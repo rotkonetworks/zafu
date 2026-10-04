@@ -84,6 +84,20 @@ export type RecordHandler = (
   api: PeopleApi,
 ) => Promise<((r: PeopleRoom) => PeopleRoom) | undefined>;
 
+/** several handlers for one room kind, their patches applied in order */
+export const chain =
+  (...hs: (RecordHandler | undefined)[]): RecordHandler =>
+  async (room, records, api) => {
+    const ps: ((r: PeopleRoom) => PeopleRoom)[] = [];
+    for (const h of hs) {
+      const p = await h?.(room, records, api);
+      if (p) {
+        ps.push(p);
+      }
+    }
+    return ps.length ? r => ps.reduce((x, p) => p(x), r) : undefined;
+  };
+
 export interface PeopleApi {
   send(roomId: string, body: string, kind?: 'msg' | 'action'): Promise<RoomMessage>;
   addRoom(room: PeopleRoom): Promise<void>;
@@ -103,6 +117,15 @@ export interface PeopleApi {
 }
 
 export { threadKey } from './vault';
+
+/** a pass that threw: said in the worker's console, shown as "the relay did not answer" */
+const unreadable = (e: unknown): 'unreachable' => {
+  console.warn(
+    '[people] a room could not be read:',
+    e instanceof Error ? (e.stack ?? e.message) : String(e),
+  );
+  return 'unreachable';
+};
 
 /** catch-up, every 5 minutes after the person opened people (T3) */
 export const T3_MS = 5 * 60_000;
@@ -338,7 +361,7 @@ export const createPeopleService = (
         break; // the rest catch up when they are opened
       }
       budget -= need;
-      slots.push(await sync(rec.id, need).catch(() => 'unreachable' as const));
+      slots.push(await sync(rec.id, need).catch(unreadable));
     }
     const slot = WORST.find(s => slots.includes(s)) ?? 'checked';
     await status(slot);
@@ -428,7 +451,7 @@ export const createPeopleService = (
       const tick = () =>
         void sync(roomId).then(
           slot => slot !== 'idle' && status(slot),
-          () => status('unreachable'),
+          (e: unknown) => status(unreadable(e)),
         );
       if (w) {
         w.n++;

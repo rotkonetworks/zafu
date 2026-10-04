@@ -28,6 +28,9 @@ fewer, calmer screens.
   a fresh transparent address per swap.
 - Buy ZEC with cash through Peer, on its own page, with a tracker that survives
   closing the browser.
+- Cash out the same way in reverse: pick "cash" when swapping from ZEC, which
+  swaps into USDC on Base, then list it on Peer and get paid in Revolut, Wise,
+  Zelle or Monzo.
 
 ### People
 
@@ -44,6 +47,9 @@ fewer, calmer screens.
   correct, presence and chat records are harder to tell apart or replay, and
   Penumbra's note tree survives closing zafu mid-sync.
 - Every setting explains itself; tap its name.
+- Spends and received notes are found by scanning every block on your device.
+  zafu no longer asks the server whether your notes exist or are spent, so it
+  never sends identifiers of your notes, not even hidden among decoys.
 
 ### Speed
 

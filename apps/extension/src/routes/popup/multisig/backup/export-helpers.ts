@@ -59,6 +59,7 @@ const buildSharePayload = async (
     address: wallet.address,
     relayUrl: wallet.multisig.relayUrl,
     createdAt: Date.now(),
+    ...(wallet.multisig.room ? { room: wallet.multisig.room } : {}),
   };
 };
 

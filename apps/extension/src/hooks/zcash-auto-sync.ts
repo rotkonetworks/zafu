@@ -31,11 +31,19 @@ import { isPro } from '../state/license';
 import { deriveRingVrfSeed } from '../state/identity';
 import { ZidecarClient } from '../state/keyring/zidecar-client';
 import { zcashClient, type ZcashBackend } from '../state/keyring/zcash-backend';
+import { selectZcashBackend } from '../state/networks';
 import { isMempoolWatchEnabled } from '../services/mempool-watch/strategy';
+
+/**
+ * the node has not said what it is yet: the worker asks it (GetLightdInfo)
+ * before syncing. Read at start, not subscribed, so the answer arriving does
+ * not restart a sync whose kind it confirmed.
+ */
+const nodeUnclassified = () => !useStore.getState().networks.networks.zcash.backendDetected;
 
 /** resolve wallet birthday height from storage or chain tip.
  *  never returns below orchard activation - no point scanning pre-orchard blocks. */
-async function resolveBirthday(
+export async function resolveBirthday(
   walletId: string,
   zidecarUrl: string,
   backend: ZcashBackend,
@@ -71,7 +79,7 @@ export function useZcashAutoSync() {
   const getVaultUnlock = useStore(selectGetVaultUnlock);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
-  const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
+  const zcashBackend = useStore(selectZcashBackend);
   const mempoolWatchSetting = useStore(s => s.networks.networks.zcash.mempoolWatch) ?? 'off';
   // Single-source-of-truth gate. UI and worker also enforce; we run the same
   // helper at every layer so all surfaces agree on the answer and no single
@@ -205,8 +213,9 @@ export function useZcashAutoSync() {
             return;
           }
           // generate ring VRF session proof for pro priority sync (this still
-          // opens the phrase in the page; it moves with the ZID signers)
-          if (isPro(useStore.getState())) {
+          // opens the phrase in the page; it moves with the ZID signers).
+          // The ring is zidecar's own rpc: never asked of any other node
+          if (isPro(useStore.getState()) && zcashBackend === 'zidecar') {
             try {
               const seed = deriveRingVrfSeed(await getMnemonic(walletId));
               await useStore.getState().ringVrf.refreshRing(zidecarUrl, seed);
@@ -229,6 +238,7 @@ export function useZcashAutoSync() {
             startHeight,
             zcashBackend,
             mempoolWatch,
+            nodeUnclassified(),
           );
         } catch (err) {
           if (err instanceof Error && err.message.includes('keyring locked')) {
@@ -353,6 +363,7 @@ export function useZcashAutoSync() {
           startHeight,
           zcashBackend,
           mempoolWatch,
+          nodeUnclassified(),
         );
       } catch (err) {
         console.error('[zcash-sync] watch-only auto-sync failed:', err);

@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { SyncStatus, ChainTip } from '../state/keyring/zidecar-client';
 import { zcashClient, zidecarExtras } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
+import { selectZcashBackend } from '../state/networks';
 import { selectActiveNetwork } from '../state/keyring';
 import { activeZcashStoreId } from '../state/pockets';
 import { zcashSyncHeightKey } from '../state/keyring/network-worker';
@@ -136,7 +137,8 @@ export function useZcashWorkerSync() {
 
 export function useZcashSyncStatus(): ZcashSyncState {
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
-  const backend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
+  const backend = useStore(selectZcashBackend);
+  const redetect = useStore(s => s.networks.redetectZcashBackend);
   // Privacy: never poll the zcash zidecar when zcash is not an enabled network.
   // Otherwise a penumbra-only wallet still hammered zcash.rotko.net for GetTip /
   // GetSyncStatus on an interval - a network connection the user never opted in
@@ -157,7 +159,13 @@ export function useZcashSyncStatus(): ZcashSyncState {
     queryKey: ['zcashSyncStatus', backend, zidecarUrl],
     // gated on zcash being enabled - no polling for a penumbra-only wallet
     enabled: zcashActive && !!zidecar,
-    queryFn: () => zidecar!.getSyncStatus(),
+    // zidecar's own rpc failing may mean the node is not one: ask it again
+    // (standard GetLightdInfo, throttled) rather than retry blind
+    queryFn: () =>
+      zidecar!.getSyncStatus().catch((e: unknown) => {
+        void redetect(zidecarUrl);
+        throw e;
+      }),
     staleTime: POLL_INTERVAL,
     refetchInterval: POLL_INTERVAL,
     retry: 2,

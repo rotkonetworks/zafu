@@ -27,6 +27,8 @@ import { createPairs } from './pairs';
 import { createInvites } from './invites';
 import { createGroups } from './groups';
 import { createCards } from './cards';
+import { foldFrost, frostOps } from './frost-room';
+import { createDeals } from './deal';
 import { compileEgress, describeEgress, type EgressInputs } from '../net/egress-policy';
 import { decideEgress } from '../net/egress-table';
 import { readEgressInputs } from '../net/egress-opt-in';
@@ -39,7 +41,13 @@ import {
 } from '../config/people-relay';
 import { PEOPLE_MESSAGE, PEOPLE_STATUS_KEY, PEOPLE_WATCH_PORT } from './protocol';
 import { readRooms, readThreads, writeRooms, writeThreads, type PeopleRoom } from './vault';
-import { createPeopleService, type Gate, type PeopleDeps, type RecordHandler } from './service';
+import {
+  chain,
+  createPeopleService,
+  type Gate,
+  type PeopleDeps,
+  type RecordHandler,
+} from './service';
 
 /** the session flag (design-social 2.10): set at T1, cleared at the last close */
 const SESSION_FLAG = 'peopleSession';
@@ -130,17 +138,9 @@ const cards = createCards({
   gate: relay => peopleDeps.gate(relay),
 });
 
-/** two kinds of record in a pair room: memo-invite answers and v2 cards; each patches in turn */
-const both =
-  (...hs: (RecordHandler | undefined)[]): RecordHandler =>
-  async (room, records, api) => {
-    const patches = [];
-    for (const h of hs) {
-      patches.push(h && (await h(room, records, api)));
-    }
-    const fs = patches.filter(p => !!p);
-    return fs.length ? r => fs.reduce((x, f) => f(x), r) : undefined;
-  };
+const deals = createDeals({
+  group: (svc, name) => groups.ops['group-create']({ name }, svc),
+});
 
 export const peopleDeps: PeopleDeps = {
   readRooms,
@@ -176,8 +176,14 @@ export const startPeopleRelay = (
   const service = createPeopleService(peopleDeps, {
     ...groups.handlers,
     card: cards.handlers.card,
-    pair: both(invites.handlers.pair, cards.handlers.pair),
     ...handlers,
+    group: chain(handlers.group ?? groups.handlers.group, foldFrost),
+    pair: chain(
+      handlers.pair ?? invites.handlers.pair,
+      cards.handlers.pair,
+      foldFrost,
+      deals.onPair,
+    ),
   });
   const all: Record<string, PeopleOp> = {
     open: async (_, s) => {
@@ -196,6 +202,8 @@ export const startPeopleRelay = (
     ...pairs.ops,
     ...invites.ops,
     ...cards.ops,
+    ...frostOps,
+    ...deals.ops,
     ...ops,
   };
 

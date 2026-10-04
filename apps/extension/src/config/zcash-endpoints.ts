@@ -17,16 +17,15 @@
  * entry in settings and the lightwalletd backend code path both stay.
  *
  * Two backend flavors (see state/keyring/zcash-backend.ts):
- *   - zidecar - rotko-hosted, trustless verification (Ligerito + NOMT
- *     proofs). Mempool watch works on this backend.
+ *   - zidecar - rotko-hosted; adds a Ligerito header proof and the
+ *     actions commitment check. Mempool watch works on this backend.
  *   - lightwalletd - public ECC lightwalletd / Zaino. Trusted (the
  *     wallet accepts what the server returns). Mempool watch is
  *     unavailable on this backend.
  *
- * Anything mentioned in `KNOWN_ZIDECAR_HOST_SUFFIXES`
- * (state/keyring/zcash-backend.ts) is classified as zidecar
- * automatically at runtime. Anything else (including a custom endpoint
- * typed into settings) gets the lightwalletd (trusted) treatment.
+ * The user is never asked which one a node is: the node says, through the
+ * standard GetLightdInfo `vendor` (detectZcashBackend). A preset's
+ * `backend` is only the guess that stands until it has answered.
  */
 
 import type { ZcashBackend } from '../state/keyring/zcash-backend';
@@ -48,7 +47,7 @@ export interface ZcashEndpointPreset {
   readonly url: string;
   /** geographic / trust classification for the regional grouping UI */
   readonly region: RpcEndpointRegion;
-  /** trustless (zidecar) vs trusted (lightwalletd) */
+  /** trustless (zidecar) vs trusted (lightwalletd), until the node itself says */
   readonly backend: ZcashBackend;
   /** the shipped default for a fresh wallet */
   readonly isDefault?: boolean;
@@ -65,7 +64,7 @@ export interface ZcashEndpointPreset {
 export const ZCASH_MAINNET_ENDPOINTS: readonly ZcashEndpointPreset[] = [
   {
     id: 'rotko-zidecar',
-    label: 'rotko zidecar',
+    label: 'rotko',
     url: 'https://zcash.rotko.net',
     region: 'default',
     backend: 'zidecar',

@@ -25,6 +25,7 @@
  * host, many clients, keeps exactly one zcash/penumbra worker alive.
  */
 
+import { errText } from '@penumbra-zone/query/error-text';
 import type { NetworkType, VaultUnlock } from './types';
 import { isValidInternalSender } from '../../senders/internal';
 import type { SealedVault, WorkerKey } from '../../shared/vault-seal';
@@ -158,6 +159,7 @@ export interface NetworkWorkerResponse {
     | 'memos-result'
     | 'sync-memos-progress'
     | 'mempool-update'
+    | 'zcash-backend-detected'
     | 'prove-request'
     | 'frost-result'
     | 'voting-result'
@@ -299,6 +301,12 @@ const handleWorkerMessage = (
           .catch(() => {});
       }
     }
+    return;
+  }
+
+  if (msg.type === 'zcash-backend-detected' && network === 'zcash') {
+    // what a node said it is (GetLightdInfo); the networks store caches it
+    window.dispatchEvent(new CustomEvent('zcash-backend-detected', { detail: msg.payload }));
     return;
   }
 
@@ -641,7 +649,7 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
   };
 
   worker.onerror = e => {
-    console.error(`[network-worker] ${network} error:`, e);
+    console.error(`[network-worker] ${network} error: ${errText(e)}`);
   };
 
   workers.set(network, state);
@@ -807,8 +815,10 @@ export const startSyncInWorker = async (
   vault: VaultUnlock,
   serverUrl: string,
   startHeight?: number,
-  backend: 'zidecar' | 'lightwalletd' = 'zidecar',
+  backend: 'zidecar' | 'lightwalletd' = 'lightwalletd',
   mempoolWatch: 'off' | 'on' = 'off',
+  /** the node has not said what it is yet: the worker asks it (GetLightdInfo) first */
+  detectBackend = false,
 ): Promise<void> => {
   // Defensive: mempool watch is meaningless on lightwalletd. Use the
   // single-source-of-truth gate from the strategy module.
@@ -824,6 +834,7 @@ export const startSyncInWorker = async (
       serverUrl,
       startHeight,
       backend,
+      detectBackend,
       mempoolWatch: effectiveMempoolWatch,
     },
     walletId,
@@ -839,8 +850,10 @@ export const startWatchOnlySyncInWorker = async (
   ufvk: string,
   serverUrl: string,
   startHeight?: number,
-  backend: 'zidecar' | 'lightwalletd' = 'zidecar',
+  backend: 'zidecar' | 'lightwalletd' = 'lightwalletd',
   mempoolWatch: 'off' | 'on' = 'off',
+  /** the node has not said what it is yet: the worker asks it (GetLightdInfo) first */
+  detectBackend = false,
 ): Promise<void> => {
   const { isMempoolWatchEnabled } = await import('../../services/mempool-watch/strategy');
   const effectiveMempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(mempoolWatch, backend)
@@ -849,7 +862,7 @@ export const startWatchOnlySyncInWorker = async (
   return callWorker(
     network,
     'sync',
-    { serverUrl, startHeight, ufvk, backend, mempoolWatch: effectiveMempoolWatch },
+    { serverUrl, startHeight, ufvk, backend, detectBackend, mempoolWatch: effectiveMempoolWatch },
     walletId,
   );
 };
@@ -1606,7 +1619,8 @@ export const buildTurnstileMigrationInWorker = async (
   accountIndex: number,
   mainnet: boolean,
   ufvk: string | undefined,
-  backend: 'zidecar' | 'lightwalletd' = 'zidecar',
+  /** omitted: the worker keeps what the sync registered for this node */
+  backend?: 'zidecar' | 'lightwalletd',
   vault?: VaultUnlock,
   fragmentSize = 400,
   /** lets stopBuildInWorker stop this build before it broadcasts */

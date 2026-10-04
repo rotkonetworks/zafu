@@ -21,6 +21,10 @@ import { bucketOf, BUCKET_SIZE as MEMO_BUCKET_SIZE } from '../services/memo-sync
 import type { BucketStart as MemoBucketStart, MemoSyncStrategy } from '../services/memo-sync/types';
 import {
   ZCASH_BACKENDS,
+  backendKey,
+  backendOfEndpoint,
+  createRedetector,
+  detectZcashBackend,
   isZcashBackend,
   zcashClient,
   zidecarExtras,
@@ -38,12 +42,6 @@ import { nu63ActivationHeight } from '../config/feature-flags';
 import { crossCheckTip, pickIndependentPeer } from './cross-verify';
 import { checkEgress } from '../net/egress';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
-import {
-  CommitmentReservoir,
-  padCommitmentQuery,
-  padNullifierQuery,
-  type CommitmentItem,
-} from './proof-decoys';
 import { BlockPrefetcher } from './block-prefetcher';
 import { once } from './once';
 import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from '../perf/rayon-isolation';
@@ -85,7 +83,9 @@ import {
   type SyncErrorCode,
 } from '../state/sync-failure';
 import { startRun, stopRun, STOP_WAIT_MS, type RunSlot } from './sync-runs';
+import { errText, storageFailure } from '@penumbra-zone/query/error-text';
 import { mergeLoadedNotes, mergeLoadedSpent } from './wallet-state-merge';
+import { storeFellBehind } from './store-reset';
 import { createBuildRegistry } from './build-abort';
 import { advanceWitnesses, frontierHolds } from './witness-advance';
 
@@ -133,17 +133,45 @@ const syncError = (code: SyncErrorCode, message: string): Error =>
   Object.assign(new Error(message), { syncCode: code });
 
 /**
- * Worker-local endpoint→backend registry. Populated only via the explicit
- * `backend` field on the 'sync' payload (the popup classifies endpoints
- * declaratively via backendOfEndpoint() and forwards). We deliberately do
- * NOT auto-probe - probing zidecar-only RPCs is a unique-to-zafu request
- * signature that fingerprints the wallet.
+ * Worker-local endpoint→backend registry, seeded by 'sync'. What a node is
+ * comes from the node: when the page has no cached answer, 'sync' asks it
+ * with the standard GetLightdInfo (detectZcashBackend) before building a
+ * client. A zidecar-only rpc is never used to find out - it is a request
+ * signature no other wallet sends, so even a failed probe marks the wallet.
  *
- * Unknown endpoints default to 'zidecar' (the rotko-shipped baseline);
- * users on a third-party lightwalletd must hit 'sync' first to seed this
- * map before any other RPC, which is the natural call order anyway.
+ * An endpoint nothing has classified gets backendOfEndpoint's guess, which
+ * is lightwalletd for every third-party host: an unclassified node never
+ * sees a zidecar-only rpc.
  */
 const backendRegistry = new Map<string, ZcashBackend>();
+
+/** one re-ask per node per cooldown, after a zidecar call failed */
+const redetectBackend = createRedetector();
+
+/** tell the page what a node said it is, so it is cached per endpoint */
+const announceBackend = (serverUrl: string, backend: ZcashBackend): void =>
+  workerSelf.postMessage({
+    type: 'zcash-backend-detected',
+    id: '',
+    network: 'zcash',
+    payload: { serverUrl, backend },
+  });
+
+/**
+ * One of zidecar's own calls failed. The node may not be (or no longer be) a
+ * zidecar: ask it again with the standard GetLightdInfo. Only an answer
+ * changes the kind - a node that is merely down keeps it. A changed kind
+ * reaches the page, which restarts the sync with the right client.
+ */
+const suspectBackend = (serverUrl: string): void => {
+  void redetectBackend(serverUrl).then(backend => {
+    if (backend && backend !== lookupBackend(serverUrl)) {
+      console.warn(`[zcash-worker] ${serverUrl} now reports itself as ${backend}`);
+      registerBackend(serverUrl, backend);
+      announceBackend(serverUrl, backend);
+    }
+  });
+};
 
 /**
  * One-shot warning latches for conditions that are stable for the life of the
@@ -152,18 +180,17 @@ const backendRegistry = new Map<string, ZcashBackend>();
  * identical lines and hides the ones that matter. These warn once, then stay
  * silent; the condition itself is unaffected.
  */
-let warnedNullifierRootMoved = false;
 let warnedNonGenesisActionsCommitment = false;
 
 function registerBackend(serverUrl: string, backend: ZcashBackend): void {
   if (!isZcashBackend(backend)) {
     throw new Error(`unknown zcash backend: ${String(backend)}`);
   }
-  backendRegistry.set(serverUrl.replace(/\/$/, ''), backend);
+  backendRegistry.set(backendKey(serverUrl), backend);
 }
 
 function lookupBackend(serverUrl: string): ZcashBackend {
-  return backendRegistry.get(serverUrl.replace(/\/$/, '')) ?? 'zidecar';
+  return backendRegistry.get(backendKey(serverUrl)) ?? backendOfEndpoint(serverUrl);
 }
 
 /** the sync client for an endpoint; call sites without a backend in scope use the registry */
@@ -601,7 +628,7 @@ function buildSignRequestEnvelope(
       const compactHex = wasm.redact_pczt_compact(pcztHex);
       return { envelope: preludeWrapSinglePczt(hexDecode(compactHex), true), compact: true };
     } catch (e) {
-      console.warn('[zcash-worker] compact redaction failed, sending legacy 0x03:', e);
+      console.warn(`[zcash-worker] compact redaction failed, sending legacy 0x03: ${errText(e)}`);
     }
   }
   return { envelope: preludeWrapSinglePczt(hexDecode(pcztHex), false), compact: false };
@@ -873,6 +900,8 @@ const DB_NAME = 'zafu-zcash';
 const DB_VERSION = 5;
 
 let sharedDb: IDBDatabase | null = null;
+/** counts connections lost under us (closed by the browser, asked to let go) */
+let dbLost = 0;
 
 const getDb = (): Promise<IDBDatabase> => {
   if (sharedDb) {
@@ -895,8 +924,25 @@ const getDb = (): Promise<IDBDatabase> => {
         ),
       );
     req.onsuccess = () => {
-      sharedDb = req.result;
-      resolve(sharedDb);
+      const db = req.result;
+      // A connection can die under us: the browser closes it when the
+      // backing store fails or the site's data is cleared ('close'), and
+      // another realm upgrading or deleting the database asks us to let go
+      // ('versionchange'). Either way forget it, so the next getDb() opens a
+      // fresh one instead of every call throwing InvalidStateError forever.
+      const forget = () => {
+        if (sharedDb === db) {
+          sharedDb = null;
+          dbLost++;
+        }
+      };
+      db.onclose = forget;
+      db.onversionchange = () => {
+        db.close();
+        forget();
+      };
+      sharedDb = db;
+      resolve(db);
     };
     req.onupgradeneeded = event => {
       const db = req.result;
@@ -955,8 +1001,13 @@ export const closeDb = () => {
 
 const txComplete = (tx: IDBTransaction): Promise<void> =>
   new Promise((resolve, reject) => {
+    // a transaction the browser aborts (its connection closed) has no error
+    // object: reject with one that says so, never with null
+    const failed = () =>
+      reject(tx.error ?? new DOMException('The transaction was aborted.', 'AbortError'));
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.onerror = failed;
+    tx.onabort = failed;
   });
 
 const idbGet = async <T>(store: string, key: IDBValidKey): Promise<T | undefined> => {
@@ -1086,34 +1137,6 @@ const getActionsCommitment = async (walletId: string): Promise<string> => {
   return r?.value ?? '0'.repeat(64); // genesis: all zeros
 };
 
-/**
- * Per-wallet secret that keys the proof-query decoys (see proof-decoys.ts).
- *
- * It must be STABLE. Decoys re-rolled on every sync would be worse than no
- * decoys at all: real items recur in every query and fresh decoys do not, so
- * intersecting a few sessions hands the server the real set. Persisting the
- * seed makes a repeated query byte-identical.
- *
- * Caveat, stated plainly: this lives in the wallet database, so clearing the
- * cache re-rolls it. A clear-and-resync therefore presents the server with a
- * second, differently-padded query over the same real notes, and the
- * intersection of the two narrows the anonymity set. There is no fix for
- * that short of deriving the seed from the wallet key material, which the
- * worker does not hold in a form stable across a wipe.
- */
-const getDecoySeed = async (walletId: string): Promise<Uint8Array> => {
-  const r = await idbGet<{ value: string }>('meta', [walletId, 'decoySeed']);
-  if (r?.value) {
-    return hexDecode(r.value);
-  }
-  const seed = crypto.getRandomValues(new Uint8Array(32));
-  const db = await getDb();
-  const tx = db.transaction('meta', 'readwrite');
-  tx.objectStore('meta').put({ walletId, key: 'decoySeed', value: hexEncode(seed) });
-  await txComplete(tx);
-  return seed;
-};
-
 const saveActionsCommitment = async (walletId: string, commitment: string): Promise<void> => {
   const db = await getDb();
   const tx = db.transaction('meta', 'readwrite');
@@ -1121,299 +1144,41 @@ const saveActionsCommitment = async (walletId: string, commitment: string): Prom
   await txComplete(tx);
 };
 
-/** verify header proof + commitment proofs + nullifier proofs after sync catches up */
+/**
+ * Verify zidecar's header proof and, for genesis-anchored wallets, the actions
+ * commitment, after sync catches up.
+ *
+ * Nothing here sends the server anything about this wallet's notes. Spend
+ * detection is the scan's job: every block from the birthday on is walked, and
+ * each action's nullifier is matched against our own notes (both pools), so a
+ * spend is seen in the block that contains it. Note membership is the scan's
+ * job too: trial decryption recomputes the cmx, and the wallet keeps its own
+ * commitment-tree frontiers. The NOMT commitment and nullifier proof rounds
+ * that used to run here added no answer the scan does not already give, and
+ * paid for it by sending the server our unspent nullifiers and our notes'
+ * (cmx, position) pairs (decoy-padded, anonymity set 3).
+ */
 const verifySyncProofs = async (
   client: ZidecarClient,
   tip: number,
   mainnet: boolean,
-  pendingCmxs: Uint8Array[],
-  pendingPositions: number[],
-  state: WalletState,
   actionsCommitment: string,
   /** whether this wallet's running actions commitment was folded from genesis
    *  (start block 0). If it was started at a birthday/import height, the fold
    *  is seeded from a non-genesis value and can NEVER equal the server's
    *  genesis-anchored proven commitment, so verifying it is meaningless. */
   genesisAnchoredActions: boolean,
-  /** secret keying the decoy padding; null disables padding (see below). */
-  decoySeed: Uint8Array | null,
-  /** observed on-chain (cmx, position) pairs to draw commitment decoys from. */
-  decoyPool: readonly CommitmentItem[],
 ): Promise<void> => {
   if (!zyncModule) {
     return;
   }
-  console.log(`[zcash-worker] verifying proofs: ${pendingCmxs.length} notes`);
   const t0 = performance.now();
 
   // 1. verify header proof
   const proven = await verifyHeaderProof(client, tip, mainnet);
   console.log(`[zcash-worker] header proof valid, roots: tree=${proven.tree_root.slice(0, 16)}...`);
 
-  // 2. verify commitment proofs for found notes
-  // proven.tree_root is the canonical orchard tree root (from zebrad's frontier);
-  // NOMT-served commitment-proof tree_root is NOMT's sparse-merkle blake3 root.
-  // The two are different tree structures and never agree by construction, so
-  // we don't bind them. We still verify the per-cmx Merkle path against the
-  // returned root (catches NOMT corruption) and confirm cmx existence; the
-  // canonical orchard membership is enforced locally during scan.
-  //
-  // PRIVACY: a (cmx, position) pair is a direct index into the block holding
-  // that output, so an unpadded request is a complete, unambiguous inventory
-  // of the wallet's notes handed to the server in the clear. The query is
-  // padded with decoys drawn from commitments the scanner actually observed
-  // in the same block range (see proof-decoys.ts) - fabricated cmxs would
-  // have no proof and identify themselves. Only proofs for OUR cmxs are
-  // verified; decoy responses are dropped unread.
-  if (pendingCmxs.length > 0) {
-    // Two independent properties, both required:
-    //   privacy - the query is padded with decoys so the server does not learn
-    //             the wallet's exact note set from the cmx+position pairs;
-    //   integrity - every proof is bound to the batch root and to something we
-    //             actually asked about, and every REAL cmx must come back.
-    // Neither subsumes the other: padding without binding still lets a server
-    // forge paths, and binding without padding still hands over the note set.
-    const realItems: CommitmentItem[] = pendingCmxs.map((cmx, i) => ({
-      cmx,
-      position: pendingPositions[i] ?? 0,
-    }));
-    const padded = padCommitmentQuery(realItems, decoyPool, decoySeed);
-    const { proofs: commitmentProofs, treeRoot } = await client.getCommitmentProofs(
-      padded.cmxs,
-      padded.positions,
-      tip,
-    );
-
-    const treeRootHex = hexEncode(treeRoot);
-    const askedCmxs = new Set(padded.cmxs.map(c => hexEncode(c)));
-    if (commitmentProofs.length !== padded.cmxs.length) {
-      throw new Error(
-        `commitment proof count mismatch: asked ${padded.cmxs.length}, got ${commitmentProofs.length}`,
-      );
-    }
-
-    const seenCmxs = new Set<string>();
-    let verified = 0;
-    for (const proof of commitmentProofs) {
-      const cmxHex = hexEncode(proof.cmx);
-      const proofRootHex = hexEncode(proof.treeRoot);
-      // Root- and request-binding apply to EVERY proof, decoy or not: a server
-      // that answers off a tree it invented is misbehaving regardless of which
-      // cmx it is answering about.
-      if (proofRootHex !== treeRootHex) {
-        throw new Error(
-          `commitment proof root mismatch: proof=${proofRootHex.slice(0, 16)} batch=${treeRootHex.slice(0, 16)}`,
-        );
-      }
-      if (!askedCmxs.has(cmxHex)) {
-        throw new Error(`commitment proof for unrequested cmx ${cmxHex.slice(0, 16)}`);
-      }
-      if (seenCmxs.has(cmxHex)) {
-        throw new Error(`duplicate commitment proof for cmx ${cmxHex.slice(0, 16)}`);
-      }
-      seenCmxs.add(cmxHex);
-
-      // Only OWN items are verified or acted on. A decoy cmx is not a real
-      // commitment, so a failing path for one proves nothing and must never
-      // fail the sync.
-      if (!padded.realHex.has(cmxHex)) {
-        continue;
-      }
-      const valid = zyncModule['verify_commitment_proof'](
-        cmxHex,
-        proofRootHex,
-        proof.pathProofRaw,
-        hexEncode(proof.valueHash),
-      ) as boolean;
-      if (!valid) {
-        throw new Error(`commitment proof invalid for cmx ${cmxHex.slice(0, 16)}`);
-      }
-      verified++;
-    }
-
-    // Omission check: padding must not become a place for the server to hide a
-    // missing answer about one of OUR notes.
-    if (verified !== realItems.length) {
-      throw new Error(
-        `commitment proofs missing for own notes: verified ${verified} of ${realItems.length}`,
-      );
-    }
-    console.log(
-      `[zcash-worker] ${verified}/${realItems.length} own commitment proofs verified ` +
-        `(root-bound, request-bound); sent ${padded.cmxs.length} incl. ` +
-        `${padded.cmxs.length - realItems.length} decoys`,
-    );
-  }
-
-  // 3. verify nullifier proofs for unspent notes.
-  //
-  // Ironwood used to be excluded here on the belief that the NOMT nullifier
-  // set was orchard-only. It never was - the set is existence-keyed and
-  // pool-agnostic, and zidecar indexes sapling, orchard and ironwood
-  // nullifiers into it from the same block walk. What actually bounds an
-  // answer is not the pool but the index's height, and the two pools have
-  // different horizons: ironwood is indexed from NU6.3 activation and is
-  // current, while the full-chain backfill trails far behind it.
-  //
-  // That distinction matters because absence is not proof. Above a pool's
-  // horizon "no entry" means "not indexed yet", which is byte-identical to
-  // "not spent" - trusting it would mark a spent note as spendable. So each
-  // note is only queried once its own pool's index reaches the tip; the rest
-  // fall back to scan-time detection.
-  const unspentAll = state.notes.filter(n => !state.spentNullifiers.has(n.nullifier));
-
-  // There used to be a single-nullifier "probe" call here, issued immediately
-  // before the batch, purely to read the index horizons off its response.
-  //
-  // It was the worst request in the wallet. One bare nullifier, unpadded, no
-  // possible ambiguity about whose it was - and because it was always
-  // `unspentAll[0]`, it was the same stable value every session, which
-  // re-identified the wallet to the server across sessions on its own. Being
-  // adjacent to the batch also joined the two: the server could attribute the
-  // whole batch to whoever sent the probe.
-  //
-  // The horizons are carried on the batch response anyway, so the probe
-  // bought nothing that the request we were about to send did not already
-  // return. It is gone; the horizons are read below, after the batch.
-  //
-  // The horizon is ONE-DIRECTIONAL, and treating it as a filter was wrong.
-  //
-  // `is_spent = true` is a Merkle INCLUSION proof against nullifier_root,
-  // verified locally below and root-bound before use - it is sound at any
-  // horizon. Only `is_spent = false` is uninformative above the horizon,
-  // because the NOMT set is existence-keyed and "not indexed yet" and "not
-  // spent" are the same bytes.
-  //
-  // Filtering the QUERY by horizon therefore discarded sound positives along
-  // with the unsound negatives. Worse: the orchard backfill trails the tip by
-  // design, so `orchardHorizon >= tip` is essentially never true in
-  // production - which meant this disabled orchard spend detection outright
-  // rather than merely narrowing it. Always ask; gate only what we believe.
-  const unspentNotes = unspentAll;
-  const unspentNfs = unspentNotes.map(n => hexDecode(n.nullifier));
-
-  // PRIVACY: these are nullifiers of UNSPENT notes - values that are not yet
-  // on chain and that only this wallet can know. Sent bare, the server can
-  // record them and fire the moment one appears in a block, deanonymising a
-  // spend before the user has made it. The query is padded with decoys drawn
-  // uniformly from the Pallas base field (where real nullifiers live) and
-  // shuffled, so the request alone no longer says which are ours.
-  //
-  // Be clear about the size of this win: the anonymity set is 3, and it is
-  // retrospective-only - when the user actually spends, the real nullifier
-  // hits the chain and the decoys never do, so the server can work backwards
-  // and identify it then. What the padding removes is the PROSPECTIVE
-  // watchlist. See proof-decoys.ts for the full accounting.
-  const padded = padNullifierQuery(unspentNfs, decoySeed);
-  const queryNfs = padded.query;
-
-  if (unspentNfs.length > 0) {
-    const {
-      proofs: nfProofs,
-      nullifierRoot,
-      syncedHeight,
-      ironwoodSyncedHeight,
-    } = await client.getNullifierProofs(queryNfs, tip);
-    const nfRootHex = hexEncode(nullifierRoot);
-
-    // Horizons come off the batch itself - this is what the deleted probe
-    // call was for. No absence gate is needed at the consumption site below:
-    // the loop acts ONLY on `proof.isSpent === true`, and never infers
-    // "unspent" from a missing entry. They are logged so the record states
-    // what coverage the answers carry.
-    console.log(
-      `[zcash-worker] queried ${queryNfs.length} nullifier proofs ` +
-        `(${unspentNfs.length} real + ${queryNfs.length - unspentNfs.length} decoy) ` +
-        `(orchard index @${syncedHeight}, ironwood @${ironwoodSyncedHeight}, tip ${tip}); ` +
-        `spent-proofs always trusted, unspent trusted only at/above the horizon`,
-    );
-
-    // NOT a tampering signal, and it must not fail the sync.
-    //
-    // These two roots are taken at DIFFERENT INSTANTS from a MUTABLE tree.
-    // zidecar's NOMT is a single live tree: proofs are generated against
-    // nomt.root() at request time, and `at_height` is accepted but ignored - // there is no versioned or pinned historical root. Meanwhile the ligerito
-    // header proof carries a snapshot of that root from whenever the proof was
-    // last generated. The server writes continuously (the ironwood cursor
-    // follows the chain tip), so between the proof and this query the root has
-    // simply moved on.
-    //
-    // Treating that as "the server tampered" was my error earlier today: it
-    // converted a benign race into a hard sync failure that users hit within
-    // minutes, and it teaches people to ignore an integrity warning - the
-    // worst possible outcome for a check that is supposed to mean something.
-    //
-    // What IS sound is verified below and stays fatal: every proof must bind
-    // to the batch root we actually checked, must be for a nullifier we asked
-    // about, and the count must match. Those are internally consistent
-    // comparisons taken at one instant, so a mismatch there really is the
-    // server contradicting itself.
-    //
-    // Making this meaningful needs a server that can prove against a pinned
-    // historical root. Until then a divergence here is unremarkable.
-    if (nfRootHex !== proven.nullifier_root) {
-      if (!warnedNullifierRootMoved) {
-        warnedNullifierRootMoved = true;
-        console.warn(
-          `[zcash-worker] nullifier root moved since the header proof ` +
-            `(live=${nfRootHex.slice(0, 16)} proven=${proven.nullifier_root.slice(0, 16)}); ` +
-            `expected while the server is indexing - proofs are still bound to the live root below`,
-        );
-      }
-    }
-
-    // Bind every proof to the root we actually checked, and to a nullifier we
-    // actually asked about. Verifying each path against the PER-PROOF root the
-    // server supplied made the whole pass forgeable: a malicious server could
-    // return the real root in the batch field, then serve paths valid against
-    // a tree it built itself. With is_spent=true that permanently marks a live
-    // note spent (funds vanish from the balance and become unspendable); with
-    // is_spent=false it hides a real spend.
-    const requested = new Set(queryNfs.map(nf => hexEncode(nf)));
-    let newlySpent = 0;
-    for (const proof of nfProofs) {
-      const proofRootHex = hexEncode(proof.nullifierRoot);
-      if (proofRootHex !== nfRootHex) {
-        throw new Error(
-          `nullifier proof root mismatch: proof=${proofRootHex.slice(0, 16)} batch=${nfRootHex.slice(0, 16)}`,
-        );
-      }
-      const nfHexForProof = hexEncode(proof.nullifier);
-      if (!requested.has(nfHexForProof)) {
-        throw new Error(`nullifier proof for unrequested nullifier ${nfHexForProof.slice(0, 16)}`);
-      }
-      // Decoys are asked about but never believed. A decoy proof carries no
-      // information about this wallet, so verifying it would only hand the
-      // server a way to fail the sync at will - and acting on its `isSpent`
-      // would let it mark a note spent that was never ours to begin with.
-      if (!padded.realHex.has(nfHexForProof)) {
-        continue;
-      }
-      const valid = zyncModule['verify_nullifier_proof'](
-        hexEncode(proof.nullifier),
-        proofRootHex,
-        proof.isSpent,
-        proof.pathProofRaw,
-        hexEncode(proof.valueHash),
-      ) as boolean;
-      if (!valid) {
-        throw new Error(`nullifier proof invalid for ${hexEncode(proof.nullifier).slice(0, 16)}`);
-      }
-      if (proof.isSpent) {
-        const nfHex = hexEncode(proof.nullifier);
-        if (!state.spentNullifiers.has(nfHex)) {
-          state.spentNullifiers.add(nfHex);
-          newlySpent++;
-        }
-      }
-    }
-    console.log(
-      `[zcash-worker] ${nfProofs.length} nullifier proofs returned, own-note proofs verified ` +
-        `(${newlySpent} newly spent)`,
-    );
-  }
-
-  // 4. verify actions commitment chain
+  // 2. verify actions commitment chain
   //
   // Only meaningful when the wallet's fold is genesis-anchored. The actions
   // commitment is a positional hash chain seeded from the previously-folded
@@ -1438,7 +1203,7 @@ const verifySyncProofs = async (
   }
 
   const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-  console.log(`[zcash-worker] all proofs verified in ${elapsed}s`);
+  console.log(`[zcash-worker] header proof checks done in ${elapsed}s`);
 };
 
 /** get cached orchard tree frontier from IDB */
@@ -1613,16 +1378,11 @@ interface IronwoodBatchMeta {
 /**
  * Mark the notes we just spent as spent, immediately, without waiting for a rescan.
  *
- * Orchard does not need this: sync step 3 asks zidecar's NOMT nullifier tree
- * "is this spent?" for every unspent orchard note, so an orchard spend is
- * noticed on the next tick regardless of which blocks get scanned.
- *
- * Ironwood has no such oracle - the NOMT nullifier tree is orchard-only - so
- * its only spend signal is the scan-time nullifier match in runSync, which
- * fires only while walking the block that contains the spend. A wallet that
- * was already synced when it sent is *past* that block and never revisits it,
- * so the note stayed "unspent" forever and its value kept counting toward the
- * balance.
+ * Both pools' only spend signal is the scan-time nullifier match in runSync,
+ * which fires while walking the block that contains the spend. That block is
+ * mined after we broadcast, so the scan reaches it later; until then the note
+ * would keep counting toward the balance and could be picked for a second
+ * spend.
  *
  * We know exactly which notes we spent, so record it at broadcast. Worst case
  * the transaction never mines and the note is wrongly held back, which the
@@ -1685,7 +1445,7 @@ const markNotesSpentLocally = async (
     for (const note of updated) {
       note.spent_by_txid = undefined;
     }
-    console.error('[zcash-worker] failed to persist local spend marks:', e);
+    console.error(`[zcash-worker] failed to persist local spend marks: ${errText(e)}`);
     return;
   }
   console.log(
@@ -2353,7 +2113,7 @@ const backfillWitnesses = async (
       `[zcash-worker] backfill replay check [${match}]: seed=${frontierHeight}(size ${checkpointSize}) → anchor=${anchorHeight}(size ${endTreeSize}, +${totalActions} actions) replayRoot=${result.anchor_hex} network=${netRoot}`,
     );
   } catch (e) {
-    console.warn('[zcash-worker] backfill replay check skipped:', e);
+    console.warn(`[zcash-worker] backfill replay check skipped: ${errText(e)}`);
   }
 
   return { byNullifier, endFrontier: result.end_frontier_hex };
@@ -2399,7 +2159,7 @@ const recordSentTx = async (rec: SentTxRecord): Promise<void> => {
     tx.objectStore('sent').put(rec);
     await txComplete(tx);
   } catch (e) {
-    console.warn('[zcash-worker] could not record sent tx locally:', e);
+    console.warn(`[zcash-worker] could not record sent tx locally: ${errText(e)}`);
   }
 };
 
@@ -2437,7 +2197,7 @@ const applyReconciliation = async (
     }
     await txComplete(tx);
   } catch (e) {
-    console.warn('[zcash-worker] could not persist sent-tx reconciliation:', e);
+    console.warn(`[zcash-worker] could not persist sent-tx reconciliation: ${errText(e)}`);
   }
 };
 
@@ -2519,7 +2279,7 @@ const stashColdSend = async (
     await writeColdSends(walletId, list.slice(-COLD_SEND_MAX));
     return id;
   } catch (e) {
-    console.warn('[zcash-worker] could not stash cold-send context:', e);
+    console.warn(`[zcash-worker] could not stash cold-send context: ${errText(e)}`);
     return undefined;
   }
 };
@@ -2549,7 +2309,7 @@ const takeColdSend = async (
     );
     return found;
   } catch (e) {
-    console.warn('[zcash-worker] could not read cold-send context:', e);
+    console.warn(`[zcash-worker] could not read cold-send context: ${errText(e)}`);
     return undefined;
   }
 };
@@ -2609,7 +2369,7 @@ const finalizeColdBroadcast = async (
       expiryHeight: parseExpiryHeight(txHex),
     });
   } catch (e) {
-    console.error('[zcash-worker] cold broadcast bookkeeping failed:', e);
+    console.error(`[zcash-worker] cold broadcast bookkeeping failed: ${errText(e)}`);
   }
 };
 
@@ -2958,7 +2718,7 @@ const buildWitnessesIronwood = async (
         `${endTreeSize} (height ${endHeight}) - the next send should take the fast path`,
     );
   } catch (e) {
-    console.warn('[zcash-worker] ironwood: could not cache witnesses after replay:', e);
+    console.warn(`[zcash-worker] ironwood: could not cache witnesses after replay: ${errText(e)}`);
   }
 
   return { anchorHex: networkRoot, paths: result.paths };
@@ -3351,7 +3111,7 @@ function handleMempoolSnapshot(
       });
     }
   } catch (err) {
-    console.log('[zcash-worker] mempool scan decrypt error:', err);
+    console.log(`[zcash-worker] mempool scan decrypt error: ${errText(err)}`);
   }
 
   for (const note of state.notes) {
@@ -3397,12 +3157,15 @@ const runSync = (...args: SyncArgs): Promise<void> => {
     state,
     async signal => {
       try {
-        await syncLoop(state, signal, ...args);
+        // a store wiped under the run restarts it from what is stored
+        while ((await syncLoop(state, signal, ...args)) === 'restart' && !signal.aborted) {
+          console.warn(`[zcash-worker] restarting sync wallet=${walletId} from the stored height`);
+        }
       } catch (err) {
         // everything outside the batch loop's own retries: opening the store,
         // deriving keys, sizing the stored frontier. The window offers to try
         // again, which resumes from the stored height.
-        console.error('[zcash-worker] runSync fatal:', err);
+        console.error(`[zcash-worker] runSync fatal: ${errText(err)}`, err);
         if (!signal.aborted) {
           workerSelf.postMessage({
             type: 'sync-error',
@@ -3431,9 +3194,9 @@ const syncLoop = async (
   serverUrl: string,
   startHeight?: number,
   ufvk?: string,
-  backend: ZcashBackend = 'zidecar',
+  backend: ZcashBackend = lookupBackend(serverUrl),
   mempoolWatch: 'off' | 'on' = 'off',
-): Promise<void> => {
+): Promise<'restart' | undefined> => {
   if (!wasmModule) {
     throw new Error('wasm not initialized');
   }
@@ -3460,6 +3223,28 @@ const syncLoop = async (
   // use whichever is higher - prevents re-scanning if chrome.storage was stale
   let currentHeight = Math.max(startHeight ?? 0, syncedHeight);
 
+  // The store under this run: the last height it saved, and the lost
+  // connections it has checked. After a reconnect, a store that no longer
+  // holds what this run saved was wiped (see store-reset.ts): the run stops
+  // and starts again from what is stored, never from its in-memory height.
+  let lastSaved = syncedHeight;
+  let lostSeen = dbLost;
+  const storeWasReset = async (): Promise<boolean> => {
+    if (lostSeen === dbLost) {
+      return false;
+    }
+    lostSeen = dbLost;
+    const [stored, wallets] = await Promise.all([getSyncHeight(walletId), listWallets()]);
+    const behind = storeFellBehind({ stored, walletKnown: wallets.includes(walletId), lastSaved });
+    if (behind) {
+      console.warn(
+        `[zcash-worker] the store was reset under sync (stored=${stored}, last saved=${lastSaved}); not scanning on from ${currentHeight}`,
+      );
+    }
+    return behind;
+  };
+  let restart = false;
+
   const client = makeZcashClient(serverUrl, backend);
   // proofs, the actions commitment, mempool watch and the tip cross-check are
   // zidecar's; on a standard lightwalletd this is undefined and none of them run
@@ -3485,7 +3270,9 @@ const syncLoop = async (
     try {
       frontierSize = Number(wasmModule.frontier_tree_size(runningFrontier));
     } catch (e) {
-      console.warn('[zcash-worker] stored orchard frontier unreadable, rebootstrapping:', e);
+      console.warn(
+        `[zcash-worker] stored orchard frontier unreadable, rebootstrapping: ${errText(e)}`,
+      );
       runningFrontier = '';
     }
   }
@@ -3527,7 +3314,7 @@ const syncLoop = async (
         `[zcash-worker] bootstrap frontier: height=${currentHeight} size=${orchardTreeSize} (dropped ${state.notes.length} stale witnesses)`,
       );
     } catch (e) {
-      console.warn('[zcash-worker] failed to bootstrap frontier:', e);
+      console.warn(`[zcash-worker] failed to bootstrap frontier: ${errText(e)}`);
     }
   }
 
@@ -3549,7 +3336,9 @@ const syncLoop = async (
       try {
         iwFrontierSize = Number(iwSizeFn(ironwoodFrontier));
       } catch (e) {
-        console.warn('[zcash-worker] stored ironwood frontier unreadable, rebootstrapping:', e);
+        console.warn(
+          `[zcash-worker] stored ironwood frontier unreadable, rebootstrapping: ${errText(e)}`,
+        );
         ironwoodFrontier = '';
       }
     }
@@ -3582,7 +3371,7 @@ const syncLoop = async (
           );
         }
       } catch (e) {
-        console.warn('[zcash-worker] failed to bootstrap ironwood frontier:', e);
+        console.warn(`[zcash-worker] failed to bootstrap ironwood frontier: ${errText(e)}`);
       }
     }
   }
@@ -3621,7 +3410,7 @@ const syncLoop = async (
           ironwoodTreeSize = Number(iwSizeFn(rebuiltFrontier));
         }
       } catch (e) {
-        console.warn('[zcash-worker] ironwood stranded-witness rebuild failed:', e);
+        console.warn(`[zcash-worker] ironwood stranded-witness rebuild failed: ${errText(e)}`);
       }
     }
   }
@@ -3642,7 +3431,9 @@ const syncLoop = async (
     try {
       await initZync();
     } catch (e) {
-      console.warn('[zcash-worker] zync-core init failed, syncing without verification:', e);
+      console.warn(
+        `[zcash-worker] zync-core init failed, syncing without verification: ${errText(e)}`,
+      );
     }
   }
   // a worker that synced a zidecar earlier keeps zync loaded; only this run's backend decides
@@ -3663,6 +3454,8 @@ const syncLoop = async (
   });
 
   let consecutiveErrors = 0;
+  /** the last failure logged: a node that stays down prints one line, not one per try */
+  let lastErrLine: string | undefined;
 
   // ── chain-continuity recovery ──
   //
@@ -3742,7 +3535,7 @@ const syncLoop = async (
       }
       await txComplete(wtx);
     } catch (e) {
-      console.warn('[zcash-worker] rewind: could not clear ironwood witnesses:', e);
+      console.warn(`[zcash-worker] rewind: could not clear ironwood witnesses: ${errText(e)}`);
     }
     for (const note of state.notes) {
       note.witness_hex = undefined;
@@ -3764,15 +3557,6 @@ const syncLoop = async (
   // A birthday/import start (startHeight > 0) folds from a non-genesis seed,
   // so the verify step must be skipped for those wallets - see verifySyncProofs.
   const actionsGenesisAnchored = (startHeight ?? 0) === 0;
-  // notes found since last header proof verification
-  const pendingCmxs: Uint8Array[] = [];
-  const pendingPositions: number[] = [];
-  // Pool of real, on-chain (cmx, position) pairs observed while scanning, used
-  // to pad the commitment-proof query with decoys that are indistinguishable
-  // from our own notes. Drawn from the same block range we just walked, which
-  // is where the real notes are - decoys sampled uniformly over all of chain
-  // history would cluster in the wrong era and be separable on that alone.
-  const decoyPool = new CommitmentReservoir();
 
   // mempool watcher: only spawned when explicitly opted in AND on a zidecar
   // endpoint (lightwalletd has no compact-action mempool RPC, so the watcher
@@ -3817,7 +3601,7 @@ const syncLoop = async (
           handleMempoolSnapshot(walletId, state, snap);
         }
       } catch (err) {
-        console.warn('[zcash-worker] mempool watcher exited:', err);
+        console.warn(`[zcash-worker] mempool watcher exited: ${errText(err)}`);
         // Surface terminal error to UI so the toggle/status badge stops
         // claiming "connected" / "reconnecting" when the watcher is dead.
         workerSelf.postMessage({
@@ -3876,6 +3660,10 @@ const syncLoop = async (
 
   while (!signal.aborted) {
     try {
+      if (await storeWasReset()) {
+        restart = true;
+        break;
+      }
       const chainHeight = await getChainTip();
 
       // Cross-check the tip against an INDEPENDENT operator, once per
@@ -3918,7 +3706,7 @@ const syncLoop = async (
                 console.log(`[zcash-worker] cross-check: ${res.detail}`);
               }
             })
-            .catch(e => console.warn('[zcash-worker] cross-check failed:', e));
+            .catch(e => console.warn(`[zcash-worker] cross-check failed: ${errText(e)}`));
         }
       }
 
@@ -4052,7 +3840,9 @@ const syncLoop = async (
                 }
                 await txComplete(wtx);
               } catch (e) {
-                console.warn('[zcash-worker] catch-up: could not clear ironwood witnesses:', e);
+                console.warn(
+                  `[zcash-worker] catch-up: could not clear ironwood witnesses: ${errText(e)}`,
+                );
               }
               for (const note of state.notes) {
                 if (poolOf(note) === 'ironwood') {
@@ -4106,84 +3896,39 @@ const syncLoop = async (
           await txComplete(metaTx);
           console.log(`[zcash-worker] cached tree frontier at height ${currentHeight}`);
         } catch (e) {
-          console.warn('[zcash-worker] failed to cache tree frontier:', e);
+          console.warn(`[zcash-worker] failed to cache tree frontier: ${errText(e)}`);
         }
 
-        // Verify proofs whenever the backend supports it - NOT only when this
-        // batch happened to discover a new orchard note.
-        //
-        // pendingCmxs is appended to only by the orchard discovery loop, so
-        // gating on it meant the nullifier pass (all server-side spend
-        // detection, both pools) ran only in a cycle right after an incoming
-        // orchard note. A steady-state wallet never ran it; an ironwood-only
-        // wallet never ran it at all. That is precisely the wallet that needs
-        // it, since ironwood has no other spent oracle.
-        //
-        // The commitment-proof step inside still no-ops on an empty
-        // pendingCmxs, so this only widens what was already conditional.
+        // Header-proof checks, whenever the backend supports them. They send
+        // nothing about this wallet; spends and notes come from the scan.
         if (zidecar && zync) {
           try {
-            // seed failure must not silently drop the padding - if we cannot
-            // load it we would send bare queries, which is the leak this is
-            // here to close. skip the verification round instead.
-            const decoySeed = await getDecoySeed(walletId);
             await verifySyncProofs(
               zidecar,
               chainHeight,
               true,
-              pendingCmxs,
-              pendingPositions,
-              state,
               actionsCommitment,
               actionsGenesisAnchored,
-              decoySeed,
-              decoyPool.snapshot(),
             );
           } catch (e) {
-            // Fail CLOSED only on checks that are actually sound.
-            //
-            // Two different kinds of failure land here and they are NOT the
-            // same thing:
-            //
-            //   SOUND - comparisons taken at ONE instant, where a mismatch
-            //   means the server contradicted itself: a proof that does not
-            //   bind to the batch root we checked, a proof for something we
-            //   never asked about, a duplicate, or a wrong count. These are
-            //   real evidence and must refuse.
-            //
-            //   RACY - comparisons between a SNAPSHOT and a LIVE value. The
-            //   NOMT tree is mutable and single-versioned: proofs are made
-            //   against nomt.root() at request time while the ligerito header
-            //   proof carries a root from whenever it was last generated, and
-            //   the server writes continuously. The same applies to the
-            //   actions commitment, which folds stored per-block roots the
-            //   indexer is still filling in. A divergence there is expected.
-            //
-            // My earlier classifier matched /mismatch|tampered/ and escalated
-            // BOTH, which bricked sync within minutes of a healthy server
-            // doing ordinary work, under a message accusing it of tampering.
-            // A false alarm on an integrity check is worse than none: it
-            // teaches users to click past the one warning that should stop
-            // them.
+            // Fail CLOSED only on checks that are actually sound. A header
+            // proof that does not verify is the server contradicting itself;
+            // an actions-commitment divergence is not (the indexer is still
+            // filling in stored per-block roots), so that one only retries.
             const detail = e instanceof Error ? e.message : String(e);
-            const tampering =
-              /proof root mismatch|unrequested|duplicate|count mismatch|proof invalid/i.test(
-                detail,
-              );
-            if (tampering) {
-              console.error('[zcash-worker] INTEGRITY FAILURE, refusing batch:', e);
-              pendingCmxs.length = 0;
-              pendingPositions.length = 0;
+            if (/proof invalid/i.test(detail)) {
+              console.error(`[zcash-worker] INTEGRITY FAILURE, refusing batch: ${errText(e)}`, e);
               throw syncError(
                 'consensus',
                 `server integrity check failed: ${detail}. ` +
                   `refusing to trust this endpoint's data - switch node or retry`,
               );
             }
-            console.warn('[zcash-worker] proof verification unavailable, will retry:', e);
+            console.warn(
+              `[zcash-worker] proof verification unavailable, will retry: ${errText(e)}`,
+            );
+            suspectBackend(serverUrl);
           }
-          pendingCmxs.length = 0;
-          pendingPositions.length = 0;
         }
 
         // mempool scanning lives in the separate watcher task spawned above
@@ -4214,7 +3959,9 @@ const syncLoop = async (
               );
               await buildWitnessesIronwood(client, walletId, behind, ironwoodFrontierHeight);
             } catch (e) {
-              console.warn('[zcash-worker] background ironwood witness rebuild failed:', e);
+              console.warn(
+                `[zcash-worker] background ironwood witness rebuild failed: ${errText(e)}`,
+              );
             }
           }
         }
@@ -4319,14 +4066,6 @@ const syncLoop = async (
           }
 
           for (const a of block.actions) {
-            // absolute commitment-tree position of this action, computed the
-            // same way as for our own notes below (batch base + index within
-            // the batch). offering every observed action to the reservoir is
-            // what gives the commitment-proof query a supply of decoys that
-            // are genuine tree entries.
-            if (zidecar && a.cmx.length === 32) {
-              decoyPool.offer(new Uint8Array(a.cmx), orchardTreeSize + (off - 4) / ACTION_SIZE);
-            }
             // pack binary for WASM scan
             if (a.nullifier.length === 32) {
               buf.set(a.nullifier, off);
@@ -4363,7 +4102,7 @@ const syncLoop = async (
         try {
           foundNotes = state.keys.scan_actions_parallel(buf);
         } catch (err) {
-          console.error('[zcash-worker] scan_actions_parallel crashed:', err);
+          console.error(`[zcash-worker] scan_actions_parallel crashed: ${errText(err)}`, err);
           currentHeight = endHeight;
           continue;
         }
@@ -4386,10 +4125,6 @@ const syncLoop = async (
           );
           newNotes.push(full);
           state.notes.push(full);
-
-          // track for verification
-          pendingCmxs.push(hexDecode(note.cmx));
-          pendingPositions.push(position);
         }
 
         // detect spent notes: a nullifier in this block matches an owned note.
@@ -4519,7 +4254,7 @@ const syncLoop = async (
           runningFrontier = result.end_frontier_hex;
           runningFrontierHeight = endHeight;
         } catch (e) {
-          console.error('[zcash-worker] witness_sync_update failed:', e);
+          console.error(`[zcash-worker] witness_sync_update failed: ${errText(e)}`, e);
           // invalidate frontier so next batch rebootstraps
           runningFrontier = '';
         }
@@ -4614,7 +4349,10 @@ const syncLoop = async (
             state.notes.push(full);
           }
         } catch (err) {
-          console.error('[zcash-worker] scan_actions_ironwood_parallel crashed:', err);
+          console.error(
+            `[zcash-worker] scan_actions_ironwood_parallel crashed: ${errText(err)}`,
+            err,
+          );
         }
 
         // spent detection: ironwood nullifiers spend ironwood notes. Same
@@ -4714,7 +4452,7 @@ const syncLoop = async (
             ironwoodFrontier = result.end_frontier_hex;
             ironwoodFrontierHeight = endHeight;
           } catch (e) {
-            console.error('[zcash-worker] witness_sync_update_ironwood failed:', e);
+            console.error(`[zcash-worker] witness_sync_update_ironwood failed: ${errText(e)}`, e);
             // invalidate frontier so the next runSync rebootstraps
             ironwoodFrontier = '';
           }
@@ -4749,7 +4487,12 @@ const syncLoop = async (
       }
       const combinedUpdated = Array.from(updatedDedup.values());
 
-      // single batched db write for entire batch
+      // single batched db write for entire batch, into the store this run
+      // has been writing: never into one wiped under it
+      if (await storeWasReset()) {
+        restart = true;
+        break;
+      }
       currentHeight = endHeight;
       await saveBatch(
         walletId,
@@ -4770,6 +4513,7 @@ const syncLoop = async (
             }
           : undefined,
       );
+      lastSaved = currentHeight;
 
       // periodic frontier snapshot for privacy-safe witness building.
       // Also cross-check local frontier vs network to detect reorg-induced corruption.
@@ -4849,6 +4593,7 @@ const syncLoop = async (
       });
 
       consecutiveErrors = 0;
+      lastErrLine = undefined;
     } catch (err) {
       // Intentional stop (wallet switch, endpoint change, shutdown): in-flight
       // RPCs can fail once teardown begins. That's not a sync failure - no
@@ -4883,6 +4628,7 @@ const syncLoop = async (
           try {
             await rewindScanCursor(target);
             currentHeight = target;
+            lastSaved = target;
             workerSelf.postMessage({
               type: 'sync-progress',
               id: '',
@@ -4900,19 +4646,50 @@ const syncLoop = async (
             // The rewind itself failed (endpoint down mid-recovery, storage
             // unavailable). Fall through and treat it as an ordinary failure
             // so the real reason is the one that gets classified.
-            console.warn('[zcash-worker] rewind failed:', rewindErr);
+            console.warn(`[zcash-worker] rewind failed: ${errText(rewindErr)}`);
           }
         }
       }
 
       consecutiveErrors++;
-      // Retrying is the policy, so a flapping endpoint would otherwise produce
-      // one of these per backoff interval indefinitely. Log the first few and
-      // then every tenth; the UI sync-error message below is unaffected, so the
-      // user still sees the wallet struggling.
-      if (consecutiveErrors <= 3 || consecutiveErrors % 10 === 0) {
-        console.error(`[zcash-worker] sync error (${consecutiveErrors}):`, err);
+      const errLine = errText(err);
+      // Storage, not the node. A closed connection is dropped so the next try
+      // opens a fresh one (retrying over it only counted: "sync error (240)").
+      // A full disk or a database newer than this build cannot be retried
+      // away: say so once, honestly, and stop until the person acts.
+      const storage = storageFailure(err);
+      if (storage) {
+        // the next try opens a fresh connection, and checks it is the same store
+        closeDb();
+        dbLost++;
       }
+      if (storage === 'fatal') {
+        console.error(`[zcash-worker] sync stopped, local data unusable: ${errLine}`);
+        workerSelf.postMessage({
+          type: 'sync-error',
+          id: '',
+          network: 'zcash',
+          walletId,
+          payload: { message: errLine, stalled: true, code: 'storage-fatal' },
+        });
+        break;
+      }
+      // on a zidecar the sync itself runs on zidecar's own calls (GetTip,
+      // whole blocks); failing twice may mean the node is not one (a local
+      // storage failure never blames the node)
+      if (consecutiveErrors === 2 && zidecar && !storage) {
+        suspectBackend(serverUrl);
+      }
+      // Retrying is the policy, so a flapping endpoint would otherwise produce
+      // one of these per backoff interval indefinitely. One line when the
+      // failure starts or changes, then every tenth; the UI sync-error message
+      // below is unaffected, so the user still sees the wallet struggling.
+      if (errLine !== lastErrLine || consecutiveErrors % 10 === 0) {
+        console.warn(
+          `[zcash-worker] sync error (${consecutiveErrors}): ${errLine}; next try in ${Math.round(syncRetryDelayMs(consecutiveErrors) / 1000)}s`,
+        );
+      }
+      lastErrLine = errLine;
       // surface to UI from the second consecutive failure (skip transient
       // single hiccups, but don't make the user stare at "syncing 0%" while
       // we silently retry forever)
@@ -4928,7 +4705,7 @@ const syncLoop = async (
           network: 'zcash',
           walletId,
           payload: {
-            message: err instanceof Error ? err.message : String(err),
+            message: errLine,
             stalled: consecutiveErrors >= SYNC_STALL_ERRORS,
             ...(code ? { code } : {}),
           },
@@ -4947,6 +4724,7 @@ const syncLoop = async (
   // Nothing in flight may be applied after the loop ends, however it ended.
   prefetcher.reset();
   state.mempoolAbort?.abort();
+  return restart ? 'restart' : undefined;
 };
 
 const getBalance = async (walletId: string): Promise<bigint> => {
@@ -5074,7 +4852,7 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
       }
     }
   } catch (e) {
-    console.warn('[zcash-worker] failed to compute pending change:', e);
+    console.warn(`[zcash-worker] failed to compute pending change: ${errText(e)}`);
   }
 
   return {
@@ -5148,15 +4926,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error('walletId required');
         }
         await initWasm();
-        const { vault, serverUrl, startHeight, ufvk, backend, mempoolWatch } = payload as {
-          /** hot wallet: the sealed vault this worker opens itself; watch-only sends ufvk */
-          vault?: SealedVault;
-          serverUrl: string;
-          startHeight?: number;
-          ufvk?: string;
-          backend?: ZcashBackend;
-          mempoolWatch?: 'off' | 'on';
-        };
+        const { vault, serverUrl, startHeight, ufvk, backend, detectBackend, mempoolWatch } =
+          payload as {
+            /** hot wallet: the sealed vault this worker opens itself; watch-only sends ufvk */
+            vault?: SealedVault;
+            serverUrl: string;
+            startHeight?: number;
+            ufvk?: string;
+            backend?: ZcashBackend;
+            /** the page has no answer from this node yet: ask it first */
+            detectBackend?: boolean;
+            mempoolWatch?: 'off' | 'on';
+          };
         // Defensive: validate enum values from cross-context payload.
         // Silent coercion of an unknown backend to 'zidecar' is a privacy
         // regression - a user configured to talk to a third-party
@@ -5170,7 +4951,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (mempoolWatch !== undefined && mempoolWatch !== 'off' && mempoolWatch !== 'on') {
           throw new Error(`unknown mempoolWatch in sync payload: ${String(mempoolWatch)}`);
         }
-        const effectiveBackend: ZcashBackend = backend ?? 'zidecar';
+        let effectiveBackend: ZcashBackend = backend ?? backendOfEndpoint(serverUrl);
+        if (detectBackend === true) {
+          // the node says what it is, through the call every light wallet
+          // makes first; a node that does not answer keeps the guess, and
+          // the sync's own errors tell the user it is unreachable
+          try {
+            effectiveBackend = await detectZcashBackend(serverUrl);
+            announceBackend(serverUrl, effectiveBackend);
+          } catch (e) {
+            console.warn(`[zcash-worker] node did not say what it is: ${errText(e)}`);
+          }
+        }
         // Seed the registry so subsequent operations (send, history, memo
         // fetch) construct the right client without re-receiving backend.
         registerBackend(serverUrl, effectiveBackend);
@@ -5499,6 +5291,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               '[zcash-worker] anchor attestation failed; emitting unattested bundle:',
               e,
             );
+            suspectBackend(syncServerUrl);
           }
         }
 
@@ -5519,7 +5312,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         try {
           anchorTime = (await client.getTreeState(anchorHeight)).time;
         } catch (e) {
-          console.warn('[zcash-worker] anchor block time unavailable; bundle omits it:', e);
+          console.warn(
+            `[zcash-worker] anchor block time unavailable; bundle omits it: ${errText(e)}`,
+          );
         }
         const cborBytes = appendCborAnchorTime(cborBundle, anchorTime);
 
@@ -5687,7 +5482,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               }
             }
           } catch (e) {
-            console.warn('[zcash-worker] get-history: transparent history failed:', e);
+            console.warn(`[zcash-worker] get-history: transparent history failed: ${errText(e)}`);
           }
         }
 
@@ -5749,11 +5544,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               amount = inputTotal - info.changeValue;
             } else {
               // No input total. histSpentByMap is keyed on note.spent_by_txid,
-              // which the NOMT nullifier ORACLE never sets - it adds the
-              // nullifier to spentNullifiers with no txid. So any spend
-              // detected by proof rather than by a scan-time nullifier match
-              // lands here (classic case: the same seed used on another device,
-              // then restored).
+              // which only a spend this wallet recorded itself sets; a spend
+              // known only as a nullifier (older wallets marked spends from
+              // server proofs, with no txid) lands here.
               //
               // This used to display info.changeValue as the amount sent, which
               // is not merely imprecise, it is the wrong number entirely: pay
@@ -5916,7 +5709,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 });
               }
             } catch (e) {
-              console.warn('[zcash-worker] get-history: pending-send height lookup failed:', e);
+              console.warn(
+                `[zcash-worker] get-history: pending-send height lookup failed: ${errText(e)}`,
+              );
             }
           }
 
@@ -5929,7 +5724,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // fire-and-forget: display must not wait on (or fail with) a write
           void applyReconciliation(walletId, result.confirm, result.prune);
         } catch (e) {
-          console.warn('[zcash-worker] could not read local sent records:', e);
+          console.warn(`[zcash-worker] could not read local sent records: ${errText(e)}`);
           reconciled = reconcileSentTxs({ chainTxs: histTxs, sent: [], scannedHeight: 0 }).txs;
         }
 
@@ -6691,7 +6486,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           try {
             result = await broadcastClient.sendTransaction(txData);
           } catch (e) {
-            console.error('[zcash-worker] broadcast RPC failed:', e);
+            console.error(`[zcash-worker] broadcast RPC failed: ${errText(e)}`);
             throw e;
           }
           if (result.errorCode !== 0) {
@@ -9132,5 +8927,5 @@ initWasm()
     workerSelf.postMessage({ type: 'ready', id: '', network: 'zcash' });
   })
   .catch(err => {
-    console.error('[zcash-worker] wasm init failed:', err);
+    console.error(`[zcash-worker] wasm init failed: ${errText(err)}`);
   });

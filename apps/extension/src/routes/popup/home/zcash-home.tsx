@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
+import { selectZcashBackend } from '../../../state/networks';
 import { contactsSelector } from '../../../state/contacts';
 import {
   selectEffectiveKeyInfo,
@@ -46,7 +47,7 @@ import { SyncStrip } from '../../../components/wallet/sync-strip';
 import { EmptyBox, HomeScreen } from './home-screen';
 import { BalanceGroup, BalanceRow, Tile } from '../../../components/wallet/balance-rows';
 import type { BalanceView } from '../../../components/wallet/balance-hero';
-import { MultisigOverview } from './multisig-overview';
+import { SharedWallets } from './shared-wallets';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { BuyInFlight } from '../../../components/buy-in-flight';
 import { SwapInFlight } from '../../../components/swap-in-flight';
@@ -86,7 +87,7 @@ export const ZcashContent = ({
   const hasWallet = !!(hasMnemonic || watchOnly);
   const isMainnet = useStore(selectZcashIsMainnet);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
-  const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
+  const zcashBackend = useStore(selectZcashBackend);
   const {
     syncStatus,
     chainTip,
@@ -375,7 +376,7 @@ export const ZcashContent = ({
         </BalanceGroup>
       )}
 
-      <MultisigOverview />
+      <SharedWallets />
 
       <HistoryContent network='zcash' penumbraAccount={0} limit={3} />
 

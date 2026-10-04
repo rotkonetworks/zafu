@@ -57,6 +57,12 @@ import { useThreadName } from './use-thread-name';
 import { NoteLine } from './card-notes';
 import { sourceLine } from '../contacts/seal';
 import { useCardSync } from '../../../people/my-card';
+import { useFrostRoom } from '../../../people/use-frost-room';
+import { DOOR_MS } from '../../../people/door';
+import { KeyCard } from './shared-wallet';
+import { DealSheet } from './deal-sheet';
+import { PaymentCard, ProposeSheet } from './payments';
+import { usePasswordGate } from '../../../hooks/password-gate';
 import { RequestSheet } from '../send/send-fields';
 import { cardOf, counterparty, shortAddress, threadIdOf, whenOf } from './threads';
 
@@ -242,11 +248,14 @@ const MoneySheet = ({
   onClose,
   onPay,
   onRequest,
+  onDeal,
 }: {
   open: boolean;
   onClose: () => void;
   onPay: () => void;
   onRequest?: (zat: bigint, note: string) => void;
+  /** a shared wallet for the two of you, over your pair room */
+  onDeal?: () => void;
 }) => {
   const [asking, setAsking] = useState(false);
   const [amount, setAmount] = useState('');
@@ -287,6 +296,11 @@ const MoneySheet = ({
           </Button>
         )}
       </div>
+      {onDeal && (
+        <Button variant='secondary' onClick={onDeal}>
+          make a deal · held by the two of you
+        </Button>
+      )}
     </Sheet>
   );
 };
@@ -463,6 +477,7 @@ export function ThreadPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState('');
   const [money, setMoney] = useState(false);
+  const [dealing, setDealing] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const messages = useMemo(
@@ -487,6 +502,14 @@ export function ThreadPage() {
   const myRooms = useMyRooms();
   const room = myRooms.find(r => r.id === roomId && r.joined);
   const relay = useThread(room)?.items;
+  // a deal made in the pair room, and an invite into someone's deal group
+  const shared = useFrostRoom(room);
+  const [sending, setSending] = useState(false);
+  const { requestAuth, PasswordModal } = usePasswordGate();
+  const dealAsk =
+    room?.pair?.deal && room.pair.deal.at * 1000 > Date.now() - DOOR_MS
+      ? room.pair.deal
+      : undefined;
   // your invite to someone with no card from you, waiting for their answer
   const waiting = myRooms.some(r => contact && r.id === pairId(contact.id) && r.pair?.waiting);
   // answers to that invite you have not confirmed: anyone who reads the memo can answer
@@ -519,8 +542,10 @@ export function ThreadPage() {
       [
         ...messages.map(m => ({ key: m.id, t: m.timestamp, m })),
         ...(relay ?? []).map(it => ({ key: it.hash || it.local!, t: it.ts * 1000, it })),
+        ...(shared.ceremony ? [{ key: shared.ceremony.id, t: shared.ceremony.at * 1000 }] : []),
+        ...shared.payments.map(p => ({ key: p.id, t: p.at * 1000, p })),
       ].sort((a, b) => a.t - b.t),
-    [messages, relay],
+    [messages, relay, shared.ceremony],
   );
 
   // whether the reader is at (or very near) the bottom right now; updated on
@@ -539,7 +564,11 @@ export function ThreadPage() {
   // read flag flipping on an older message, must never yank the view
   useEffect(() => {
     const last = rows.at(-1);
-    const mine = last ? ('m' in last ? last.m.direction === 'sent' : last.it.mine) : false;
+    const mine = last
+      ? 'm' in last
+        ? last.m.direction === 'sent'
+        : 'it' in last && last.it.mine
+      : false;
     if (stuckToBottomRef.current || mine) {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
     }
@@ -646,6 +675,29 @@ export function ThreadPage() {
             )}
             {'m' in r ? (
               <Item m={r.m} from={name} />
+            ) : 'p' in r ? (
+              room &&
+              shared.seat &&
+              shared.me && (
+                <PaymentCard
+                  p={r.p}
+                  room={room}
+                  seat={shared.seat}
+                  me={shared.me}
+                  kept={shared.kept[r.p.id]}
+                  nameOf={() => name}
+                  requestAuth={requestAuth}
+                />
+              )
+            ) : !('it' in r) ? (
+              room && (
+                <KeyCard
+                  view={shared}
+                  roomId={room.id}
+                  nameOf={() => name}
+                  onSend={() => setSending(true)}
+                />
+              )
             ) : r.it.kind === 'note' ? (
               <NoteLine
                 item={r.it}
@@ -661,6 +713,20 @@ export function ThreadPage() {
       </div>
 
       {contact && answers.length > 0 && <Answers contactId={contact.id} answers={answers} />}
+      {dealAsk && (
+        <div className='flex h-11 shrink-0 items-center justify-between gap-3 border-t border-border-soft px-4 text-xs text-fg'>
+          <span className='truncate'>
+            {name} asks you into a deal · {dealAsk.group}
+          </span>
+          <button
+            type='button'
+            onClick={() => navigate(`${PopupPath.INBOX_JOIN}?code=${dealAsk.code}&via=pasted`)}
+            className='shrink-0 text-zigner-gold hover:underline'
+          >
+            join
+          </button>
+        </div>
+      )}
       {canSend && (invites || waiting) && (
         <div className='flex h-8 shrink-0 items-center justify-between gap-3 border-t border-border-soft px-4 text-[11px] text-fg-muted'>
           <span className='truncate'>
@@ -737,7 +803,37 @@ export function ThreadPage() {
         onClose={() => setMoney(false)}
         onPay={() => send()}
         onRequest={network === 'zcash' ? (zat, note) => void request(zat, note) : undefined}
+        onDeal={
+          room?.pair?.peer && shared.me && !shared.ceremony
+            ? () => {
+                setMoney(false);
+                setDealing(true);
+              }
+            : undefined
+        }
       />
+      {PasswordModal}
+      {room && shared.seat && (
+        <ProposeSheet
+          open={sending}
+          onClose={() => setSending(false)}
+          room={room}
+          seat={shared.seat}
+          to={address}
+          requestAuth={requestAuth}
+        />
+      )}
+      {room?.pair?.peer && shared.me && contact && (
+        <DealSheet
+          open={dealing}
+          onClose={() => setDealing(false)}
+          roomId={room.id}
+          contactId={contact.id}
+          name={name}
+          me={shared.me}
+          peer={room.pair.peer}
+        />
+      )}
       {contact && (
         <RelaySheet
           open={picking}

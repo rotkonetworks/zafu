@@ -87,6 +87,20 @@ describe('classifySyncFailure - sniffed', () => {
     expect(classifySyncFailure(raw).kind).toBe(kind);
   });
 
+  it('reads an IndexedDB DOMException by its name, not only its message', () => {
+    // the message alone ("The database connection is closing.") names no store
+    const closed = new DOMException('The database connection is closing.', 'InvalidStateError');
+    expect(classifySyncFailure(closed).kind).toBe('storageFatal');
+    expect(classifySyncFailure(closed).raw).toBe(
+      'InvalidStateError: The database connection is closing.',
+    );
+    const full = new DOMException(
+      'The current transaction exceeded its quota.',
+      'QuotaExceededError',
+    );
+    expect(classifySyncFailure(full).kind).toBe('storageFatal');
+  });
+
   it('accepts Errors, strings, and junk without throwing', () => {
     expect(classifySyncFailure(new Error('connection refused')).kind).toBe('network');
     expect(classifySyncFailure({ message: 'database is locked' }).kind).toBe('storageBusy');

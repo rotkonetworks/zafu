@@ -34,6 +34,7 @@ import { ScanBlockResult } from '@penumbrafi/types/state-commitment-tree';
 import { computePositionId, getLpNftMetadata, decryptPositionMetadata } from '@penumbrafi/wasm/dex';
 import { customizeSymbol } from '@penumbrafi/wasm/metadata';
 import { backOff } from 'exponential-backoff';
+import { errText, storageFailure } from './error-text';
 import { updatePricesFromSwaps } from './helpers/price-indexer';
 import { processActionDutchAuctionEnd } from './helpers/process-action-dutch-auction-end';
 import { processActionDutchAuctionSchedule } from './helpers/process-action-dutch-auction-schedule';
@@ -96,6 +97,10 @@ interface ProcessBlockParams {
 /** what a snapshot view server reports as its height before it scans a block */
 const U64_MAX = 0xffffffffffffffffn;
 
+/** sync retries wait 5s, doubling to 2 minutes, for as long as a window is open */
+const SYNC_RETRY_START_MS = 5_000;
+const SYNC_RETRY_MAX_MS = 120_000;
+
 const POSITION_STATES: PositionState[] = [
   new PositionState({ state: PositionState_PositionStateEnum.OPENED }),
   new PositionState({ state: PositionState_PositionStateEnum.CLOSED }),
@@ -138,6 +143,16 @@ export class BlockProcessor implements BlockProcessorInterface {
   private checkpointAhead = false;
   /** the stored tree was compared with the chain once (see checkStoredTree) */
   private treeChecked = false;
+  /** the last failure logged, so a node that stays down prints one line, not one per try */
+  private lastFailure: string | undefined;
+  /** a storage failure ended the loop: sync() starts nothing on this processor again */
+  private storageFailed = false;
+  /**
+   * Told once, with the error, when a storage failure ends the loop (see
+   * `storageFailure`). The processor cannot reopen its own database; the
+   * owner of the services can, by building them again.
+   */
+  public onStorageFailure?: (e: unknown) => void;
   private readonly genesisBlock: CompactBlock | undefined;
   private readonly walletCreationBlockHeight: number | undefined;
   private readonly compactFrontierBlockHeight: number | undefined;
@@ -171,40 +186,65 @@ export class BlockProcessor implements BlockProcessorInterface {
     // paused: nobody is looking, so a view call poking sync() starts nothing;
     // stopped: a view call through old services must not revive a wallet
     // the user switched away from
-    this.paused || this.holds > 0 || this.stopped
+    this.paused || this.holds > 0 || this.stopped || this.storageFailed
       ? Promise.resolve()
       : (this.syncPromise ??= backOff(this.run, {
           delayFirstAttempt: false,
-          startingDelay: 5_000, // 5 seconds
+          startingDelay: SYNC_RETRY_START_MS,
           numOfAttempts: Infinity,
-          maxDelay: 20_000, // 20 seconds
+          maxDelay: SYNC_RETRY_MAX_MS,
           retry: async (e, attemptNumber) => {
-            // Intentional stop (wallet switch, shutdown): in-flight RPCs reject
-            // with the abort reason. That's teardown, not a sync failure - no
-            // scary log, no tree reset, no retry.
+            // Intentional stop (wallet switch, shutdown) or pause (every window
+            // closed): in-flight RPCs reject with the abort reason. That's
+            // teardown, not a sync failure - no log, no tree reset, no retry.
             if (this.abortController.signal.aborted) {
               return false;
             }
-            // Retrying is the policy here, not a failure: an endpoint that is down
-            // produces one of these every backoff interval, forever, which buries
-            // the errors that actually need attention under hundreds of identical
-            // lines. Log the first few attempts and then every tenth; the recovery
-            // below still runs on every attempt either way.
-            const shouldLog = attemptNumber <= 3 || attemptNumber % 10 === 0;
-            if (shouldLog) {
-              console.error(`Sync failure #${attemptNumber}: `, e);
+            // A storage failure ends the loop. The IndexedDb under this
+            // processor holds one connection for its whole life, so a closed
+            // connection fails every attempt the same way: retrying it only
+            // counted ("Sync failure #1680"). Its owner, told through
+            // onStorageFailure, reopens the database
+            // by building the services again, or reports a fatal one.
+            if (storageFailure(e)) {
+              this.storageFailed = true;
+              this.onStorageFailure?.(e);
+              return false;
             }
+            // Retrying is the policy here, not a failure: an endpoint that is
+            // down fails every attempt. One calm line when the failure starts or
+            // changes and then every tenth attempt, with the wait doubling to
+            // two minutes; the recovery below still runs on every attempt.
+            const text = errText(e);
+            if (text !== this.lastFailure || attemptNumber % 10 === 0) {
+              const wait = Math.min(
+                SYNC_RETRY_MAX_MS,
+                SYNC_RETRY_START_MS * 2 ** (attemptNumber - 1),
+              );
+              console.warn(
+                `[sync] penumbra sync attempt ${attemptNumber} failed: ${text}; next try in ${Math.round(wait / 1000)}s`,
+              );
+            }
+            this.lastFailure = text;
             // The next attempt puts the tree back to what is stored before it
             // reads a block (see `run`). A reset that throws is just a failed
             // attempt, retried like any other: it never ends the loop, and the
             // run never goes on over a tree that is ahead of storage.
             return Promise.resolve(true);
           },
-        })).finally(
+        })
+          // reported once through onStorageFailure; every caller that chained
+          // on this promise would otherwise log it again
+          .catch((e: unknown) => {
+            if (!this.storageFailed) {
+              throw e;
+            }
+          })).finally(() => {
           // if the above promise completes, exponential backoff has ended (aborted).
           // reset the rejected promise to allow for a new sync to be started.
-          () => (this.syncPromise = undefined),
-        );
+          this.syncPromise = undefined;
+          this.lastFailure = undefined;
+        });
 
   /**
    * One run of the loop, bound to the abort signal it started with. A resume
@@ -252,7 +292,7 @@ export class BlockProcessor implements BlockProcessorInterface {
     try {
       await this.flushAndSave();
     } catch (e) {
-      console.debug('[sync] progress not kept at pause; the next run reads it again:', e);
+      console.debug('[sync] progress not kept at pause; the next run reads it again:', errText(e));
     }
   }
 
@@ -391,7 +431,10 @@ export class BlockProcessor implements BlockProcessorInterface {
         }
         return latest;
       },
-      { retry: () => !signal.aborted },
+      // a node that answers without a height (or not at all) is asked a few
+      // more times, 0.5s doubling, before the attempt fails into the loop's
+      // own backoff (was ten tries from 100ms, then the loop again)
+      { retry: () => !signal.aborted, startingDelay: 500, maxDelay: 8_000, numOfAttempts: 5 },
     );
 
     // Check that 'currentHeight' and 'compactFrontierBlockHeight' local extension
@@ -449,7 +492,7 @@ export class BlockProcessor implements BlockProcessorInterface {
       // as missing: that forces a re-fetch below which overwrites the poisoned
       // entry, instead of letting the throw stall every sync.
       const fmd = await this.indexedDb.getFmdParams().catch((err: unknown) => {
-        console.warn('[sync] stored FMD params undecodable, will re-fetch:', err);
+        console.warn('[sync] stored FMD params undecodable, will re-fetch:', errText(err));
         return undefined;
       });
       const storedApp = await this.indexedDb.getAppParams();
@@ -467,7 +510,7 @@ export class BlockProcessor implements BlockProcessorInterface {
         );
       }
     } catch (e) {
-      console.warn('[sync] chain params repair failed:', e);
+      console.warn('[sync] chain params repair failed:', errText(e));
     }
 
     // Validators: their per-epoch refresh (handleEpochTransition) is gated on
@@ -480,7 +523,7 @@ export class BlockProcessor implements BlockProcessorInterface {
         void this.updateValidatorInfos(currentHeight);
       }
     } catch (e) {
-      console.warn('[sync] validator repair failed:', e);
+      console.warn('[sync] validator repair failed:', errText(e));
     }
 
     // handle the special case where no syncing has been done yet, and
@@ -892,7 +935,7 @@ export class BlockProcessor implements BlockProcessorInterface {
       remote = await this.querier.cnidarium.fetchRemoteRoot(height);
       local = this.viewServer.getSctRoot();
     } catch (e) {
-      console.debug('[sync] stored tree not checked:', e);
+      console.debug('[sync] stored tree not checked:', errText(e));
       return 'unknown';
     }
     if (!remote.inner.length) {

@@ -1,3 +1,5 @@
+import { storedList } from './stored-list';
+
 export type Capability =
   | 'connect' // see addresses, balances
   | 'sign_identity' // ZID ed25519 signing
@@ -152,5 +154,5 @@ export function isDenied(perms: OriginPermissions | undefined, cap: Capability):
   if (!perms) {
     return false;
   }
-  return perms.denied.includes(cap);
+  return storedList(perms.denied).includes(cap);
 }

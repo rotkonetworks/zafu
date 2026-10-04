@@ -13,6 +13,11 @@
  * (to replay a request inside the app's own page, for apps whose templates
  * ask for that) are optional, requested inside the person's tap, and given
  * back when the capture ends unless they chose to keep them.
+ *
+ * Hosts: the required `<all_urls>` host permission (the service worker
+ * reaches whatever light-client endpoint the person configures) already
+ * covers every pay app's hosts, so they are not optional_host_permissions
+ * (Chrome warns they are redundant and drops them) and are never requested.
  */
 
 import type { PayApp, TemplateKey } from '../apps';
@@ -35,12 +40,13 @@ export const CAPTURE_PERMISSIONS: chrome.runtime.ManifestPermissions[] = [
 
 const originsOf = (app: PayApp) => app.hosts.map(h => `https://${h}/*`);
 
-export const hasCaptureAccess = (app: PayApp): Promise<boolean> =>
-  chrome.permissions.contains({ permissions: CAPTURE_PERMISSIONS, origins: originsOf(app) });
+/** the app's hosts ride on the required `<all_urls>`, so only the APIs are asked for */
+export const hasCaptureAccess = (): Promise<boolean> =>
+  chrome.permissions.contains({ permissions: CAPTURE_PERMISSIONS });
 
 /** must run inside the person's tap: Chrome only grants from a user gesture */
-export const requestCaptureAccess = (app: PayApp): Promise<boolean> =>
-  chrome.permissions.request({ permissions: CAPTURE_PERMISSIONS, origins: originsOf(app) });
+export const requestCaptureAccess = (): Promise<boolean> =>
+  chrome.permissions.request({ permissions: CAPTURE_PERMISSIONS });
 
 /** give the access back (the origins stay as zafu's install granted them) */
 export const releaseCaptureAccess = (): Promise<boolean> =>

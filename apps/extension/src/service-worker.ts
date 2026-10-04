@@ -75,7 +75,7 @@ import { getAuthorization } from './ctx/authorization';
 import { CustodyService, StakeService, ViewService } from '@penumbra-zone/protobuf';
 import { custodyClientCtx } from '@penumbrafi/services/ctx/custody-client';
 import { stakeClientCtx } from '@penumbrafi/services/ctx/stake-client';
-import { createDirectClient } from '@penumbra-zone/transport-dom/direct';
+import { createDirectClient } from './direct-client';
 import { internalTransportOptions } from './transport-options';
 
 // idb, querier, block processor
@@ -89,6 +89,7 @@ import {
 } from './wallet-services';
 import type { StartedServices } from './wallet-services';
 import type { BlockProcessor } from '@penumbra-zone/query/block-processor';
+import { errText, storageFailure } from '@penumbra-zone/query/error-text';
 import { getWalletFromStorage } from '@repo/storage-chrome/onboard';
 import type { WalletJson } from '@repo/wallet';
 import { createRebuildScheduler } from './rebuild-scheduler';
@@ -166,6 +167,7 @@ const ui = startUiOpenSession(
     resume: () => {
       penumbraSync('resume');
       runChainCheck();
+      reopenPenumbraStorage.onOpen();
     },
     pause: () => {
       console.log('[sw] last UI surface closed, requesting zcash sync stop');
@@ -200,8 +202,53 @@ const chainCheck = createChainCheck({
 });
 const runChainCheck = chainCheck.run;
 
+/**
+ * Penumbra's database connection died under the block processor (the browser
+ * closed it, or the backing store failed): build the services again, which
+ * opens a fresh connection, a few times with a growing wait. A full disk or a
+ * database from a newer build is said once and left alone, since a new
+ * connection cannot fix it. Nothing is rebuilt while every window is closed;
+ * the next window to open does it.
+ */
+const reopenPenumbraStorage = (() => {
+  const MAX = 3;
+  let tries = 0;
+  let waiting = false;
+  const reopen = () => {
+    waiting = false;
+    void rebuilds.request('penumbra storage reopen', true);
+  };
+  return {
+    failed: (e: unknown) => {
+      if (storageFailure(e) === 'fatal' || tries >= MAX) {
+        console.error(
+          `[sync] penumbra sync stopped: local data could not be read or written (${errText(e)}). reload zafu to try again`,
+        );
+        return;
+      }
+      tries++;
+      const wait = 5_000 * 2 ** (tries - 1);
+      console.warn(`[sync] penumbra storage closed (${errText(e)}); reopening in ${wait / 1000}s`);
+      waiting = true;
+      // a window that opened during the wait already reopened it (onOpen)
+      setTimeout(() => {
+        if (waiting && (ui.open || keepPenumbraSyncing)) {
+          reopen();
+        }
+      }, wait);
+    },
+    /** a window opened: a reopen held back while every window was closed goes now */
+    onOpen: () => {
+      if (waiting) {
+        reopen();
+      }
+    },
+  };
+})();
+
 /** a fresh block processor, before anything can start it */
 const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: boolean }) => {
+  bp.onStorageFailure = reopenPenumbraStorage.failed;
   // fresh services start syncing at once; with every window closed they wait
   if (!ui.open && !keepPenumbraSyncing) {
     bp.pause();
@@ -298,7 +345,7 @@ const rebuildServices = async (target: PenumbraTarget, _previous: unknown, why: 
     // an intentional stop ends a run quietly; anything else deserves the console
     void ws.blockProcessor
       .sync()
-      .catch((e: unknown) => console.error('[sync] block processor terminated:', e));
+      .catch((e: unknown) => console.error(`[sync] block processor terminated: ${errText(e)}`));
   } catch {
     // stub services (penumbra gated off): nothing to sync
   }
@@ -311,7 +358,7 @@ const rebuilds = createRebuildScheduler<PenumbraTarget>({
   desired: desiredPenumbraTarget,
   same: sameTarget,
   rebuild: rebuildServices,
-  onError: e => console.error('[sync] rebuild failed:', e),
+  onError: e => console.error(`[sync] rebuild failed: ${errText(e)}`),
 });
 const reinitializeServices = (why: string) => rebuilds.request(why);
 
@@ -413,7 +460,9 @@ const initHandler = async () => {
 
   // run any pending IDB clears requested before the previous reload,
   // BEFORE wallet services open new connections (which would block deletion)
-  await finishPendingWipe().catch(e => console.warn('[clear-startup] erase finish failed', e));
+  await finishPendingWipe().catch(e =>
+    console.warn(`[clear-startup] erase finish failed: ${errText(e)}`),
+  );
   await performPendingClears();
 
   // record what the boot services are for, so a later request that would
@@ -570,15 +619,25 @@ void (async () => {
 // On startup, RESUME polling any pending IBC transfer (unlike penumbra sends, a
 // destination poll is idempotent and fully reconstructible from the persisted
 // record, so it survives SW eviction). Also prunes stale terminal records.
-void runIbcTransferSweep().catch(e => console.warn('[ibc-tracker] startup sweep failed', e));
+void runIbcTransferSweep().catch(e =>
+  console.warn(`[ibc-tracker] startup sweep failed: ${errText(e)}`),
+);
 
 // listen for internal service controls. A message can arrive before
 // `initHandler` created the boot services (the worker is started to deliver it),
 // and every consumer here awaits this promise inside its own try/catch - so the
 // pre-boot state is an explicit "still starting" rejection, not a TypeError on
 // undefined.
-const servicesNotStarted = (): Promise<Services> =>
-  Promise.reject(new Error('wallet services are still starting'));
+//
+// Most messages are not for this listener and never read the promise, so the
+// rejection is marked handled here: an unread one surfaced as "Uncaught (in
+// promise) Error: wallet services are still starting" for every message that
+// woke the worker. Consumers that await it still get the rejection.
+const servicesNotStarted = (): Promise<Services> => {
+  const notYet = Promise.reject(new Error('wallet services are still starting'));
+  notYet.catch(() => undefined);
+  return notYet;
+};
 
 chrome.runtime.onMessage.addListener((req, sender, respond) =>
   internalServiceListener(walletServices ?? servicesNotStarted(), req, sender, respond),
@@ -665,7 +724,9 @@ void chrome.alarms.create('ibcTransferPoll', {
 
 chrome.alarms.onAlarm.addListener(async alarm => {
   if (alarm.name === 'ibcTransferPoll') {
-    await runIbcTransferSweep().catch(e => console.warn('[ibc-tracker] poll failed', e));
+    await runIbcTransferSweep().catch(e =>
+      console.warn(`[ibc-tracker] poll failed: ${errText(e)}`),
+    );
     return;
   }
 
@@ -743,11 +804,11 @@ chrome.alarms.onAlarm.addListener(async alarm => {
       // an intentional stop ends a run quietly; anything else deserves the console
       void ws.blockProcessor
         .sync()
-        .catch((e: unknown) => console.error('[sync] block processor terminated:', e));
+        .catch((e: unknown) => console.error(`[sync] block processor terminated: ${errText(e)}`));
     } catch (e) {
-      // services not initialized or network not enabled - this is expected
+      // services not initialized or penumbra off - expected, one quiet line
       if (globalThis.__DEV__) {
-        console.info('Skipping background sync:', e);
+        console.debug(`Skipping background sync: ${errText(e)}`);
       }
     }
   }
@@ -818,7 +879,7 @@ void (async () => {
     );
     await sweepScheduledDeletes();
   } catch (e) {
-    console.warn('[sw] sweepScheduledDeletes failed:', e);
+    console.warn(`[sw] sweepScheduledDeletes failed: ${errText(e)}`);
   }
 })();
 

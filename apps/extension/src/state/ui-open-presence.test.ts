@@ -1,4 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 class FakePort {
   private readonly listeners: (() => void)[] = [];
@@ -52,6 +57,7 @@ const freshModule = async () => {
 
 describe('ui open presence', () => {
   it('a window still counts as open after the service worker restarts', async () => {
+    vi.useFakeTimers();
     const fake = fakeRuntime();
     vi.stubGlobal('chrome', { runtime: fake.runtime });
     (await freshModule()).trackUiOpenPresence(
@@ -63,9 +69,37 @@ describe('ui open presence', () => {
     fake.restartWorker();
     const lastClose = vi.fn();
     (await freshModule()).trackUiOpenPresence(() => {}, lastClose);
+    await vi.advanceTimersByTimeAsync(1_000);
 
     // a second window opens and closes: it is not the last one
     fake.runtime.connect({ name: 'zafu-ui-open' }).drop();
     expect(lastClose).not.toHaveBeenCalled();
+  });
+
+  it('backs off while the worker cannot be reached, and reads the error', async () => {
+    vi.useFakeTimers();
+    let lastErrorReads = 0;
+    const ports: FakePort[] = [];
+    const runtime = {
+      connect: vi.fn(({ name }: { name: string }) => {
+        const port = new FakePort(name);
+        ports.push(port);
+        return port;
+      }),
+      get lastError() {
+        lastErrorReads++;
+        return { message: 'Could not establish connection. Receiving end does not exist.' };
+      },
+    };
+    vi.stubGlobal('chrome', { runtime });
+    (await freshModule()).announceUiOpenPresence();
+    // every connect fails at once, for a minute
+    for (let t = 0; t < 60_000; t += 50) {
+      ports.splice(0).forEach(p => p.drop());
+      await vi.advanceTimersByTimeAsync(50);
+    }
+    // 500ms doubling to a 30s cap: a handful of tries, never a tight loop
+    expect(runtime.connect.mock.calls.length).toBeLessThan(10);
+    expect(lastErrorReads).toBe(runtime.connect.mock.calls.length);
   });
 });

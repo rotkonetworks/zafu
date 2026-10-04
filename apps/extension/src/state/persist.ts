@@ -1,3 +1,4 @@
+import { storedList } from '@repo/storage-chrome/stored-list';
 import { StateCreator, StoreMutatorIdentifier } from 'zustand';
 import { AllSlices } from '.';
 import { produce } from 'immer';
@@ -15,6 +16,8 @@ import type { EncryptedVault } from './keyring/types';
 import type { ZcashWalletJson } from './wallets';
 import { contactsWrites, type Contact } from './contacts';
 import type { RecentAddress } from './recent-addresses';
+
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
 
 export type Middleware = <
   T,
@@ -109,11 +112,11 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
           localExtStorage.get('knownSites'), // plaintext - not encrypted
         ]);
       const knownSites = Array.isArray(rawKnownSites)
-        ? (rawKnownSites as Record<string, unknown>[]).map(r => {
+        ? (rawKnownSites as unknown[]).filter(isRecord).map(r => {
             // handle new OriginPermissions shape
             if ('granted' in r && Array.isArray(r['granted'])) {
               const granted = r['granted'] as string[];
-              const denied = r['denied'] as string[];
+              const denied = storedList<string>(r['denied']);
               let choice: UserChoice;
               if (granted.includes('connect')) {
                 choice = UserChoice.Approved;
@@ -166,7 +169,11 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
             })) as typeof state.wallets.zcashWallets;
           }
           if (Array.isArray(contacts) && read.unwritten()) {
-            state.contacts.contacts = contacts;
+            // a contact another build wrote may lack its address list: fill
+            // it, keep every other field (see storage-chrome/stored-list.ts)
+            state.contacts.contacts = contacts
+              .filter(isRecord)
+              .map(c => (Array.isArray(c.addresses) ? c : { ...c, addresses: [] }));
           }
           if (Array.isArray(recentAddresses)) {
             state.recentAddresses.recentAddresses = recentAddresses;

@@ -20,7 +20,6 @@ const PREF_KEYS = [
   'zidDiscovery',
   'peopleRelay',
   'networkEndpoints',
-  'zcashBackend',
   'hiddenTransparentChains',
   'transparentAgreed',
   'penumbraTotalIn',

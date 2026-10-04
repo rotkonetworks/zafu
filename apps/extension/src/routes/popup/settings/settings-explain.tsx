@@ -115,6 +115,16 @@ export const SETTINGS_EXPLAIN = {
   },
   'network.zcashNode': {
     blurb: 'which node zafu reads the zcash chain from, and asks for your memos.',
+    states: [
+      {
+        label: 'verified',
+        text: 'the node proves the chain it serves and zafu checks every proof; it also offers memo decoys and instant pending',
+      },
+      {
+        label: 'no mark',
+        text: 'zafu reads the chain as other light wallets do, trusting what the node returns',
+      },
+    ],
     footer:
       'any node you pick - preset or your own - learns your ip and roughly when you sync, never your keys',
   },

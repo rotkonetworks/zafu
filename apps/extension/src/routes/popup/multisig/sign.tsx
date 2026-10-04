@@ -14,15 +14,10 @@ import { selectActiveZcashWallet } from '../../../state/wallets';
 import {
   frostSignRound1InWorker,
   frostSpendSignInWorker,
-  frostInspectPcztOutputsInWorker,
   type FrostParsedTx,
 } from '../../../state/keyring/network-worker';
-import {
-  computeVerdict,
-  assessClaimedFee,
-  verdictAllowsSigning,
-  type Verdict,
-} from '../send/frost-multisig/multisig-verifier';
+import { verdictAllowsSigning, type Verdict } from '../send/frost-multisig/multisig-verifier';
+import { reviewSignRequest } from '../send/frost-multisig/review';
 import { FrostdRelayClient } from '../../../state/keyring/frostd-relay-client';
 import {
   buildRelayIdentity,
@@ -198,61 +193,19 @@ export const MultisigSign = () => {
             setAmountZat(req.amountZat);
             setFeeZat(req.feeZat);
 
-            // Verifier: derive output truth from the PCZT (recompute sighash +
-            // OVK-decrypt outputs). Anything that cannot be verified refuses - // there is no "show it anyway and leave approve live" path, because
-            // the host chooses whether we can verify. FROST multisig wallets
-            // store the `uview1…` string in `orchardFvk` (DKG flows save it
-            // there); single-key wallets store it in `ufvk`.
-            const ufvkForVerify = activeWallet?.multisig
-              ? activeWallet.orchardFvk
-              : activeWallet?.ufvk;
-            const fee = assessClaimedFee(req.feeZat, req.amountZat);
-            if (!req.pcztHex) {
-              setVerdict({
-                kind: 'refuse',
-                reasons: [
-                  'host did not publish the PCZT bytes - everything shown here would be host-authored text bound to nothing',
-                  'refusing to release a share against an unverifiable request',
-                ],
-              });
-            } else if (!ufvkForVerify) {
-              setVerdict({
-                kind: 'refuse',
-                reasons: [
-                  'this wallet has no viewing key on file, so the PCZT cannot be decoded',
-                  'refusing to release a share against an unverifiable request',
-                ],
-              });
-            } else if (!fee.ok) {
-              setVerdict({ kind: 'refuse', reasons: [fee.reason] });
-            } else {
-              const ufvk = ufvkForVerify;
-              const isMain = activeWallet.mainnet;
-              const pcztHex = req.pcztHex;
-              void (async () => {
-                try {
-                  const p = await frostInspectPcztOutputsInWorker(pcztHex, ufvk);
-                  setParsed(p);
-                  setVerdict(
-                    computeVerdict({
-                      parsed: p,
-                      claimedRecipient: req.recipient,
-                      claimedAmountZat: req.amountZat,
-                      claimedSighashHex: req.sighash,
-                      mainnet: isMain,
-                    }),
-                  );
-                } catch (err) {
-                  setVerdict({
-                    kind: 'refuse',
-                    reasons: [
-                      `could not parse the published PCZT: ${err instanceof Error ? err.message : 'parse failed'}`,
-                      'refusing to release a share against an unverifiable request',
-                    ],
-                  });
-                }
-              })();
-            }
+            // Verifier: derive output truth from the PCZT (see review.ts).
+            // FROST multisig wallets store the `uview1…` string in `orchardFvk`
+            // (DKG flows save it there); single-key wallets store it in `ufvk`.
+            void reviewSignRequest(
+              req,
+              activeWallet?.multisig ? activeWallet.orchardFvk : activeWallet?.ufvk,
+              !!activeWallet?.mainnet,
+            ).then(r => {
+              if (r.parsed) {
+                setParsed(r.parsed);
+              }
+              setVerdict(r.verdict);
+            });
             return;
           }
           // collect ALL peer C: bundles - t≥3 needs threshold-1 of them, not just 1.

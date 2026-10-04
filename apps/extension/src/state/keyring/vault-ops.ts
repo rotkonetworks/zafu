@@ -5,6 +5,7 @@
  * every function here is independently testable.
  */
 
+import { storedList } from '@repo/storage-chrome/stored-list';
 import type { KeyInfo, EncryptedVault, NetworkType, ZignerZafuImport, LedgerImport } from './types';
 import type { ZcashWalletJson } from '../wallets';
 import type { BoxJson } from '@repo/encryption/box';
@@ -16,7 +17,7 @@ export const generateZcashWalletId = (): string =>
   `zcash-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
 export const vaultsToKeyInfos = (vaults: EncryptedVault[], selectedId?: string): KeyInfo[] =>
-  vaults.map(v => ({
+  storedList<EncryptedVault>(vaults).map(v => ({
     id: v.id,
     name: v.name,
     type: v.type,
@@ -191,6 +192,11 @@ export interface FrostMultisigParams {
   /** hide from main wallet UI (app-driven multisigs e.g. poker); sign-time lookup still works */
   hidden?: boolean;
   /**
+   * The room this seat was made in (a group, or a deal's pair room): its
+   * rounds run there, not on frostd, and it never takes the active-wallet slot.
+   */
+  room?: SeatRoom;
+  /**
    * Origin of the dapp that created the vault via the external API
    * (zafu_dkg_join / zafu_frost_create). Used by destructive external
    * operations (zafu_delete_multisig) to enforce same-origin scope - * a malicious site can't target vaults owned by another origin via
@@ -198,6 +204,15 @@ export interface FrostMultisigParams {
    * UI directly (e.g. zigner-multisig flow).
    */
   createdByOrigin?: string;
+}
+
+/** where a shared wallet lives in people: its room, and the ceremony that made it */
+export interface SeatRoom {
+  walletId: string;
+  roomId: string;
+  ceremony: string;
+  /** the members' room keys: who may propose and seal payments in that room */
+  members: string[];
 }
 
 export const buildFrostVault = (
@@ -222,6 +237,7 @@ export const buildFrostVault = (
     ...(params.relayCeremonyId ? { relayCeremonyId: params.relayCeremonyId } : {}),
     ...(params.custody === 'airgapSigner' ? { custody: 'airgapSigner' as const } : {}),
     ...(params.hidden ? { hidden: true as const } : {}),
+    ...(params.room ? { room: params.room } : {}),
     ...(params.createdByOrigin ? { createdByOrigin: params.createdByOrigin } : {}),
   },
 });
@@ -253,6 +269,7 @@ export const buildFrostZcashWallet = (
         }
       : { keyPackage: encKeyPackage!, ephemeralSeed: encEphemeralSeed! }),
     ...(params.hidden ? { hidden: true as const } : {}),
+    ...(params.room ? { room: params.room } : {}),
   },
 });
 

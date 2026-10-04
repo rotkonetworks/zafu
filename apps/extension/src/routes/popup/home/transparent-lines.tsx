@@ -7,6 +7,7 @@
  * check on its own from then on; after that a tap just checks.
  */
 
+import { storedList } from '@repo/storage-chrome/stored-list';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -139,7 +140,7 @@ const useAgreedChains = () => {
   const queryClient = useQueryClient();
   const { data: agreed = [] } = useQuery({
     queryKey: ['transparentAgreed'],
-    queryFn: async () => (await localExtStorage.get('transparentAgreed')) ?? [],
+    queryFn: async () => storedList<CosmosChainId>(await localExtStorage.get('transparentAgreed')),
   });
   return {
     agreed,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../state';
+import { selectZcashBackend } from '../../../state/networks';
 import { privacySelector, type PrivacySettings } from '../../../state/privacy';
 import { selectActiveNetwork } from '../../../state/keyring';
 import { Section, SettingsScreen } from './settings-screen';
@@ -63,9 +64,8 @@ function ZcashWireRows({
 }) {
   const memo = useStore(s => s.networks.networks.zcash.memoSyncStrategy ?? 'private');
   const mempool = useStore(s => s.networks.networks.zcash.mempoolWatch ?? 'off');
-  const zidecar = useStore(
-    s => !!ZCASH_BACKENDS[s.networks.networks.zcash.backend ?? 'zidecar'].extras,
-  );
+  // memo decoys and instant pending exist only where the node is a zidecar
+  const zidecar = useStore(s => !!ZCASH_BACKENDS[selectZcashBackend(s)].extras);
   const setMemo = useStore(s => s.networks.setMemoSyncStrategy);
   const setMempool = useStore(s => s.networks.setMempoolWatch);
   if (!zidecar) {

@@ -10,10 +10,12 @@
  * - Rebuilds run strictly one at a time.
  * - Requests arriving while one is PENDING (queued, not yet started) fold into
  *   it; the target is read when it runs, so it reflects the latest state.
- * - Nothing happens if the desired target equals the running one.
+ * - Nothing happens if the desired target equals the running one, unless the
+ *   request is forced: the running services are broken (their database
+ *   connection was closed) and the same target must be built again.
  */
 export interface RebuildScheduler<T> {
-  request: (why: string) => Promise<void>;
+  request: (why: string, force?: boolean) => Promise<void>;
   /** record what is running without rebuilding (e.g. the boot services) */
   setRunning: (target: T) => void;
   getRunning: () => T | undefined;
@@ -28,8 +30,10 @@ export const createRebuildScheduler = <T>(deps: {
   let running: T | undefined;
   let chain: Promise<void> = Promise.resolve();
   let pending = false;
+  let forced = false;
 
-  const request = (why: string): Promise<void> => {
+  const request = (why: string, force = false): Promise<void> => {
+    forced ||= force;
     if (pending) {
       return chain;
     }
@@ -38,7 +42,9 @@ export const createRebuildScheduler = <T>(deps: {
       .then(async () => {
         pending = false;
         const target = await deps.desired();
-        if (running !== undefined && deps.same(running, target)) {
+        const force = forced;
+        forced = false;
+        if (!force && running !== undefined && deps.same(running, target)) {
           return;
         }
         const previous = running;

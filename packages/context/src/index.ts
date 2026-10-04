@@ -1,5 +1,6 @@
 import { BlockProcessor } from '@penumbra-zone/query/block-processor';
 import { RootQuerier } from '@penumbra-zone/query/root-querier';
+import { errText } from '@penumbra-zone/query/error-text';
 import { IndexedDb } from '@penumbra-zone/storage/indexed-db';
 import { ViewServer } from '@penumbrafi/wasm/view-server';
 import { ServicesInterface, WalletServices } from '@penumbrafi/types/services';
@@ -49,7 +50,9 @@ export class Services implements ServicesInterface {
     void this.walletServicesPromise.then(({ blockProcessor }) =>
       blockProcessor
         .sync()
-        .catch((e: unknown) => console.error('[penumbra] block processor sync failed:', e)),
+        .catch((e: unknown) =>
+          console.error(`[penumbra] block processor sync failed: ${errText(e)}`),
+        ),
     );
     return this.walletServicesPromise;
   }
