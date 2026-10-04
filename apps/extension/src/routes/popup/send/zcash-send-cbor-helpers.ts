@@ -9,31 +9,60 @@
  */
 
 /**
- * Strip the CBOR `{1: bytes}` envelope wrapping a `zcash-pczt` UR payload.
- * Inverse of the wasm-side `cborWrapPczt`. Mirrors what zigner's signer does
- * internally - the envelope is a fixed shape so we can parse positionally
- * without pulling in a generic CBOR decoder.
+ * Facts the Zigner KERNEL (not the wasm module) reports about itself in a
+ * signing response. A module cannot attest its own version - that is exactly
+ * what a malicious module would lie about - so these come from the APK.
+ *
+ * Mirrors Keystone's firmware version in its sign result: it lets the wallet
+ * say "update Zigner" up front instead of failing after the user approved.
  */
-export function unwrapCborSinglePczt(cbor: Uint8Array): Uint8Array {
+export interface SignerKernelInfo {
+  /** Version of the module baked into the APK (BAKED_MODULE_VERSION). */
+  bakedModuleVersion?: number;
+  /** Version of the module that actually produced this response. */
+  activeModuleVersion?: number;
+  /** Kernel <-> module host ABI version. */
+  hostAbiVersion?: number;
+}
+
+const KERNEL_INFO_KEYS: Record<number, keyof SignerKernelInfo> = {
+  1: 'bakedModuleVersion',
+  2: 'activeModuleVersion',
+  3: 'hostAbiVersion',
+};
+
+/**
+ * Strip the CBOR envelope around a signer response: `{1: bytes}` or, from
+ * newer Zigner builds, `{1: bytes, 2: {uint: uint, ...}}` where key 2 is the
+ * kernel's [`SignerKernelInfo`].
+ *
+ * Parsed positionally and strictly - no generic CBOR decoder: canonical key
+ * order, every length checked before use, the buffer consumed exactly, key 2
+ * limited to small unsigned-integer pairs with no duplicate keys. Unknown
+ * key-2 entries are skipped (forward compatible) but must still be uints.
+ */
+export function unwrapSignerEnvelope(cbor: Uint8Array): {
+  payload: Uint8Array;
+  kernel: SignerKernelInfo | null;
+} {
   if (cbor.length < 3) {
     throw new Error('CBOR PCZT envelope too short');
   }
-  if (cbor[0] !== 0xa1) {
-    throw new Error('expected CBOR map(1) at offset 0');
+  const entries = cbor[0];
+  if (entries !== 0xa1 && entries !== 0xa2) {
+    throw new Error('expected CBOR map(1) or map(2) at offset 0');
   }
   if (cbor[1] !== 0x01) {
     throw new Error('expected CBOR key 1 at offset 1');
   }
   let pos = 2;
-  const tag = cbor[pos++]!;
 
   // Read a big-endian length of `nBytes`, checking every byte is present
   // before reading it. Accumulate with `* 256 + b` rather than `<< 8`:
   // JS bitwise ops are signed 32-bit, so a 0x5a length with the high bit
   // set (>= 2 GiB) would go negative, slip past the `len > remaining`
   // guard, and yield a silently-truncated PCZT. Multiplication keeps it a
-  // positive JS number. A length that large is bogus for a PCZT anyway - // the size sanity check below rejects it - but we must not let it become
-  // negative first.
+  // positive JS number.
   const readLen = (nBytes: number): number => {
     if (pos + nBytes > cbor.length) {
       throw new Error(`CBOR length header truncated (need ${nBytes} bytes)`);
@@ -45,6 +74,7 @@ export function unwrapCborSinglePczt(cbor: Uint8Array): Uint8Array {
     return v;
   };
 
+  const tag = cbor[pos++]!;
   let len: number;
   if (tag >= 0x40 && tag <= 0x57) {
     len = tag - 0x40; // length packed in the tag (0..23)
@@ -57,17 +87,67 @@ export function unwrapCborSinglePczt(cbor: Uint8Array): Uint8Array {
   } else {
     throw new Error(`unexpected CBOR bytes tag 0x${tag.toString(16)}`);
   }
-
-  // Canonical single-PCZT envelope: the byte string must consume the buffer
-  // exactly. Trailing bytes mean a malformed or smuggled payload - reject
-  // rather than silently ignore them.
-  if (pos + len !== cbor.length) {
+  if (pos + len > cbor.length) {
     throw new Error(
-      `CBOR PCZT envelope not canonical: declared length ${len} at offset ${pos} ` +
-        `vs buffer length ${cbor.length} (expected exact consume)`,
+      `CBOR PCZT envelope truncated: declared length ${len} at offset ${pos} ` +
+        `vs buffer length ${cbor.length}`,
     );
   }
-  return cbor.slice(pos, pos + len);
+  const payload = cbor.slice(pos, pos + len);
+  pos += len;
+
+  if (entries === 0xa1) {
+    // Canonical single-PCZT envelope: the byte string must consume the buffer
+    // exactly. Trailing bytes mean a malformed or smuggled payload.
+    if (pos !== cbor.length) {
+      throw new Error(
+        `CBOR PCZT envelope not canonical: ${cbor.length - pos} trailing bytes`,
+      );
+    }
+    return { payload, kernel: null };
+  }
+
+  // map(2): key 2 = kernel info, a map of uint -> uint.
+  if (cbor[pos++] !== 0x02) {
+    throw new Error('expected CBOR key 2 after the payload');
+  }
+  const readUint = (what: string): number => {
+    if (pos >= cbor.length) throw new Error(`CBOR ${what} truncated`);
+    const b = cbor[pos++]!;
+    if (b <= 0x17) return b;
+    if (b === 0x18) return readLen(1);
+    if (b === 0x19) return readLen(2);
+    if (b === 0x1a) return readLen(4);
+    throw new Error(`expected CBOR unsigned int for ${what}, got 0x${b.toString(16)}`);
+  };
+  const head = cbor[pos++];
+  if (head === undefined || head < 0xa0 || head > 0xb7) {
+    throw new Error('expected a small CBOR map for kernel info');
+  }
+  const kernel: SignerKernelInfo = {};
+  const seen = new Set<number>();
+  for (let i = 0; i < head - 0xa0; i++) {
+    const k = readUint('kernel info key');
+    const v = readUint('kernel info value');
+    if (seen.has(k)) throw new Error(`duplicate kernel info key ${k}`);
+    seen.add(k);
+    const field = KERNEL_INFO_KEYS[k];
+    if (field) kernel[field] = v;
+  }
+  if (pos !== cbor.length) {
+    throw new Error(`CBOR signer envelope not canonical: ${cbor.length - pos} trailing bytes`);
+  }
+  return { payload, kernel };
+}
+
+/**
+ * Strip the CBOR envelope wrapping a `zcash-pczt` / `zigner-module` UR
+ * payload and return only the payload. Inverse of the wasm-side
+ * `cborWrapPczt`. Accepts the optional kernel-info entry newer Zigner builds
+ * add (see [`unwrapSignerEnvelope`]); use that function to read it.
+ */
+export function unwrapCborSinglePczt(cbor: Uint8Array): Uint8Array {
+  return unwrapSignerEnvelope(cbor).payload;
 }
 
 // ===========================================================================
