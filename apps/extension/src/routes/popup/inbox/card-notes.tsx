@@ -5,12 +5,14 @@
  */
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import type { CardV2 } from '@repo/wallet/networks/zcash/card-v2';
 import { changed, readNote, type Note } from '../../../people/cards';
 import { addressesOf } from '../../../people/my-card';
 import type { ThreadItem } from '../../../people/vault';
+import { sealPath } from '../paths';
 import { hhmm } from './add-person';
 import { shortAddress } from './threads';
 
@@ -85,7 +87,18 @@ const UpdateSheet = ({
   );
 };
 
-export const NoteLine = ({ item, name }: { item: ThreadItem; name: string }) => {
+export const NoteLine = ({
+  item,
+  name,
+  contactId,
+  sealChecked,
+}: {
+  item: ThreadItem;
+  name: string;
+  contactId?: string;
+  sealChecked?: boolean;
+}) => {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const note = readNote(item);
   const at = item.ts * 1000;
@@ -112,6 +125,16 @@ export const NoteLine = ({ item, name }: { item: ThreadItem; name: string }) => 
           <span className='self-center text-[11px] text-fg-dim'>
             you can chat and pay each other
           </span>
+          {contactId && !sealChecked && (
+            <button
+              type='button'
+              onClick={() => navigate(sealPath(contactId))}
+              className='flex items-center gap-2 self-center border border-border-soft px-3 py-2 text-xs text-fg-high hover:bg-elev-2'
+            >
+              check the seal with {name}
+              <span className='i-lucide-chevron-right size-3.5 text-fg-dim' aria-hidden='true' />
+            </button>
+          )}
         </>
       );
     case 'saved-them':

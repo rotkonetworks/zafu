@@ -113,6 +113,10 @@ export const popupRoutes: RouteObject[] = [
             ...screen('contactCard'),
           },
           {
+            path: PopupPath.CONTACT_SEAL,
+            ...screen('contactSeal'),
+          },
+          {
             path: PopupPath.CONTACT,
             ...screen('contact'),
           },

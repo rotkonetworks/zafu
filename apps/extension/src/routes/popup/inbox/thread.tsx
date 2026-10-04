@@ -55,6 +55,7 @@ import {
 } from '../../../config/people-relay';
 import { useThreadName } from './use-thread-name';
 import { NoteLine } from './card-notes';
+import { sourceLine } from '../contacts/seal';
 import { useCardSync } from '../../../people/my-card';
 import { RequestSheet } from '../send/send-fields';
 import { cardOf, counterparty, shortAddress, threadIdOf, whenOf } from './threads';
@@ -621,7 +622,7 @@ export function ThreadPage() {
           <span className='truncate text-[11px] text-fg-muted'>
             {contact
               ? contact.zid
-                ? 'from a card'
+                ? (sourceLine(contact) ?? 'from a card')
                 : 'address only'
               : address
                 ? 'tap to save'
@@ -644,7 +645,12 @@ export function ThreadPage() {
             {'m' in r ? (
               <Item m={r.m} from={name} />
             ) : r.it.kind === 'note' ? (
-              <NoteLine item={r.it} name={name} />
+              <NoteLine
+                item={r.it}
+                name={name}
+                contactId={contact?.id}
+                sealChecked={!!contact?.sealChecked}
+              />
             ) : (
               <RelayLine item={r.it} onRetry={() => say(r.it.body, r.it.local)} />
             )}

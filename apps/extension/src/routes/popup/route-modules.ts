@@ -85,6 +85,7 @@ export const popupScreens = {
   contacts: () => import('./contacts').then(m => m.ContactsPage),
   contact: () => import('./contacts/contact').then(m => m.ContactPage),
   contactCard: () => import('./contacts/card').then(m => m.CardPage),
+  contactSeal: () => import('./contacts/seal').then(m => m.SealPage),
   addPerson: () => import('./inbox/add-person').then(m => m.AddPersonPage),
   scanCard: () => import('./inbox/scan-card').then(m => m.ScanCardPage),
   link: () => import('./link').then(m => m.LinkPage),

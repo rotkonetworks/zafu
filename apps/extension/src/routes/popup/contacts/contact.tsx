@@ -20,7 +20,7 @@ import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
 import { useShareCard } from '../../../hooks/use-share-card';
 import { ScreenHeader } from '../../../components/screen-header';
-import { PopupPath, threadPath } from '../paths';
+import { PopupPath, sealPath, threadPath } from '../paths';
 import { shortAddress } from '../inbox/threads';
 import { contactStatus } from '.';
 import {
@@ -220,7 +220,13 @@ const ContactView = ({ contact }: { contact: Contact }) => {
       <RowGroup>
         <Row type='screen' label='rename' onPress={() => setOpen({ kind: 'rename' })} />
         {contact.zid && (
-          <Row type='screen' label='check seal again' onPress={() => setOpen({ kind: 'seal' })} />
+          <Row
+            type='screen'
+            label={contact.sealChecked ? 'check seal again' : 'check the seal'}
+            onPress={() =>
+              contact.rel ? navigate(sealPath(contact.id)) : setOpen({ kind: 'seal' })
+            }
+          />
         )}
         {/* a v2 card of yours they hold: a fresh address goes to them as a signed update */}
         {contact.given && (
