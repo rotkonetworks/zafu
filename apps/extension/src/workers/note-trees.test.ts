@@ -1,21 +1,24 @@
-// Note trees on the real shipped blob: every path must equal the old replay
-// path's (build_merkle_paths from the empty tree), across a reload from rows
-// and a migration from a stored per-note witness.
+// Note trees on the real shipped blob, against a chain built in the test: every
+// path must equal a full replay's (build_merkle_paths from the empty tree), across
+// reload, migration from the per-note era, recovery, rewind and reseeding.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
 import {
-  addWitnesses,
   applyTreeWrites,
   changesToWrite,
   concatRoots,
   encodeBlocks,
+  legacyWitnesses,
   loadTree,
   MAX_CHECKPOINTS,
+  openTrees,
   rootsIndexOf,
-  seedTree,
   treePaths,
+  withoutWitness,
   type NoteTree,
+  type TreeBlock,
+  type TreeChain,
   type TreeWrite,
 } from './note-trees';
 import { encodeSubtreeRootsArg, parseSubtreeRootStream } from '../state/keyring/subtree-roots';
@@ -25,12 +28,13 @@ interface Wasm {
   NoteTree: new (maxCheckpoints: number) => NoteTree;
   build_merkle_paths(tree: string, blocks: string, positions: string, anchor: number): string;
   build_witnesses_and_paths(tree: string, blocks: string, positions: string): string;
+  tree_root_hex(tree: string): string;
 }
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
 
-/** deterministic cmxs below 2^254 (always canonical), in blocks of 0..4 */
-const makeChain = (n: number) => {
+/** deterministic cmxs below 2^254 (always canonical), in blocks of 0..4 from height 2000 */
+const makeChain = (n: number): TreeBlock[] => {
   let x = 0x9e3779b9;
   const next = () => {
     x ^= x << 13;
@@ -38,7 +42,7 @@ const makeChain = (n: number) => {
     x ^= x << 5;
     return x >>> 0;
   };
-  const blocks: { height: number; cmxs: Uint8Array[] }[] = [];
+  const blocks: TreeBlock[] = [];
   let made = 0;
   for (let height = 2_000; made < n; height++) {
     const k = Math.min(next() % 5, n - made);
@@ -56,15 +60,21 @@ const makeChain = (n: number) => {
   return blocks;
 };
 
-const asJson = (blocks: { height: number; cmxs: Uint8Array[] }[]) =>
+const asJson = (blocks: readonly TreeBlock[]) =>
   JSON.stringify(
     blocks.map(b => ({ height: b.height, actions: b.cmxs.map(c => ({ cmx_hex: hex(c) })) })),
   );
 
-const sizeAfter = (blocks: { cmxs: Uint8Array[] }[]) =>
-  blocks.reduce((n, b) => n + b.cmxs.length, 0);
+const upTo = (chain: readonly TreeBlock[], height: number) => chain.filter(b => b.height <= height);
+const sizeAt = (chain: readonly TreeBlock[], height: number) =>
+  upTo(chain, height).reduce((n, b) => n + b.cmxs.length, 0);
+/** position of the k-th leaf of the first block at or above `height` that has one */
+const leafNear = (chain: readonly TreeBlock[], height: number) => {
+  const b = chain.find(x => x.height >= height && x.cmxs.length > 0)!;
+  return { position: sizeAt(chain, b.height - 1), height: b.height };
+};
 
-/** the worker's `meta` store, by key, for one wallet */
+/** the worker's `meta` store for one wallet, by key */
 class FakeMeta {
   rows = new Map<string, unknown>();
   put({ key, value }: { key: string; value: unknown }) {
@@ -84,6 +94,36 @@ class FakeMeta {
 
 describe('note trees on the real wasm', () => {
   let wasm: Wasm;
+  const make = () => new wasm.NoteTree(MAX_CHECKPOINTS);
+  /** the frontier (zcashd hex) after block `height` */
+  const frontier = (chain: readonly TreeBlock[], height: number) =>
+    (
+      JSON.parse(wasm.build_witnesses_and_paths('', asJson(upTo(chain, height)), '[]')) as {
+        end_frontier_hex: string;
+      }
+    ).end_frontier_hex;
+  /** the replay oracle: root and paths at `height` */
+  const replay = (chain: readonly TreeBlock[], positions: number[], height: number) =>
+    JSON.parse(
+      wasm.build_merkle_paths('', asJson(upTo(chain, height)), JSON.stringify(positions), height),
+    ) as { anchor_hex: string; paths: { position: number; path: { hash: string }[] }[] };
+  /** a server over `chain`, counting the blocks it serves */
+  const serverOver = (chain: readonly TreeBlock[]) => {
+    const served = { blocks: 0 };
+    const c: TreeChain = {
+      frontierAt: (_pool, height) => Promise.resolve(height <= 0 ? '' : frontier(chain, height)),
+      subtreeRoots: () => Promise.resolve([]),
+      blocks: (_pool, from, to) => {
+        const out = chain.filter(b => b.height >= from && b.height <= to);
+        served.blocks += out.length;
+        return Promise.resolve(out);
+      },
+    };
+    return { chain: c, served };
+  };
+  const write = (meta: FakeMeta, writes: TreeWrite[]) =>
+    applyTreeWrites(meta as unknown as IDBObjectStore, 'w', writes);
+
   beforeAll(async () => {
     (globalThis as { IDBKeyRange?: unknown }).IDBKeyRange ??= {
       bound: (lower: unknown, upper: unknown) => ({ lower, upper }),
@@ -94,87 +134,233 @@ describe('note trees on the real wasm', () => {
     });
   });
 
-  const write = (meta: FakeMeta, writes: TreeWrite[]) =>
-    applyTreeWrites(meta as unknown as IDBObjectStore, 'w', writes);
-
-  test('seeded, appended in batches, reloaded from rows: the replay paths', () => {
+  test('a fresh wallet: seeded, appended in batches, reloaded from rows, the replay paths', async () => {
     const chain = makeChain(3_000);
-    const cut = 400; // blocks in the first batch
-    const notes = [17, sizeAfter(chain.slice(0, cut)) + 3, 2_998];
+    const birthday = 2_100;
     const end = chain[chain.length - 1]!.height;
-    const oracle = JSON.parse(
-      wasm.build_merkle_paths('', asJson(chain), JSON.stringify(notes), end),
-    ) as { anchor_hex: string; paths: { position: number; path: { hash: string }[] }[] };
-
+    const { chain: server } = serverOver(chain);
     const meta = new FakeMeta();
-    const tree = new wasm.NoteTree(MAX_CHECKPOINTS);
-    expect(seedTree(tree, '', 1_999, [])).toEqual({ seeded: 0, failed: 0 });
-    const marked = (from: number, to: number) => notes.filter(p => p >= from && p < to);
-    const s1 = sizeAfter(chain.slice(0, cut));
-    tree.append_blocks(
-      0,
-      encodeBlocks(chain.slice(0, cut)),
-      Uint32Array.from(marked(0, s1)),
-      end - 50,
+    const trees = await openTrees(
+      make,
+      server,
+      [],
+      [{ pool: 'orchard', height: birthday, size: sizeAt(chain, birthday), legacy: [] }],
     );
-    write(meta, [changesToWrite('orchard', tree.take_changes())]);
-    tree.append_blocks(
-      s1,
-      encodeBlocks(chain.slice(cut)),
-      Uint32Array.from(marked(s1, 3_000)),
-      end - 50,
-    );
-    write(meta, [changesToWrite('orchard', tree.take_changes())]);
-    tree.free();
+    write(meta, trees.takeWrites());
+    const notes = [leafNear(chain, 2_150), leafNear(chain, 2_600)];
+    const mid = 2_400;
+    for (const [from, to] of [
+      [birthday + 1, mid],
+      [mid + 1, end],
+    ] as const) {
+      const batch = chain.filter(b => b.height >= from && b.height <= to);
+      const start = trees.size('orchard')!;
+      const found = notes.filter(n => n.height >= from && n.height <= to).map(n => n.position);
+      trees.append('orchard', start, batch, found, end - 50);
+      write(meta, trees.takeWrites());
+    }
+    trees.free();
 
-    const loaded = loadTree(meta.list(), 'orchard', () => new wasm.NoteTree(MAX_CHECKPOINTS))!;
+    const loaded = loadTree(meta.list(), 'orchard', make)!;
     expect(loaded.latest_checkpoint()).toBe(end);
-    expect(loaded.next_position()).toBe(3_000);
-    const got = treePaths(loaded, notes);
-    expect(got).toEqual({ anchorHeight: end, rootHex: oracle.anchor_hex, paths: oracle.paths });
-    // the other pool has no rows, and a note outside the tree is refused, not guessed
-    expect(
-      loadTree(meta.list(), 'ironwood', () => new wasm.NoteTree(MAX_CHECKPOINTS)),
-    ).toBeUndefined();
-    expect(treePaths(loaded, [18])).toMatch(/not in the tree/);
-    // an anchor below the newest checkpoint must be one that is retained
-    expect(treePaths(loaded, notes, chain[cut]!.height)).toMatch(/no retained checkpoint/);
-    loaded.free();
-  });
-
-  test('a stored per-note witness migrates with no replay', () => {
-    const chain = makeChain(1_500);
-    const head = chain.slice(0, 300);
-    const size = sizeAfter(head);
-    const h = head[head.length - 1]!.height;
-    // what the wallet has stored today: a witness at the frontier's size
-    const legacy = JSON.parse(
-      wasm.build_witnesses_and_paths('', asJson(head), JSON.stringify([5])),
-    ) as { end_frontier_hex: string; entries: { witness_hex: string }[] };
-
-    const tree = new wasm.NoteTree(MAX_CHECKPOINTS);
-    expect(seedTree(tree, legacy.end_frontier_hex, h, legacy.entries)).toEqual({
-      seeded: 1,
-      failed: 0,
-    });
-    // a witness at another size is counted, not thrown
-    expect(addWitnesses(tree, [{ witness_hex: '00' }])).toEqual({ seeded: 0, failed: 1 });
-    tree.append_blocks(size, encodeBlocks(chain.slice(300)), new Uint32Array(), 0);
-
-    const end = chain[chain.length - 1]!.height;
-    const oracle = JSON.parse(wasm.build_merkle_paths('', asJson(chain), '[5]', end)) as {
-      anchor_hex: string;
-      paths: unknown[];
-    };
-    expect(treePaths(tree, [5])).toEqual({
+    const positions = notes.map(n => n.position);
+    const oracle = replay(chain, positions, end);
+    expect(treePaths(loaded, positions)).toEqual({
       anchorHeight: end,
       rootHex: oracle.anchor_hex,
       paths: oracle.paths,
     });
-    tree.free();
+    // a spend's requested anchor lands on the newest checkpoint at or below it
+    const older = treePaths(loaded, positions, end - 3);
+    expect(typeof older !== 'string' && older.anchorHeight).toBe(end - 3);
+    // an anchor below a note cannot carry it; one above both is fine
+    expect(treePaths(loaded, positions, mid)).toMatch(/no path at 2400/);
+    expect(treePaths(loaded, positions, birthday - 1)).toMatch(/no retained checkpoint/);
+    // a note outside the tree is refused, not guessed
+    expect(treePaths(loaded, [positions[0]! + 1])).toMatch(/not in the tree yet/);
+    loaded.free();
   });
 
-  test('a dropped tree clears every row; a truncation rewrites the shards', () => {
+  test('the per-note era migrates: aligned witnesses taken, a stale one recovered, rows retired', async () => {
+    const chain = makeChain(2_000);
+    const synced = 2_500;
+    const size = sizeAt(chain, synced);
+    const kept = leafNear(chain, 2_100);
+    const stale = leafNear(chain, 2_200);
+    const spent = leafNear(chain, 2_300);
+    // the witnesses as the old version stored them: two at the synced size,
+    // one left behind at an older size
+    const atSynced = JSON.parse(
+      wasm.build_witnesses_and_paths(
+        '',
+        asJson(upTo(chain, synced)),
+        JSON.stringify([kept.position, spent.position]),
+      ),
+    ) as { entries: { witness_hex: string }[] };
+    const behind = JSON.parse(
+      wasm.build_witnesses_and_paths('', asJson(upTo(chain, 2_400)), `[${stale.position}]`),
+    ) as { entries: { witness_hex: string }[] };
+    // real-shaped stored records: orchard notes carry their witness, ironwood
+    // ones live in the witnesses-ironwood store
+    const record = (n: { position: number; height: number }, nf: string) => ({
+      walletId: 'w',
+      height: n.height,
+      value: '50000',
+      nullifier: nf,
+      cmx: 'aa'.repeat(32),
+      txid: 'bb'.repeat(32),
+      position: n.position,
+      is_change: false,
+      rseed: 'cc'.repeat(32),
+      rho: 'dd'.repeat(32),
+      recipient: 'ee'.repeat(43),
+    });
+    const noteRecords = [
+      {
+        ...record(kept, 'nf-kept'),
+        witness_hex: atSynced.entries[0]!.witness_hex,
+        witness_tree_size: size,
+      },
+      {
+        ...record(stale, 'nf-stale'),
+        witness_hex: behind.entries[0]!.witness_hex,
+        witness_tree_size: sizeAt(chain, 2_400),
+      },
+      {
+        ...record(spent, 'nf-spent'),
+        witness_hex: atSynced.entries[1]!.witness_hex,
+        witness_tree_size: size,
+      },
+      { ...record(kept, 'nf-iw'), pool: 'ironwood' as const },
+    ];
+    const iwRows = [
+      { walletId: 'w', nullifier: 'nf-iw', witness_hex: 'not-a-witness', witness_tree_size: 7 },
+    ];
+    const byPool = legacyWitnesses(noteRecords, iwRows, new Set(['nf-spent']));
+    expect(byPool.orchard).toHaveLength(2);
+    expect(byPool.ironwood).toEqual([{ witness_hex: 'not-a-witness', witness_tree_size: 7 }]);
+    // the record a migration writes back: everything but the witness
+    const { witness_hex: _w, witness_tree_size: _s, ...bare } = noteRecords[0]!;
+    expect(withoutWitness(noteRecords[0]!)).toEqual(bare);
+
+    const { chain: server, served } = serverOver(chain);
+    const trees = await openTrees(
+      make,
+      server,
+      [],
+      [{ pool: 'orchard', height: synced, size, legacy: byPool.orchard }],
+    );
+    const tree = trees.get('orchard')!;
+    expect(tree.is_marked(kept.position)).toBe(true);
+    expect(tree.is_marked(stale.position)).toBe(false);
+    expect(served.blocks).toBe(0);
+
+    // the sync loop scans on, then recovers the stale note once caught up
+    const end = chain[chain.length - 1]!.height;
+    trees.append(
+      'orchard',
+      size,
+      chain.filter(b => b.height > synced),
+      [],
+      end,
+    );
+    await trees.recover('orchard', [kept, stale]);
+    expect(served.blocks).toBeGreaterThan(0);
+    const positions = [kept.position, stale.position];
+    const oracle = replay(chain, positions, end);
+    expect(treePaths(tree, positions)).toEqual({
+      anchorHeight: end,
+      rootHex: oracle.anchor_hex,
+      paths: oracle.paths,
+    });
+    // nothing left to recover: no blocks fetched
+    const before = served.blocks;
+    await trees.recover('orchard', [kept, stale]);
+    expect(served.blocks).toBe(before);
+    trees.free();
+  });
+
+  test('a stored tree that does not end where the wallet does is reseeded', async () => {
+    const chain = makeChain(1_200);
+    const { chain: server } = serverOver(chain);
+    const meta = new FakeMeta();
+    const first = await openTrees(
+      make,
+      server,
+      [],
+      [{ pool: 'orchard', height: 2_200, size: sizeAt(chain, 2_200), legacy: [] }],
+    );
+    write(meta, first.takeWrites());
+    first.free();
+    // the wallet says it is at 2_300: the stored tree (at 2_200) is not that
+    const second = await openTrees(make, server, meta.list(), [
+      { pool: 'orchard', height: 2_300, size: sizeAt(chain, 2_300), legacy: [] },
+    ]);
+    expect(second.get('orchard')!.latest_checkpoint()).toBe(2_300);
+    expect(second.size('orchard')).toBe(sizeAt(chain, 2_300));
+    second.free();
+  });
+
+  test('a rewind lands on a retained checkpoint; past them it reseeds', async () => {
+    const chain = makeChain(1_500);
+    const { chain: server } = serverOver(chain);
+    const trees = await openTrees(
+      make,
+      server,
+      [],
+      [{ pool: 'orchard', height: 2_000, size: sizeAt(chain, 2_000), legacy: [] }],
+    );
+    const note = leafNear(chain, 2_050);
+    const end = chain[chain.length - 1]!.height;
+    trees.append(
+      'orchard',
+      trees.size('orchard')!,
+      chain.filter(b => b.height > 2_000),
+      [note.position],
+      end - 30,
+    );
+    const landed = await trees.rewind(end - 10, 0);
+    expect(landed).toBe(end - 10);
+    expect(trees.size('orchard')).toBe(sizeAt(chain, end - 10));
+    expect(trees.get('orchard')!.is_marked(note.position)).toBe(true);
+    // between checkpoints: lands on the one below (the seed at 2_000 is the only one there)
+    expect(await trees.rewind(end - 100, 0)).toBe(2_000);
+    // below everything retained: reseeded from the server at the target
+    expect(await trees.rewind(1_999, 0)).toBe(1_999);
+    expect(trees.size('orchard')).toBe(sizeAt(chain, 1_999));
+    expect(trees.get('orchard')!.is_marked(note.position)).toBe(false);
+    trees.free();
+  });
+
+  test('a tree that differs from the server is reseeded; a matching one is kept', async () => {
+    const chain = makeChain(800);
+    const { chain: server } = serverOver(chain);
+    const trees = await openTrees(
+      make,
+      server,
+      [],
+      [{ pool: 'orchard', height: 2_100, size: sizeAt(chain, 2_100), legacy: [] }],
+    );
+    const f = frontier(chain, 2_100);
+    expect(trees.check('orchard', 2_100, { frontier: f, root: wasm.tree_root_hex(f) })).toBe(false);
+    const other = frontier(chain, 2_101);
+    expect(
+      trees.check('orchard', 2_100, { frontier: other, root: wasm.tree_root_hex(other) }),
+    ).toBe(true);
+    // a dropped tree (a batch it refused) is reseeded by the next check
+    trees.append('orchard', trees.size('orchard')!, [], [], 0);
+    expect(trees.get('orchard')).toBeDefined();
+    trees.append('orchard', 5, chain.slice(200, 201), [], 0);
+    expect(trees.get('orchard')).toBeUndefined();
+    expect(trees.check('orchard', 2_150, { frontier: f, root: 'x' })).toBe(true);
+    expect(trees.get('orchard')).toBeDefined();
+    // the dropped tree's rows are cleared before the reseed's are written
+    const writes = trees.takeWrites();
+    expect(writes.some(w => w.clear)).toBe(true);
+    trees.free();
+  });
+
+  test('rows: a dropped tree clears them, a truncation rewrites the shards, bad rows load nothing', () => {
     const meta = new FakeMeta();
     meta.put({ key: 'syncHeight', value: 5 });
     write(meta, [
@@ -192,11 +378,15 @@ describe('note trees on the real wasm', () => {
     ]);
     write(meta, [{ pool: 'orchard', clear: true, puts: [] }]);
     expect([...meta.rows.keys()].sort()).toEqual(['st:ironwood:ck', 'syncHeight']);
-    // rows that do not load give no tree rather than half of one
     meta.put({ key: 'st:ironwood:s:00000000', value: new Uint8Array([9]) });
-    expect(
-      loadTree(meta.list(), 'ironwood', () => new wasm.NoteTree(MAX_CHECKPOINTS)),
-    ).toBeUndefined();
+    expect(loadTree(meta.list(), 'ironwood', make)).toBeUndefined();
+    // changesToWrite keys shards by a fixed-width index, so a range covers them
+    const t = make();
+    t.insert_frontier('', 1);
+    expect(changesToWrite('orchard', t.take_changes()).puts.map(p => p.key)).toContain(
+      'st:orchard:ck',
+    );
+    t.free();
   });
 });
 
