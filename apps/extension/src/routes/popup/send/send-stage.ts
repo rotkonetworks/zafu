@@ -33,7 +33,7 @@ const zcash: Stages = {
   names: ['selecting notes', 'building witnesses', 'proving', 'broadcasting'],
   of: [
     [/^(loading wallet state|fetching chain tip|selecting notes|notes selected)/, 0],
-    [/^(building merkle witnesses|witnesses built|witness corrupt)/, 1],
+    [/^(building merkle witnesses|witnesses built|catch-up)/, 1],
     [
       /^(checking NU6\.3|NU6\.3 active|proving|building & proving|PCZT|unsigned|transaction proved)/,
       2,
@@ -48,15 +48,15 @@ const zcash: Stages = {
       return n ? `${n} note${n === '1' ? '' : 's'}` : '';
     }
     if (i === 1) {
-      return last(steps, 'witness corrupt') ? 'rebuilding · about 3 min' : 'note tree';
+      return last(steps, 'catch-up') ? 'catching up' : 'note tree';
     }
     return i === 2 && i === active ? (last(steps, 'proving')?.detail ?? '') : '';
   },
   explain: (steps, active, hot) =>
     [
       NOTES_PAY,
-      last(steps, 'witness corrupt')
-        ? 'the note tree needs a deeper rebuild this time, about 3 min. thank you for waiting.'
+      last(steps, 'catch-up')
+        ? 'catching up the note tree first, so this takes a little longer. thank you for waiting.'
         : 'showing each note exists in the zcash note tree, without saying which one.',
       hot
         ? 'your computer proves the payment is valid and signs it with your key. the network learns nothing about sender, amount or memo.'

@@ -16,7 +16,6 @@ import { OverlayPortal } from '../../../components/overlay-portal';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VaultUnlock } from '../../../state/keyring/types';
 import { Button } from '@repo/ui/components/ui/button';
-import { StepList } from '@repo/ui/components/ui/step-list';
 import { ScreenHeader } from '../../../components/screen-header';
 import { PopupPath } from '../paths';
 import { Sensitive } from '../../../components/sensitive';
@@ -26,8 +25,13 @@ import {
   buildTurnstileMigrationInWorker,
   completeTurnstileMigrationInWorker,
   spawnNetworkWorker,
+  stopBuildInWorker,
   type TurnstileMigrationUnsignedResult,
 } from '../../../state/keyring/network-worker';
+import { isBuildStopped } from '../../../workers/build-abort';
+import { Sending, type SendingNote } from './send-ui';
+import { STAGES, sendStage } from './send-stage';
+import { isHeartbeat, phaseOf, useSendWatch } from './send-watch';
 import {
   parsePreludeSinglePcztResponse,
   unwrapCborSinglePczt,
@@ -150,6 +154,51 @@ export function IronwoodMigrate({
     { step: string; detail?: string; elapsedMs: number }[]
   >([]);
 
+  // the build in the worker, stoppable under this key until it broadcasts
+  const buildKeyRef = useRef<string | null>(null);
+  const buildSinceRef = useRef(0);
+  const [buildNote, setBuildNote] = useState<Exclude<SendingNote, 'slow'>>('leave');
+  const watch = useSendWatch(progressSteps, buildSinceRef.current, step === 'building');
+
+  /** stop the build; the worker says if it is already broadcasting */
+  const stopBuild = useCallback(async (failed?: string) => {
+    const key = buildKeyRef.current;
+    if (!key) {
+      return;
+    }
+    setBuildNote('stopping');
+    const outcome = await stopBuildInWorker('zcash', key);
+    if (outcome === 'committed') {
+      setBuildNote('on-its-way');
+      return;
+    }
+    buildKeyRef.current = null;
+    setBuildNote('leave');
+    if (failed) {
+      setError(failed);
+      setStep('error');
+    } else {
+      setStep('review');
+    }
+  }, []);
+
+  // far past its phase's bound: end it calmly instead of spinning on
+  useEffect(() => {
+    if (watch !== 'timeout') {
+      return;
+    }
+    const quietAt = progressSteps.findLast(p => !isHeartbeat(p.step))?.step;
+    if (phaseOf(quietAt) === 'broadcast') {
+      setError(
+        'zafu did not hear back from the network · it may still arrive, so please look at home before trying again',
+      );
+      setStep('error');
+      return;
+    }
+    void stopBuild('this took far longer than it should, so zafu stopped it · nothing was moved');
+    // once per timeout
+  }, [watch]);
+
   // mirror the zcash-send build screen: live progress from the worker
   useEffect(() => {
     if (step !== 'building' && step !== 'broadcast') {
@@ -195,6 +244,10 @@ export function IronwoodMigrate({
         setStep('review');
         return;
       }
+      const key = crypto.randomUUID();
+      buildKeyRef.current = key;
+      buildSinceRef.current = Date.now();
+      setBuildNote('leave');
       setStep('building');
       try {
         await spawnNetworkWorker('zcash');
@@ -207,6 +260,8 @@ export function IronwoodMigrate({
           ufvk,
           backend,
           vault,
+          undefined,
+          key,
         );
         // hot path resolves to { txid, fee } (tx already broadcast in-worker)
         if (!('txid' in result)) {
@@ -215,6 +270,10 @@ export function IronwoodMigrate({
         setTxid(result.txid);
         setStep('complete');
       } catch (err) {
+        if (isBuildStopped(err)) {
+          // stopped: the stop already put the screen where it belongs
+          return;
+        }
         setError(err instanceof Error ? err.message : 'failed to build migration transaction');
         setStep('error');
       }
@@ -228,6 +287,10 @@ export function IronwoodMigrate({
       setStep('error');
       return;
     }
+    const key = crypto.randomUUID();
+    buildKeyRef.current = key;
+    buildSinceRef.current = Date.now();
+    setBuildNote('leave');
     setStep('building');
     setError(null);
     setProgressSteps([]);
@@ -241,6 +304,9 @@ export function IronwoodMigrate({
         mainnet,
         ufvk,
         backend,
+        undefined,
+        undefined,
+        key,
       );
       // cold path resolves to the unsigned PCZT result (with UR frames)
       if ('txid' in result) {
@@ -250,6 +316,9 @@ export function IronwoodMigrate({
       setUrFrames(result.urFrames);
       setStep('sign');
     } catch (err) {
+      if (isBuildStopped(err)) {
+        return;
+      }
       setError(err instanceof Error ? err.message : 'failed to build migration transaction');
       setStep('error');
     }
@@ -394,12 +463,22 @@ export function IronwoodMigrate({
 
       case 'building':
         return (
-          <div className='flex flex-col items-center gap-4 p-6'>
-            <div className='w-16 h-16 bg-primary/20 flex items-center justify-center'>
-              <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent animate-spin' />
-            </div>
-            <h2 className='text-lg'>building migration</h2>
-            <StepList steps={progressSteps} className='w-full max-w-sm' />
+          <div className='flex h-full min-h-0 flex-col'>
+            <Sending
+              meta={<Sensitive>{fmtZec(orchardZat)} zec · orchard to ironwood</Sensitive>}
+              stages={STAGES.zcash}
+              steps={progressSteps}
+              floor={0}
+              since={buildSinceRef.current}
+              hot={!!isHotWallet}
+              note={buildNote !== 'leave' ? buildNote : watch === 'slow' ? 'slow' : 'leave'}
+              onStop={
+                buildNote !== 'on-its-way' && sendStage(STAGES.zcash, progressSteps) < 3
+                  ? () => void stopBuild()
+                  : undefined
+              }
+              onClose={onClose}
+            />
           </div>
         );
 

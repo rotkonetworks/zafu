@@ -311,22 +311,79 @@ export function Proving({
   );
 }
 
+/** what the reserved line under a running build says */
+export type SendingNote = 'leave' | 'slow' | 'stopping' | 'on-its-way';
+
+const NOTE: Record<SendingNote, (stoppable: boolean) => string> = {
+  leave: () => 'you can close this · it keeps going and shows on home',
+  slow: stoppable =>
+    stoppable
+      ? 'this is taking longer than usual · keep waiting or stop it'
+      : 'this is taking longer than usual · thank you for waiting',
+  stopping: () => 'stopping this send',
+  'on-its-way': () => 'it is already on its way',
+};
+
+/**
+ * The footer of every running build: one reserved line, a quiet way to stop
+ * while nothing has left yet, and the way back to the wallet.
+ */
+export const SendingFooter = ({
+  note = 'leave',
+  onStop,
+  onClose,
+}: {
+  note?: SendingNote;
+  /** offered only before anything is broadcast */
+  onStop?: () => void;
+  /** the way back to the wallet; a sheet has its own */
+  onClose?: () => void;
+}) => (
+  <Footer className='flex-col'>
+    <span
+      className={cn(
+        'flex h-[18px] items-center justify-center text-[11px]',
+        note === 'slow' ? 'text-zigner-gold' : 'text-fg-muted',
+      )}
+    >
+      {NOTE[note](!!onStop)}
+    </span>
+    <div className='flex gap-2'>
+      {onStop && (
+        <Button
+          variant='quiet'
+          onClick={onStop}
+          disabled={note === 'stopping'}
+          className={cn('h-11 text-[13px]', onClose ? 'w-[132px]' : 'grow')}
+        >
+          stop this send
+        </Button>
+      )}
+      {onClose && (
+        <Button variant='secondary' onClick={onClose} className='h-11 grow'>
+          back to wallet
+        </Button>
+      )}
+    </div>
+  </Footer>
+);
+
 /** board Proving: the sending screen, which may be left while it runs */
 export const Sending = ({
   meta,
   onClose,
+  onStop,
+  note,
   ...proving
-}: Parameters<typeof Proving>[0] & { meta: ReactNode; onClose: () => void }) => (
+}: Parameters<typeof Proving>[0] & {
+  meta: ReactNode;
+  onClose: () => void;
+  onStop?: () => void;
+  note?: SendingNote;
+}) => (
   <>
     <ScreenHeader title='sending' backPath={false} meta={meta} />
     <Proving {...proving} />
-    <Footer className='flex-col'>
-      <span className='flex h-[18px] items-center justify-center text-[11px] text-fg-muted'>
-        you can close this · it keeps going and shows on home
-      </span>
-      <Button variant='secondary' onClick={onClose} className='h-11'>
-        back to wallet
-      </Button>
-    </Footer>
+    <SendingFooter note={note} onStop={onStop} onClose={onClose} />
   </>
 );

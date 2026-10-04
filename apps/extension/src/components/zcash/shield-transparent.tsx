@@ -55,6 +55,11 @@ import {
   zafuShieldingDeps,
 } from '../../ledger/zcash-app/zafu-deps';
 import { LedgerSteps } from '../../routes/popup/send/send-states';
+import { Proving, SendingFooter, type SendingNote } from '../../routes/popup/send/send-ui';
+import { STAGES, sendStage, type SendProgress } from '../../routes/popup/send/send-stage';
+import { isHeartbeat, phaseOf, useSendWatch } from '../../routes/popup/send/send-watch';
+import { stopBuildInWorker } from '../../state/keyring/network-worker';
+import { isBuildStopped } from '../../workers/build-abort';
 
 /** mirrors home's fmtZec - trim trailing zeros, keep at least 2 decimals */
 const fmtZec = (val: number): string => {
@@ -127,6 +132,63 @@ export const ShieldTransparent = ({
   const [zignerTxid, setZignerTxid] = useState<string | null>(null);
   const [zignerError, setZignerError] = useState<string | null>(null);
 
+  // the build in the worker (hot shield or zigner's unsigned build), with the
+  // same progress, stop and stall handling as the send screen
+  const buildKeyRef = useRef<string | null>(null);
+  const [buildSteps, setBuildSteps] = useState<SendProgress[]>([]);
+  const [buildSince, setBuildSince] = useState(0);
+  const [buildNote, setBuildNote] = useState<Exclude<SendingNote, 'slow'>>('leave');
+  const building = shielding || zignerStep === 'building';
+  const startBuild = () => {
+    const key = crypto.randomUUID();
+    buildKeyRef.current = key;
+    setBuildSteps([]);
+    setBuildSince(Date.now());
+    setBuildNote('leave');
+    return key;
+  };
+  useEffect(() => {
+    if (!building) {
+      return;
+    }
+    const onProgress = (e: Event) => {
+      const { step, detail } = (e as CustomEvent<SendProgress>).detail;
+      setBuildSteps(prev => [...prev, { step, detail }]);
+    };
+    window.addEventListener('zcash-send-progress', onProgress);
+    return () => window.removeEventListener('zcash-send-progress', onProgress);
+  }, [building]);
+  const watch = useSendWatch(buildSteps, buildSince, building);
+  const stopBuild = async (failed?: string) => {
+    const key = buildKeyRef.current;
+    if (!key) {
+      return;
+    }
+    setBuildNote('stopping');
+    const outcome = await stopBuildInWorker('zcash', key);
+    if (outcome === 'committed') {
+      setBuildNote('on-its-way');
+      return;
+    }
+    buildKeyRef.current = null;
+    setBuildNote('leave');
+    setShielding(false);
+    setZignerStep(failed ? 'error' : 'idle');
+    if (failed) {
+      setZignerError(failed);
+    }
+  };
+  useEffect(() => {
+    if (watch !== 'timeout') {
+      return;
+    }
+    const quietAt = buildSteps.findLast(p => !isHeartbeat(p.step))?.step;
+    if (phaseOf(quietAt) !== 'broadcast') {
+      void stopBuild('this took far longer than it should, so zafu stopped it · nothing was moved');
+    }
+    // once per timeout
+  }, [watch]);
+
   const handleShield = useCallback(async () => {
     if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') {
       return;
@@ -144,6 +206,7 @@ export const ShieldTransparent = ({
     setShieldTxid(null);
     setShieldError(null);
 
+    const key = startBuild();
     try {
       const vault = await keyRing.getVaultUnlock(selectedKeyInfo.id);
       const result = await shieldInWorker(
@@ -153,10 +216,13 @@ export const ShieldTransparent = ({
         zidecarUrl,
         tAddresses,
         isMainnet,
+        key,
       );
       setShieldTxid(result.txid);
     } catch (err) {
-      setShieldError(err instanceof Error ? err.message : String(err));
+      if (!isBuildStopped(err)) {
+        setShieldError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
       setShielding(false);
     }
@@ -187,6 +253,7 @@ export const ShieldTransparent = ({
     setZignerStep('building');
     setZignerTxid(null);
     setZignerError(null);
+    const key = startBuild();
 
     try {
       await spawnNetworkWorker('zcash');
@@ -197,6 +264,8 @@ export const ShieldTransparent = ({
         tAddresses,
         isMainnet,
         ufvk,
+        undefined,
+        key,
       );
       setUnsignedData(result);
 
@@ -220,6 +289,9 @@ export const ShieldTransparent = ({
       setSignRequestQr(qrHex);
       setZignerStep('show_qr');
     } catch (err) {
+      if (isBuildStopped(err)) {
+        return;
+      }
       setZignerError(err instanceof Error ? err.message : String(err));
       setZignerStep('error');
     }
@@ -318,6 +390,31 @@ export const ShieldTransparent = ({
         <Button variant='secondary' onClick={ledger.stop} className='w-full'>
           not now
         </Button>
+      </div>
+    );
+  }
+
+  // a build in the worker swaps in the sending screen's stages, with a quiet
+  // stop while nothing has left
+  if (building) {
+    return (
+      <div className='-mx-4 flex flex-col'>
+        {PasswordModal}
+        <Proving
+          stages={STAGES.zcash}
+          steps={buildSteps}
+          floor={0}
+          since={buildSince}
+          hot={method === 'hot'}
+        />
+        <SendingFooter
+          note={buildNote !== 'leave' ? buildNote : watch === 'slow' ? 'slow' : 'leave'}
+          onStop={
+            buildNote !== 'on-its-way' && sendStage(STAGES.zcash, buildSteps) < 3
+              ? () => void stopBuild()
+              : undefined
+          }
+        />
       </div>
     );
   }

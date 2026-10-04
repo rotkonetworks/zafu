@@ -3,14 +3,14 @@ import { SyncStatus, type SyncStatusProps } from '../zcash/sync-status';
 import { syncNotice } from '../zcash/sync-notice';
 import type { SyncFailure } from '../../state/sync-failure';
 import { useOnline } from '../../hooks/use-online';
-import { useRebuildLeft, useRebuildSince } from '../../state/witness-rebuild';
+import { catchUpLeft, useCatchUp } from '../../state/witness-rebuild';
 import { useTxOps } from '../../tx-ops/use-tx-ops';
 import { PopupPath } from '../../routes/popup/paths';
 
 /**
- * The strip's own subscriptions (network, a running witness rebuild, the
+ * The strip's own subscriptions (network, a send's note-tree catch-up, the
  * tracker) live here, so a change re-renders the strip and not the screen.
- * A rebuild counts only on a network that rebuilds witnesses, and only
+ * A catch-up counts only on a network that keeps witnesses, and only
  * while a send of that network is still pending.
  */
 export const SyncStrip = ({
@@ -31,10 +31,10 @@ export const SyncStrip = ({
   const navigate = useNavigate();
   const online = useOnline();
   const sending = useTxOps().some(op => op.network === network && op.status === 'pending');
-  const rebuildLeft = useRebuildLeft(useRebuildSince());
+  const catchUp = useCatchUp();
   const spec = syncNotice({
     online,
-    rebuildLeft: rebuilds && sending ? rebuildLeft : undefined,
+    catchingUp: rebuilds && sending && catchUp ? { left: catchUpLeft(catchUp) } : undefined,
     failure,
   });
   if (synced && !spec && !notice) {

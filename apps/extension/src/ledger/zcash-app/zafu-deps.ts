@@ -169,6 +169,8 @@ export async function buildLedgerSendPczt(a: {
   memo: string;
   mainnet: boolean;
   ufvk: string;
+  /** lets the send page stop this build (stopBuildInWorker) */
+  cancelKey?: string;
 }): Promise<{ pcztHex: string; coldSendId?: string; fee: string }> {
   const built = await buildSendTxPcztInWorker(
     'zcash',
@@ -180,6 +182,9 @@ export async function buildLedgerSendPczt(a: {
     0, // anchor to the live tip, like the zigner branch
     a.mainnet,
     a.ufvk,
+    false,
+    undefined,
+    a.cancelKey,
   );
   return {
     pcztHex: assertPcztHex(built.pcztHex, 'the send build'),

@@ -72,6 +72,7 @@ const STATUS: Record<MessageStatus, string> = {
   confirmed: '',
   failed: 'this did not leave. please try again.',
   interrupted: 'zafu closed before we saw it leave. it may still arrive.',
+  discarded: 'stopped before it left. nothing was sent.',
 };
 
 const PayCard = ({ uri, mine, from }: { uri: string; mine: boolean; from: string }) => {

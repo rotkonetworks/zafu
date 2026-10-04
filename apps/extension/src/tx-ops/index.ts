@@ -26,7 +26,9 @@ export type TxOpStatus =
   | 'done'
   | 'failed'
   /** no answer for a long time: the page driving it probably went away */
-  | 'unknown';
+  | 'unknown'
+  /** stopped before it was broadcast: nothing was sent */
+  | 'discarded';
 
 export interface TxOp {
   opId: string;
@@ -48,6 +50,13 @@ export interface TxOp {
   restUrl?: string;
   /** the completion toast has been shown */
   notified?: boolean;
+  /**
+   * zcash: the build can still be stopped from any window (home's in-flight
+   * card), under this op's id; cleared once it starts broadcasting
+   */
+  stoppable?: boolean;
+  /** the optimistic outbox record of this send, discarded with it */
+  outboxId?: string;
   /** penumbra send: carried so the sent-message memo can be recorded */
   memo?: string;
   recipient?: string;
@@ -167,6 +176,13 @@ export const holdTxOp = (opId: string): Promise<() => void> =>
 /** a screen is showing this op's outcome right now */
 export const isTxOpShown = (opId: string): Promise<boolean> =>
   navigator.locks.request(shownKey(opId), { ifAvailable: true }, lock => lock === null);
+
+/**
+ * A send stopped before it left: terminal, never announced (the person did
+ * it themselves), and swept with the other finished ops.
+ */
+export const discardTxOp = (opId: string): Promise<void> =>
+  writeTxOp(opId, { status: 'discarded', step: undefined, stoppable: false, notified: true });
 
 export const removeTxOps = (opIds: readonly string[]): Promise<void> =>
   chrome.storage.session.remove(opIds.map(txOpKey));

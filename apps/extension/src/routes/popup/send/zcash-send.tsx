@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Sensitive } from '../../../components/sensitive';
-import { removeTxOps, writeTxOp } from '../../../tx-ops';
+import { discardTxOp, writeTxOp } from '../../../tx-ops';
 import { useStore } from '../../../state';
 import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
@@ -23,8 +23,12 @@ import {
   getBalanceInWorker,
   getTransparentUtxosInWorker,
   broadcastRawTxInWorker,
+  stopBuildInWorker,
   type SendTxPcztUnsignedResult,
 } from '../../../state/keyring/network-worker';
+import { BuildStopped, isBuildStopped } from '../../../workers/build-abort';
+import { SendRun } from './send-run';
+import { isHeartbeat, phaseOf, useSendWatch } from './send-watch';
 import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { nu63ActivationHeight } from '../../../config/feature-flags';
@@ -91,15 +95,16 @@ import {
   Strip,
   isTransparentAddress,
   shortAddress,
+  type SendingNote,
 } from './send-ui';
 import { AmountField, AddressSheet, ToField } from './send-fields';
-import { STAGES } from './send-stage';
+import { STAGES, sendStage } from './send-stage';
 
 import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
-import { LedgerGone, LedgerSteps, WitnessRebuild, ZignerWrongCode } from './send-states';
+import { CatchUpNotice, LedgerGone, LedgerSteps, ZignerWrongCode } from './send-states';
 import { isLedgerGone } from '../../../ledger/disconnect';
 import { zignerCodeChain, type ZignerChain } from '../../../shared/zigner-code';
-import { useRebuildLeft, useRebuildSince } from '../../../state/witness-rebuild';
+import { useCatchUp } from '../../../state/witness-rebuild';
 import {
   parseCompactResponse,
   mergeContributions,
@@ -173,6 +178,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const pendingTempTxIdRef = useRef<string | null>(null);
   // the transaction tracker's record for this send (home card + toast)
   const trackOpRef = useRef<string | null>(null);
+  // this attempt, and the one way to cancel it (see send-run.ts)
+  const runRef = useRef<SendRun | null>(null);
+  // the reserved line under a running build, beyond what the clock says
+  const [sendNote, setSendNote] = useState<Exclude<SendingNote, 'slow'>>('leave');
 
   /** promote the optimistic record to the real txid and mark it broadcasted. */
   const promoteToBroadcasted = useCallback(
@@ -192,7 +201,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         console.warn(e);
       }
       if (trackOpRef.current) {
-        void writeTxOp(trackOpRef.current, { status: 'done', step: undefined, txId: realTxId });
+        void writeTxOp(trackOpRef.current, {
+          status: 'done',
+          step: undefined,
+          stoppable: false,
+          txId: realTxId,
+        });
         trackOpRef.current = null;
       }
     },
@@ -203,7 +217,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const markPendingFailed = useCallback(
     async (reason: string) => {
       if (trackOpRef.current) {
-        void writeTxOp(trackOpRef.current, { status: 'failed', step: undefined, error: reason });
+        void writeTxOp(trackOpRef.current, {
+          status: 'failed',
+          step: undefined,
+          stoppable: false,
+          error: reason,
+        });
         trackOpRef.current = null;
       }
       const tempId = pendingTempTxIdRef.current;
@@ -239,9 +258,26 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // promoteToBroadcasted() still rewrites the temp id to the real txid and
   // moves it on to broadcasting → pending.
   //
+  // A cold round (a QR waiting for its scan, a frost room, a ledger that went
+  // away) and a cold build whose PCZT only this page could show die with the
+  // page: nothing was signed, so that attempt is killed and discarded, never
+  // left to read "interrupted". A hot build goes on in the worker.
+  //
   // Empty deps: this must run on real unmount and nothing else.
+  const stepRef = useRef<SendStep>('form');
+  const hotRef = useRef(false);
   useEffect(() => {
     return () => {
+      const run = runRef.current;
+      const cold = ['sign', 'scan', 'ledger-gone', 'frost-room', 'frost-signing', 'airgap-flow'];
+      if (
+        run?.live &&
+        !run.sent &&
+        (cold.includes(stepRef.current) || (stepRef.current === 'building' && !hotRef.current))
+      ) {
+        void run.cancel();
+        return;
+      }
       const tempId = pendingTempTxIdRef.current;
       if (tempId !== null) {
         void messagesRef.current.markOutgoingInterrupted(
@@ -253,6 +289,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   }, []);
 
   const [step, setStep] = useState<SendStep>('form');
+  stepRef.current = step;
   const [recipient, setRecipient] = useState(prefill?.recipient ?? '');
   const [amount, setAmount] = useState(prefill?.amount ?? '');
   const [memo, setMemo] = useState(prefill?.memo ?? '');
@@ -370,9 +407,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     { step: string; detail?: string; elapsedMs: number }[]
   >([]);
   const buildStartRef = useRef(0);
+  // is the build still moving? real time only (send-watch.ts)
+  const watch = useSendWatch(
+    sendSteps,
+    buildStartRef.current,
+    step === 'building' || step === 'broadcast',
+  );
   // a witness rebuild the worker reported for this build (board StWitness)
-  const rebuilding = useRebuildSince();
-  const rebuildLeft = useRebuildLeft(rebuilding);
+  const catchUp = useCatchUp();
 
   // self-custody multisig (mnemonic FROST) state
   const [frostRoomCode, setFrostRoomCode] = useState('');
@@ -575,10 +617,98 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         elapsedMs: number;
       };
       setSendSteps(prev => [...prev, detail]);
+      // what home's card says while this page is gone, and when it stops
+      // offering to stop: the worker refuses from the broadcast on
+      const op = trackOpRef.current;
+      if (detail.step.includes('broadcasting')) {
+        runRef.current?.broadcasting();
+        if (op) {
+          void writeTxOp(op, { status: 'pending', step: 'broadcasting', stoppable: false });
+        }
+      } else if (op && detail.step === 'catch-up: start') {
+        void writeTxOp(op, { status: 'pending', step: 'catching up the note tree' });
+      } else if (op && /^(proving|building & proving|building, proving)/.test(detail.step)) {
+        void writeTxOp(op, { status: 'pending', step: 'proving' });
+      }
     };
     window.addEventListener('zcash-send-progress', handler);
     return () => window.removeEventListener('zcash-send-progress', handler);
   }, [step]);
+
+  /**
+   * Kill and discard the running attempt (send-run.ts). `failed`: zafu ended
+   * it, not the person.
+   */
+  const cancelRun = async (failed?: string) => {
+    const run = runRef.current;
+    if (!run) {
+      return 'stopped' as const;
+    }
+    const result = await run.cancel(failed);
+    if (result === 'stopped') {
+      pendingTempTxIdRef.current = null;
+      trackOpRef.current = null;
+      ledgerRunRef.current++;
+      ledgerRoundRef.current = null;
+      pcztUnsignedRef.current = null;
+      pcztMultisigRef.current = null;
+    }
+    return result;
+  };
+
+  // A build that has gone quiet far past its phase's bound is ended, calmly:
+  // before the broadcast it is stopped and nothing was sent; after it, zafu
+  // can only say it did not hear back.
+  useEffect(() => {
+    if (watch !== 'timeout') {
+      return;
+    }
+    const run = runRef.current;
+    const quietAt = sendSteps.findLast(p => !isHeartbeat(p.step))?.step;
+    if (run?.sent || step === 'broadcast' || phaseOf(quietAt) === 'broadcast') {
+      const reason =
+        'zafu did not hear back from the network · it may still arrive, so please look at home before sending again';
+      const tempId = pendingTempTxIdRef.current;
+      pendingTempTxIdRef.current = null;
+      if (tempId) {
+        void messages.markOutgoingInterrupted(tempId, reason);
+      }
+      if (trackOpRef.current) {
+        void writeTxOp(trackOpRef.current, {
+          status: 'unknown',
+          step: undefined,
+          stoppable: false,
+        });
+        trackOpRef.current = null;
+      }
+      run?.finish();
+      setFormError(reason);
+      setStep('error');
+      return;
+    }
+    const reason = 'this took far longer than it should, so zafu stopped it · nothing was sent';
+    void cancelRun(reason).then(result => {
+      if (result === 'on-its-way') {
+        setSendNote('on-its-way');
+        return;
+      }
+      setFormError(reason);
+      setStep('error');
+    });
+    // once per timeout
+  }, [watch]);
+
+  /** "stop this send": back to review with the form as it was */
+  const stopSend = async () => {
+    setSendNote('stopping');
+    const result = await cancelRun();
+    if (result === 'on-its-way') {
+      setSendNote('on-its-way');
+      return;
+    }
+    setSendNote('leave');
+    setStep('review');
+  };
 
   const handleSign = async () => {
     if (!selectedKeyInfo) {
@@ -601,7 +731,31 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     setStep('building');
     setFormError(null);
     setSendSteps([]);
+    setSendNote('leave');
     buildStartRef.current = Date.now();
+    hotRef.current = kind === 'hot';
+    const run = new SendRun({
+      stopBuild: key => stopBuildInWorker('zcash', key),
+      discard: (opId, tempId) => {
+        void discardTxOp(opId);
+        if (tempId) {
+          void messages.markOutgoingDiscarded(tempId);
+        }
+      },
+      fail: (opId, tempId, reason) => {
+        void writeTxOp(opId, {
+          status: 'failed',
+          step: undefined,
+          stoppable: false,
+          error: reason,
+          notified: true,
+        });
+        if (tempId) {
+          void messages.markOutgoingFailed(tempId, reason);
+        }
+      },
+    });
+    runRef.current = run;
 
     // optimistic outgoing entry - visible in inbox immediately, before
     // any RPC. promoted to the real txid post-build; marked failed in
@@ -615,19 +769,23 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         asset: 'ZEC',
       });
       pendingTempTxIdRef.current = tempTxId;
+      run.tempTxId = tempTxId;
     } catch (e) {
       console.warn('[zcash-send] failed to record optimistic pending:', e);
       pendingTempTxIdRef.current = null;
     }
     // Tracker record. If this page closes mid-send it stays pending and the
     // sweep later says 'unknown' - it may still have been sent.
-    trackOpRef.current = crypto.randomUUID();
-    void writeTxOp(trackOpRef.current, {
+    trackOpRef.current = run.key;
+    void writeTxOp(run.key, {
       network: 'zcash',
       label: `send ${amount} ZEC`,
       status: 'pending',
       step: 'building',
       startedAt: Date.now(),
+      // home can stop it while it builds, under the same key
+      stoppable: true,
+      ...(run.tempTxId ? { outboxId: run.tempTxId } : {}),
     });
 
     try {
@@ -635,6 +793,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       const amountZat = Math.round(Number(amount) * 1e8).toString();
       const coldDeps = { walletId: storeId ?? walletId, zidecarUrl, mainnet };
       const finish = (txid: string) => {
+        run.broadcasting();
+        run.finish();
         void promoteToBroadcasted(txid);
         complete(txid);
         setStep('complete');
@@ -661,7 +821,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           mainnet,
           ufvk,
           frost,
+          undefined,
+          run.key,
         );
+        if (!run.live) {
+          throw new BuildStopped();
+        }
         setFee(fmtZecShort(result.fee));
         return result;
       };
@@ -673,9 +838,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           // verify password, then build signed tx + broadcast
           const authorized = await requestAuth();
           if (!authorized) {
+            // a dismissed password cancels the send: nothing was built
+            await cancelRun();
             setStep('review');
             return;
           }
+          // the build's clock starts now, not while the password was asked
+          buildStartRef.current = Date.now();
+          setSendSteps([]);
           const vault = await getVaultUnlock(walletId);
           const result = await buildSendTxInWorker(
             'zcash',
@@ -687,6 +857,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             accountIndex,
             mainnet,
             vault,
+            undefined,
+            run.key,
           );
           if ('txid' in result) {
             setFee(fmtZecShort(result.fee));
@@ -711,6 +883,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             const unplugged = new Promise<never>((_, reject) =>
               transport.on('disconnect', () => reject(new Error('DisconnectedDevice'))),
             );
+            // a cancelled send closes the device channel: a later approval on
+            // the device can no longer reach the broadcast
+            const release = run.hold(() => void transport.close().catch(() => undefined));
             try {
               const { txid } = await Promise.race([
                 ledgerTransparentSendFlowBtc(
@@ -739,6 +914,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               ]);
               finish(txid);
             } finally {
+              release();
               await transport.close().catch(() => undefined);
             }
           });
@@ -759,9 +935,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           // co-signers can inspect + sighash-verify the spend before signing.
           const authorized = await requestAuth();
           if (!authorized) {
+            await cancelRun();
             setStep('review');
             return;
           }
+          run.hold(() => frostAbortRef.current?.abort());
           const ms = activeZcashWallet!.multisig!; // implied by the kind
           const secrets = await useStore
             .getState()
@@ -800,6 +978,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               coldDeps,
               {
                 onSigned: () => {
+                  run.broadcasting();
                   setStep('broadcast');
                   setFrostProgress('broadcasting...');
                 },
@@ -831,7 +1010,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             memo,
             mainnet,
             ufvk,
+            cancelKey: run.key,
           });
+          if (!run.live) {
+            throw new BuildStopped();
+          }
           setFee(fmtZecShort(built.fee));
           const protocol = await loadLedgerZcashProtocol();
           const stillHere = () => selectEffectiveKeyInfo(useStore.getState())?.id === walletId;
@@ -841,6 +1024,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             const device = await openLedger();
             const abort = new AbortController();
             ledgerAbortRef.current = abort;
+            const release = run.hold(() => abort.abort());
             try {
               const out = await new LedgerOperation(
                 zafuLedgerDeps({
@@ -886,6 +1070,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               const g = ledgerGuidance(e);
               throw new Error(`${g.title} · ${g.action}`);
             } finally {
+              release();
               ledgerAbortRef.current = null;
               await device.close().catch(() => undefined);
             }
@@ -931,6 +1116,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           });
           zignerDeliverRef.current = deliver;
           zignerFailRef.current = fail;
+          run.hold(() => fail(new BuildStopped()));
 
           const finalResult = await signAndBroadcast(
             signer,
@@ -940,7 +1126,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               coldSendId: result.coldSendId,
             },
             coldDeps,
-            { onSigned: () => setStep('broadcast') },
+            {
+              onSigned: () => {
+                run.broadcasting();
+                setStep('broadcast');
+              },
+            },
           );
           zignerDeliverRef.current = null;
           zignerFailRef.current = null;
@@ -949,11 +1140,24 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         },
       })();
     } catch (err) {
+      // a cancelled attempt was already discarded and put back on review
+      if (run.discarded) {
+        return;
+      }
+      if (isBuildStopped(err)) {
+        // stopped from another window (home's card): the records are its
+        run.finish();
+        pendingTempTxIdRef.current = null;
+        trackOpRef.current = null;
+        setStep('review');
+        return;
+      }
       failSend(err);
     }
   };
 
   const failSend = (err: unknown) => {
+    runRef.current?.finish();
     frostAbortRef.current?.abort();
     frostAbortRef.current = null;
     const reason = err instanceof Error ? err.message : 'failed to build transaction';
@@ -970,6 +1174,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     try {
       await round(() => {
         signed = true;
+        runRef.current?.broadcasting();
         setStep('broadcast');
       });
       ledgerRoundRef.current = null;
@@ -989,7 +1194,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const reconnectLedger = () => {
     const round = ledgerRoundRef.current;
     if (round) {
-      runLedgerRound(round).catch(failSend);
+      runLedgerRound(round).catch(err => {
+        if (!runRef.current?.discarded && !isBuildStopped(err)) {
+          failSend(err);
+        }
+      });
     }
   };
 
@@ -1143,13 +1352,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   );
 
   // Backing out of a cold-signing step cancels before anything is broadcast:
-  // drop the tracker record rather than leave a spinner that ends 'unknown'.
-  const dropTrackOp = () => {
-    if (trackOpRef.current) {
-      void removeTxOps([trackOpRef.current]);
-      trackOpRef.current = null;
-    }
-  };
+  // the round is killed and the send discarded (send-run.ts), never left as a
+  // spinner that ends 'unknown'.
+  const dropTrackOp = () => void cancelRun();
 
   const handleBack = () => {
     switch (step) {
@@ -1157,14 +1362,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         setStep('form');
         break;
       case 'building':
-        setStep('review');
+        void stopSend();
         break;
       case 'sign':
         dropTrackOp();
         setStep('review');
         break;
       case 'scan':
-        dropTrackOp();
+        // back to the same request on screen: the round is still waiting
         setStep('sign');
         break;
       case 'ledger-sign':
@@ -1200,13 +1405,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   };
 
   const handleClose = () => {
-    frostAbortRef.current?.abort();
-    frostAbortRef.current = null;
     if (
       ['sign', 'scan', 'ledger-gone', 'frost-room', 'frost-signing', 'airgap-flow'].includes(step)
     ) {
       dropTrackOp();
     }
+    frostAbortRef.current?.abort();
+    frostAbortRef.current = null;
     reset();
     onClose();
   };
@@ -1220,8 +1425,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         frostAirgapSigner(orchardSigs, result),
         result,
         { walletId: storeId ?? selectedKeyInfo!.id, zidecarUrl, mainnet },
-        { onSigned: () => setStep('broadcast') },
+        {
+          onSigned: () => {
+            runRef.current?.broadcasting();
+            setStep('broadcast');
+          },
+        },
       );
+      runRef.current?.finish();
       void promoteToBroadcasted(finalResult.txid);
       complete(finalResult.txid);
       setStep('complete');
@@ -1394,28 +1605,47 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
       // broadcasting is the tail of the same operation: one sending screen
       case 'building':
-      case 'broadcast':
-        return rebuilding !== undefined && step === 'building' ? (
-          <WitnessRebuild
-            step={sendSteps.findLast(p => p.step.startsWith('backfill:'))?.step.slice(10)}
-            left={rebuildLeft}
-            onBackground={onClose}
+      case 'broadcast': {
+        const sendMeta = (
+          <span>
+            <Sensitive>{amount} zec</Sensitive> to {toLabel}
+          </span>
+        );
+        // stop is offered only while nothing has left
+        const onStop =
+          step === 'building' &&
+          sendNote !== 'on-its-way' &&
+          !runRef.current?.sent &&
+          sendStage(STAGES.zcash, sendSteps) < 3
+            ? () => void stopSend()
+            : undefined;
+        const note: SendingNote =
+          sendNote !== 'leave' ? sendNote : watch === 'slow' ? 'slow' : 'leave';
+        // a catch-up of this build, said the moment it starts
+        return catchUp &&
+          step === 'building' &&
+          sendSteps.some(p => p.step === 'catch-up: start') ? (
+          <CatchUpNotice
+            catchUp={catchUp}
+            meta={sendMeta}
+            note={note}
+            onStop={onStop}
+            onClose={onClose}
           />
         ) : (
           <Sending
-            meta={
-              <span>
-                <Sensitive>{amount} zec</Sensitive> to {toLabel}
-              </span>
-            }
+            meta={sendMeta}
             stages={STAGES.zcash}
             steps={sendSteps}
             floor={step === 'broadcast' ? 3 : 0}
             since={buildStartRef.current}
             hot={kind === 'hot'}
+            note={note}
+            onStop={onStop}
             onClose={onClose}
           />
         );
+      }
 
       case 'sign':
       case 'scan':

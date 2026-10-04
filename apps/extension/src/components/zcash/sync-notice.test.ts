@@ -6,12 +6,20 @@ const nodeDown = classifySyncFailure('connection refused');
 
 describe('syncNotice', () => {
   it('says offline first, whatever else is failing', () => {
-    const n = syncNotice({ online: false, rebuildLeft: 'about 2 min left', failure: nodeDown });
+    const n = syncNotice({
+      online: false,
+      catchingUp: { left: 'about 2 min left' },
+      failure: nodeDown,
+    });
     expect(n).toMatchObject({ tone: 'warn', text: OFFLINE_MESSAGE, action: { kind: 'retry' } });
   });
 
-  it('shows a running witness rebuild over a sync failure', () => {
-    const n = syncNotice({ online: true, rebuildLeft: 'about 2 min left', failure: nodeDown });
+  it('shows a send note-tree catch-up over a sync failure', () => {
+    const n = syncNotice({
+      online: true,
+      catchingUp: { left: 'about 2 min left' },
+      failure: nodeDown,
+    });
     expect(n).toMatchObject({ tone: 'gold', meta: 'about 2 min left' });
   });
 
