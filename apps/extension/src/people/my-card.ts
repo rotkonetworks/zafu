@@ -67,7 +67,8 @@ export const givenOf = (c: CardV2): GivenCard => ({
   ...(c.zcash ? { zcash: c.zcash } : {}),
   ...(c.penumbra ? { penumbra: c.penumbra } : {}),
   relay: c.relay,
-  caps: c.caps,
+  // what a card says about its own room, not about reaching you: never makes it stale
+  caps: c.caps & ~Cap.sealed,
 });
 
 /** what your card for one person says right now, before it is signed */
@@ -162,7 +163,7 @@ export const useMyCards = () => {
       ...(mine?.address.startsWith('utest') ? { testnet: true } : {}),
       penumbraOn,
       relay: defaultPeopleRelay(await localExtStorage.get('peopleRelay')),
-      caps: Cap.chat | Cap.mailbox | Cap.sealed | (discovery ? Cap.discovery : 0),
+      caps: Cap.chat | Cap.mailbox | (discovery ? Cap.discovery : 0),
     };
   };
 
@@ -204,7 +205,8 @@ export const useMyCards = () => {
       ...(at.testnet ? { testnet: true } : {}),
       ...(at.penumbraOn ? { penumbra: await penumbra(mnemonic, o.given?.penumbra) } : {}),
       relay: at.relay,
-      caps: at.caps,
+      // only a card you show is answered in its room: it says it reads sealed answers
+      caps: at.caps | (kind === 'card' ? Cap.sealed : 0),
       created: minutes(),
     };
     const b64 = cardB64(signCardV2(card, keys.seed));

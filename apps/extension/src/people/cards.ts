@@ -123,9 +123,13 @@ const KEPT = ['zcash', 'penumbra', 'relay', 'caps'] as const;
 /** fields that change who or where they are: asked about first */
 const ASKED = ['name', 'testnet'] as const;
 
+/** a field as a person reads it: `Cap.sealed` is about the card's own room, not about them */
+const field = (c: CardV2, k: (typeof KEPT)[number] | (typeof ASKED)[number] | 'pairKa') =>
+  k === 'caps' ? c.caps & ~Cap.sealed : (c[k] ?? '');
+
 /** which fields an update changed, as a person reads them */
 export const changed = (from: CardV2, to: CardV2) =>
-  ([...KEPT, ...ASKED, 'pairKa'] as const).filter(k => (from[k] ?? '') !== (to[k] ?? ''));
+  ([...KEPT, ...ASKED, 'pairKa'] as const).filter(k => field(from, k) !== field(to, k));
 
 /** what an update does: kept as it is, asked about first, or refused */
 export const updateKind = (from: CardV2, to: CardV2): 'kept' | 'asked' | 'refused' => {

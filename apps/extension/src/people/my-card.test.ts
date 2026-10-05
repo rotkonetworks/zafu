@@ -112,6 +112,8 @@ describe('your card for someone', () => {
     expect(isStale(given, { ...now, zcash: '22'.repeat(43) })).toBe(true);
     expect(isStale(given, { ...now, relay: 'https://relay.example.org' })).toBe(true);
     expect(isStale(given, { ...now, penumbraOn: true })).toBe(true);
+    // the card you showed says it reads sealed answers; that never makes it stale
+    expect(isStale(givenOf({ ...base, caps: base.caps | Cap.sealed }), now)).toBe(false);
   });
 
   it('an answer becomes the person, under the id their address was made for', () => {

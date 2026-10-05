@@ -27,6 +27,7 @@ import {
   CARD_BODY,
   CARD_TTL_SENT,
   CARD_TTL_SHOWN,
+  changed,
   createCards,
   cardRoomId,
   cardRoomSecret,
@@ -252,12 +253,19 @@ describe('add a person', () => {
     expect(bob.lines(pairId('a-id'))).toEqual(['them: hi ken']);
 
     // A gives B a new address: a signed update, revision 1, replaces revision 0
-    const update = card(ALICE, 0, { kind: 'update', revision: 1, zcash: '22'.repeat(43) });
+    const update = card(ALICE, 0, {
+      kind: 'update',
+      revision: 1,
+      zcash: '22'.repeat(43),
+      caps: Cap.chat | Cap.mailbox,
+    });
     await alice.op('card-send', { contactId: 'ken-id', card: update });
     clock.t += 60_000;
     await bob.service.check();
     expect(bob.room(pairId('a-id'))?.pair?.v2?.latest).toBe(update);
     expect(bob.notes(pairId('a-id'))?.at(-1)).toBe('update');
+    // the card said it reads sealed answers, the update does not: only the address changed
+    expect(changed(readB64Card(aCard)!, readB64Card(update)!)).toEqual(['zcash']);
 
     // an older revision, signed or not, never replaces a newer one
     await alice.op('card-send', {
