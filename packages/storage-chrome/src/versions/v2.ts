@@ -236,11 +236,11 @@ type LOCAL = {
   };
   /**
    * Zcash sync backend.
-   *   'zidecar'      — rotko-hosted; mempool watch and the tip cross-check.
+   *   'zidecar'      - rotko-hosted; mempool watch and the tip cross-check.
    *                    (Older builds also checked a header proof and queried
    *                    NOMT proofs; both are gone, and spends and notes come
    *                    from the local block scan on both backends.)
-   *   'lightwalletd' — public indexer (e.g. zec.rocks).
+   *   'lightwalletd' - public indexer (e.g. zec.rocks).
    *   Both are trusted for chain data: the wallet uses what the server returns.
    * NOT auto-detected at runtime: declarative, set per endpoint. Probes
    * are a fingerprint vector (only zafu clients hit zidecar-only RPCs).
