@@ -19,9 +19,10 @@ export interface EthWallet {
 }
 
 /**
- * BIP-32 secp256k1 HD key derivation
+ * BIP-32 secp256k1 HD key derivation. Shared with networks/thorchain, whose
+ * keys sit on coin type 931 with the plain cosmos address.
  */
-function bip32DeriveSecp256k1(
+export function bip32DeriveSecp256k1(
   seed: Uint8Array,
   path: string,
 ): { privateKey: Uint8Array; chainCode: Uint8Array } {
