@@ -533,7 +533,11 @@ export class BlockProcessor implements BlockProcessorInterface {
 
       // Pull the app parameters from the full node, which other parameter setting (gas prices
       // for instance) will be derived from, rather than making additional network requests.
-      const appParams = await bounded(opts => this.querier.app.appParams(opts), signal, 'app params');
+      const appParams = await bounded(
+        opts => this.querier.app.appParams(opts),
+        signal,
+        'app params',
+      );
       await this.persistChainParams(appParams, currentHeight);
 
       // Finally, persist the frontier to IndexedDB. Services save it as they
@@ -1077,7 +1081,9 @@ export class BlockProcessor implements BlockProcessorInterface {
     const version = await raw?.get('REGISTRY_VERSION', 'commit').catch(() => undefined);
     await this.indexedDb.clear();
     for (const m of assets) {
-      await this.indexedDb.saveAssetsMetadata(toPlainMessage(m) as Required<PlainMessage<Metadata>>);
+      await this.indexedDb.saveAssetsMetadata(
+        toPlainMessage(m) as Required<PlainMessage<Metadata>>,
+      );
     }
     if (version !== undefined) {
       await raw?.put('REGISTRY_VERSION', version, 'commit').catch(() => undefined);

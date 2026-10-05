@@ -354,9 +354,7 @@ describe('note trees on the real wasm', () => {
     // one answer, or two that disagree with each other, never replace the tree
     expect(await trees.check('orchard', 2_100, differs)).toBe(false);
     expect(await trees.check('orchard', 2_100, differs, () => Promise.resolve(same))).toBe(false);
-    expect(await trees.check('orchard', 2_100, differs, () => Promise.resolve(differs))).toBe(
-      true,
-    );
+    expect(await trees.check('orchard', 2_100, differs, () => Promise.resolve(differs))).toBe(true);
     // a dropped tree (a batch it refused) is reseeded by the next check
     trees.append('orchard', trees.size('orchard')!, [], [], 0);
     expect(trees.get('orchard')).toBeDefined();

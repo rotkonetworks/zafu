@@ -66,7 +66,9 @@ const hotkeyBoxKey = async (walletId: string, roundId: string): Promise<string> 
 
 type HotkeyStorage = Record<string, string | LegacyVotingRecord>;
 
-const getVotingStorage = async (local: ExtensionStorage<LocalStorageState>): Promise<HotkeyStorage> =>
+const getVotingStorage = async (
+  local: ExtensionStorage<LocalStorageState>,
+): Promise<HotkeyStorage> =>
   // votingHotkeys is not in the schema (like votingCasts)
   ((await (local as any).get(HOTKEYS)) as HotkeyStorage | undefined) ?? {};
 

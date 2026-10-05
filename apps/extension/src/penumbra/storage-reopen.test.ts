@@ -6,7 +6,8 @@ const setup = (height: number | undefined = 100) => {
   const deps = {
     reopen: vi.fn(),
     mayReopen: () => true,
-    kind: (e: unknown) => ((e as Error).message === 'quota' ? 'fatal' : 'reopen') as 'fatal' | 'reopen',
+    kind: (e: unknown) =>
+      ((e as Error).message === 'quota' ? 'fatal' : 'reopen') as 'fatal' | 'reopen',
     stopped: vi.fn(),
     height: () => Promise.resolve(height),
     wait: (fn: () => void) => void timers.push(fn),

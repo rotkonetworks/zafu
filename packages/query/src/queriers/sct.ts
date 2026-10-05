@@ -26,7 +26,10 @@ export class SctQuerier implements SctQuerierInterface {
     return this.client.sctFrontier(req);
   }
 
-  epochByBlockHeight(req: EpochByHeightRequest, opts?: CallOptions): Promise<EpochByHeightResponse> {
+  epochByBlockHeight(
+    req: EpochByHeightRequest,
+    opts?: CallOptions,
+  ): Promise<EpochByHeightResponse> {
     return this.client.epochByHeight(req, opts);
   }
 }

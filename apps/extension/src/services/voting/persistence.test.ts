@@ -130,9 +130,9 @@ describe('sealed voting hotkeys', () => {
 
   test('a record stored in the clear by an older build is read, then resealed on the next write', async () => {
     const { mem, local, session } = await storages();
-    const key = await Key.fromJson((await (session as { get: (k: string) => Promise<unknown> }).get(
-      'passwordKey',
-    )) as never);
+    const key = await Key.fromJson(
+      (await (session as { get: (k: string) => Promise<unknown> }).get('passwordKey')) as never,
+    );
     const seal = async (o: unknown) => JSON.stringify((await key.seal(JSON.stringify(o))).toJson());
     mem.set('votingHotkeys', {
       'w:r': {

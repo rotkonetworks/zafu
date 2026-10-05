@@ -669,7 +669,9 @@ export const openTrees = async (
           return false;
         }
         if (!mayReseed(pool)) {
-          warn(`${pool} note tree root at ${height} differs, reseed refused: one was taken within the hour`);
+          warn(
+            `${pool} note tree root at ${height} differs, reseed refused: one was taken within the hour`,
+          );
           return false;
         }
         warn(`${pool} note tree root at ${height} differs from the server's (twice): reseeding`);

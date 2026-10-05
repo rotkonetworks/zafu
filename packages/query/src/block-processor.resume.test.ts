@@ -299,7 +299,9 @@ describe('BlockProcessor resume', () => {
       { height: 6n, tree: chainAt(6n) },
       {
         anchor: (h, call) =>
-          call === 0 ? new Promise<MerkleRoot>(() => undefined) : Promise.resolve(rootOf(chainAt(h))),
+          call === 0
+            ? new Promise<MerkleRoot>(() => undefined)
+            : Promise.resolve(rootOf(chainAt(h))),
       },
     );
     void processor.sync().catch(() => undefined);
