@@ -110,6 +110,7 @@ export const contactFromAnswer = (
     addresses: addressesOf(answer),
     cardV2: room.card.answer,
     source: room.card.via === 'memo' ? 'memo' : 'link',
+    ...(room.card.checked ? { sealChecked: room.card.checked } : {}),
     given: givenOf(mine),
   };
 };
@@ -161,7 +162,7 @@ export const useMyCards = () => {
       ...(mine?.address.startsWith('utest') ? { testnet: true } : {}),
       penumbraOn,
       relay: defaultPeopleRelay(await localExtStorage.get('peopleRelay')),
-      caps: Cap.chat | Cap.mailbox | (discovery ? Cap.discovery : 0),
+      caps: Cap.chat | Cap.mailbox | Cap.sealed | (discovery ? Cap.discovery : 0),
     };
   };
 
@@ -215,6 +216,8 @@ export const useMyCards = () => {
 
   return {
     ready: keyInfo?.type === 'mnemonic',
+    /** this wallet keeps no recovery phrase here (zigner, ledger, a shared wallet): no cards */
+    cannot: !!keyInfo && keyInfo.type !== 'mnemonic',
     walletId: keyInfo?.id,
     /** a card for the next person: a fresh relationship and an id their contact will have */
     fresh: async () => {
@@ -240,6 +243,8 @@ export const useMyCards = () => {
 const sending = new Set<string>();
 /** contacts whose card was checked against these inputs in this window */
 const checked = new Set<string>();
+/** wallets whose old unanswered cards were let go, and closes retried, in this window */
+const swept = new Set<string>();
 
 /**
  * Keep contacts in step with the rooms (mounted on the people screens):
@@ -275,8 +280,17 @@ export const useCardSync = (): void => {
       }
     };
     const byId = new Map(contacts.map(c => [c.id, c]));
+    if (!swept.has(walletId)) {
+      swept.add(walletId);
+      void peopleCall('card-expire', {}).catch(() => swept.delete(walletId));
+    }
     for (const r of rooms) {
       const c = r.card;
+      // a close that did not leave last time goes now
+      if (r.kind === 'card' && c?.mine && c.state === 'cancelling' && !swept.has(r.id)) {
+        swept.add(r.id);
+        once(`cancel:${r.id}`, () => peopleCall('card-cancel', { roomId: r.id }));
+      }
       if (r.kind === 'card' && c?.mine && c.state === 'answered' && !byId.has(c.contactId)) {
         const data = contactFromAnswer(r, walletId);
         if (data) {

@@ -9,11 +9,9 @@ import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../routes/popup/paths';
 import { requestEgressOptIn } from '../net/egress-opt-in';
 import { PEOPLE_RELAY } from '../config/people-relay';
+import { hhmm } from '../utils/when';
 import { peopleAsk, usePeople } from './client';
 import type { PeopleSlot } from './service';
-
-const hhmm = (ms: number) =>
-  new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 export const RelaySlot = ({ waiting }: { waiting?: string }) => {
   const navigate = useNavigate();
