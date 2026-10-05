@@ -13,6 +13,8 @@ import { cn } from '@repo/ui/lib/utils';
 import { AskOnce, Column, StepLines, useNow, type Host } from '../../components/scroll-page';
 import { clock } from '../../buy/machine';
 import { Sensitive } from '../../components/sensitive';
+import { useStore as useZafu } from '../../state';
+import { selectHideBalances } from '../../state/privacy';
 import { depositFeeZat } from '../../workers/transparent-deposit';
 import { cancellable, isDone, needs, PAYOUT_BLOCKS, stepLines, type Flight } from '../../lp/flight';
 import {
@@ -677,11 +679,11 @@ export const WithdrawScreen = ({ onOut }: { onOut: () => void }) => {
 
 /** LpAdding, LpWithdrawing, LpRefunded: the flight's real steps and clock */
 /** where a flight from before this tab stands, in one line */
-const waitLine = (f: Flight): string =>
+const waitLine = (f: Flight, zec: (zat: bigint) => string): string =>
   f.stage === 'shield'
     ? 'your zec is waiting to be shielded back · at your lp address'
     : f.kind === 'add'
-      ? `your add is waiting to be sent · ${zecText(BigInt(f.amountZat))} zec to thorchain`
+      ? `your add is waiting to be sent · ${zec(BigInt(f.amountZat))} zec to thorchain`
       : `your take-out is waiting to be sent · the ask to thorchain`;
 
 export const TrackScreen = ({
@@ -704,11 +706,14 @@ export const TrackScreen = ({
     })),
   );
   const now = useNow();
+  // hide balances masks every figure the tracker writes, the same five dots as Sensitive
+  const hidden = useZafu(selectHideBalances);
+  const zec = hidden ? () => '•••••' : zecText;
   const f = s.flight;
   if (!f) {
     return null;
   }
-  const lines = stepLines(f, { zec: zecText, address: short(s.address), pocket: s.pocket });
+  const lines = stepLines(f, { zec, address: short(s.address), pocket: s.pocket });
   // a send this tab was not asked for: it waits for continue, with the password
   const held =
     !isDone(f) &&
@@ -735,7 +740,7 @@ export const TrackScreen = ({
         <h1 className='font-display text-[38px] leading-[1.15] text-fg-high'>{title}</h1>
         <span className='flex shrink-0 flex-col items-end gap-1.5'>
           <span className='font-display text-[34px] tabular-nums text-fg-high'>
-            {refunded && f.outZat ? zecText(BigInt(f.outZat)) : clock(now - f.started)}
+            {refunded && f.outZat ? zec(BigInt(f.outZat)) : clock(now - f.started)}
           </span>
           <span className='text-[11px] text-fg-muted'>
             {refunded
@@ -757,7 +762,7 @@ export const TrackScreen = ({
       <StepLines steps={lines} />
       {held ? (
         <div className='flex flex-col divide-y divide-border-soft border border-zigner-gold/40 bg-elev-1'>
-          <span className='px-3.5 py-3 text-[13px] text-fg-high'>{waitLine(f)}</span>
+          <span className='px-3.5 py-3 text-[13px] text-fg-high'>{waitLine(f, zec)}</span>
           {s.moved && (
             <span className='px-3.5 py-2.5 text-xs text-warn'>
               the pool moved · this add now costs {pct(s.moved.now)}
