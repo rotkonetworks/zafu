@@ -109,6 +109,10 @@ export const PRE_STREAM_TIMEOUT_MS = 30_000;
 /** pause before the second anchor a mismatch needs before anything is wiped */
 export const SECOND_ANCHOR_DELAY_MS = 3_000;
 
+/** the abort's reason as an Error (an abort() with no reason gives a DOMException already) */
+const abortReason = (signal: AbortSignal): Error =>
+  signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason));
+
 /**
  * `call`, ended by the run's abort or after `ms`: the run settles even when the
  * request does not. The request gets the same signal and timeout (connect
@@ -122,7 +126,7 @@ const bounded = <T>(
 ): Promise<T> =>
   new Promise<T>((resolve, reject) => {
     signal.throwIfAborted();
-    const onAbort = () => reject(signal.reason);
+    const onAbort = () => reject(abortReason(signal));
     const timer = setTimeout(() => reject(new Error(`${what}: no answer in ${ms / 1000}s`)), ms);
     signal.addEventListener('abort', onAbort, { once: true });
     call({ signal, timeoutMs: ms })
@@ -138,7 +142,7 @@ const pause = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
     const onAbort = () => {
       clearTimeout(timer);
-      reject(signal.reason);
+      reject(abortReason(signal));
     };
     const timer = setTimeout(() => {
       signal.removeEventListener('abort', onAbort);

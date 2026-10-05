@@ -15,10 +15,9 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { BlockProcessor } from './block-processor';
-import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
+import { AssetId, Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { MerkleRoot } from '@penumbra-zone/protobuf/penumbra/crypto/tct/v1/tct_pb';
-import { Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 
 type BlockProcessorDeps = ConstructorParameters<typeof BlockProcessor>[0];
 
@@ -91,7 +90,7 @@ const makeChain = (start: { height: bigint | undefined; tree: bigint[] }, node: 
       db.registry = undefined;
       return Promise.resolve();
     },
-    iterateAssetsMetadata: async function* () {
+    iterateAssetsMetadata: function* () {
       yield* [...db.assets];
     },
     saveAssetsMetadata: (m: unknown) => {
@@ -300,7 +299,9 @@ describe('BlockProcessor resume', () => {
       {
         anchor: (h, call) =>
           call === 0
-            ? new Promise<MerkleRoot>(() => undefined)
+            ? new Promise<MerkleRoot>(() => {
+                /* never answers */
+              })
             : Promise.resolve(rootOf(chainAt(h))),
       },
     );
