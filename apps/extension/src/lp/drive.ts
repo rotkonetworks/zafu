@@ -16,6 +16,7 @@
 import { checkVault, type DepositPlan, type DepositRequest } from '../workers/transparent-deposit';
 import {
   advance,
+  HALF_BLOCKS,
   needs,
   sending,
   sent,
@@ -63,6 +64,8 @@ export interface DriveDeps {
   paired?: () => Promise<PairedPosition | undefined>;
   /** a swap to rune: has THORChain paid it out */
   swapped?: (txid: string) => Promise<boolean>;
+  /** a rune MsgDeposit by hash: on chain, refused there, or nowhere */
+  runeTx?: (hash: string) => Promise<{ state: 'included' | 'failed' | 'missing'; log?: string }>;
   /**
    * Write `f` over the stored flight it was made from (same id and rev) and
    * hand back what was written; throws StaleFlight when the stored one moved
@@ -154,6 +157,16 @@ export const observe = async (f: Flight, d: DriveDeps, to: string): Promise<Fact
     }
     if (x.seen.out?.refund && d.refundReason) {
       x.refundReason = await d.refundReason(asked).catch(() => undefined);
+    }
+  }
+  if (f.stage === 'half') {
+    x.height = d.height?.();
+    const late =
+      f.halfHeight !== undefined &&
+      x.height !== undefined &&
+      x.height - f.halfHeight >= HALF_BLOCKS;
+    if (late && f.runeTxid && d.runeTx) {
+      x.runeTx = await d.runeTx(f.runeTxid);
     }
   }
   if (f.kind === 'swap' && f.stage === 'seen' && f.sendTxid && d.swapped && !x.seen?.out?.refund) {

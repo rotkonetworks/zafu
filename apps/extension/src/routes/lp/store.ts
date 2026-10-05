@@ -83,6 +83,7 @@ import {
   pairedLive,
   quoteRune,
   readRune,
+  readRuneTx,
   readSwapped,
   reserveOf,
   RUNE_FEE,
@@ -617,6 +618,7 @@ const depsOf = (storeId: string, lp: { index: number; address: string }): DriveD
         runeSend: (memo: string, rune: bigint) => runeSend(memo, rune),
         paired: async () => (await readRune(runeOn()!.address!)).paired,
         swapped: (txid: string) => readSwapped(txid),
+        runeTx: (hash: string) => readRuneTx(hash),
       }
     : {}),
   save: async (f, after) => {

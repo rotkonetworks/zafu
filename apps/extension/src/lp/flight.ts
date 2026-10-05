@@ -16,6 +16,7 @@
  *             the rune half goes first and is seen waiting before any zec goes
  *             to the pool; a zec half sent back leaves the rune waiting:
  *             refunded -> recover -> recovering -> shield -> shielded
+ *             a rune half not seen waiting within HALF_BLOCKS and not on chain: lost
  *  withdraw2: ask (from the thor1) -> payout -> arrive -> shield -> shielded
  *                                         \-> received (paid all in rune)
  *  swap:      fund -> settle -> send -> seen -> received (zec to rune, paid to the thor1)
@@ -44,7 +45,8 @@ export type Stage =
   | 'half'
   | 'recover'
   | 'recovering'
-  | 'received';
+  | 'received'
+  | 'lost';
 
 export interface Flight {
   v: 1;
@@ -94,6 +96,10 @@ export interface Flight {
   runeBase?: string;
   /** the rune MsgDeposit's hash: an add's rune half, or a take-out's ask */
   runeTxid?: string;
+  /** THORChain's height when the rune half was first watched for */
+  halfHeight?: number;
+  /** the rune half never arrived: the add ended with nothing added */
+  lost?: true;
   /** the MsgDeposit that took a waiting half back */
   recoverTxid?: string;
   /** a two-sided take-out pays both sides, or all in one */
@@ -112,7 +118,13 @@ export class StaleFlight extends Error {
   }
 }
 
-export const DONE: ReadonlySet<Stage> = new Set(['credited', 'shielded', 'refused', 'received']);
+export const DONE: ReadonlySet<Stage> = new Set([
+  'credited',
+  'shielded',
+  'refused',
+  'received',
+  'lost',
+]);
 export const PAIRED_KINDS: ReadonlySet<Flight['kind']> = new Set(['add2', 'withdraw2', 'swap']);
 export const isPaired = (f: Pick<Flight, 'kind'>): boolean => PAIRED_KINDS.has(f.kind);
 export const isDone = (f: Flight): boolean => DONE.has(f.stage);
@@ -136,6 +148,7 @@ const STAGES: ReadonlySet<string> = new Set([
   'recover',
   'recovering',
   'received',
+  'lost',
 ]);
 
 const KINDS: ReadonlySet<string> = new Set(['add', 'withdraw', 'add2', 'withdraw2', 'swap']);
@@ -268,7 +281,19 @@ export interface Facts {
   paired?: { units: bigint; pendingRune: bigint; pendingAsset: bigint };
   /** a swap to rune: THORChain has paid it out */
   swapped?: boolean;
+  /** the rune half's tx, looked up past the deadline: on chain, refused there, or nowhere */
+  runeTx?: { state: 'included' | 'failed' | 'missing'; log?: string };
 }
+
+/**
+ * How long a rune half may take to show as waiting before its tx is looked
+ * up: about 10 minutes of THORChain blocks. Included means it is late and
+ * still watched; missing or refused ends the add, with nothing added.
+ */
+export const HALF_BLOCKS = 100;
+
+export const LOST_LINE =
+  "the rune half didn't arrive · nothing was added · your rune is still in your rune address";
 
 /**
  * How long a take-out waits for THORChain to plan its payout before the page
@@ -290,9 +315,18 @@ export const advance = (f: Flight, x: Facts, now = Date.now()): Flight => {
       // onto units already there is credited at once (no pending), which also counts
       const p = x.paired;
       const before = BigInt(f.unitsBefore ?? '0');
-      return p && (p.pendingRune >= BigInt(f.runeBase ?? '1') || p.units > before)
-        ? to(f, 'send', {}, now)
-        : f;
+      if (p && (p.pendingRune >= BigInt(f.runeBase ?? '1') || p.units > before)) {
+        return to(f, 'send', { halfHeight: undefined }, now);
+      }
+      // not seen waiting: the zec half never goes. Past the deadline, a rune tx
+      // that is nowhere (or refused) ends the add calmly; one that landed is waited for
+      if (x.runeTx && x.runeTx.state !== 'included') {
+        return to(f, 'lost', { reason: x.runeTx.log, lost: true }, now);
+      }
+      if (f.halfHeight === undefined && x.height !== undefined && x.height > 0) {
+        return { ...f, halfHeight: x.height };
+      }
+      return f;
     }
     case 'recovering': {
       const p = x.paired;
@@ -415,7 +449,9 @@ export const recoverHalf = (f: Flight, now = Date.now()): Flight =>
 
 /** a refunded add's coins, or a payout that sits at the lp address, shielded back at the person's word */
 export const shieldRefund = (f: Flight, now = Date.now()): Flight =>
-  f.stage === 'refunded' || f.stage === 'arrive' ? to(f, 'shield', {}, now) : f;
+  f.stage === 'refunded' || f.stage === 'arrive' || (f.stage === 'lost' && !!f.fundTxid)
+    ? to(f, 'shield', {}, now)
+    : f;
 
 export type StepState = 'done' | 'now' | 'later' | 'turned';
 
@@ -492,6 +528,26 @@ const pairedAddLines = (
           `${r(f.runeBase)} rune from ${t.thor ?? 'your rune address'}`,
         ),
       ];
+  if (f.lost) {
+    return [
+      ...head.map(l => ({ ...l, state: 'done' as const })),
+      {
+        t: "the rune half didn't arrive",
+        d: 'nothing was added · your rune is still in your rune address',
+        at: at('lost'),
+        state: 'turned',
+      },
+      ...(f.stage === 'shield' || f.stage === 'shielded'
+        ? [
+            {
+              t: `shielded back to ${t.pocket}`,
+              at: at('shielded'),
+              state: (f.stage === 'shield' ? 'now' : 'done') as StepState,
+            },
+          ]
+        : []),
+    ];
+  }
   const waiting: StepLine = {
     t: 'waiting for the other side',
     d: 'the rune half is in · it waits for the zec half',

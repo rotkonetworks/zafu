@@ -6,11 +6,14 @@ import {
   cancellable,
   isDone,
   isFlight,
+  HALF_BLOCKS,
+  LOST_LINE,
   needs,
   recoverHalf,
   resumed,
   sending,
   sent,
+  shieldRefund,
   startFlight,
   stepLines,
   type Flight,
@@ -392,5 +395,93 @@ describe('driving a two-sided add', () => {
     const { d } = deps({ runeSend: undefined });
     const f = await act({ ...add2(), stage: 'rune' }, d);
     expect(f.error).toMatch(/does not use rune/);
+  });
+});
+
+describe('a rune half that never shows as waiting', () => {
+  const atHalf = () => ({
+    ...add2(),
+    stage: 'half' as const,
+    runeTxid: 'RUNETX',
+    fundTxid: 'fund',
+  });
+  const none = { units: 0n, pendingRune: 0n, pendingAsset: 0n };
+
+  it('the zec half is never sent while the rune half is not seen waiting, however long', async () => {
+    let h = 28_000_000;
+    const runeTx = vi.fn(async () => ({ state: 'included' as const }));
+    const { d } = deps({ height: () => h, runeTx, paired: vi.fn(async () => none) });
+    let f: Flight = atHalf();
+    for (let i = 0; i < 12; i++) {
+      f = await drive(f, d, 'vault');
+      h += 30;
+    }
+    expect(f.stage).toBe('half');
+    expect(f.halfHeight).toBe(28_000_000);
+    // past the deadline it was looked up: included, so still watched
+    expect(runeTx).toHaveBeenCalledWith('RUNETX');
+    expect(d.deposit).not.toHaveBeenCalled();
+    expect(d.shieldOut).not.toHaveBeenCalled();
+  });
+
+  it('not looked up before the deadline', async () => {
+    let h = 100;
+    const runeTx = vi.fn(async () => ({ state: 'missing' as const }));
+    const { d } = deps({ height: () => h, runeTx, paired: vi.fn(async () => none) });
+    let f: Flight = await drive(atHalf(), d, 'vault');
+    h += HALF_BLOCKS - 1;
+    f = await drive(f, d, 'vault');
+    expect(runeTx).not.toHaveBeenCalled();
+    expect(f.stage).toBe('half');
+  });
+
+  it('past the deadline and nowhere on chain: lost, calmly, nothing added', async () => {
+    let h = 100;
+    const { d } = deps({
+      height: () => h,
+      runeTx: vi.fn(async () => ({ state: 'missing' as const })),
+      paired: vi.fn(async () => none),
+    });
+    let f: Flight = await drive(atHalf(), d, 'vault');
+    h += HALF_BLOCKS;
+    f = await drive(f, d, 'vault');
+    expect(f.stage).toBe('lost');
+    expect(isDone(f)).toBe(true);
+    expect(d.deposit).not.toHaveBeenCalled();
+    expect(LOST_LINE).toBe(
+      "the rune half didn't arrive · nothing was added · your rune is still in your rune address",
+    );
+    expect(stepLines(f, T).map(l => l.t)).toContain("the rune half didn't arrive");
+    // stop: the zec at the lp address is shielded back
+    f = shieldRefund(f);
+    expect(f.stage).toBe('shield');
+    expect(needs(f)).toBe('shield');
+  });
+
+  it('refused on chain: lost, with its log as the reason', () => {
+    const f = advance(
+      { ...atHalf(), halfHeight: 1 },
+      { paired: none, height: 500, runeTx: { state: 'failed', log: 'insufficient funds' } },
+    );
+    expect(f.stage).toBe('lost');
+    expect(f.reason).toBe('insufficient funds');
+  });
+
+  it('landed late: it shows waiting on a later read, and the zec half goes then', async () => {
+    let h = 100;
+    const paired = vi.fn(async () => none as typeof none);
+    const { d } = deps({
+      height: () => h,
+      runeTx: vi.fn(async () => ({ state: 'included' as const })),
+      paired,
+    });
+    let f: Flight = await drive(atHalf(), d, 'vault');
+    h += HALF_BLOCKS + 5;
+    f = await drive(f, d, 'vault');
+    expect(f.stage).toBe('half');
+    paired.mockResolvedValue({ units: 0n, pendingRune: BigInt(f.runeBase!), pendingAsset: 0n });
+    f = await drive(f, d, 'vault');
+    expect(f.stage).toBe('seen');
+    expect(d.deposit).toHaveBeenCalledTimes(1);
   });
 });

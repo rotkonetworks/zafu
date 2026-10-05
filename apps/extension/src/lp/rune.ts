@@ -257,3 +257,27 @@ export const readSwapped = async (txid: string, signal?: AbortSignal): Promise<b
     st['outbound_signed']?.completed !== false
   );
 };
+
+/** a rune MsgDeposit by hash: included (code 0), refused on chain, or nowhere THORNode knows */
+export const readRuneTx = async (
+  hash: string,
+  signal?: AbortSignal,
+): Promise<{ state: 'included' | 'failed' | 'missing'; log?: string }> => {
+  await allowed();
+  try {
+    const r = await thornodeGet<{ tx_response?: { code?: number; raw_log?: string } }>(
+      `/cosmos/tx/v1beta1/txs/${hash.toUpperCase()}`,
+      NODES,
+      signal,
+    );
+    const code = r.tx_response?.code ?? 0;
+    return code === 0
+      ? { state: 'included' }
+      : { state: 'failed', log: r.tx_response?.raw_log || `code ${code}` };
+  } catch (e) {
+    if (notFound(e)) {
+      return { state: 'missing' };
+    }
+    throw e;
+  }
+};
