@@ -236,13 +236,12 @@ type LOCAL = {
   };
   /**
    * Zcash sync backend.
-   *   'zidecar'      — adds a Ligerito header proof verified locally.
-   *                    (Older builds also queried NOMT nullifier and
-   *                    commitment proofs; spends and notes now come from
-   *                    the local block scan on both backends.)
-   *   'lightwalletd' — trusted public indexer (e.g. zec.rocks). No
-   *                    verification pipeline; the wallet trusts what the
-   *                    server returns.
+   *   'zidecar'      — rotko-hosted; mempool watch and the tip cross-check.
+   *                    (Older builds also checked a header proof and queried
+   *                    NOMT proofs; both are gone, and spends and notes come
+   *                    from the local block scan on both backends.)
+   *   'lightwalletd' — public indexer (e.g. zec.rocks).
+   *   Both are trusted for chain data: the wallet uses what the server returns.
    * NOT auto-detected at runtime: declarative, set per endpoint. Probes
    * are a fingerprint vector (only zafu clients hit zidecar-only RPCs).
    */

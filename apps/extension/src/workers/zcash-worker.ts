@@ -2790,11 +2790,10 @@ const syncLoop = async (
       const chainHeight = await getChainTip();
 
       // Cross-check the tip against an INDEPENDENT operator, once per
-      // catch-up. The Ligerito header proof has no constraint system, so the
-      // chain state this endpoint reports is not bound to consensus by
-      // anything we can verify locally; cross-verification is the design's
-      // own stated mitigation and had zero call sites. Advisory, not fatal:
-      // a lagging or unreachable peer is far more common than an attack.
+      // catch-up. The node is trusted for chain data: nothing it reports is
+      // bound to consensus by anything we can verify locally, so a second
+      // operator is the only check there is. Advisory, not fatal: a lagging
+      // or unreachable peer is far more common than an attack.
       //
       // Gated on the user's own "zcash tip cross-check" opt-in BEFORE the
       // attempt, not just left to the egress guard to refuse: egress still
@@ -3596,7 +3595,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // Defensive: validate enum values from cross-context payload.
         // Silent coercion of an unknown backend to 'zidecar' is a privacy
         // regression - a user configured to talk to a third-party
-        // lightwalletd would end up hitting the trustless code path (with
+        // lightwalletd would end up hitting the zidecar code path (with
         // its zidecar-only RPCs) and either fail loudly OR, worse, succeed
         // against a server that happens to implement those endpoints with
         // a different trust model. Reject unknown explicitly.
@@ -3905,8 +3904,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // FROST cold device (which requires attested anchors) accepts the
         // bundle. Best-effort: on lightwalletd, server error, or signing
         // disabled we emit an unattested bundle (still imports on non-FROST
-        // devices). The anchor was already cross-checked against zidecar's
-        // tree-state during witness building, so it isn't arbitrary.
+        // devices). The anchor was already compared with the same node's
+        // tree state during witness building, and the attestation comes from
+        // that same operator: it says the node stands behind the anchor, not
+        // that the anchor is proven. The node is trusted for chain data.
         // Attestation is orchard-only for now: zidecar's SignAnchor verifies the
         // anchor against its orchard tree-state, so an ironwood anchor would not
         // match and returns unavailable. Ironwood bundles ship unattested - fine
