@@ -23,9 +23,7 @@ export const RelaySlot = ({ waiting }: { waiting?: string }) => {
       () => undefined,
     );
   const turnOn = () =>
-    void setDestinationOptIn(PEOPLE_RELAY, 'allowed')
-      .then(refreshEgress)
-      .then(again);
+    void setDestinationOptIn(PEOPLE_RELAY, 'allowed').then(refreshEgress).then(again);
   const line: { text: string; action?: [string, () => void]; tone?: 'warn' } | undefined = waiting
     ? { text: waiting }
     : slot === 'checking'
