@@ -6,9 +6,30 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { create } from 'zustand';
 import { AllSlices, initializeStore } from '../state';
 import { LpCard } from '../components/lp-card';
-import { advance, needs, resumed, sending, sent, startFlight } from './flight';
+import { drive, type DriveDeps } from './drive';
+import {
+  advance,
+  cancelFlight,
+  cancellable,
+  needs,
+  resumed,
+  sending,
+  sent,
+  StaleFlight,
+  startFlight,
+} from './flight';
 import { ADD_MEMO } from './math';
-import { changeLp, exportLp, patchLpPocket, readLp, readLpPocket, restoreLp } from './store';
+import {
+  beginFlight,
+  changeFlight,
+  changeLp,
+  exportLp,
+  patchLpPocket,
+  readLp,
+  readLpPocket,
+  restoreLp,
+  saveFlight,
+} from './store';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, unknown> }).mock;
@@ -142,5 +163,63 @@ describe('the home card', () => {
   test('is absent with nothing read and nothing on its way', async () => {
     await changeLp(() => ({ v: { index: 21, address: LP } }));
     expect(await mount(<LpCard storeId='v' />, 1000)).toBe('');
+  });
+});
+
+describe('one writer at a time, in storage', () => {
+  const ID = 'vault#1';
+  const TEX = 'tex1h55z0mdpnaxjxqs39sht9659ztnjk32reer52v';
+
+  test('a write from an older copy is refused; after a broadcast it lands', async () => {
+    await changeLp(() => ({ [ID]: { index: 21, address: LP } }));
+    const f = (await beginFlight(ID, startFlight('add', 1_000_000n, ADD_MEMO)))!;
+    const newer = await saveFlight(ID, { ...f, fundZat: '1' });
+    await expect(saveFlight(ID, { ...f, fundZat: '2' })).rejects.toBeInstanceOf(StaleFlight);
+    expect((await readLpPocket(ID))?.flight?.fundZat).toBe('1');
+    const done = await saveFlight(ID, { ...f, fundTxid: 'tx' }, true);
+    expect(done.rev).toBe((newer.rev ?? 0) + 1);
+  });
+
+  test('a second flight never starts while one is on its way', async () => {
+    await changeLp(() => ({ [ID]: { index: 21, address: LP } }));
+    expect(await beginFlight(ID, startFlight('add', 1n, ADD_MEMO, {}, 1))).toBeDefined();
+    expect(await beginFlight(ID, startFlight('add', 2n, ADD_MEMO, {}, 2))).toBeUndefined();
+    expect((await readLpPocket(ID))?.flight?.amountZat).toBe('1');
+  });
+
+  test('a cancel written mid-turn wins: the turn stops before the deposit', async () => {
+    await changeLp(() => ({ [ID]: { index: 21, address: LP } }));
+    const started = (await beginFlight(ID, startFlight('add', 1_000_000n, ADD_MEMO)))!;
+    const settled = await saveFlight(ID, sent(sending(started), 'fund-txid'));
+    let answer!: (v: { fee: string; change: string; short: string }) => void;
+    const deposit = vi.fn(async () => 'send-txid');
+    const d: DriveDeps = {
+      owner: ID,
+      address: LP,
+      index: 21,
+      vault: async () => ({
+        inbound: { address: TEX, halted: false, lpPaused: false, dust: 15_000n, outboundFee: 1n },
+      }),
+      plan: () => new Promise(r => (answer = r)),
+      shieldOut: async () => 'x',
+      deposit,
+      shieldBack: async () => 'shield-txid',
+      seen: async () => ({ observed: false, finalised: false }),
+      units: async () => 0n,
+      utxoZat: async () => [],
+      save: (f, after) => saveFlight(ID, f, after),
+    };
+    // the tick's turn waits inside observe on the lp address plan
+    const turn = drive(settled, d, TEX, true);
+    await new Promise(r => setTimeout(r, 0));
+    // the person cancels: decided on the stored flight, under the lock
+    const next = await changeFlight(ID, f => (f && cancellable(f) ? cancelFlight(f) : false));
+    expect(next?.cancelled).toBe(true);
+    answer({ fee: '15000', change: '0', short: '0' });
+    await expect(turn).rejects.toBeInstanceOf(StaleFlight);
+    expect(deposit).not.toHaveBeenCalled();
+    const stored = (await readLpPocket(ID))?.flight;
+    expect(stored?.cancelled).toBe(true);
+    expect(stored?.stage).toBe('shield');
   });
 });

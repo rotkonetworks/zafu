@@ -6,17 +6,39 @@
  * bytes. The vault is read fresh right before the zec leaves the shielded
  * pool and again right before the deposit. The record is saved with a
  * "sending" mark before each broadcast, so a closed tab never sends twice.
+ *
+ * Every save is a compare-and-set against the stored flight (`save` throws
+ * StaleFlight when the stored copy moved on, say a cancel). The sending mark
+ * is that save, so a cancel that lands first always wins: the turn stops
+ * before anything is broadcast.
  */
 
 import { checkVault, type DepositPlan, type DepositRequest } from '../workers/transparent-deposit';
-import { advance, needs, sending, sent, stopped, type Facts, type Flight } from './flight';
-import { memoFits } from './math';
+import {
+  advance,
+  needs,
+  sending,
+  sent,
+  StaleFlight,
+  stopped,
+  type Facts,
+  type Flight,
+} from './flight';
+import { askClears, memoFits } from './math';
 import type { TxSeen, ZecInbound } from './thor';
 
+export { StaleFlight };
+
 export interface DriveDeps {
+  /** the pocket store this page is bound to; a flight of another is never sent */
+  owner: string;
   /** the pocket's lp address and its t-branch index */
   address: string;
   index: number;
+  /** why this page may not send right now (zafu shows another wallet or pocket), or nothing */
+  away?: () => string | undefined;
+  /** THORChain's height, as last read */
+  height?: () => number | undefined;
   /** a fresh look at the zec vault and the pauses */
   vault: () => Promise<{ inbound: ZecInbound; addPaused?: string; outPaused?: string }>;
   plan: (req: DepositRequest) => Promise<DepositPlan>;
@@ -31,8 +53,20 @@ export interface DriveDeps {
   utxoZat: () => Promise<bigint[]>;
   /** Midgard's reason, when it may be asked */
   refundReason?: (txid: string) => Promise<string | undefined>;
-  save: (f: Flight) => Promise<unknown>;
+  /**
+   * Write `f` over the stored flight it was made from (same id and rev) and
+   * hand back what was written; throws StaleFlight when the stored one moved
+   * on. `after` a broadcast it writes over any rev of the same flight: the
+   * txid is the truth then.
+   */
+  save: (f: Flight, after?: boolean) => Promise<Flight>;
 }
+
+export const VAULT_MOVED_LINE =
+  'thorchain moved its zec vault since you confirmed · nothing was sent · continue to pay the new one';
+export const ASK_LINE =
+  "thorchain's least amount it sees moved past this take-out's ask · nothing was sent · please start the take-out again";
+export const OWNER_LINE = 'this take-out or add belongs to another pocket · nothing was sent';
 
 const line = (e: unknown) =>
   e instanceof Error && e.message ? e.message : 'something broke on our side, not yours';
@@ -42,8 +76,24 @@ export const PAUSED_LINE = {
   withdraw: 'thorchain has paused take-outs from this pool · nothing was sent',
 } as const;
 
-/** the vault to pay right now, or why not: asked before every move */
-const payable = async (f: Flight, d: DriveDeps): Promise<ZecInbound> => {
+/** this page may send this flight at all: its pocket, and the pocket zafu shows */
+const mine = (f: Flight, d: DriveDeps) => {
+  if (f.owner && f.owner !== d.owner) {
+    throw new Error(OWNER_LINE);
+  }
+  const away = d.away?.();
+  if (away) {
+    throw new Error(away);
+  }
+};
+
+/**
+ * The vault to pay right now, or why not: asked before every move. The
+ * first vault a flight pays toward is pinned on it; one that changes after
+ * stops and asks (continue re-pins). A take-out's ask must still clear the
+ * dust read now, within the cap.
+ */
+const payable = async (f: Flight, d: DriveDeps): Promise<{ inbound: ZecInbound; f: Flight }> => {
   if (!memoFits(f.memo)) {
     throw new Error('this memo is longer than 80 bytes · nothing was sent');
   }
@@ -52,7 +102,13 @@ const payable = async (f: Flight, d: DriveDeps): Promise<ZecInbound> => {
     throw new Error(PAUSED_LINE[f.kind]);
   }
   await checkVault(v.inbound.address, true);
-  return v.inbound;
+  if (f.vault && f.vault !== v.inbound.address) {
+    throw new Error(VAULT_MOVED_LINE);
+  }
+  if (f.kind === 'withdraw' && !askClears(BigInt(f.amountZat), v.inbound.dust)) {
+    throw new Error(ASK_LINE);
+  }
+  return { inbound: v.inbound, f: f.vault ? f : { ...f, vault: v.inbound.address } };
 };
 
 const reqOf = (f: Flight, d: DriveDeps, to: string): DepositRequest => ({
@@ -85,43 +141,64 @@ export const observe = async (f: Flight, d: DriveDeps, to: string): Promise<Fact
       x.refundReason = await d.refundReason(f.sendTxid).catch(() => undefined);
     }
   }
+  if (f.stage === 'payout') {
+    x.height = d.height?.();
+  }
   if (f.stage === 'arrive') {
     x.utxoZat = await d.utxoZat();
   }
   return x;
 };
 
-/** run the send the stage wants; a refusal or failure stops the flight with its line */
+/**
+ * Run the send the stage wants, and save what came of it. A refusal or
+ * failure stops the flight with its line; a stored flight that moved on
+ * (StaleFlight) stops the turn with nothing sent.
+ */
 export const act = async (f: Flight, d: DriveDeps): Promise<Flight> => {
   const step = needs(f);
   if (!step) {
     return f;
   }
+  let at = f;
   try {
+    mine(f, d);
     if (step === 'fund') {
       // refused here, before any zec leaves the shielded pool
-      const inbound = await payable(f, d);
-      const plan = await d.plan(reqOf(f, d, inbound.address));
+      const p = await payable(f, d);
+      at = p.f;
+      const plan = await d.plan(reqOf(at, d, p.inbound.address));
       if (plan.short === '0') {
-        return sent(f, undefined);
+        return await d.save(sent(at, undefined));
       }
-      await d.save(sending(f));
-      return sent(f, await d.shieldOut(BigInt(plan.short)), { fundZat: plan.short });
+      const out = await d.save(sending(at));
+      at = out;
+      return await d.save(
+        sent(out, await d.shieldOut(BigInt(plan.short)), { fundZat: plan.short }),
+        true,
+      );
     }
     if (step === 'send') {
-      const inbound = await payable(f, d);
-      const req = reqOf(f, d, inbound.address);
+      const p = await payable(f, d);
+      at = p.f;
+      const req = reqOf(at, d, p.inbound.address);
       const plan = await d.plan(req);
       if (plan.short !== '0') {
         throw new Error("your lp address doesn't hold this yet · nothing was sent");
       }
-      await d.save(sending(f));
-      return sent(f, await d.deposit(req, plan.fee));
+      const out = await d.save(sending(at));
+      at = out;
+      return await d.save(sent(out, await d.deposit(req, plan.fee)), true);
     }
-    await d.save(sending(f));
-    return sent(f, await d.shieldBack());
+    const out = await d.save(sending(f));
+    at = out;
+    return await d.save(sent(out, await d.shieldBack()), true);
   } catch (e) {
-    return stopped(f, line(e));
+    if (e instanceof StaleFlight) {
+      throw e;
+    }
+    // a step that failed stops with its line and waits for the person
+    return d.save(stopped(at, line(e)), at.sending !== undefined);
   }
 };
 
@@ -136,12 +213,7 @@ export const drive = async (
   to: string,
   mayAct = true,
 ): Promise<Flight> => {
-  let next = advance(f, await observe(f, d, to));
-  if (mayAct) {
-    next = await act(next, d);
-  }
-  if (next !== f) {
-    await d.save(next);
-  }
-  return next;
+  const seen = advance(f, await observe(f, d, to));
+  const next = seen === f ? f : await d.save(seen);
+  return mayAct ? act(next, d) : next;
 };

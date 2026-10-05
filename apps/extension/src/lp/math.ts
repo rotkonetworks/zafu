@@ -27,6 +27,27 @@ export const memoFits = (memo: string): boolean => memoBytes(memo) <= MAX_MEMO_B
 
 /** the founder's minimum add: below it the return fee and network fees eat most of it */
 export const MIN_ADD_ZAT = 200_000n;
+
+/** the most a take-out's ask may pay, zat (0.001 zec): a dust past this is refused, never paid */
+export const MAX_ASK_ZAT = 100_000n;
+/** the least an ask pays, zat, whatever the dust: a zcash output worth relaying */
+const MIN_ASK_ZAT = 10_000n;
+
+/**
+ * The take-out ask, from the chain's dust threshold read at send time.
+ * THORChain does not observe an inbound at or under the dust (the swap path
+ * asks for dust + 1 for the same reason), so the ask pays twice the dust:
+ * safely above it, should the threshold move a little between the confirm
+ * and the send. Undefined when that is past MAX_ASK_ZAT.
+ */
+export const askZat = (dust: bigint): bigint | undefined => {
+  const a = dust * 2n > MIN_ASK_ZAT ? dust * 2n : MIN_ASK_ZAT;
+  return dust >= 0n && a <= MAX_ASK_ZAT ? a : undefined;
+};
+
+/** an ask still pays above the dust read now, within the cap */
+export const askClears = (ask: bigint, dust: bigint): boolean => ask > dust && ask <= MAX_ASK_ZAT;
+
 /** the default amount on the add screen */
 export const DEFAULT_ADD = '0.01';
 /** cost vs market: orange from here */

@@ -19,7 +19,7 @@ import {
   type DepositWasm,
 } from '../workers/transparent-deposit';
 import { PAYABLE_ZEC_VAULT } from '../state/swap/thornode';
-import { ADD_MEMO, MIN_ADD_ZAT, withdrawMemo } from './math';
+import { ADD_MEMO, askZat, MIN_ADD_ZAT, withdrawMemo } from './math';
 
 type Wasm = DepositWasm & { initSync: (o: { module: Buffer }) => void; SpendKeys: SpendKeysCtor };
 
@@ -90,19 +90,26 @@ describe('an lp deposit on the real wasm', () => {
     expect(rest).toEqual([]);
   });
 
-  test('the take-out ask: dust from the lp address with -:ZEC.ZEC:<bps>', async () => {
-    const chain = chainWith([25_000n]);
+  test('the take-out ask: above the dust, from the lp address, with -:ZEC.ZEC:<bps>', async () => {
+    // THORChain does not observe an inbound at or under the dust (15000 on 2026-10-05)
+    const ask = askZat(15_000n)!;
+    expect(ask > 15_000n).toBe(true);
+    const chain = chainWith([45_000n]);
     const memoText = withdrawMemo(5_000);
-    const plan = await planDeposit(wasm, chain, { ...req, memo: memoText, amountZat: '15000' });
+    const plan = await planDeposit(wasm, chain, {
+      ...req,
+      memo: memoText,
+      amountZat: ask.toString(),
+    });
     expect(plan.short).toBe('0');
     const sent = await sendDeposit(wasm, chain, keys, {
       ...req,
       memo: memoText,
-      amountZat: '15000',
+      amountZat: ask.toString(),
       reviewedFee: plan.fee,
     });
     const [pay, memo] = transparentOutputs(sent.txHex);
-    expect(pay!.value).toBe(15_000n);
+    expect(pay!.value).toBe(ask);
     expect(memo!.script).toBe(opReturnScript(memoHex('-:ZEC.ZEC:5000')));
   });
 
@@ -110,8 +117,8 @@ describe('an lp deposit on the real wasm', () => {
     const plan = await planDeposit(wasm, chainWith([10_000n]), {
       ...req,
       memo: withdrawMemo(10_000),
-      amountZat: '15000',
+      amountZat: '30000',
     });
-    expect(BigInt(plan.short)).toBe(15_000n + BigInt(plan.fee) - 10_000n);
+    expect(BigInt(plan.short)).toBe(30_000n + BigInt(plan.fee) - 10_000n);
   });
 });

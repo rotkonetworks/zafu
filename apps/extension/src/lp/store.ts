@@ -18,7 +18,7 @@ import {
   writeEncrypted,
 } from '../state/encrypted-storage';
 import { parsePocketStoreId, pocketStoreId, zcashTransparentIndexKey } from '../state/pocket-id';
-import { isFlight, type Flight } from './flight';
+import { isDone, isFlight, StaleFlight, type Flight } from './flight';
 
 export const LP_KEY = 'zecLp';
 const KEY = LP_KEY as keyof LocalStorageState;
@@ -103,6 +103,57 @@ export const patchLpPocket = (storeId: string, patch: Partial<LpPocket>): Promis
     const p = book[storeId];
     return p ? { ...book, [storeId]: { ...p, ...patch } } : book;
   });
+
+/**
+ * Write a flight over the stored one it was made from: the same id and rev.
+ * Hands back what was written (its rev one higher); throws StaleFlight when
+ * the stored flight moved on, or when locked. `after` a broadcast it writes
+ * over any rev of the same flight, since the txid is the truth then.
+ */
+export const saveFlight = async (storeId: string, f: Flight, after = false): Promise<Flight> => {
+  let out: Flight | undefined;
+  await changeLp(book => {
+    const p = book[storeId];
+    const cur = p?.flight;
+    if (!p || cur?.id !== f.id || (!after && (cur.rev ?? 0) !== (f.rev ?? 0))) {
+      return book;
+    }
+    out = { ...f, rev: (cur.rev ?? 0) + 1 };
+    return { ...book, [storeId]: { ...p, flight: out } };
+  });
+  if (!out) {
+    throw new StaleFlight();
+  }
+  return out;
+};
+
+/**
+ * Change the stored flight in place, under the lock: `fn` sees what is
+ * stored now, not a copy from earlier. Its answer is written (undefined
+ * clears it); `false` leaves it. Hands back what is stored after.
+ */
+export const changeFlight = async (
+  storeId: string,
+  fn: (f: Flight | undefined) => Flight | undefined | false,
+): Promise<Flight | undefined> => {
+  let out: Flight | undefined;
+  await changeLp(book => {
+    const p = book[storeId];
+    if (!p) {
+      return book;
+    }
+    const next = fn(p.flight);
+    out = next === false ? p.flight : next && { ...next, rev: (p.flight?.rev ?? 0) + 1 };
+    return next === false ? book : { ...book, [storeId]: { ...p, flight: out } };
+  });
+  return out;
+};
+
+/** start a flight only when none is on its way in any tab: what was stored, or undefined when one is */
+export const beginFlight = async (storeId: string, f: Flight): Promise<Flight | undefined> => {
+  const out = await changeFlight(storeId, cur => (cur && !isDone(cur) ? false : f));
+  return out?.id === f.id ? out : undefined;
+};
 
 /** call `fn` whenever the book changes in any realm */
 export const onLpChange = (fn: () => void): (() => void) => {

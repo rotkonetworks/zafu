@@ -83,6 +83,9 @@ const BACK: Partial<Record<Screen, LpState['view']>> = {
 export const LpPage = () => {
   const screen = useLp(screenOf);
   const flight = useLp(s => s.flight);
+  const follower = useLp(s => s.follower);
+  const away = useLp(s => s.away);
+  const pocket = useLp(s => s.pocket);
   const hasPos = useLp(s => !!positionOf(s));
   const { requestAuth, PasswordModal } = usePasswordGate();
 
@@ -98,7 +101,11 @@ export const LpPage = () => {
     };
   }, []);
 
+  // a watching tab, or a page whose pocket is no longer the one zafu shows, never sends
   const confirm = (go: () => Promise<void>) => async () => {
+    if (follower || away) {
+      return;
+    }
     if (await requestAuth()) {
       await go();
     }
@@ -169,7 +176,14 @@ export const LpPage = () => {
     >
       {PasswordModal}
       <div className='flex flex-1 items-stretch gap-12 pt-3'>
-        <div className='flex w-[480px] max-w-full shrink-0 flex-col justify-center'>
+        <div className='flex w-[480px] max-w-full shrink-0 flex-col justify-center gap-4'>
+          {(follower || away) && screen !== 'locked' && screen !== 'loading' && (
+            <span className='border border-warn/40 bg-elev-1 px-3.5 py-2.5 text-xs text-fg'>
+              {follower
+                ? 'zec liquidity is open in another tab, so this one only watches. please use that tab, or close it and this one takes over.'
+                : `this page is for ${pocket}. zafu now shows another wallet or pocket; please switch back to ${pocket} to continue.`}
+            </span>
+          )}
           {column[screen]()}
         </div>
         {screen !== 'loading' && screen !== 'locked' && screen !== 'cannot' && (

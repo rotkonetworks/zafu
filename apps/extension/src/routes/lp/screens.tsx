@@ -12,10 +12,10 @@ import { Button } from '@repo/ui/components/ui/button';
 import { cn } from '@repo/ui/lib/utils';
 import { AskOnce, Column, StepLines, useNow, type Host } from '../../components/scroll-page';
 import { clock } from '../../buy/machine';
+import { Sensitive } from '../../components/sensitive';
 import { depositFeeZat } from '../../workers/transparent-deposit';
-import { cancellable, isDone, needs, stepLines, type Flight } from '../../lp/flight';
+import { cancellable, isDone, needs, PAYOUT_BLOCKS, stepLines, type Flight } from '../../lp/flight';
 import {
-  ADD_MEMO,
   afterFee,
   costTone,
   fairAmount,
@@ -29,8 +29,11 @@ import {
   zecText,
 } from '../../lp/math';
 import {
+  ADD_FEES,
   allowEgress,
+  ASK_CAP_LINE,
   allowThornode,
+  askOf,
   finish,
   goEgress,
   goFirst,
@@ -39,6 +42,8 @@ import {
   positionOf,
   setAmount,
   setPart,
+  SHIELD_BACK_FEE,
+  SHIELD_OUT_FEE,
   shieldItBack,
   show,
   tick,
@@ -47,11 +52,6 @@ import {
 } from './store';
 
 export const useLp = <T,>(sel: (s: LpState) => T): T => useStore(lpStore, sel);
-
-/** the zcash network fee of a shield-out to a t-address, about: two orchard actions and the t-output */
-const SHIELD_OUT_FEE = 15_000n;
-/** one shielding input */
-const SHIELD_BACK_FEE = 10_000n;
 
 export const short = (a?: string) => (a ? `${a.slice(0, 5)}…${a.slice(-4)}` : '');
 const usd = (n: number) =>
@@ -158,8 +158,11 @@ export const EgressScreen = () => {
     {
       mark: 't',
       name: 'thornode',
-      does: 'the pool, your position, its address, pauses',
-      host: on.thornode ? 'already allowed' : 'gateway.liquify.com\n/thorchain_api',
+      does: 'the pool, your position, its vault, pauses',
+      // the vault and pauses are read from both and must agree before any zec moves
+      host: on.thornode
+        ? 'already allowed'
+        : 'gateway.liquify.com/thorchain_api\nthornode.ninerealms.com · checks the vault',
       c: on.thornode ? 'text-fg-muted' : 'text-zigner-gold',
     },
     {
@@ -180,7 +183,7 @@ export const EgressScreen = () => {
   ];
   return (
     <AskOnce
-      sub='liquidity talks to these, and only while this page is open.'
+      sub='liquidity talks to these, and only while this page is open. thornode and midgard see your one lp address with your ip.'
       hosts={hosts}
       onNotNow={goFirst}
       onAllow={() => void allowEgress()}
@@ -210,7 +213,7 @@ const CHIPS = ['0.005', '0.01', '0.02'];
 
 /** LpFlow add, with its slot states: calm, too small, large, paused */
 export const AddScreen = ({ onAdd }: { onAdd: () => void }) => {
-  const { amt, shielded, pocket, at, read, thorAt, flight } = useLp(
+  const { amt, shielded, pocket, at, read, thorAt, flight, err } = useLp(
     useShallow(s => ({
       amt: s.amt,
       shielded: s.shieldedZat,
@@ -219,6 +222,7 @@ export const AddScreen = ({ onAdd }: { onAdd: () => void }) => {
       read: !!s.thor,
       thorAt: s.thor?.at,
       flight: !!s.flight,
+      err: s.error,
     })),
   );
   const { a, q, small, fair, fairQ, paused } = useAddQuote();
@@ -226,8 +230,11 @@ export const AddScreen = ({ onAdd }: { onAdd: () => void }) => {
   const tone = costTone(q?.costPct);
   const large = !small && tone === 'strong';
   const age = at ? Math.max(0, Math.round((now - at) / 1000)) : 0;
-  const fees = SHIELD_OUT_FEE + depositFeeZat(ADD_MEMO.length);
-  const can = read && !!a && !!q && !small && !paused && !flight;
+  const fees = ADD_FEES;
+  // the most this pocket can add: its shielded zec, less the network fees
+  const max = shielded !== undefined && shielded > fees ? shielded - fees : 0n;
+  const over = !!a && shielded !== undefined && a > max;
+  const can = read && !!a && !!q && !small && !paused && !flight && shielded !== undefined && !over;
   const costText = small || !q ? 'n/a' : q.costPct === undefined ? 'no price' : pct(q.costPct);
   const costC =
     small || !q || q.costPct === undefined
@@ -277,7 +284,9 @@ export const AddScreen = ({ onAdd }: { onAdd: () => void }) => {
           })}
           <span className='flex-1' />
           {shielded !== undefined && (
-            <span className='text-xs text-fg-dim'>of {zecText(shielded)} shielded</span>
+            <span className='text-xs text-fg-dim'>
+              of <Sensitive>{zecText(shielded)}</Sensitive> shielded
+            </span>
           )}
         </div>
       </div>
@@ -318,6 +327,23 @@ export const AddScreen = ({ onAdd }: { onAdd: () => void }) => {
               thorchain has paused adds to this pool. nothing was sent.
             </span>
             <span className='text-[11px] text-fg-dim'>{age} s ago</span>
+          </>
+        ) : over ? (
+          <>
+            <span className='size-2 shrink-0 bg-warn' />
+            <span className='flex-1 text-[13px] text-fg'>
+              more than {pocket} holds shielded, with the network fees
+            </span>
+            {max >= MIN_ADD_ZAT && (
+              <Button
+                variant='secondary'
+                size='sm'
+                className='h-[30px] text-zigner-gold'
+                onClick={() => setAmount(zecText(max).replace(/\.?0+$/, ''))}
+              >
+                use max
+              </Button>
+            )}
           </>
         ) : small ? (
           <>
@@ -366,6 +392,7 @@ export const AddScreen = ({ onAdd }: { onAdd: () => void }) => {
         <LpAddressRow w='w-[92px]' />
       </Table>
 
+      {err && <span className='text-xs text-warn'>{err}</span>}
       <Button
         variant={large || !can ? 'secondary' : 'primary'}
         className='h-14'
@@ -413,15 +440,15 @@ export const PositionScreen = () => {
       <div className='flex flex-col gap-1.5'>
         <span className='text-xs text-fg-muted'>worth now, if taken out</span>
         <div className='flex items-baseline gap-2.5'>
-          <span className='font-display text-[52px] leading-[1.05] tabular-nums text-fg-high'>
+          <Sensitive className='font-display text-[52px] leading-[1.05] tabular-nums text-fg-high'>
             {zecText(worth)}
-          </span>
+          </Sensitive>
           <span className='text-base text-zigner-gold'>zec</span>
           <span className='flex-1' />
           {s.zecUsd && (
-            <span className='text-[15px] text-fg-muted'>
+            <Sensitive className='text-[15px] text-fg-muted'>
               {usd((Number(worth) / 1e8) * s.zecUsd)}
-            </span>
+            </Sensitive>
           )}
         </div>
       </div>
@@ -434,7 +461,7 @@ export const PositionScreen = () => {
               : undefined
           }
         >
-          {zecText(added)} zec
+          <Sensitive>{zecText(added)} zec</Sensitive>
         </Row>
         <Row k='since adding' side='after the pool fee to take it out'>
           <span className={since < 0 ? 'text-warn' : 'text-green'}>
@@ -445,8 +472,10 @@ export const PositionScreen = () => {
         <Row k='fees earned' side='pool growth, thornode'>
           <span className='text-green'>+{pct(p.luviGrowthPct, 2)}</span>
         </Row>
-        <Row k='your share' side={`${p.units.toLocaleString('en-US')} units`}>
-          {s.thor && pct((Number(p.units) / Number(s.thor.pool.units)) * 100, 2)}
+        <Row k='your share' side={<Sensitive>{p.units.toLocaleString('en-US')} units</Sensitive>}>
+          <Sensitive>
+            {s.thor && pct((Number(p.units) / Number(s.thor.pool.units)) * 100, 2)}
+          </Sensitive>
         </Row>
         <LpAddressRow />
       </Table>
@@ -488,6 +517,8 @@ export const WithdrawScreen = ({ onOut }: { onOut: () => void }) => {
       zecUsd: s.zecUsd,
       pocket: s.pocket,
       address: s.lp?.address,
+      ask: askOf(s),
+      err: s.error,
     })),
   );
   const now = useNow();
@@ -498,10 +529,11 @@ export const WithdrawScreen = ({ onOut }: { onOut: () => void }) => {
   }
   const bps = s.part * 100;
   const pays = withdrawZec(t.pool, p.units, bps, t.minSlipBps);
-  const dust = t.inbound.dust;
+  // the ask pays above THORChain's dust (lp/math.ts askZat); none when the dust is past the caps
+  const ask = s.ask ?? 0n;
   const fees =
     t.inbound.outboundFee +
-    dust +
+    ask +
     depositFeeZat(withdrawMemo(bps).length) +
     SHIELD_OUT_FEE +
     SHIELD_BACK_FEE;
@@ -553,7 +585,7 @@ export const WithdrawScreen = ({ onOut }: { onOut: () => void }) => {
             )}
           >
             <span className='text-[11px] tracking-[0.04em] text-fg-muted'>{k}</span>
-            <span className={cn('font-display text-[22px] tabular-nums', c)}>{v}</span>
+            <Sensitive className={cn('font-display text-[22px] tabular-nums', c)}>{v}</Sensitive>
           </div>
         ))}
       </div>
@@ -583,7 +615,9 @@ export const WithdrawScreen = ({ onOut }: { onOut: () => void }) => {
               </span>
             }
           >
-            {zecText(all)} zec{usdOf(all)}
+            <Sensitive>
+              {zecText(all)} zec{usdOf(all)}
+            </Sensitive>
           </Row>
           <Row
             k='had you kept the zec'
@@ -598,7 +632,9 @@ export const WithdrawScreen = ({ onOut }: { onOut: () => void }) => {
               )
             }
           >
-            {zecText(added)} zec{usdOf(added)}
+            <Sensitive>
+              {zecText(added)} zec{usdOf(added)}
+            </Sensitive>
           </Row>
           <Row
             k='lost to the price move'
@@ -614,14 +650,19 @@ export const WithdrawScreen = ({ onOut }: { onOut: () => void }) => {
           <Row k='comes back to' w='w-[110px]' h='h-[52px]'>
             {s.pocket} · shielded
           </Row>
-          <Row k='asks with' w='w-[110px]' h='h-[52px]' side={withdrawMemo(bps)}>
-            <span className='text-[13px] text-fg'>
-              {zecText(dust)} zec from {short(s.address)}
-            </span>
-          </Row>
         </Table>
       )}
-      <Button className='h-14' disabled={!!t.outPaused} onClick={onOut}>
+      <Table>
+        <Row k='asks with' w='w-[110px]' h='h-[52px]' side={withdrawMemo(bps)}>
+          <span className='text-[13px] text-fg'>
+            {s.ask ? `${zecText(s.ask)} zec from ${short(s.address)}` : 'n/a'}
+          </span>
+        </Row>
+      </Table>
+      {(s.err ?? (!s.ask ? ASK_CAP_LINE : undefined)) && (
+        <span className='text-xs text-warn'>{s.err ?? ASK_CAP_LINE}</span>
+      )}
+      <Button className='h-14' disabled={!!t.outPaused || !s.ask} onClick={onOut}>
         {t.outPaused
           ? 'take-outs are paused · check again'
           : s.part === 100
@@ -745,6 +786,19 @@ export const TrackScreen = ({
             </Button>
           )}
         </div>
+      ) : f.late ? (
+        <div className='flex flex-col gap-1.5 border border-warn/40 bg-elev-1 px-3.5 py-3'>
+          <span className='text-[13px] text-fg-high'>
+            thorchain has planned no payout in about {blocksToMin(PAYOUT_BLOCKS)} minutes. we are
+            sorry for the wait.
+          </span>
+          <span className='text-xs text-fg'>
+            your position stays yours until it pays. this page keeps watching; a payout that comes
+            later lands at your lp address and shows in your wallet. you may look up the ask
+            {f.sendTxid && ` (tx ${f.sendTxid.slice(0, 4)}…${f.sendTxid.slice(-4)})`} on a thorchain
+            explorer, or stop watching and ask again from your position.
+          </span>
+        </div>
       ) : (
         <div className='flex h-11 items-center border border-border-soft bg-elev-1 px-3.5'>
           <span className='text-xs text-fg'>
@@ -789,6 +843,15 @@ export const TrackScreen = ({
           <Button className='h-14 flex-1' onClick={() => void finish()}>
             {f.kind === 'add' && f.stage === 'credited' ? 'see your liquidity' : 'done'}
           </Button>
+        ) : f.late ? (
+          <>
+            <Button variant='secondary' className='h-14 w-[170px]' onClick={() => void finish()}>
+              stop watching
+            </Button>
+            <Button className='h-14 flex-1' onClick={() => show('position')}>
+              keep watching
+            </Button>
+          </>
         ) : f.stage === 'arrive' ? (
           <>
             <Button variant='secondary' className='h-14 w-[170px]' onClick={() => show('position')}>
@@ -829,7 +892,7 @@ export const BlockedScreen = () => {
                   : `last read ${Math.round(ago / 24)} days ago`
           }
         >
-          {cache ? `${zecText(BigInt(cache.zat))} zec` : 'not read yet'}
+          {cache ? <Sensitive>{zecText(BigInt(cache.zat))} zec</Sensitive> : 'not read yet'}
         </Row>
         <Row k='add, take out' h='h-14'>
           wait for a fresh read

@@ -10,7 +10,9 @@ vi.mock('../state/swap/near', () => ({
 }));
 
 import {
+  DISAGREE_LINE,
   historyOf,
+  ONE_NODE_LINE,
   lpEgress,
   NotAllowed,
   pausesOf,
@@ -18,6 +20,7 @@ import {
   readMidgard,
   readThor,
   readTxSeen,
+  readVault,
   txSeenOf,
   zecInboundOf,
 } from './thor';
@@ -223,5 +226,73 @@ describe('history', () => {
         reason: 'pool paused',
       },
     ]);
+  });
+});
+
+describe('the vault, from more than one operator', () => {
+  /** each operator's answers, keyed by host */
+  const serve = (per: Record<string, Record<string, unknown> | 'down'>) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        fetched.push(url);
+        const u = new URL(url);
+        const host = per[u.host] ?? {};
+        if (host === 'down') {
+          return Promise.reject(new TypeError('failed to fetch'));
+        }
+        const path = u.pathname.replace('/chain/thorchain_api', '');
+        return Promise.resolve(
+          new Response(JSON.stringify(host[path] ?? LIVE[path] ?? {}), { status: 200 }),
+        );
+      }),
+    );
+  const rows = LIVE['/thorchain/inbound_addresses'] as Record<string, unknown>[];
+  const withZec = (patch: Record<string, unknown>) =>
+    rows.map(r => (r['chain'] === 'ZEC' ? { ...r, ...patch } : r));
+
+  it('asks both operators, and takes the vault when they agree', async () => {
+    view.on.add('thorchain');
+    serve({});
+    const v = await readVault();
+    expect(v.inbound.address).toBe(zecInboundOf(rows as never)!.address);
+    expect(fetched.some(u => u.includes('ninerealms'))).toBe(true);
+    expect(fetched.some(u => u.includes('liquify'))).toBe(true);
+  });
+
+  it('refuses when one operator names another vault', async () => {
+    view.on.add('thorchain');
+    serve({
+      'gateway.liquify.com': {
+        '/thorchain/inbound_addresses': withZec({ address: 't1PTs8DQifJxg6HmUq7AgYYFNkbyQa1zjgf' }),
+      },
+    });
+    await expect(readVault()).rejects.toThrow(DISAGREE_LINE);
+  });
+
+  it('refuses when the operators disagree on a pause', async () => {
+    view.on.add('thorchain');
+    serve({
+      'thornode.ninerealms.com': {
+        '/thorchain/mimir': { ...(LIVE['/thorchain/mimir'] as object), PAUSELPZEC: 1 },
+      },
+    });
+    await expect(readVault()).rejects.toThrow(DISAGREE_LINE);
+  });
+
+  it('refuses when only one operator answers', async () => {
+    view.on.add('thorchain');
+    serve({ 'thornode.ninerealms.com': 'down' });
+    await expect(readVault()).rejects.toThrow(ONE_NODE_LINE);
+  });
+
+  it('takes the higher dust of the two', async () => {
+    view.on.add('thorchain');
+    serve({
+      'thornode.ninerealms.com': {
+        '/thorchain/inbound_addresses': withZec({ dust_threshold: '20000' }),
+      },
+    });
+    expect((await readVault()).inbound.dust).toBe(20_000n);
   });
 });

@@ -61,9 +61,26 @@ export interface Flight {
   error?: string;
   /** the person cancelled before the pool got it: whatever reached the lp address is shielded back */
   cancelled?: true;
+  /** bumped on every write: a write made from an older copy is refused (lp/store.ts saveFlight) */
+  rev?: number;
+  /** the pocket store this flight belongs to; a page bound to another pocket never sends it */
+  owner?: string;
+  /** the vault the person's flight first paid toward: a change stops and asks */
+  vault?: string;
+  /** THORChain's height when the take-out's payout was first watched */
+  askHeight?: number;
+  /** no payout planned within PAYOUT_BLOCKS of the ask: still watched, and said plainly */
+  late?: true;
   /** when each stage began */
   at: Partial<Record<Stage, number>>;
   started: number;
+}
+
+/** the stored flight moved on (a cancel, another writer): this turn stops, nothing is sent */
+export class StaleFlight extends Error {
+  constructor() {
+    super('this flight changed while it was being driven');
+  }
 }
 
 export const DONE: ReadonlySet<Stage> = new Set(['credited', 'shielded', 'refused']);
@@ -192,7 +209,16 @@ export interface Facts {
   utxoZat?: bigint[];
   /** Midgard's refund reason for our send */
   refundReason?: string;
+  /** THORChain's height now */
+  height?: number;
 }
+
+/**
+ * How long a take-out waits for THORChain to plan its payout before the page
+ * says so: about 30 minutes of THORChain blocks. Past it the flight keeps
+ * watching (a late payout still moves it on); the page only stops pretending.
+ */
+export const PAYOUT_BLOCKS = 300;
 
 /** move on from what was seen; nothing seen, nothing moves */
 export const advance = (f: Flight, x: Facts, now = Date.now()): Flight => {
@@ -227,9 +253,24 @@ export const advance = (f: Flight, x: Facts, now = Date.now()): Flight => {
     case 'payout': {
       const out = x.seen?.out;
       if (out && !out.refund && out.txid) {
-        return to(f, 'arrive', { outZat: out.zat.toString(), outTxid: out.txid }, now);
+        return to(
+          f,
+          'arrive',
+          { outZat: out.zat.toString(), outTxid: out.txid, late: undefined },
+          now,
+        );
       }
-      return x.refundReason ? to(f, 'refused', { reason: x.refundReason }, now) : f;
+      if (x.refundReason) {
+        return to(f, 'refused', { reason: x.refundReason, late: undefined }, now);
+      }
+      if (x.height === undefined || x.height <= 0) {
+        return f;
+      }
+      if (f.askHeight === undefined) {
+        return { ...f, askHeight: x.height };
+      }
+      // nothing planned for us this long after the ask: said plainly, still watched
+      return !out && !f.late && x.height - f.askHeight >= PAYOUT_BLOCKS ? { ...f, late: true } : f;
     }
     case 'arrive': {
       // the payout lands as one coin of its amount; a coin a little under it (a fee taken on the
@@ -244,7 +285,6 @@ export const advance = (f: Flight, x: Facts, now = Date.now()): Flight => {
   }
 };
 
-/** a refunded add's coins, shielded back at the person's word */
 /**
  * Cancel before the pool got anything: with nothing moved yet the flight is
  * simply dropped (undefined); once zec sits at the lp address (a shield-out,
@@ -252,15 +292,20 @@ export const advance = (f: Flight, x: Facts, now = Date.now()): Flight => {
  * nothing to cancel.
  */
 export const cancelFlight = (f: Flight, now = Date.now()): Flight | undefined =>
-  f.stage === 'fund' && !f.fundTxid && !f.sending
-    ? undefined
-    : f.stage === 'fund' || f.stage === 'settle' || f.stage === 'send' || f.stage === 'ask'
-      ? to({ ...f, cancelled: true, sending: undefined }, 'shield', {}, now)
-      : f;
+  !cancellable(f)
+    ? f
+    : f.stage === 'fund' && !f.fundTxid
+      ? undefined
+      : to({ ...f, cancelled: true }, 'shield', {}, now);
 
-/** may this flight still be cancelled (nothing has reached the pool) */
+/**
+ * May this flight still be cancelled: nothing has reached the pool, and no
+ * send is marked out (a marked send may already be on the network, so a
+ * cancel then would only pretend).
+ */
 export const cancellable = (f: Flight): boolean =>
   !f.cancelled &&
+  !f.sending &&
   (f.stage === 'fund' || f.stage === 'settle' || f.stage === 'send' || f.stage === 'ask') &&
   !f.sendTxid;
 
@@ -381,9 +426,11 @@ export const stepLines = (
       'the pool pays out',
       f.outZat
         ? `${z(f.outZat)} zec`
-        : f.expectZat
-          ? `≈ ${z(f.expectZat)} zec, after the pool's fee`
-          : undefined,
+        : f.late
+          ? 'no payout planned yet · still watching'
+          : f.expectZat
+            ? `≈ ${z(f.expectZat)} zec, after the pool's fee`
+            : undefined,
     ),
     line(4, 'arrive', 'arrived at your lp address'),
     line(5, 'shield', `shielded back to ${t.pocket}`),

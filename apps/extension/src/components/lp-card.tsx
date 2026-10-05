@@ -9,6 +9,7 @@ import { isDone } from '../lp/flight';
 import { zecText } from '../lp/math';
 import { LP_PRELOAD, openLpPage } from '../lp/open';
 import { onLpChange, readLpPocket, type LpPocket } from '../lp/store';
+import { Sensitive } from './sensitive';
 import { BalanceGroup, BalanceRow } from './wallet/balance-rows';
 
 export const LpWave = ({ className = 'size-4' }: { className?: string }) => (
@@ -69,7 +70,7 @@ export const LpCard = ({ storeId }: { storeId?: string }) => {
           note={
             rec?.cache && (
               <span className='text-[11px] text-fg-muted'>
-                {rec.cache.sharePct.toFixed(2)}% of the pool
+                <Sensitive>{rec.cache.sharePct.toFixed(2)}%</Sensitive> of the pool
               </span>
             )
           }

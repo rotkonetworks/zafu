@@ -168,22 +168,60 @@ export const readThor = async (address?: string, signal?: AbortSignal): Promise<
   };
 };
 
-/** a fresh look at the vault and the pauses, right before zec moves */
+export const ONE_NODE_LINE =
+  'only one thorchain node answered, so the vault could not be checked · nothing was sent · please try again in a minute';
+export const DISAGREE_LINE =
+  'the thorchain nodes disagree about the zec vault or its pauses · nothing was sent · please try again in a minute';
+
+/** a vault view, compared field by field across nodes */
+const sameVault = (
+  a: { inbound: ZecInbound } & Pick<ThorRead, 'addPaused' | 'outPaused'>,
+  b: { inbound: ZecInbound } & Pick<ThorRead, 'addPaused' | 'outPaused'>,
+) =>
+  a.inbound.address === b.inbound.address &&
+  a.inbound.halted === b.inbound.halted &&
+  a.inbound.lpPaused === b.inbound.lpPaused &&
+  a.addPaused === b.addPaused &&
+  a.outPaused === b.outPaused;
+
+/**
+ * A fresh look at the vault and the pauses, right before zec moves, from
+ * every THORNode operator zafu knows (ninerealms and liquify, both under the
+ * one thornode destination), each asked on its own. One that does not
+ * answer, or two that disagree on the vault or a pause, refuse: no single
+ * operator decides where the zec goes. The dust is the higher of the two.
+ */
 export const readVault = async (
   signal?: AbortSignal,
+  urls: readonly string[] = THORNODE_URLS,
 ): Promise<{ inbound: ZecInbound } & Pick<ThorRead, 'addPaused' | 'outPaused'>> => {
   if (!(await lpEgress()).thornode) {
     throw new NotAllowed(THORNODE_DEST);
   }
-  const [rows, mimir] = await Promise.all([
-    node<Raw[]>('/inbound_addresses', signal),
-    node<Record<string, number>>('/mimir', signal),
-  ]);
-  const inbound = zecInboundOf(rows);
-  if (!inbound?.address) {
+  const views = await Promise.all(
+    urls.map(async base => {
+      const [rows, mimir] = await Promise.all([
+        thornodeGet<Raw[]>('/thorchain/inbound_addresses', [base], signal),
+        thornodeGet<Record<string, number>>('/thorchain/mimir', [base], signal),
+      ]);
+      const inbound = zecInboundOf(Array.isArray(rows) ? rows : []);
+      return inbound?.address ? { inbound, ...pausesOf(mimir, inbound) } : undefined;
+    }),
+  ).catch((e: unknown) => {
+    throw signal?.aborted ? e : new Error(ONE_NODE_LINE);
+  });
+  if (views.some(v => !v)) {
     throw new Error('thorchain has no zec vault right now · nothing was sent');
   }
-  return { inbound, ...pausesOf(mimir, inbound) };
+  const [first, ...rest] = views as NonNullable<(typeof views)[number]>[];
+  if (!first || urls.length < 2) {
+    throw new Error(ONE_NODE_LINE);
+  }
+  if (rest.some(v => !sameVault(first, v))) {
+    throw new Error(DISAGREE_LINE);
+  }
+  const dust = views.reduce((m, v) => (v!.inbound.dust > m ? v!.inbound.dust : m), 0n);
+  return { ...first, inbound: { ...first.inbound, dust } };
 };
 
 /** a deposit as THORChain sees it: observed, finalised, and what it sends back to `to` */
