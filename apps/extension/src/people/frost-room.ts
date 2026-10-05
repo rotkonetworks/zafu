@@ -513,6 +513,15 @@ export const ceremonyOf = (
     fvk: new Map(),
     split: new Set(),
   };
+  // a start's id belongs to one start: another under it (another author, or
+  // other terms) would take over its consent, so both stop it instead
+  const said = JSON.stringify(s);
+  for (const m of all) {
+    const twin = m.body.t === 'start' && m.body.id === s.id;
+    if (twin && (m.from !== start.from || JSON.stringify(m.body) !== said)) {
+      c.split.add(start.from).add(m.from);
+    }
+  }
   const first = new Map<string, string>();
   for (const { from, at, body } of all) {
     if (body.id !== c.id || !c.members.includes(from)) {

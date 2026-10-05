@@ -599,6 +599,23 @@ describe('a shared wallet made in its group room', () => {
     expect(saved).toEqual([]);
   });
 
+  test('another start under the same id does not take over its consent: it stops it', async () => {
+    const { ws, G } = await group(3);
+    const [a, b, m] = ws;
+    const members = ws.map(w => w.me(G).pubkey);
+    const honest = startBody(members, 2, 'studio') as Extract<FrostBody, { t: 'start' }>;
+    await a!.post(G, await packFrost(honest));
+    await agreeAll(ws, G);
+    // m says a start of its own under that id, with another threshold
+    await m!.post(G, await packFrost({ ...honest, k: 3, label: 'studio' }));
+    expect(await run(ws, G)).toEqual(['mismatch', 'mismatch', 'mismatch']);
+    for (const w of ws) {
+      expect(w.seats).toEqual([]);
+      expect(current(w, G).split).toEqual(new Set([a!.me(G).pubkey, m!.me(G).pubkey]));
+    }
+    void b;
+  });
+
   test('the wallet is compared as a commitment: the viewing key is never said in the room', async () => {
     const { ws, G } = await group(2);
     await start(
