@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeLoadedNotes, mergeLoadedSpent } from './wallet-state-merge';
+import { mergeLoadedNotes, mergeLoadedSpent, readAcrossRewinds } from './wallet-state-merge';
 
 interface Note {
   nullifier: string;
@@ -43,5 +43,40 @@ describe('mergeLoadedSpent', () => {
     const merged = mergeLoadedSpent(live, ['y'], true);
     expect(merged).toBe(live);
     expect([...merged].sort()).toEqual(['x', 'y']);
+  });
+});
+
+describe('readAcrossRewinds', () => {
+  it('reads again when a rewind lands during the read', async () => {
+    let rewinds = 0;
+    const store = ['orphan', 'kept'];
+    let reads = 0;
+    const result = await readAcrossRewinds(
+      () => rewinds,
+      async () => {
+        reads++;
+        const snapshot = [...store];
+        if (reads === 1) {
+          // the rewind commits while this read is in flight
+          store.splice(0, 1);
+          rewinds++;
+        }
+        return snapshot;
+      },
+    );
+    expect(reads).toBe(2);
+    expect(result).toEqual(['kept']);
+  });
+
+  it('reads once when nothing moves', async () => {
+    let reads = 0;
+    await readAcrossRewinds(
+      () => 0,
+      async () => {
+        reads++;
+        return reads;
+      },
+    );
+    expect(reads).toBe(1);
   });
 });

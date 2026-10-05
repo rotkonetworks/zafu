@@ -18,6 +18,7 @@ const KINDS: SyncFailureKind[] = [
   'network',
   'endpoint',
   'consensus',
+  'wrongNetwork',
   'chainRecovery',
   'storageBusy',
   'storageFatal',
@@ -48,6 +49,13 @@ describe('classifySyncFailure - structured codes', () => {
   it('reads a code off a tagged Error object', () => {
     const tagged = Object.assign(new Error('anything at all'), { syncCode: 'endpoint' });
     expect(classifySyncFailure(tagged).kind).toBe('endpoint');
+  });
+
+  it('a node on another network asks to choose another, and does not retry by itself', () => {
+    const f = classifySyncFailure(Object.assign(new Error('x'), { syncCode: 'wrong-network' }));
+    expect(f.kind).toBe('wrongNetwork');
+    expect(f.message).toBe('this node serves another zcash network · please choose another');
+    expect(f.action?.kind).toBe('settings');
   });
 
   it('ignores a code it does not recognise and falls back to sniffing', () => {

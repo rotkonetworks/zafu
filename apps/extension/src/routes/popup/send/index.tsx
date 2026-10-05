@@ -11,6 +11,7 @@ import { ZcashSend } from './zcash-send';
 import { useStore } from '../../../state';
 import { selectActiveNetwork } from '../../../state/keyring';
 import { activeAccountIndex } from '../../../state/pockets';
+import { selectZcashIsMainnet } from '../../../state/wallets';
 import { isActiveIbcChain, getNetwork, getActiveIbcSubnetworks } from '../../../config/networks';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { Segmented } from '@repo/ui/components/ui/segmented';
@@ -37,6 +38,8 @@ export function SendPage() {
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
   const activePocket = useStore(activeAccountIndex);
+  // the active zcash wallet's keys: a testnet viewing key sends on testnet
+  const zcashMainnet = useStore(selectZcashIsMainnet);
   // dedicated window should close on completion, side panel navigates normally
   const [inDedicatedWindow] = useState(() => isDedicatedWindow());
 
@@ -86,7 +89,12 @@ export function SendPage() {
       );
     }
     return (
-      <ZcashSend onClose={goBack} accountIndex={activePocket} mainnet={true} prefill={prefill} />
+      <ZcashSend
+        onClose={goBack}
+        accountIndex={activePocket}
+        mainnet={zcashMainnet}
+        prefill={prefill}
+      />
     );
   }
   if (cosmosChain) {

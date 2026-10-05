@@ -5,7 +5,13 @@
  * zigner wallets: informational (QR auth happens in approval popup)
  */
 
-import { OverlayPortal } from '../../components/overlay-portal';
+import {
+  Dialog,
+  DialogLayer,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+} from '@repo/ui/components/ui/dialog';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../../state';
 import { passwordSelector } from '../../state/password';
@@ -72,103 +78,116 @@ export const PasswordGateModal = ({
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter') {
         void handleSubmit();
-      } else if (e.key === 'Escape') {
-        onCancel();
       }
     },
-    [handleSubmit, onCancel],
+    [handleSubmit],
   );
 
   if (!open) {
     return null;
   }
 
-  // Portaled + z-[70]: the auth gate is by definition the topmost surface.
-  // Rendered inline it was trapped below body-portaled overlays (e.g. the
-  // ironwood migrate takeover at z-60) - requestAuth() opened an invisible
-  // modal and the confirm click appeared to do nothing.
+  // A radix layer, portaled, at z-[70]: the auth gate is by definition the
+  // topmost surface. Rendered inline it was trapped below body-portaled
+  // overlays (e.g. the ironwood migrate takeover at z-60). A plain portal was
+  // not enough either: opened from inside a radix sheet (a shared wallet's
+  // "propose and seal"), the sheet keeps pointer events and focus to itself,
+  // so the password box could be neither tapped nor typed into. As a radix
+  // layer of its own it sits on top of any open sheet; Esc cancels.
   return (
-    <OverlayPortal>
-      <div className='fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm'>
-        <div className='mx-4 w-full max-w-sm border border-border-soft bg-canvas p-5 shadow-xl'>
-          <div className='mb-4 flex items-center gap-2'>
-            <span className='i-ph-lock h-4 w-4 text-zigner-gold' />
-            <h3 className='text-lg'>confirm this transaction</h3>
+    <Dialog open onOpenChange={o => !o && onCancel()}>
+      <DialogPortal>
+        <DialogOverlay className='z-[70] bg-black/60' />
+        <DialogLayer
+          aria-describedby={undefined}
+          onOpenAutoFocus={e => {
+            e.preventDefault();
+            inputRef.current?.focus();
+          }}
+          className='fixed inset-0 z-[70] flex items-center justify-center focus:outline-none'
+        >
+          <div className='mx-4 w-full max-w-sm border border-border-soft bg-canvas p-5 shadow-xl'>
+            <div className='mb-4 flex items-center gap-2'>
+              <span className='i-ph-lock h-4 w-4 text-zigner-gold' />
+              <DialogTitle className='text-lg font-normal leading-normal tracking-normal'>
+                confirm this transaction
+              </DialogTitle>
+            </div>
+
+            {walletType === 'zigner' ? (
+              <>
+                <p className='mb-4 text-xs text-fg-muted'>
+                  this transaction is signed on your zigner.
+                </p>
+                <div className='flex gap-2'>
+                  <button
+                    onClick={onCancel}
+                    className='flex-1 border border-border-soft px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-elev-1'
+                  >
+                    not now
+                  </button>
+                  <button
+                    onClick={onConfirm}
+                    className='flex-1 bg-zigner-gold px-4 py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-primary/90'
+                  >
+                    continue
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className='mb-3 text-xs text-fg-muted'>your password, to sign it.</p>
+
+                <div className='relative mb-3'>
+                  <input
+                    ref={inputRef}
+                    type={reveal ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => {
+                      setPassword(e.target.value);
+                      setError('');
+                    }}
+                    onKeyDown={handleKeyDown}
+                    placeholder='password'
+                    disabled={checking}
+                    className='w-full border border-border-soft bg-input px-3 py-2.5 pr-10 text-sm text-fg placeholder:text-fg-muted focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+                  />
+                  <button
+                    type='button'
+                    onClick={() => setReveal(prev => !prev)}
+                    className='absolute right-3 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg-high'
+                  >
+                    {reveal ? (
+                      <span className='i-ph-eye h-3.5 w-3.5' />
+                    ) : (
+                      <span className='i-ph-eye-slash h-3.5 w-3.5' />
+                    )}
+                  </button>
+                </div>
+
+                {error && <p className='mb-3 text-xs text-red-400'>{error}</p>}
+
+                <div className='flex gap-2'>
+                  <button
+                    onClick={onCancel}
+                    disabled={checking}
+                    className='flex-1 border border-border-soft px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-elev-1 disabled:opacity-50'
+                  >
+                    not now
+                  </button>
+                  <button
+                    onClick={() => void handleSubmit()}
+                    disabled={checking || !password.trim()}
+                    className='flex-1 bg-zigner-gold px-4 py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-primary/90 disabled:opacity-50'
+                  >
+                    {checking ? 'checking' : 'sign'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-
-          {walletType === 'zigner' ? (
-            <>
-              <p className='mb-4 text-xs text-fg-muted'>
-                this transaction is signed on your zigner.
-              </p>
-              <div className='flex gap-2'>
-                <button
-                  onClick={onCancel}
-                  className='flex-1 border border-border-soft px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-elev-1'
-                >
-                  not now
-                </button>
-                <button
-                  onClick={onConfirm}
-                  className='flex-1 bg-zigner-gold px-4 py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-primary/90'
-                >
-                  continue
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className='mb-3 text-xs text-fg-muted'>your password, to sign it.</p>
-
-              <div className='relative mb-3'>
-                <input
-                  ref={inputRef}
-                  type={reveal ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => {
-                    setPassword(e.target.value);
-                    setError('');
-                  }}
-                  onKeyDown={handleKeyDown}
-                  placeholder='password'
-                  disabled={checking}
-                  className='w-full border border-border-soft bg-input px-3 py-2.5 pr-10 text-sm text-fg placeholder:text-fg-muted focus:border-zigner-gold focus:outline-none disabled:opacity-50'
-                />
-                <button
-                  type='button'
-                  onClick={() => setReveal(prev => !prev)}
-                  className='absolute right-3 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg-high'
-                >
-                  {reveal ? (
-                    <span className='i-ph-eye h-3.5 w-3.5' />
-                  ) : (
-                    <span className='i-ph-eye-slash h-3.5 w-3.5' />
-                  )}
-                </button>
-              </div>
-
-              {error && <p className='mb-3 text-xs text-red-400'>{error}</p>}
-
-              <div className='flex gap-2'>
-                <button
-                  onClick={onCancel}
-                  disabled={checking}
-                  className='flex-1 border border-border-soft px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-elev-1 disabled:opacity-50'
-                >
-                  not now
-                </button>
-                <button
-                  onClick={() => void handleSubmit()}
-                  disabled={checking || !password.trim()}
-                  className='flex-1 bg-zigner-gold px-4 py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-primary/90 disabled:opacity-50'
-                >
-                  {checking ? 'checking' : 'sign'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </OverlayPortal>
+        </DialogLayer>
+      </DialogPortal>
+    </Dialog>
   );
 };

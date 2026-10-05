@@ -351,6 +351,14 @@ describe('note trees on the real wasm', () => {
     expect(await trees.check('orchard', 2_100, same)).toBe(false);
     const other = frontier(chain, 2_101);
     const differs = { frontier: other, root: wasm.tree_root_hex(other) };
+    // differs: asks without changing anything
+    trees.takeWrites();
+    expect(trees.differs('orchard', 2_100, same.root)).toBe(false);
+    expect(trees.differs('orchard', 2_100, differs.root)).toBe(true);
+    expect(trees.differs('orchard', 2_099, differs.root)).toBe(false);
+    expect(trees.differs('orchard', 2_100, undefined)).toBe(false);
+    expect(trees.differs('ironwood', 2_100, differs.root)).toBe(false);
+    expect(trees.takeWrites()).toEqual([]);
     // one answer, or two that disagree with each other, never replace the tree
     expect(await trees.check('orchard', 2_100, differs)).toBe(false);
     expect(await trees.check('orchard', 2_100, differs, () => Promise.resolve(same))).toBe(false);
