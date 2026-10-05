@@ -13,7 +13,7 @@ import { cn } from '@repo/ui/lib/utils';
 import { formatZecAmount, parseZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import type { PeopleRoom } from '../../../people/vault';
 import type { FrostMine } from '../../../people/frost-room';
-import type { Proposal } from '../../../people/room-sign';
+import { reviewOf, type Proposal } from '../../../people/room-sign';
 import { declinePayment, proposePayment, sealPayment } from '../../../people/use-frost-room';
 import type { ZcashWalletJson } from '../../../state/wallets';
 import type { Verdict } from '../send/frost-multisig/multisig-verifier';
@@ -118,7 +118,9 @@ export const PaymentCard = ({
   const [error, setError] = useState('');
   const k = seat.multisig!.threshold;
   const who = (m: string) => (m === me ? 'you' : nameOf(m));
-  const yours = !kept?.cm && !kept?.no && !p.no.has(me) && !p.sent;
+  const yours = !kept?.cm && !kept?.no && !p.no.has(me) && !p.sent && !p.split;
+  // what this device sealed is the only payment it signs (people/room-sign)
+  const stopped = p.split || (!!kept?.cm && kept.rv !== reviewOf(p));
   const run = (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError('');
@@ -148,7 +150,7 @@ export const PaymentCard = ({
         <span className='flex items-center gap-2 text-[11px] text-fg-muted'>
           <Hanko ch='判' />
           <span className='grow'>proposal · by {who(p.by)}</span>
-          <span>{p.sent ? 'sent' : p.set ? 'signing' : 'open'}</span>
+          <span>{p.sent ? 'sent' : stopped ? 'stopped' : p.set ? 'signing' : 'open'}</span>
         </span>
         <span className='font-display text-[26px] text-fg-high'>
           {formatZecAmount(BigInt(p.amt))} <span className='text-sm text-zigner-gold'>zec</span>
@@ -174,6 +176,13 @@ export const PaymentCard = ({
         ))}
         {p.sent && (
           <span className='break-all font-mono text-[11px] text-success'>sent · {p.sent}</span>
+        )}
+        {!p.sent && stopped && (
+          <span className='text-[11px] text-hanko-light'>
+            {p.split
+              ? 'its signers were named twice, so nobody signs it. please propose it again.'
+              : 'this is not the payment you sealed, so your device does not sign it.'}
+          </span>
         )}
       </div>
       {verdict && verdict.kind !== 'match' && verdict.kind !== 'pending' && (
