@@ -82,7 +82,7 @@ export const AskOnce = ({
       </Button>
     </div>
     <span className='text-xs text-fg-dim'>
-      each one can be blocked later in everything zafu talks to
+      each one can be turned off later in everything zafu talks to
     </span>
   </Column>
 );
@@ -192,7 +192,9 @@ export const UnlockColumn = ({
           placeholder='password'
           onChange={e => setPw(e.target.value)}
         />
-        {wrong && <span className='text-xs text-warn'>that doesn't match - please try again</span>}
+        {wrong && (
+          <span className='text-xs text-warn'>that doesn't match · please try again, slowly</span>
+        )}
         <Button type='submit' className='h-14' loading={busy}>
           unlock
         </Button>

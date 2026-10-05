@@ -125,8 +125,8 @@ export const Panel = ({ screen }: { screen: string }) => {
   const now = useNow();
   const t = s.thor;
   const off = !t || screen === 'first' || screen === 'egress' || screen === 'blocked';
-  const offSrc = s.blocked ? 'blocked by you' : t ? '' : (s.readErr ?? 'after you allow');
-  const nr = (k: string): R => ({ k, v: s.blocked ? 'blocked' : 'not read', tag: true });
+  const offSrc = s.blocked ? 'off' : t ? '' : (s.readErr ?? 'after you allow');
+  const nr = (k: string): R => ({ k, v: s.blocked ? 'off' : 'not read', tag: true });
   const p = positionOf(s);
   const worth = worthOf(s);
   const tSrc = t ? `thornode · ${ago(now, t.at)}` : '';
@@ -140,7 +140,7 @@ export const Panel = ({ screen }: { screen: string }) => {
   const share = adding && t ? Math.min(100, (Number(a) / Number(t.pool.asset)) * 100) : 0;
   const status = off
     ? s.blocked
-      ? 'not read · blocked'
+      ? 'not read · off'
       : 'not read yet'
     : t.addPaused
       ? 'adds paused'

@@ -882,7 +882,10 @@ export const BlockedScreen = () => {
   const now = useNow(60_000);
   const ago = cache ? Math.round((now - cache.readAt) / 3_600_000) : undefined;
   return (
-    <Column title='thornode is blocked' sub="so we can't read the pool or your position right now.">
+    <Column
+      title='thornode is off for now'
+      sub='the pool and your position are read once it is on.'
+    >
       <Table className='opacity-70'>
         <Row
           k='your position'
@@ -905,14 +908,14 @@ export const BlockedScreen = () => {
       </Table>
       <Buttons>
         <Button variant='secondary' className='h-14 w-[170px]' onClick={() => window.close()}>
-          keep it blocked
+          keep it off
         </Button>
         <Button className='h-14 flex-1' onClick={() => void allowThornode()}>
-          allow thornode
+          turn on
         </Button>
       </Buttons>
       <span className='text-xs text-fg-dim'>
-        only while this page is open · blockable again any time
+        only while this page is open · it can be turned off again any time
       </span>
     </Column>
   );

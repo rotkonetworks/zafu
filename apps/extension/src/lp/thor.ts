@@ -25,7 +25,7 @@ const NODES = [...THORNODE_URLS].reverse();
 /** a read was not made: its destination is off */
 export class NotAllowed extends Error {
   constructor(readonly destination: string) {
-    super(`${destination} is not allowed`);
+    super(`${destination} is off`);
   }
 }
 

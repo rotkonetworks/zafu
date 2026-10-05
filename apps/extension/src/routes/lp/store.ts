@@ -493,7 +493,9 @@ const vaultOf = async () => {
     throw new Error(away);
   }
   if (!keyId || hotKey()?.id !== keyId) {
-    throw new Error('this wallet cannot sign here');
+    throw new Error(
+      'this wallet signs elsewhere · please choose one whose phrase is on this computer',
+    );
   }
   return useStore.getState().keyRing.getVaultUnlock(keyId);
 };
@@ -502,7 +504,9 @@ const vaultOf = async () => {
 const boundAccount = () => {
   const { account } = get();
   if (account === undefined) {
-    throw new Error('this wallet cannot sign here');
+    throw new Error(
+      'this wallet signs elsewhere · please choose one whose phrase is on this computer',
+    );
   }
   return account;
 };
@@ -528,7 +532,9 @@ const depsOf = (storeId: string, lp: { index: number; address: string }): DriveD
       await vaultOf(),
     );
     if (!('txid' in r)) {
-      throw new Error('this wallet cannot sign here');
+      throw new Error(
+        'this wallet signs elsewhere · please choose one whose phrase is on this computer',
+      );
     }
     return r.txid;
   },
