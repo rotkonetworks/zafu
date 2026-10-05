@@ -82,13 +82,14 @@ export const COMPACT_SIGN_REQUEST = true;
 export const NU6_3_ACTIVATION_HEIGHT_MAINNET = 3_428_143;
 
 /**
- * NU6.3 Ironwood activation height on TESTNET.
- *
- * The pinned librustzcash fork activates NU6.3 at height 1 on test/regtest
- * (see `zcash_protocol::consensus`, and `nu6_3_activation_height(false) == 1`
- * on the Rust side), i.e. testnet is ALWAYS post-activation.
+ * NU6.3 Ironwood activation height on TESTNET: 4,134,000, as in released
+ * `zcash_protocol` and the wasm (`NU6_3_ACTIVATION_HEIGHT_TESTNET`). Checked
+ * against the testnet chain (testnet.zec.rocks, 2026-10-05): the coinbase of
+ * 4,133,999 is v5 bound to NU6.2 (0x5437f330), that of 4,134,000 is v6 bound
+ * to NU6.3 (0x37a5165b). The old value 1 came from the retired librustzcash
+ * fork, which activated NU6.3 from genesis on test/regtest.
  */
-export const NU6_3_ACTIVATION_HEIGHT_TESTNET = 1;
+export const NU6_3_ACTIVATION_HEIGHT_TESTNET = 4_134_000;
 
 /**
  * The NU6.3 activation height for the network the wallet is talking to.
