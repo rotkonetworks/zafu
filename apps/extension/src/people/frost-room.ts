@@ -762,12 +762,13 @@ export const advance = async (
   if (mine.saved) {
     return 'done';
   }
+  // a ceremony that cannot finish stops for everyone, before anyone is asked to agree to it
+  if (mismatched(c)) {
+    return 'mismatch';
+  }
   // keys are made once this member agreed, on this device, to what the start says
   if (c.by !== me.pubkey && !mine.ok) {
     return 'waiting';
-  }
-  if (mismatched(c)) {
-    return 'mismatch';
   }
   const send = async (body: FrostBody) => io.post(await packFrost(body), `${body.t}:${body.id}`);
   // what this device said before and the room does not show: a post that

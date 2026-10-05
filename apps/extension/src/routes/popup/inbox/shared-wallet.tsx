@@ -217,7 +217,7 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage, onSend }: CardProps) 
           );
         })}
       </div>
-      {mine && c.by !== me && !kept?.ok ? (
+      {!bad && mine && c.by !== me && !kept?.ok ? (
         <div className='flex flex-col gap-2 border-t border-border-soft px-3.5 py-3'>
           <span className='text-xs text-fg'>
             {!c.deal

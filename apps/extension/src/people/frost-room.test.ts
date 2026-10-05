@@ -608,7 +608,13 @@ describe('a shared wallet made in its group room', () => {
     await agreeAll(ws, G);
     // m says a start of its own under that id, with another threshold
     await m!.post(G, await packFrost({ ...honest, k: 3, label: 'studio' }));
+    // whichever of the two starts a device reads as the ceremony (their ids
+    // tie, their message ids are random), every member stops, the starter too,
+    // and nobody is asked to agree to it again
     expect(await run(ws, G)).toEqual(['mismatch', 'mismatch', 'mismatch']);
+    for (const w of ws) {
+      expect(await w.turn(G)).toBe('mismatch');
+    }
     for (const w of ws) {
       expect(w.seats).toEqual([]);
       expect(current(w, G).split).toEqual(new Set([a!.me(G).pubkey, m!.me(G).pubkey]));
