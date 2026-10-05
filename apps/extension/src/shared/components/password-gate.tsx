@@ -63,7 +63,7 @@ export const PasswordGateModal = ({
       if (valid) {
         onConfirm();
       } else {
-        setError("that doesn't match · please try again, slowly");
+        setError("that doesn't match · please try again");
         setPassword('');
         inputRef.current?.focus();
       }
