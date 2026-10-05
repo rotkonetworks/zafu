@@ -8,9 +8,9 @@
  * run time. Only the vote servers themselves are contacted live:
  *   vote servers: /shielded-vote/v1/rounds, /tally-results/{id}
  *
- * This module is read-only (phase 1): list rounds, show proposals,
- * show tallies. Casting requires the voting crypto crate (note-bundle
- * setup, hotkeys, nullifier proofs) compiled into zcash-wasm - phase 2.
+ * The vote screen is read-only for now (list rounds, show proposals,
+ * show tallies); the submission and casting plumbing lives in ./api.ts and
+ * ./cast.ts, on the standalone voting-wasm blob.
  */
 
 export interface TrustedKey {
@@ -57,7 +57,8 @@ export interface VotingServiceConfig {
   rounds: Record<string, RoundConfigEntry>;
 }
 
-export type RoundStatus = 'active' | 'tallying' | 'completed' | 'cancelled';
+/** 'starting': the round's key ceremony is still running; it opens once that confirms. */
+export type RoundStatus = 'starting' | 'active' | 'tallying' | 'completed' | 'cancelled';
 
 export interface VoteOption {
   id: number;
@@ -85,12 +86,12 @@ export interface VotingRound {
   /** unix seconds */
   votingEnd: number;
   status: RoundStatus;
-  /** election-authority key (hex), present once the round's key ceremony confirmed */
+  /**
+   * election-authority key (hex): set only when the bundled config endorses
+   * it for this round (and the server agrees). The snapshot roots casting
+   * needs come from `fetchRoundParams`, cross-checked across servers.
+   */
   eaPkHex?: string;
-  /** note-commitment tree root at the snapshot (hex); delegation proves against it */
-  ncRootHex?: string;
-  /** nullifier IMT root at the snapshot (hex); delegation proves against it */
-  nullifierImtRootHex?: string;
   proposals: VotingProposal[];
   /** present in the pinned dynamic config's rounds map (basic endorsement) */
   inConfig: boolean;

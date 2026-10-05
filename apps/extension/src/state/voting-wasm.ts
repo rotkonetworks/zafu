@@ -73,21 +73,14 @@ export interface VotingWasm {
     vote_json: string,
     network: string,
   ) => string;
-  build_vote_shares_wire: (
-    hotkey_secret_hex: string,
-    round_params_json: string,
-    delegation_state_json: string,
-    van_witness_json: string,
-    vote_json: string,
-    network: string,
-    submit_at: bigint,
-  ) => string;
   /**
-   * ZKP #2 + signed cast. Returns JSON `{ proposal_id, wire, shares,
+   * ZKP #2 + signed cast. Returns JSON `{ proposal_id, wire,
    * commitment_bundle_json, next_delegation_state_json }`: `wire` is the
-   * `POST /cast-vote` body, `next_delegation_state_json` replaces the bundle's
-   * delegation state for its next cast (the 51-bit proposal authority with
-   * this proposal's bit cleared - never computed in JS).
+   * `POST /cast-vote` body; `commitment_bundle_json` holds the share secrets
+   * (seal it); `next_delegation_state_json` replaces the bundle's delegation
+   * state for its next cast (the 51-bit proposal authority with this
+   * proposal's bit cleared - never computed in JS), stored only once the
+   * cast is on chain. No shares: they need the included tree position.
    */
   cast_vote_hot_wire: (
     hotkey_secret_hex: string,
@@ -96,7 +89,6 @@ export interface VotingWasm {
     van_witness_json: string,
     vote_json: string,
     network: string,
-    submit_at: bigint,
   ) => string;
   /**
    * Helper shares for a vote already on chain, from the recovery bundle

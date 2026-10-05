@@ -12,8 +12,11 @@
  *   `generate_voting_hotkey`); the governance output target.
  * * `notes_json` — `[NoteInfoDto]` (the delegated notes).
  * * `round_params_json` — `RoundParamsDto`.
- * * `consensus_branch_id` — branch id at the snapshot height (host resolves via
- *   lightwalletd).
+ * * `consensus_branch_id` — branch id the host's node reports (lightwalletd).
+ *   It must have the Ironwood pool (NU6.3 or later, NU7 included), and so
+ *   must the snapshot height. It only selects the note protocol: the PCZT is
+ *   always built under TX1 v1's V6 / NU6.3 profile, the one the vote chain
+ *   rebuilds the signed digest under.
  * * `round_name` — display memo text.
  * * `network` — "mainnet" | "testnet" | "regtest".
  * * `bundle_index` — delegation bundle index (echoed into `delegation_state`).
@@ -45,22 +48,28 @@ export function build_vote_commitment_wire(hotkey_secret_hex: string, round_para
 export function build_vote_shares_from_recovery(commitment_bundle_json: string, vc_tree_position: bigint, submit_at: bigint): string;
 
 /**
- * Build the helper-server share payloads (`[VoteShareWire]`) for one HOT vote.
+ * Build the `POST /cast-vote` body plus what the host keeps for after it lands.
  *
- * `submit_at` is the unix-seconds submission time stamped into each share.
- * Runs the ZKP #2 proof.
- */
-export function build_vote_shares_wire(hotkey_secret_hex: string, round_params_json: string, delegation_state_json: string, van_witness_json: string, vote_json: string, network: string, submit_at: bigint): string;
-
-/**
- * Build BOTH the commitment wire and share wires from a SINGLE proof run.
+ * Runs ZKP #2 once. Returns
+ * `{ proposal_id, wire, commitment_bundle_json, next_delegation_state_json }`.
  *
- * Prefer this over calling the two builders separately: ZKP #2 is expensive and
- * each of `build_vote_commitment_wire` / `build_vote_shares_wire` runs it once.
- * Returns `SignedVoteCommitmentView`-shaped JSON
- * `{ proposal_id, wire, shares, commitment_bundle_json }`.
+ * No helper shares come back from here: a share commits to the vote's leaf
+ * index in the round's commitment tree (`vc_tree_position`), which only
+ * exists once the cast-vote transaction is included. Shares built before
+ * that carry a guessed position, and the helper's reveal for them never
+ * matches the tree, so the vote silently drops out of the tally. Build them
+ * with [`build_vote_shares_from_recovery`] from `commitment_bundle_json` and
+ * the included position.
+ *
+ * `commitment_bundle_json` holds the share secrets (it can rebuild shares,
+ * which carry `vote_decision`): store it encrypted.
+ *
+ * `next_delegation_state_json` is this bundle's state for its next cast
+ * (this proposal's authority bit cleared). Store it only after the cast is
+ * on chain: if the cast never lands, the old state is still the valid one,
+ * and a cleared bit would lock the proposal out of a retry.
  */
-export function cast_vote_hot_wire(hotkey_secret_hex: string, round_params_json: string, delegation_state_json: string, van_witness_json: string, vote_json: string, network: string, submit_at: bigint): string;
+export function cast_vote_hot_wire(hotkey_secret_hex: string, round_params_json: string, delegation_state_json: string, van_witness_json: string, vote_json: string, network: string): string;
 
 /**
  * Finalize delegation (phase 2 of 2): run ZKP #1 with host-injected IMT proofs
@@ -102,21 +111,6 @@ export function initThreadPool(num_threads: number): Promise<any>;
 export function pir_fetch_imt_proofs(pir_base_url: string, nullifiers_json: string, js_fetch: Function): Promise<string>;
 
 /**
- * Self-contained delegation-proof feasibility probe.
- *
- * Builds synthetic wallet notes / Merkle witnesses / IMT non-membership
- * proofs entirely inside wasm (no host-supplied inputs) and runs a REAL
- * K=14 halo2 delegation proof via `zcash_voting::selftest`. Exists purely to
- * measure whether K=14 proving completes inside a wasm32 module and how
- * long it takes; the extension does not call this in production flows.
- *
- * Returns JSON `{"ok":bool,"proof_len":N,"error":string|null}`. Timing is
- * deliberately left to the JS caller (`Date.now()` around the call) since
- * `std::time::Instant` panics on bare wasm32-unknown-unknown.
- */
-export function selftest_prove_delegation(): string;
-
-/**
  * Install a panic hook that forwards Rust panics to the JS console instead
  * of an opaque "unreachable executed" trap. Call once from JS after load.
  */
@@ -139,12 +133,10 @@ export interface InitOutput {
     readonly build_delegation_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number) => [number, number, number, number];
     readonly build_vote_commitment_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
     readonly build_vote_shares_from_recovery: (a: number, b: number, c: bigint, d: bigint) => [number, number, number, number];
-    readonly build_vote_shares_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
-    readonly cast_vote_hot_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
+    readonly cast_vote_hot_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
     readonly finalize_delegation: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly generate_voting_hotkey: (a: number, b: number) => [number, number, number, number];
     readonly pir_fetch_imt_proofs: (a: number, b: number, c: number, d: number, e: any) => any;
-    readonly selftest_prove_delegation: () => [number, number];
     readonly voting_wasm_init_panic_hook: () => void;
     readonly rustsecp256k1_v0_10_0_context_create: (a: number) => number;
     readonly rustsecp256k1_v0_10_0_context_destroy: (a: number) => void;
