@@ -19,6 +19,7 @@ import {
 } from './card-v2';
 import { decodeContactCard, decodeMemo, encodeContactCard, MemoType } from './memo-codec';
 
+const fromHex = (h: string) => Uint8Array.from(h.match(/../g)!, b => parseInt(b, 16));
 const seed = new Uint8Array(32).fill(7);
 const key = bytesToHex(ed25519.getPublicKey(seed));
 const theirs = bytesToHex(ed25519.getPublicKey(new Uint8Array(32).fill(9)));
@@ -52,8 +53,57 @@ describe('card v2', () => {
     );
     expect(close).toMatchObject({ kind: 'close', revision: 9 });
     expect(close?.zcash).toBeUndefined();
-    const http = { ...base, relay: 'http://people-relay.test:8787', testnet: true };
+    const http = { ...base, relay: 'http://127.0.0.1:8787', testnet: true };
     expect(readCardV2(signCardV2(http, seed))).toEqual(http);
+  });
+
+  test('plain http only to a relay on this computer', () => {
+    for (const relay of ['http://localhost:8787', 'http://127.0.0.1', 'http://[::1]:9/r']) {
+      expect(readCardV2(signCardV2({ ...base, relay }, seed))?.relay).toBe(relay);
+    }
+    for (const relay of ['http://tracker.example', 'http://localhost.evil.example', 'ftp://x.y']) {
+      expect(() => signCardV2({ ...base, relay }, seed)).toThrow();
+    }
+    // a card that names plain http elsewhere, signed by hand, does not read
+    const byHand = (host: string) => {
+      const b = signCardV2({ ...base, relay: 'https://x' }, seed);
+      const at = 5 + 64 + 43; // ver, kind, flags, revision, key, pairKa, zcash
+      expect(b[at]).toBe(1);
+      const h = new TextEncoder().encode(host);
+      const unsigned = new Uint8Array([
+        ...b.subarray(0, at),
+        h.length,
+        ...h,
+        ...b.subarray(at + 2, b.length - 64),
+      ]);
+      const pre = new Uint8Array([...new TextEncoder().encode('zafu-card-v2'), ...unsigned]);
+      return new Uint8Array([...unsigned, ...ed25519.sign(pre, seed)]);
+    };
+    expect(readCardV2(byHand('http://localhost:1'))?.relay).toBe('http://localhost:1');
+    expect(readCardV2(byHand('http://tracker.example'))).toBeNull();
+  });
+
+  test('strict signatures: no small-order keys, no malleable S', () => {
+    const good = signCardV2(base, seed);
+    // S + L is the same signature under ZIP-215 but not under RFC 8032
+    const L = 2n ** 252n + 27742317777372353535851937790883648493n;
+    const sig = good.subarray(good.length - 64);
+    let s = 0n;
+    for (let i = 31; i >= 0; i--) {
+      s = (s << 8n) | BigInt(sig[32 + i]!);
+    }
+    const big = s + L;
+    const sBytes = Array.from({ length: 32 }, (_, i) => Number((big >> BigInt(8 * i)) & 0xffn));
+    const malleable = new Uint8Array([...good.subarray(0, good.length - 32), ...sBytes]);
+    expect(readCardV2(malleable)).toBeNull();
+    expect(readCardV2(good)).not.toBeNull();
+    // the identity point as a key: S = 0 "verifies" for any message under ZIP-215
+    const identity = '01' + '00'.repeat(31);
+    const forged = new Uint8Array(good);
+    forged.set(fromHex(identity), 5);
+    forged.set(new Uint8Array(64).fill(0), forged.length - 64);
+    forged.set(fromHex(identity), forged.length - 64);
+    expect(readCardV2(forged)).toBeNull();
   });
 
   test('refuses a card signed by another key, and any changed byte', () => {
