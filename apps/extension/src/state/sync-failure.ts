@@ -33,6 +33,7 @@ export type SyncFailureKind =
   | 'network'
   | 'endpoint'
   | 'consensus'
+  | 'wrongNetwork'
   | 'chainRecovery'
   | 'storageBusy'
   | 'storageFatal'
@@ -68,6 +69,7 @@ export const SYNC_ERROR_CODES = [
   'network',
   'endpoint',
   'consensus',
+  'wrong-network',
   'chain-recovery',
   'storage-busy',
   'storage-fatal',
@@ -83,6 +85,7 @@ const KIND_BY_CODE: Record<SyncErrorCode, SyncFailureKind> = {
   network: 'network',
   endpoint: 'endpoint',
   consensus: 'consensus',
+  'wrong-network': 'wrongNetwork',
   'chain-recovery': 'chainRecovery',
   'storage-busy': 'storageBusy',
   'storage-fatal': 'storageFatal',
@@ -98,6 +101,7 @@ const MESSAGES: Record<SyncFailureKind, string> = {
   network: "the node isn't answering · zafu keeps trying",
   endpoint: "the node isn't answering · please choose another",
   consensus: 'this node sent data zafu could not verify · please choose another',
+  wrongNetwork: 'this node serves another zcash network · please choose another',
   chainRecovery: 'the chain moved while syncing · zafu keeps trying',
   storageBusy: 'wallet data is busy · zafu keeps trying',
   storageFatal: 'wallet data could not be read · please reload zafu',
@@ -115,6 +119,7 @@ const ACTIONS: Partial<Record<SyncFailureKind, SyncFailureAction>> = {
   network: CHOOSE,
   endpoint: CHOOSE,
   consensus: CHOOSE,
+  wrongNetwork: CHOOSE,
   // A local problem must never make the wallet blame the node (vizor's rule).
   storageFatal: { label: 'reload', kind: 'reload' },
   unknown: TRY_AGAIN,
@@ -124,6 +129,7 @@ const AUTO_RETRIES: Record<SyncFailureKind, boolean> = {
   network: true,
   endpoint: false,
   consensus: false,
+  wrongNetwork: false,
   // Surfaced only once the in-run rewind budget is spent; the next sync run
   // starts with a fresh budget, so recovery really does continue.
   chainRecovery: true,

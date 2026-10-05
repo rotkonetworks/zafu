@@ -106,6 +106,7 @@ import { startRun, stopRun, STOP_WAIT_MS, type RunSlot } from './sync-runs';
 import { errText, storageFailure } from '@penumbra-zone/query/error-text';
 import { mergeLoadedNotes, mergeLoadedSpent, readAcrossRewinds } from './wallet-state-merge';
 import { allowMismatchRewind, rewindPurge } from './rewind-purge';
+import { isWrongNetwork, walletIsMainnet } from './chain-network';
 import { storeFellBehind } from './store-reset';
 import { createBuildRegistry } from './build-abort';
 
@@ -2897,11 +2898,23 @@ const syncLoop = async (
     cachedTipAt = 0;
   };
 
+  // the node's network, asked once per run before any block is read
+  let networkChecked = false;
   while (!signal.aborted) {
     try {
       if (await storeWasReset()) {
         restart = true;
         break;
+      }
+      if (!networkChecked) {
+        const info = await client.getLightdInfo();
+        if (isWrongNetwork(info.chainName, walletIsMainnet(ufvk))) {
+          throw syncError(
+            'wrong-network',
+            `the node serves the ${info.chainName} network, not this wallet's`,
+          );
+        }
+        networkChecked = true;
       }
       const chainHeight = await getChainTip();
 
