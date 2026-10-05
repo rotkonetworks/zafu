@@ -4,17 +4,15 @@
  * nothing below it moves when it changes.
  */
 
-import { useNavigate } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
-import { PopupPath } from '../routes/popup/paths';
 import { requestEgressOptIn } from '../net/egress-opt-in';
+import { setDestinationOptIn } from '../net/ledger';
 import { PEOPLE_RELAY } from '../config/people-relay';
 import { hhmm } from '../utils/when';
 import { peopleAsk, usePeople } from './client';
 import type { PeopleSlot } from './service';
 
 export const RelaySlot = ({ waiting }: { waiting?: string }) => {
-  const navigate = useNavigate();
   const status = usePeople().status;
   const slot: PeopleSlot = status?.slot ?? 'idle';
   const again = () => void peopleAsk('check').catch(() => undefined);
@@ -23,6 +21,7 @@ export const RelaySlot = ({ waiting }: { waiting?: string }) => {
       ok => ok && again(),
       () => undefined,
     );
+  const turnOn = () => void setDestinationOptIn(PEOPLE_RELAY, 'allowed').then(again);
   const line: { text: string; action?: [string, () => void]; tone?: 'warn' } | undefined = waiting
     ? { text: waiting }
     : slot === 'checking'
@@ -33,8 +32,8 @@ export const RelaySlot = ({ waiting }: { waiting?: string }) => {
           ? { text: 'messages wait until the relay is allowed', action: ['allow', allow] }
           : slot === 'blocked'
             ? {
-                text: 'the relay is blocked in what zafu talks to',
-                action: ['open connections', () => navigate(PopupPath.SETTINGS_CONNECTIONS)],
+                text: 'the relay is off in what zafu talks to',
+                action: ['turn on', turnOn],
               }
             : slot === 'offline'
               ? { text: 'you seem to be offline. nothing is lost; messages wait here.' }

@@ -20,8 +20,8 @@ const COPY: Record<PermissionState, { title: string; hint: string }> = {
   requesting: { title: 'requesting access', hint: 'allow camera access in the browser prompt.' },
   granted: { title: 'camera access granted', hint: 'close this tab and return to zafu.' },
   denied: {
-    title: 'camera access denied',
-    hint: 'enable it from the camera icon in your address bar, then try again.',
+    title: 'camera access is off',
+    hint: 'turn it on from the camera icon in your address bar, then try again.',
   },
 };
 
