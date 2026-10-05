@@ -13,7 +13,7 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { viaLine } from '../../../links/land';
 import { peopleAsk, useMyRooms, useWatchRoom } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
-import { CODE_RE, OLD_CODE_RE, normalizeCode } from '../../../people/protocol';
+import { CODE_RE, OLD_CODE_RE, isRelayGated, normalizeCode } from '../../../people/protocol';
 import type { DoorCard } from '../../../people/groups';
 import { PopupPath, groupPath } from '../paths';
 
@@ -59,12 +59,11 @@ export function GroupJoinPage() {
       (e: unknown) =>
         live &&
         setStep({
-          kind:
-            e instanceof Error && /not allowed yet|blocked/.test(e.message)
-              ? 'no-relay'
-              : e instanceof Error && e.message.includes('unclear')
-                ? 'unclear'
-                : 'failed',
+          kind: isRelayGated(e)
+            ? 'no-relay'
+            : e instanceof Error && e.message.includes('unclear')
+              ? 'unclear'
+              : 'failed',
         }),
     );
     return () => {

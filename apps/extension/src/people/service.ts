@@ -29,6 +29,7 @@ import {
 } from '@zafu/zirc/room';
 import { presenceEpoch, type RelayTransport } from '@zafu/zid';
 import { pairShard } from './shard';
+import { RELAY_NOT_ON, RELAY_OFF } from './protocol';
 import { mergeItems, threadKey, type PeopleRoom, type Thread, type ThreadItem } from './vault';
 
 /** what the slot under a title says (design-social 5.0) */
@@ -136,7 +137,7 @@ const FIRST_WINDOWS = 12;
 
 export class PeopleNeedsRelay extends Error {
   constructor(readonly gate: Exclude<Gate, 'on'>) {
-    super(gate === 'blocked' ? 'the relay is off' : 'the relay is not on yet');
+    super(gate === 'blocked' ? RELAY_OFF : RELAY_NOT_ON);
   }
 }
 
