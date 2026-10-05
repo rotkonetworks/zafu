@@ -190,7 +190,7 @@ export const useMyCards = () => {
     },
   ): Promise<{ b64: string; card: CardV2 }> => {
     if (keyInfo?.type !== 'mnemonic') {
-      throw new Error('this wallet cannot make cards');
+      throw new Error("this wallet doesn't make cards · a phrase or zigner wallet does");
     }
     const mnemonic = await getMnemonic(keyInfo.id);
     const at = await now(o.contactId, o.addrGen);

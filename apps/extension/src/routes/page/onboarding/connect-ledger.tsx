@@ -111,7 +111,7 @@ const ConnectLedgerTransparent = () => {
       }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      setError(`failed to connect ledger: ${message}`);
+      setError(`zafu couldn't reach the ledger · ${message}`);
       setPhase('idle');
     }
   }, []);
@@ -143,7 +143,7 @@ const ConnectLedgerTransparent = () => {
       navigate(firstWallet ? PagePath.PERSONALIZE : PagePath.ONBOARDING_SUCCESS);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      setError(`failed to import: ${message}`);
+      setError(`this ledger wasn't added · ${message}`);
       setPhase('connected');
     }
   }, [account, addLedgerUnencrypted, walletLabel, navigate]);
@@ -227,7 +227,7 @@ const ConnectLedgerTransparent = () => {
                   to update before they try to send, or it fails on-device. */}
             <StatusSlot tone='warn' icon='i-ph-arrows-clockwise'>
               update your ledger zcash app to the latest version in ledger live first. an older app
-              does not recognise the current zcash network and will reject transparent sends.
+              does not know the current zcash network and can&apos;t sign transparent sends.
             </StatusSlot>
 
             {/* TRANSPARENT-ONLY. zafu signs Ledger via the Bitcoin app (the only

@@ -142,7 +142,7 @@ export const LedgerGone = ({
         </li>
         <li className='flex h-12 items-center gap-3 px-3.5 text-warn'>
           <span className='size-3.5 shrink-0 bg-warn' />
-          lost the connection
+          the connection dropped
         </li>
       </ol>
       <Assure warn>

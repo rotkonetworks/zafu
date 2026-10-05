@@ -51,7 +51,7 @@ export const PasswordGateModal = ({
 
   const handleSubmit = useCallback(async () => {
     if (!password.trim()) {
-      setError('password required');
+      setError('please enter your password');
       return;
     }
 
@@ -63,12 +63,12 @@ export const PasswordGateModal = ({
       if (valid) {
         onConfirm();
       } else {
-        setError('wrong password');
+        setError("that doesn't match · please try again");
         setPassword('');
         inputRef.current?.focus();
       }
     } catch {
-      setError('verification failed');
+      setError("zafu couldn't check that just now · please try again");
     } finally {
       setChecking(false);
     }

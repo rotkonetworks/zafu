@@ -117,7 +117,9 @@ export function FrostAirgapSignFlow({
         setTrigger1(new TextEncoder().encode(trigger));
       } catch (err) {
         if (!cancelled) {
-          onError(err instanceof Error ? err.message : 'failed to open relay room');
+          onError(
+            err instanceof Error ? err.message : "the relay room didn't open · please try again",
+          );
         }
       }
     })();
@@ -179,7 +181,7 @@ export function FrostAirgapSignFlow({
       setTrigger2(new TextEncoder().encode(trigger));
       setStep('r2-out');
     } catch (err) {
-      onError(err instanceof Error ? err.message : 'round 1 failed');
+      onError(err instanceof Error ? err.message : "round 1 didn't finish");
     }
   };
 
@@ -219,7 +221,7 @@ export function FrostAirgapSignFlow({
     } catch (err) {
       sessionRef.current?.abort.abort();
       sessionRef.current = null;
-      onError(err instanceof Error ? err.message : 'round 2 failed');
+      onError(err instanceof Error ? err.message : "round 2 didn't finish");
     }
   };
 

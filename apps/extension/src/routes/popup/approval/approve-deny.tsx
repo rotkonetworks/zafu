@@ -39,7 +39,7 @@ export const ApproveDeny = ({
       </div>
       {ignore && (
         <Button className='w-full py-2 text-base' size='sm' variant='quiet' onClick={ignore}>
-          ignore site
+          don't ask again
         </Button>
       )}
     </div>

@@ -248,8 +248,8 @@ const MultisigCreateZafu = () => {
       for (const peerFvk of peerFvks) {
         if (peerFvk !== orchardFvk) {
           throw new Error(
-            `FVK mismatch: peer saw a different viewing key - ` +
-              `ours ends ...${orchardFvk.slice(-8)}, theirs ends ...${peerFvk.slice(-8)}`,
+            `the co-signers' viewing keys differ (ours ...${orchardFvk.slice(-8)}, ` +
+              `theirs ...${peerFvk.slice(-8)}) · nothing was saved`,
           );
         }
       }
@@ -471,7 +471,7 @@ const MultisigCreateZafu = () => {
             <span className='tabular-nums text-fg-dim'>{countdown}s</span>
           </div>
           <p className='text-label text-fg-muted'>
-            every signer must derive the same viewing key before the wallet is saved
+            the wallet is saved once every signer has the same viewing key
           </p>
         </div>
       )}
@@ -836,7 +836,7 @@ const MultisigCreateZigner = () => {
         for (const peerFvk of peerFvksRef.current) {
           if (peerFvk !== ufvk) {
             throw new Error(
-              `FVK mismatch: ours ...${ufvk.slice(-8)}, theirs ...${peerFvk.slice(-8)}`,
+              `the co-signers' viewing keys differ (ours ...${ufvk.slice(-8)}, theirs ...${peerFvk.slice(-8)}) · nothing was saved`,
             );
           }
         }

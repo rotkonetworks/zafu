@@ -114,7 +114,7 @@ const ETHERMINT_RECIPIENT_PROBLEM: Record<InjectiveRecipientProblem, (prefix?: s
   {
     penumbra: () => 'penumbra address - use shield instead',
     'other-chain': prefix => `${prefix ?? 'other'} address, not injective`,
-    checksum: () => 'typo - a character is wrong',
+    checksum: () => "one character doesn't fit · please check it",
     format: () => 'not an address',
   };
 
@@ -651,7 +651,7 @@ export function CosmosSend({
       }
     } catch (err) {
       setTxStatus('error');
-      setTxError(err instanceof Error ? err.message : 'transaction failed');
+      setTxError(err instanceof Error ? err.message : "didn't go through · nothing was sent");
     }
   }, [
     isSameChain,

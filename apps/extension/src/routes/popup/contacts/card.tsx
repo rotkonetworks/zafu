@@ -69,7 +69,7 @@ const Invalid = ({ why, next }: { why: string; next: string }) => {
     <>
       <main className='flex grow flex-col gap-4 px-4 py-5'>
         <span className='i-lucide-shield-x size-8 text-hanko-light' aria-hidden='true' />
-        <span className='font-display text-xl text-fg-high'>this card cannot be used</span>
+        <span className='font-display text-xl text-fg-high'>this card can&apos;t be used here</span>
         <span className='text-sm text-fg'>{why}</span>
         <div className='flex flex-col border border-border-soft bg-elev-1 text-xs text-fg-muted'>
           <span className='border-b border-border-soft px-3.5 py-2.5'>saved nothing</span>

@@ -182,7 +182,9 @@ const hotKey = () => {
 const mnemonic = async (): Promise<string> => {
   const k = hotKey();
   if (!k) {
-    throw new Error('this wallet cannot sign here');
+    throw new Error(
+      'this wallet signs elsewhere · please choose one whose phrase is on this computer',
+    );
   }
   return useStore.getState().keyRing.getMnemonic(k.id);
 };
@@ -191,7 +193,9 @@ const mnemonic = async (): Promise<string> => {
 const freshShielded = async (): Promise<string> => {
   const k = hotKey();
   if (!k) {
-    throw new Error('this wallet cannot sign here');
+    throw new Error(
+      'this wallet signs elsewhere · please choose one whose phrase is on this computer',
+    );
   }
   const vault = await useStore.getState().keyRing.getVaultUnlock(k.id);
   const d = Array.from(crypto.getRandomValues(new Uint8Array(11)), b =>

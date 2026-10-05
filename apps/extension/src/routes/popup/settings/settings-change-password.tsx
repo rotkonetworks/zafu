@@ -12,7 +12,7 @@ import { PopupPath } from '../paths';
 type Outcome = 'wrong' | 'same' | 'broke' | 'done';
 
 const NOTE: Record<Outcome | 'mismatch', [string, string]> = {
-  wrong: ["that doesn't match · please try again, slowly", 'text-warning'],
+  wrong: ["that doesn't match · please try again", 'text-warning'],
   mismatch: ["these don't match yet", 'text-warning'],
   same: ['that is the password already · please choose a new one', 'text-warning'],
   broke: ['something broke on our side, not yours. nothing was changed.', 'text-warning'],

@@ -77,7 +77,7 @@ export const usePenumbraTransaction = ({
           } else if (op.status === 'done') {
             finish(() => resolve({ txId: op.txId ?? 'unknown', memo: op.memo }));
           } else if (op.status === 'failed') {
-            finish(() => reject(new Error(op.error ?? 'transaction failed')));
+            finish(() => reject(new Error(op.error ?? "didn't go through · nothing was sent")));
           } else if (op.status === 'unknown') {
             // no fixed page timeout any more (it fired while people were still
             // approving); the tracker's sweep marks a silent op unknown instead
@@ -107,7 +107,7 @@ export const usePenumbraTransaction = ({
         };
         // sanity: request must satisfy its own guard (also keeps the import used)
         if (!isPenumbraSendRequest(request)) {
-          finish(() => reject(new Error('invalid send request')));
+          finish(() => reject(new Error("zafu couldn't read this send request")));
           return;
         }
         const shown = ownOutcome
@@ -117,7 +117,10 @@ export const usePenumbraTransaction = ({
         void Promise.all([recorded, shown])
           .then(() => chrome.runtime.sendMessage(request))
           .catch((err: unknown) => {
-            const error = err instanceof Error ? err : new Error('failed to reach wallet');
+            const error =
+              err instanceof Error
+                ? err
+                : new Error("zafu couldn't reach the wallet · please try again");
             void writeTxOp(opId, { status: 'failed', error: error.message });
             finish(() => reject(error));
           });

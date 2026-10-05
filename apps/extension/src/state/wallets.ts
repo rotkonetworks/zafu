@@ -226,7 +226,7 @@ export const createWalletsSlice =
         const { all, activeIndex } = get().wallets;
 
         if (all.length <= 1) {
-          throw new Error('Cannot remove the last wallet');
+          throw new Error('the last wallet stays');
         }
 
         if (index < 0 || index >= all.length) {

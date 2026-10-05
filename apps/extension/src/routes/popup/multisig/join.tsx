@@ -232,8 +232,8 @@ const MultisigJoinZafu = () => {
       for (const peerFvk of peerFvks) {
         if (peerFvk !== orchardFvk) {
           throw new Error(
-            `FVK mismatch: peer saw a different viewing key - ` +
-              `ours ends ...${orchardFvk.slice(-8)}, theirs ends ...${peerFvk.slice(-8)}`,
+            `the co-signers' viewing keys differ (ours ...${orchardFvk.slice(-8)}, ` +
+              `theirs ...${peerFvk.slice(-8)}) · nothing was saved`,
           );
         }
       }
@@ -757,7 +757,7 @@ const MultisigJoinZigner = () => {
         for (const peerFvk of peerFvksRef.current) {
           if (peerFvk !== ufvk) {
             throw new Error(
-              `FVK mismatch: ours ...${ufvk.slice(-8)}, theirs ...${peerFvk.slice(-8)}`,
+              `the co-signers' viewing keys differ (ours ...${ufvk.slice(-8)}, theirs ...${peerFvk.slice(-8)}) · nothing was saved`,
             );
           }
         }

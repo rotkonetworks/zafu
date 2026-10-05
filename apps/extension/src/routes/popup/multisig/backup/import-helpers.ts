@@ -68,7 +68,7 @@ export const readFileAsText = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error('failed to read file'));
+    reader.onerror = () => reject(new Error("this file didn't open"));
     reader.readAsText(file);
   });
 
@@ -77,7 +77,7 @@ export const readEnvelopeFromFile = async (file: File): Promise<FrostBackupEnvel
   const text = await readFileAsText(file);
   const env = parseEnvelopeJson(text);
   if (!env) {
-    throw new Error('not a valid FROST backup file');
+    throw new Error("this doesn't look like a multisig backup");
   }
   return env;
 };
@@ -89,7 +89,7 @@ export const importBackup = async (
 ): Promise<ImportSummary> => {
   const payload: FrostBackupPayload | null = await openBackup(envelope, passphrase);
   if (!payload) {
-    throw new Error('wrong passphrase or corrupted backup');
+    throw new Error("that passphrase doesn't open this backup");
   }
 
   const shares =

@@ -63,7 +63,7 @@ export const SettingsPassphrase = () => {
 
   const shown = phrase.length > 0;
   const hot = vault?.type === 'mnemonic';
-  const note = wrong ? "that doesn't match · please try again, slowly" : error;
+  const note = wrong ? "that doesn't match · please try again" : error;
 
   return (
     <SettingsScreen

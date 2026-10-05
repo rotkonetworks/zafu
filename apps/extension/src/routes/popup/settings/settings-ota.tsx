@@ -68,7 +68,7 @@ export const SettingsOta = () => {
       {record.feature_set.length > 0 ? (
         <p className='text-label text-fg-muted'>capabilities: {record.feature_set.join(', ')}</p>
       ) : (
-        <p className='text-label text-fg-muted'>no capabilities offered (fail-closed)</p>
+        <p className='text-label text-fg-muted'>nothing offered</p>
       )}
     </div>
   ) : (
@@ -135,7 +135,7 @@ export const SettingsOta = () => {
 
         {phase === SessionPhase.Error && (
           <p className='bg-red-500/10 p-2 text-label text-red-300'>
-            {session.error ?? 'ota session failed'}
+            {session.error ?? "the update session didn't finish"}
           </p>
         )}
 

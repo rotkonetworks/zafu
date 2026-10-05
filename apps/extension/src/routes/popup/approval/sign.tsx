@@ -169,7 +169,7 @@ export const SignApproval = () => {
       try {
         const resp = JSON.parse(raw);
         if (resp.type !== 'zid-resp' || !resp.signature || !resp.publicKey) {
-          throw new Error('invalid response format');
+          throw new Error("zafu couldn't read that answer · please scan again");
         }
 
         // share log is written by the service worker (sign-request.ts) after popup closes

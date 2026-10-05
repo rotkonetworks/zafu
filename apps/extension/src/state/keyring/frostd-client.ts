@@ -150,8 +150,8 @@ export class FrostdClient {
       });
     } catch {
       throw new Error(
-        `cannot reach the relay at ${this.host} - it may be down, or blocked ` +
-          `by your network. You can point at a different one under "advanced".`,
+        `the relay at ${this.host} isn't answering · it may be resting, or your network ` +
+          `keeps it out. another one can be set under "advanced".`,
       );
     }
 

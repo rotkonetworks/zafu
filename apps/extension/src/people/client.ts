@@ -9,7 +9,7 @@ import { useStore } from '../state';
 import { selectEffectiveKeyInfo } from '../state/keyring';
 import { requestEgressOptIn } from '../net/egress-opt-in';
 import { PEOPLE_RELAY } from '../config/people-relay';
-import { PEOPLE_MESSAGE, PEOPLE_STATUS_KEY, PEOPLE_WATCH_PORT } from './protocol';
+import { PEOPLE_MESSAGE, PEOPLE_STATUS_KEY, PEOPLE_WATCH_PORT, isRelayNotOn } from './protocol';
 import {
   onRoster,
   readInvites,
@@ -117,7 +117,7 @@ export const peopleAsk = async <T = unknown>(
   try {
     return await peopleCall<T>(op, args);
   } catch (e) {
-    if (!(e instanceof Error) || !e.message.includes('not allowed yet')) {
+    if (!isRelayNotOn(e)) {
       throw e;
     }
     if (!(await requestEgressOptIn(PEOPLE_RELAY))) {

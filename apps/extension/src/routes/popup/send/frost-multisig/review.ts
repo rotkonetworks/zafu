@@ -36,13 +36,13 @@ export const reviewSignRequest = async (
   if (!req.pcztHex) {
     return refuse(
       'host did not publish the PCZT bytes - everything shown here would be host-authored text bound to nothing',
-      'refusing to release a share against an unverifiable request',
+      "zafu keeps your share back · this request can't be checked",
     );
   }
   if (!ufvk) {
     return refuse(
       'this wallet has no viewing key on file, so the PCZT cannot be decoded',
-      'refusing to release a share against an unverifiable request',
+      "zafu keeps your share back · this request can't be checked",
     );
   }
   if (!fee.ok) {
@@ -63,7 +63,7 @@ export const reviewSignRequest = async (
   } catch (err) {
     return refuse(
       `could not parse the published PCZT: ${err instanceof Error ? err.message : 'parse failed'}`,
-      'refusing to release a share against an unverifiable request',
+      "zafu keeps your share back · this request can't be checked",
     );
   }
 };

@@ -924,7 +924,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           // build a PCZT (gh #17) then hand off to FrostAirgapSignFlow
           const result = await buildPczt(true);
           if (!result.pcztHex) {
-            throw new Error('PCZT build succeeded but pcztHex is empty - reload the extension');
+            throw new Error(
+              "zafu couldn't finish this send · nothing was sent, please reload zafu",
+            );
           }
           pcztMultisigRef.current = result;
           setStep('airgap-flow');
@@ -945,7 +947,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             .getState()
             .keyRing.getMultisigSecrets(activeZcashWallet!.vaultId);
           if (!secrets) {
-            throw new Error('failed to decrypt multisig keys - unlock wallet first');
+            throw new Error("the multisig keys didn't open · please unlock zafu and try again");
           }
           const result = await buildPczt(true);
           setStep('frost-room');
@@ -1160,7 +1162,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     runRef.current?.finish();
     frostAbortRef.current?.abort();
     frostAbortRef.current = null;
-    const reason = err instanceof Error ? err.message : 'failed to build transaction';
+    const reason =
+      err instanceof Error ? err.message : "zafu couldn't build this send · nothing was sent";
     void markPendingFailed(reason);
     setFormError(reason);
     setStep('error');
@@ -1267,7 +1270,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           const { version, messages } = parseCompactResponse(unwrapped);
           if (version !== SUPPORTED_COMPACT_RESPONSE_VERSION) {
             throw new Error(
-              `unsupported compact response version "${version}" (expected "${SUPPORTED_COMPACT_RESPONSE_VERSION}")`,
+              `zigner answered in a newer format (${version}, zafu reads ${SUPPORTED_COMPACT_RESPONSE_VERSION}) · please update zafu or zigner`,
             );
           }
 
@@ -1299,9 +1302,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           // the compact check above: a legacy response is only valid as the
           // answer to a legacy request.
           if (pcztRequestWasCompactRef.current) {
-            throw new Error(
-              'received a legacy full-PCZT response but this request was sent as compact',
-            );
+            throw new Error('zigner answered in an older format · please scan again');
           }
           const preluded =
             unwrapped.length >= 3 &&
@@ -1326,7 +1327,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         }
         zignerDeliverRef.current(signedPcztHex);
       } catch (err) {
-        const reason = err instanceof Error ? err.message : 'failed to reconstruct signed PCZT';
+        const reason =
+          err instanceof Error
+            ? err.message
+            : "zafu couldn't read the signed answer · nothing was sent";
         // Surface the REAL cause. Without this the merge/parse error was only
         // handed to the reject seam as a bare string, so it was neither logged
         // nor shown - every compact failure collapsed to the generic "failed to
@@ -1441,7 +1445,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         setShowSavePrompt(true);
       }
     } catch (err) {
-      const reason = err instanceof Error ? err.message : 'broadcast failed';
+      const reason =
+        err instanceof Error
+          ? err.message
+          : "the network didn't take this send · please look at home before trying again";
       void markPendingFailed(reason);
       setFormError(reason);
       setStep('error');
