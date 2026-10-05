@@ -7272,7 +7272,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           delegationStateJson: string;
           vanWitnessJson: string;
           voteJson: string;
-          submitAt: number;
         };
         const raw = JSON.parse(
           (await proveViaOffscreen({
@@ -7284,15 +7283,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               cv.vanWitnessJson,
               cv.voteJson,
               cv.network,
-              // stringified bigint over postMessage, same convention as the
-              // core send builders' amount/fee args.
-              String(cv.submitAt),
             ],
           })) as string,
         ) as {
           proposal_id: number;
           wire: unknown;
-          shares: unknown;
           commitment_bundle_json: string;
           next_delegation_state_json: string;
         };
@@ -7394,12 +7389,31 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
           return note;
         });
+        // The witness pool is the notes' own pool, never a default: a tree
+        // path from the other pool's tree is a root the proof cannot match.
+        // Voting notes are Ironwood (V3) only; the 0.12 delegation circuit
+        // rejects others, so refuse here before any tree work.
+        const notePools = [...new Set(orderedNotes.map(poolOf))];
+        if (notePools.length !== 1) {
+          throw new Error(
+            `get-merkle-witnesses: notes from ${notePools.join(' and ') || 'no'} pools; ` +
+              'a delegation bundle holds notes from one pool',
+          );
+        }
+        const snapshotPool = notePools[0]!;
+        if (snapshotPool !== 'ironwood') {
+          throw new Error(
+            `get-merkle-witnesses: ${snapshotPool} notes cannot be delegated; voting takes ironwood notes`,
+          );
+        }
+        if (witnessPool && witnessPool !== snapshotPool) {
+          throw new Error(
+            `get-merkle-witnesses: asked for ${witnessPool} witnesses for ${snapshotPool} notes`,
+          );
+        }
         const witnessClient = makeZcashClient(witnessServerUrl);
         // the snapshot height exactly: from the tree when it still retains that
         // checkpoint, else by a replay to it (voting only; spends never replay)
-        // voting notes are Ironwood/V3 only (the 0.12 delegation circuit
-        // rejects others), so that is the default snapshot pool
-        const snapshotPool = witnessPool ?? 'ironwood';
         const fromTree = await buildWitnesses(
           witnessClient,
           walletId,

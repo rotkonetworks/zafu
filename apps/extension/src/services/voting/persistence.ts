@@ -245,8 +245,108 @@ const loadVotingRoundRecordUnlocked = async (
 };
 
 /**
+ * One cast, kept from before its POST until its shares are out: the recovery
+ * bundle (share secrets; it rebuilds shares that carry the vote's choice),
+ * the bundle's next delegation state, and how far it got. All of it sits in
+ * one identity-bound sealed box, so neither the choice nor which tx is this
+ * wallet's vote is readable from storage.
+ */
+export interface VoteCastRecord {
+  proposalId: number;
+  /** the signed POST /cast-vote body: re-sent as is, never rebuilt */
+  wire: string;
+  commitmentBundleJson: string;
+  nextDelegationStateJson: string;
+  /** set once a vote server reported the cast tx */
+  txHash?: string;
+  /** set once the cast is included: where it landed in the commitment tree */
+  position?: { height: number; vcPosition: number; vanPosition: number };
+  /** set once the helper shares went out */
+  sharesQueued?: boolean;
+}
+
+const castKey = (walletId: string, roundId: string, proposalId: number): string =>
+  `${walletId}:${roundId}:${proposalId}`;
+
+const getCastStorage = async (
+  local: ExtensionStorage<LocalStorageState>,
+): Promise<Record<string, string>> =>
+  // votingCasts is not in the schema (like votingHotkeys)
+  ((await (local as any).get('votingCasts')) as Record<string, string> | undefined) ?? {};
+
+const saveVoteCastUnlocked = async (
+  local: ExtensionStorage<LocalStorageState>,
+  session: ExtensionStorage<SessionStorageState>,
+  walletId: string,
+  roundId: string,
+  cast: VoteCastRecord,
+): Promise<void> => {
+  const sessionKeyJson = await session.get('passwordKey');
+  if (!sessionKeyJson) {
+    throw new Error('keyring locked - cannot save the vote');
+  }
+  const key = await Key.fromJson(sessionKeyJson);
+  // P1: the record's identity is inside the sealed plaintext (see saveVotingHotkey)
+  const box = JSON.stringify(
+    (await key.seal(JSON.stringify({ v: 1, walletId, roundId, cast }))).toJson(),
+  );
+  const storage = await getCastStorage(local);
+  storage[castKey(walletId, roundId, cast.proposalId)] = box;
+  await (local as any).set('votingCasts', storage);
+};
+
+const loadVoteCastUnlocked = async (
+  local: ExtensionStorage<LocalStorageState>,
+  session: ExtensionStorage<SessionStorageState>,
+  walletId: string,
+  roundId: string,
+  proposalId: number,
+): Promise<VoteCastRecord | null> => {
+  const sessionKeyJson = await session.get('passwordKey');
+  if (!sessionKeyJson) {
+    throw new Error('keyring locked - cannot load the vote');
+  }
+  const boxJson = (await getCastStorage(local))[castKey(walletId, roundId, proposalId)];
+  if (!boxJson) {
+    return null;
+  }
+  const key = await Key.fromJson(sessionKeyJson);
+  const opened = await key.unseal(Box.fromJson(JSON.parse(boxJson)));
+  if (!opened) {
+    throw new Error('failed to decrypt the stored vote (tamper or wrong key)');
+  }
+  const parsed = JSON.parse(opened) as {
+    walletId: string;
+    roundId: string;
+    cast?: VoteCastRecord;
+  };
+  if (
+    parsed.walletId !== walletId ||
+    parsed.roundId !== roundId ||
+    parsed.cast?.proposalId !== proposalId ||
+    typeof parsed.cast.commitmentBundleJson !== 'string' ||
+    typeof parsed.cast.wire !== 'string'
+  ) {
+    throw new Error('stored vote identity mismatch - blob relocated across keys');
+  }
+  return parsed.cast;
+};
+
+/** Drop one cast's record (refused on chain, or done with). */
+export const deleteVoteCast = async (
+  local: ExtensionStorage<LocalStorageState>,
+  walletId: string,
+  roundId: string,
+  proposalId: number,
+): Promise<void> => {
+  const storage = await getCastStorage(local);
+  delete storage[castKey(walletId, roundId, proposalId)];
+  await (local as any).set('votingCasts', storage);
+};
+
+/**
  * Purge a voting round record after the reveal window closes.
- * Deletes both hotkey and delegation state.
+ * Deletes the hotkey, the delegation state and the round's sealed casts.
  */
 export const purgeVotingRound = async (
   local: ExtensionStorage<LocalStorageState>,
@@ -257,6 +357,12 @@ export const purgeVotingRound = async (
   const key_str = storageKey(walletId, roundId);
   delete storage[key_str];
   await setVotingStorage(local, storage);
+  const casts = await getCastStorage(local);
+  const prefix = `${walletId}:${roundId}:`;
+  for (const k of Object.keys(casts).filter(k => k.startsWith(prefix))) {
+    delete casts[k];
+  }
+  await (local as any).set('votingCasts', casts);
 };
 
 // each seals or opens with the session key: key users (state/keyring-lock)
@@ -266,3 +372,7 @@ export const saveDelegationState: typeof saveDelegationStateUnlocked = (...a) =>
   keyUse(() => saveDelegationStateUnlocked(...a));
 export const loadVotingRoundRecord: typeof loadVotingRoundRecordUnlocked = (...a) =>
   keyUse(() => loadVotingRoundRecordUnlocked(...a));
+export const saveVoteCast: typeof saveVoteCastUnlocked = (...a) =>
+  keyUse(() => saveVoteCastUnlocked(...a));
+export const loadVoteCast: typeof loadVoteCastUnlocked = (...a) =>
+  keyUse(() => loadVoteCastUnlocked(...a));

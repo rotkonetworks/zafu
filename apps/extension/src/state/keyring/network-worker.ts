@@ -2120,6 +2120,8 @@ export const finalizeDelegationInWorker = async (a: {
   return callWorker('zcash', 'finalize-delegation', a);
 };
 
+/** ZKP #2 + signed cast. Callers go through services/voting/cast.ts, which
+ *  seals the bundle before anything is sent. */
 export const castVoteHotInWorker = async (a: {
   network: string;
   hotkeySecretHex: string;
@@ -2127,14 +2129,16 @@ export const castVoteHotInWorker = async (a: {
   delegationStateJson: string;
   vanWitnessJson: string;
   voteJson: string;
-  submitAt: number;
 }): Promise<{
   proposalId: number;
   /** POST /shielded-vote/v1/cast-vote body */
   wire: string;
-  /** recovery bundle: persist it, shares are rebuilt from it once the vote lands */
+  /** recovery bundle (share secrets, can rebuild shares that carry the
+   *  choice): sealed storage only; shares are rebuilt from it once the vote
+   *  lands */
   commitmentBundleJson: string;
-  /** the bundle's delegation state for its next cast (authority bit cleared) */
+  /** the bundle's delegation state for its next cast (authority bit
+   *  cleared); store it only once the cast is on chain */
   nextDelegationStateJson: string;
 }> => {
   return callWorker('zcash', 'cast-vote-hot-wire', a);

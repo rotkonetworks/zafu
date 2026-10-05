@@ -3,12 +3,10 @@
 export const build_delegation_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number) => [number, number, number, number];
 export const build_vote_commitment_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
 export const build_vote_shares_from_recovery: (a: number, b: number, c: bigint, d: bigint) => [number, number, number, number];
-export const build_vote_shares_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
-export const cast_vote_hot_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
+export const cast_vote_hot_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
 export const finalize_delegation: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
 export const generate_voting_hotkey: (a: number, b: number) => [number, number, number, number];
 export const pir_fetch_imt_proofs: (a: number, b: number, c: number, d: number, e: any) => any;
-export const selftest_prove_delegation: () => [number, number];
 export const voting_wasm_init_panic_hook: () => void;
 export const rustsecp256k1_v0_10_0_context_create: (a: number) => number;
 export const rustsecp256k1_v0_10_0_context_destroy: (a: number) => void;

@@ -101,6 +101,52 @@ The shielded-voting module ships as its own blob, lazy-loaded by
 (`zcash-build-parallel.ts`, proofs). It is NOT built from `crates/zcash-wasm`;
 refreshing zafu-wasm leaves it untouched, and vice versa.
 
+### 2026-10-05 (2) - post-merge review fixes
+
+- source repo: zcli, branch `fix/voting-review`, rev `2e50b9c` (on master
+  `e3b3522`): crate `crates/voting-wasm`, `--features parallel`, built with
+  `crates/voting-wasm/build-wasm.sh` (which now runs the `wasm-opt` step
+  below and both local patches itself).
+- why: `cast_vote_hot_wire` returned helper shares built from a guessed tree
+  position (`vc_tree_position` is only known once the cast is included), so
+  sending them dropped the vote from the tally. A testnet snapshot past NU7
+  (4,465,026) failed at PCZT build with a misleading branch mismatch.
+- exports: `cast_vote_hot_wire` returns `{ proposal_id, wire,
+commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
+  takes no `submit_at`; `build_vote_shares_wire` is gone, so
+  `build_vote_shares_from_recovery` is the only share path;
+  `selftest_prove_delegation` is no longer in release blobs (zcli
+  `--features parallel,selftest` for a timing build). `build_delegation_pczt`
+  accepts any branch with the Ironwood pool (NU6.3, NU7) and always builds
+  under TX1 v1's V6 / NU6.3 profile. The rest is unchanged.
+- new file `wait_async_worker.js`: where `Atomics.waitAsync` is missing
+  (Firefox) js-sys's futures executor waits through a helper worker. The
+  stock glue starts it from a blob: URL, which the extension CSP refuses; the
+  glue now loads this shipped copy of the same script instead.
+- recipe (RUSTFLAGS unset):
+
+      CARGO_TARGET_DIR=... WASM_OPT=/nix/store/azhmf1il8da9pps80bk2f4l6ql6bgfg7-binaryen-130/bin/wasm-opt \
+        crates/voting-wasm/build-wasm.sh <out dir>
+
+  then copy `voting_wasm.js`, `voting_wasm.d.ts`, `voting_wasm_bg.wasm`,
+  `voting_wasm_bg.wasm.d.ts`, `wait_async_worker.js`. The rayon snippet is
+  unchanged (`wasm-bindgen-rayon-38edf6e439f6d70d`) and kept as is.
+
+- toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
+  wasm-bindgen CLI 0.2.126, wasm-opt (binaryen) 130.
+- size: post `-Oz` 6,384,567 bytes.
+- sha256(voting_wasm_bg.wasm) =
+  1e13e0ee7379b779e762f15058cbb9d1a3613dee289970618422ec3b4fc77cdd
+- sha256(voting_wasm.js) =
+  2809ce92892bbd208a96ae3a34c6552d0bea74ae16376d07685047db252e6404
+  (both reproduced byte for byte from a second build at the rev above).
+- shared imported memory: `(memory $mimport$0 25 32768 shared)`.
+- tests: `cargo test --release -p zcash_voting -p voting-wasm` 114 passed;
+  `local_chain_e2e` against a local svoted v1.6.1-rc.5 (now also reading
+  each cast's position from its tx hash) finalized its tally; in node this
+  blob rebuilds the 32 shares that chain's helper accepted and builds a
+  delegation PCZT past testnet NU7.
+
 ### 2026-10-05 - voting-circuits 0.12 / vote-sdk 1.6 (prod zvote-1)
 
 - source repo: zcli, branch `fix/voting-0.12`, rev `fd8d74b` (on master
