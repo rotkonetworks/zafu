@@ -473,16 +473,25 @@ const pairedAddLines = (
   at: (s: Stage) => number | undefined,
 ): StepLine[] => {
   const r = (s?: string) => (s && t.rune ? t.rune(BigInt(s)) : '');
-  const head = [
-    line(0, 'fund', 'shield out to your lp address', f.fundZat ? `${z(f.fundZat)} zec` : undefined),
-    line(1, 'settle', 'one block to settle', 'zcash confirmation'),
-    line(
-      2,
-      'rune',
-      'rune half sent',
-      `${r(f.runeBase)} rune from ${t.thor ?? 'your rune address'}`,
-    ),
-  ];
+  // a take-back started from the position: this page sent no halves, so none are listed
+  const standalone = !f.fundTxid && !f.runeBase;
+  const head = standalone
+    ? []
+    : [
+        line(
+          0,
+          'fund',
+          'shield out to your lp address',
+          f.fundZat ? `${z(f.fundZat)} zec` : undefined,
+        ),
+        line(1, 'settle', 'one block to settle', 'zcash confirmation'),
+        line(
+          2,
+          'rune',
+          'rune half sent',
+          `${r(f.runeBase)} rune from ${t.thor ?? 'your rune address'}`,
+        ),
+      ];
   const waiting: StepLine = {
     t: 'waiting for the other side',
     d: 'the rune half is in · it waits for the zec half',
@@ -493,16 +502,24 @@ const pairedAddLines = (
     const back = f.stage === 'shield' || f.stage === 'shielded';
     return [
       ...head.map(l => ({ ...l, state: 'done' as const })),
-      f.cancelled
-        ? { t: 'cancelled · the zec half was not sent', at: at('recover'), state: 'turned' }
-        : {
-            t: 'thorchain returned the zec half',
-            d: f.reason ? `its reason: ${f.reason}` : undefined,
-            at: at('refunded'),
-            state: 'turned',
-          },
+      ...(standalone
+        ? []
+        : [
+            f.cancelled
+              ? {
+                  t: 'cancelled · the zec half was not sent',
+                  at: at('recover'),
+                  state: 'turned' as const,
+                }
+              : {
+                  t: 'thorchain returned the zec half',
+                  d: f.reason ? `its reason: ${f.reason}` : undefined,
+                  at: at('refunded'),
+                  state: 'turned' as const,
+                },
+          ]),
       {
-        t: 'rune half taken back',
+        t: standalone ? 'waiting half taken back' : 'rune half taken back',
         d: 'from your rune address · less the network fee',
         at: at('recovering'),
         state:

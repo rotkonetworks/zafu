@@ -209,6 +209,27 @@ describe('a two-sided add in flight', () => {
   });
 });
 
+describe('a waiting half taken back from the position', () => {
+  it('lists only what this page does: the take-back, then the shield', () => {
+    let f = startFlight('add2', 0n, RECOVER_MEMO, {
+      thor: THOR1,
+      stage: 'recover',
+      runeTxid: 'PENDING',
+      outZat: '50000',
+    });
+    expect(needs(f)).toBe('recover');
+    expect(stepLines(f, T).map(l => l.t)).toEqual(['waiting half taken back']);
+    f = advance(sent(sending(f), 'REC'), {
+      paired: { units: 0n, pendingRune: 0n, pendingAsset: 0n },
+    });
+    expect(f.stage).toBe('shield');
+    expect(stepLines(f, T).map(l => l.t)).toEqual([
+      'waiting half taken back',
+      'shielded back to main pocket',
+    ]);
+  });
+});
+
 describe('a two-sided take-out in flight', () => {
   const out = (as: 'both' | 'zec' | 'rune') =>
     startFlight('withdraw2', 0n, pairedWithdrawMemo(10_000, as), {

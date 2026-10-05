@@ -188,6 +188,8 @@ export const ASK_CAP_LINE =
   "thorchain's least amount for a take-out is past what zafu pays for one · nothing was sent · please try again later";
 export const CANCEL_LATE_LINE =
   'this step had already gone out, so it can no longer be cancelled · it is tracked here';
+export const HALF_WAITING_LINE =
+  'a half is still waiting in the pool · please take it back from your position first · nothing was sent';
 export const BUSY_LINE = 'an add or take-out is already on its way · please finish it first';
 
 export const lpStore = createStore<LpState>()(() => initial);
@@ -1020,6 +1022,11 @@ export const startAdd2 = async () => {
       error:
         'this is more than this pocket holds shielded, with the network fees · nothing was sent',
     });
+    return;
+  }
+  // a half already waiting would pair with this add's zec, and this rune would be left waiting
+  if (runeRead?.paired && (runeRead.paired.pendingRune > 0n || runeRead.paired.pendingAsset > 0n)) {
+    set({ error: HALF_WAITING_LINE });
     return;
   }
   const half = runeFor(thor.pool, a);

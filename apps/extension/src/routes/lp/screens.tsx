@@ -1140,6 +1140,7 @@ export const TwoSidedScreen = ({ onAdd }: { onAdd: () => void }) => {
       mayStop: mayStopRune(s),
     })),
   );
+  const now = useNow();
   const rune = s.half;
   const px = s.zecUsd && s.thor ? { zec: s.zecUsd, rune: s.thor.runeUsd } : undefined;
   const both = s.thor && a && rune ? quotePaired(s.thor.pool, a, rune, px) : undefined;
@@ -1207,7 +1208,10 @@ export const TwoSidedScreen = ({ onAdd }: { onAdd: () => void }) => {
   const shortRune = r && s.need !== undefined && r.balance < s.need ? s.need - r.balance : 0n;
   const over = !!a && s.shielded !== undefined && a + ADD_FEES > s.shielded;
   const paused = s.thor?.addPaused;
+  const waiting = !!r?.paired && (r.paired.pendingRune > 0n || r.paired.pendingAsset > 0n);
+  const age = s.thor ? Math.max(0, Math.round((now - s.thor.at) / 1000)) : 0;
   const can =
+    !waiting &&
     !!s.thor &&
     !!a &&
     !!rune &&
@@ -1290,6 +1294,19 @@ export const TwoSidedScreen = ({ onAdd }: { onAdd: () => void }) => {
           <span className='flex-1 text-xs text-fg-muted'>
             {s.runeErr ?? 'reading your rune address'}
           </span>
+        ) : waiting ? (
+          <>
+            <span className='size-2 shrink-0 bg-warn' />
+            <span className='flex-1 text-[13px] text-fg'>a half is still waiting in the pool</span>
+            <Button
+              variant='secondary'
+              size='sm'
+              className='h-[30px] text-zigner-gold'
+              onClick={() => show('position')}
+            >
+              see it
+            </Button>
+          </>
         ) : shortRune ? (
           <>
             <span className='size-2 shrink-0 bg-warn' />
@@ -1315,7 +1332,9 @@ export const TwoSidedScreen = ({ onAdd }: { onAdd: () => void }) => {
         ) : (
           <>
             <span className='size-1.5 shrink-0 animate-pulse bg-green motion-reduce:animate-none' />
-            <span className='flex-1 text-xs text-fg-muted'>at the pool's ratio, read just now</span>
+            <span className='flex-1 text-xs text-fg-muted'>
+              at the pool's ratio, read {age} s ago
+            </span>
             <span className='text-xs text-fg-dim'>
               keeps {runeText(reserveOf(r.fee))} rune for fees
             </span>

@@ -40,7 +40,7 @@ import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { create } from 'zustand';
 import { AllSlices, initializeStore } from '../../state';
 import { changeLp, exportLpRune, readLpPocket } from '../../lp/store';
-import { lpStore, mayStopRune, refresh, refreshRune } from './store';
+import { HALF_WAITING_LINE, lpStore, mayStopRune, refresh, refreshRune, startAdd2 } from './store';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, unknown> }).mock;
@@ -127,5 +127,46 @@ describe('a pocket that chose rune', () => {
     await refreshRune();
     expect(urls).toEqual([]);
     view.on.add('thorchain');
+  });
+});
+
+describe('an add while a half already waits', () => {
+  it('is refused, so the new zec never pairs with the old half', async () => {
+    await changeLp(() => ({
+      'vault-a': { index: 21, address: LP, rune: { index: 3, on: true, address: THOR1 } },
+    }));
+    const pool = { asset: 2_349_956_151n, rune: 4_115_368_117_505n, units: 3_902_179_720_724n };
+    lpStore.setState({
+      rune: { index: 3, on: true, address: THOR1 },
+      amt: '0.01',
+      shieldedZat: 100_000_000n,
+      thor: {
+        pool: { ...pool, status: 'Available', tradingHalted: false, pendingRune: 0n, zecUsd: 1 },
+      } as never,
+      runeRead: {
+        at: 0,
+        address: THOR1,
+        balance: 1_000_000_000_000n,
+        fee: 2_000_000n,
+        account: { accountNumber: '1', sequence: '0' },
+        paired: {
+          units: 0n,
+          pendingRune: 173_400_000n,
+          pendingAsset: 0n,
+          runeAddress: THOR1,
+          assetAddress: LP,
+          depositAsset: 0n,
+          depositRune: 0n,
+          lastAddHeight: 1,
+          luviGrowthPct: 0,
+        },
+      },
+      flight: undefined,
+      error: undefined,
+    });
+    await startAdd2();
+    expect(lpStore.getState().error).toBe(HALF_WAITING_LINE);
+    expect((await readLpPocket('vault-a'))?.flight).toBeUndefined();
+    expect(worker.signThorDepositInWorker).not.toHaveBeenCalled();
   });
 });
