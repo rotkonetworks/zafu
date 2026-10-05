@@ -179,10 +179,10 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
 
 ## 2026-10-05 rebuild (4) - NoteTree.recover_shard, NoteTree.carry_marks
 
-- source repo: zcli, branch `feat/note-tree-shard-recovery`, rev `0347f3f`
-  (zcli master `113f1b0` plus one commit, zcli PR #22). Not on master yet:
-  it is a branch build until that PR merges, after which this entry should name the
-  merge commit (rebuild from it and compare the sha below).
+- source repo: zcli master, merge commit `872094d` (zcli PR #22), built from its
+  branch head `0347f3f`. The merge commit's `crates/zcash-wasm`, `Cargo.toml` and
+  `Cargo.lock` are byte-identical to `0347f3f` (`git diff 0347f3f 872094d` over those
+  paths is empty), so the sha below holds for the merge commit.
 - new (public data only, nothing takes a key):
   `NoteTree.recover_shard(index, first_position, blocks, positions)` marks
   lost notes by replaying their own 2^16-leaf shard; the replayed shard
