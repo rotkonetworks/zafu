@@ -46,7 +46,7 @@ import {
   IdentityKey,
 } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { getDelegationTokenMetadata } from '@penumbrafi/wasm/stake';
-import { toPlainMessage } from '@bufbuild/protobuf';
+import { toPlainMessage, type PlainMessage } from '@bufbuild/protobuf';
 import { getAssetIdFromGasPrices } from '@penumbra-zone/getters/compact-block';
 import { getSpendableNoteRecordCommitment } from '@penumbra-zone/getters/spendable-note-record';
 import { getSwapRecordCommitment } from '@penumbra-zone/getters/swap-record';
@@ -99,6 +99,53 @@ const U64_MAX = 0xffffffffffffffffn;
 
 /** sync retries wait 5s, doubling to 2 minutes, for as long as a window is open */
 const SYNC_RETRY_START_MS = 5_000;
+/**
+ * How long a unary call before the block stream (the stored-tree check, the
+ * first height, a fresh wallet's epoch and params) may take. A node that takes
+ * the connection and never answers would otherwise pin the run, and a resume
+ * would wait on it for the life of the worker.
+ */
+export const PRE_STREAM_TIMEOUT_MS = 30_000;
+/** pause before the second anchor a mismatch needs before anything is wiped */
+export const SECOND_ANCHOR_DELAY_MS = 3_000;
+
+/**
+ * `call`, ended by the run's abort or after `ms`: the run settles even when the
+ * request does not. The request gets the same signal and timeout (connect
+ * cancels it); the race covers a transport that ignores them.
+ */
+const bounded = <T>(
+  call: (opts: { signal: AbortSignal; timeoutMs: number }) => Promise<T>,
+  signal: AbortSignal,
+  what: string,
+  ms = PRE_STREAM_TIMEOUT_MS,
+): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    signal.throwIfAborted();
+    const onAbort = () => reject(signal.reason);
+    const timer = setTimeout(() => reject(new Error(`${what}: no answer in ${ms / 1000}s`)), ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+    call({ signal, timeoutMs: ms })
+      .then(resolve, reject)
+      .finally(() => {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', onAbort);
+      });
+  });
+
+/** a wait that ends early (rejecting) on the run's abort */
+const pause = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 const SYNC_RETRY_MAX_MS = 120_000;
 
 const POSITION_STATES: PositionState[] = [
@@ -143,6 +190,13 @@ export class BlockProcessor implements BlockProcessorInterface {
   private checkpointAhead = false;
   /** the stored tree was compared with the chain once (see checkStoredTree) */
   private treeChecked = false;
+  /**
+   * The node has confirmed it serves this database's chain. The owner sets it
+   * false for services started on a stored chain id, and true once the chain
+   * check confirms it. A stored tree is never wiped before then: an anchor
+   * from another chain disagrees with every tree.
+   */
+  public chainConfirmed = true;
   /** the last failure logged, so a node that stays down prints one line, not one per try */
   private lastFailure: string | undefined;
   /** a storage failure ended the loop: sync() starts nothing on this processor again */
@@ -399,9 +453,14 @@ export class BlockProcessor implements BlockProcessorInterface {
     // a wallet stored by an older build may already hold a tree the chain
     // never had (blocks inserted twice); read it again from its start
     if (fullSyncHeight !== undefined && !this.treeChecked) {
-      const verdict = await this.checkStoredTree(fullSyncHeight);
+      const verdict = await this.checkStoredTree(fullSyncHeight, signal);
       if (verdict === 'ok') {
         this.treeChecked = true;
+      } else if (verdict === 'mismatch' && !this.chainConfirmed) {
+        // checked again by a later run, once the chain id is confirmed
+        console.warn(
+          '[sync] the stored tree differs from the node, which has not confirmed its chain id yet: kept',
+        );
       } else if (verdict === 'mismatch') {
         await this.rescanFromStart(fullSyncHeight);
         fullSyncHeight = undefined;
@@ -425,7 +484,12 @@ export class BlockProcessor implements BlockProcessorInterface {
     let latestKnownBlockHeight = await backOff(
       async () => {
         signal.throwIfAborted();
-        const latest = await this.querier.tendermint.latestBlockHeight();
+        // shared with other callers, so it takes no signal: raced instead
+        const latest = await bounded(
+          () => this.querier.tendermint.latestBlockHeight(),
+          signal,
+          'latest block height',
+        );
         if (!latest) {
           throw new Error('Unknown latest block height');
         }
@@ -447,8 +511,14 @@ export class BlockProcessor implements BlockProcessorInterface {
       // One of the neccessary steps here to seed the database with the first epoch
       // is a one-time request to fetch the epoch for the corresponding frontier
       // block height from the full node, and save it to storage.
-      const remoteEpoch = await this.querier.sct.epochByBlockHeight(
-        new EpochByHeightRequest({ height: currentHeight }),
+      const remoteEpoch = await bounded(
+        opts =>
+          this.querier.sct.epochByBlockHeight(
+            new EpochByHeightRequest({ height: currentHeight }),
+            opts,
+          ),
+        signal,
+        'epoch by height',
       );
 
       if (remoteEpoch.epoch) {
@@ -463,7 +533,7 @@ export class BlockProcessor implements BlockProcessorInterface {
 
       // Pull the app parameters from the full node, which other parameter setting (gas prices
       // for instance) will be derived from, rather than making additional network requests.
-      const appParams = await this.querier.app.appParams();
+      const appParams = await bounded(opts => this.querier.app.appParams(opts), signal, 'app params');
       await this.persistChainParams(appParams, currentHeight);
 
       // Finally, persist the frontier to IndexedDB. Services save it as they
@@ -500,7 +570,11 @@ export class BlockProcessor implements BlockProcessorInterface {
       // missing - once repaired, later syncs skip the fetch, and a fresh wallet
       // (which already ran the isFreshWallet branch above) does not re-fetch.
       if (!fmd || !storedApp?.sctParams) {
-        const freshAppParams = await this.querier.app.appParams();
+        const freshAppParams = await bounded(
+          opts => this.querier.app.appParams(opts),
+          signal,
+          'app params',
+        );
         await this.persistChainParams(freshAppParams, currentHeight);
         console.debug(
           '[sync] chain params repaired - sct:',
@@ -920,34 +994,53 @@ export class BlockProcessor implements BlockProcessorInterface {
    * a tree with blocks inserted twice, or positions counted from the wrong
    * place, fails this check.
    *
-   * 'unknown' (the node did not answer, or has no anchor for that height) is
-   * never taken for a mismatch: only a definite answer that disagrees starts
-   * a rescan.
+   * 'unknown' (the node did not answer in time, or has no anchor for that
+   * height) is never taken for a mismatch. The anchor is not proven, so one
+   * answer that disagrees is not enough either: a mismatch needs a second
+   * answer, asked again after a pause, that gives the same anchor.
    */
-  private async checkStoredTree(height: bigint): Promise<'ok' | 'mismatch' | 'unknown'> {
+  private async checkStoredTree(
+    height: bigint,
+    signal: AbortSignal,
+  ): Promise<'ok' | 'mismatch' | 'unknown'> {
     // a snapshot flush stored before the fix names no real height
     if (height === U64_MAX) {
       return 'mismatch';
     }
-    let remote: MerkleRoot;
-    let local: MerkleRoot;
-    try {
-      remote = await this.querier.cnidarium.fetchRemoteRoot(height);
-      local = this.viewServer.getSctRoot();
-    } catch (e) {
-      console.debug('[sync] stored tree not checked:', errText(e));
+    const anchor = async (): Promise<MerkleRoot | undefined> => {
+      try {
+        const r = await bounded(
+          opts => this.querier.cnidarium.fetchRemoteRoot(height, opts),
+          signal,
+          'stored tree check',
+        );
+        return r.inner.length ? r : undefined;
+      } catch (e) {
+        if (signal.aborted) {
+          throw e;
+        }
+        console.debug('[sync] stored tree not checked:', errText(e));
+        return undefined;
+      }
+    };
+    const remote = await anchor();
+    if (!remote) {
       return 'unknown';
     }
-    if (!remote.inner.length) {
-      return 'unknown';
-    }
+    const local = this.viewServer.getSctRoot();
     if (remote.equals(local)) {
       console.debug(`[sync] the stored tree at ${height} is the chain's`);
       return 'ok';
     }
+    await pause(SECOND_ANCHOR_DELAY_MS, signal);
+    const again = await anchor();
+    if (!again?.equals(remote)) {
+      console.warn(`[sync] the node's anchor at ${height} differs from ours once, not twice: kept`);
+      return 'unknown';
+    }
     console.warn(
       `[sync] the stored tree at ${height} is not the chain's ` +
-        `(local ${uint8ArrayToHex(local.inner)}, chain ${uint8ArrayToHex(remote.inner)}); ` +
+        `(local ${uint8ArrayToHex(local.inner)}, chain ${uint8ArrayToHex(remote.inner)}, twice); ` +
         'reading the chain again from the start',
     );
     return 'mismatch';
@@ -961,9 +1054,39 @@ export class BlockProcessor implements BlockProcessorInterface {
    * (`walletCreationBlockHeight`). Nothing here is the user's own: notes,
    * swaps, history and positions all come back from the chain.
    */
+  /**
+   * Clear everything this wallet derived from the chain, but keep what it did
+   * not: the asset metadata (the registry's, which the node never re-serves for
+   * IBC assets) and the registry version it was seeded at, so balances keep
+   * their names and decimals through the rescan.
+   */
+  private async clearChainData(): Promise<void> {
+    const assets: Metadata[] = [];
+    for await (const m of this.indexedDb.iterateAssetsMetadata()) {
+      assets.push(m);
+    }
+    // the registry version lives in a store the interface does not expose
+    const raw = (
+      this.indexedDb as unknown as {
+        db?: {
+          get(store: string, key: string): Promise<unknown>;
+          put(store: string, value: unknown, key: string): Promise<unknown>;
+        };
+      }
+    ).db;
+    const version = await raw?.get('REGISTRY_VERSION', 'commit').catch(() => undefined);
+    await this.indexedDb.clear();
+    for (const m of assets) {
+      await this.indexedDb.saveAssetsMetadata(toPlainMessage(m) as Required<PlainMessage<Metadata>>);
+    }
+    if (version !== undefined) {
+      await raw?.put('REGISTRY_VERSION', version, 'commit').catch(() => undefined);
+    }
+  }
+
   private async rescanFromStart(height: bigint): Promise<void> {
     console.warn(`[sync] rescanning from the start; the stored height was ${height}`);
-    await this.indexedDb.clear();
+    await this.clearChainData();
     this.unflushed = true;
     await this.viewServer.resetTreeToStored();
     this.unflushed = false;

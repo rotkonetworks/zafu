@@ -18,6 +18,7 @@ import { BlockProcessor } from './block-processor';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { MerkleRoot } from '@penumbra-zone/protobuf/penumbra/crypto/tct/v1/tct_pb';
+import { Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 
 type BlockProcessorDeps = ConstructorParameters<typeof BlockProcessor>[0];
 
@@ -35,8 +36,21 @@ const tick = () =>
     setTimeout(r, 0);
   });
 
-const makeChain = (start: { height: bigint | undefined; tree: bigint[] }) => {
-  const db = { height: start.height, tree: [...start.tree], cleared: 0, failSaves: 0 };
+interface Node {
+  /** the anchor the node gives at h (the chain's own by default) */
+  anchor?: (h: bigint, call: number) => Promise<MerkleRoot>;
+}
+
+const makeChain = (start: { height: bigint | undefined; tree: bigint[] }, node: Node = {}) => {
+  const db = {
+    height: start.height,
+    tree: [...start.tree],
+    cleared: 0,
+    failSaves: 0,
+    assets: [new Metadata({ display: 'transfer/channel-2/uusdc', symbol: 'USDC' })],
+    registry: 'abc123' as unknown,
+  };
+  let anchorCalls = 0;
   let memory = [...start.tree];
 
   const viewServer = {
@@ -73,7 +87,24 @@ const makeChain = (start: { height: bigint | undefined; tree: bigint[] }) => {
       db.cleared++;
       db.tree = [];
       db.height = undefined;
+      db.assets = [];
+      db.registry = undefined;
       return Promise.resolve();
+    },
+    iterateAssetsMetadata: async function* () {
+      yield* [...db.assets];
+    },
+    saveAssetsMetadata: (m: unknown) => {
+      db.assets.push(new Metadata(m as Metadata));
+      return Promise.resolve();
+    },
+    // the storage class's own idb handle, where the registry version lives
+    db: {
+      get: () => Promise.resolve(db.registry),
+      put: (_store: string, v: unknown) => {
+        db.registry = v;
+        return Promise.resolve();
+      },
     },
     addEpoch: () => Promise.resolve(),
     clearValidatorInfos: () => Promise.resolve(),
@@ -85,7 +116,10 @@ const makeChain = (start: { height: bigint | undefined; tree: bigint[] }) => {
   const querier = {
     // far ahead: no block here is "new", so nothing flushes on its own
     tendermint: { latestBlockHeight: () => Promise.resolve(1_000_000n) },
-    cnidarium: { fetchRemoteRoot: (h: bigint) => Promise.resolve(rootOf(chainAt(h))) },
+    cnidarium: {
+      fetchRemoteRoot: (h: bigint) =>
+        node.anchor ? node.anchor(h, anchorCalls++) : Promise.resolve(rootOf(chainAt(h))),
+    },
     stake: {
       allValidatorInfos: async function* () {
         /* none */
@@ -218,14 +252,61 @@ describe('BlockProcessor resume', () => {
     processor.stop('test done');
   });
 
-  it('a stored tree the chain never had is read again from the start', async () => {
-    // an older build doubled blocks 3 and 4, then flushed at 6
-    const corrupt = [0n, 1n, 2n, 3n, 4n, 3n, 4n, 5n, 6n];
+  // an older build doubled blocks 3 and 4, then flushed at 6
+  const corrupt = [0n, 1n, 2n, 3n, 4n, 3n, 4n, 5n, 6n];
+
+  it('a stored tree the chain never had is read again from the start, keeping the assets', async () => {
     const { processor, db, memory } = makeChain({ height: 6n, tree: corrupt });
     void processor.sync().catch(() => undefined);
 
-    await caughtUp(memory);
+    await vi.waitFor(() => expect(memory()[memory().length - 1]).toBe(TIP), { timeout: 10_000 });
     expect(db.cleared).toBe(1);
+    expect(memory()).toEqual(chainAt(TIP));
+    // registry metadata and its version are not chain data: kept through the wipe
+    expect(db.assets.map(a => a.symbol)).toEqual(['USDC']);
+    expect(db.registry).toBe('abc123');
+    processor.stop('test done');
+  });
+
+  it('a mismatch before the node confirmed the chain id wipes nothing', async () => {
+    const { processor, db, memory } = makeChain({ height: 6n, tree: corrupt });
+    processor.chainConfirmed = false;
+    void processor.sync().catch(() => undefined);
+    await vi.waitFor(() => expect(memory().length).toBeGreaterThan(20), { timeout: 10_000 });
+    expect(db.cleared).toBe(0);
+    processor.stop('test done');
+  });
+
+  it('one disagreeing anchor is not enough: a second answer must give the same', async () => {
+    // the node answers a wrong anchor once (a lagging backend), then the chain's
+    const { processor, db, memory } = makeChain(
+      { height: 6n, tree: chainAt(6n) },
+      {
+        anchor: (h, call) =>
+          Promise.resolve(call === 0 ? rootOf([...chainAt(h), 99n]) : rootOf(chainAt(h))),
+      },
+    );
+    void processor.sync().catch(() => undefined);
+    await vi.waitFor(() => expect(memory()[memory().length - 1]).toBe(TIP), { timeout: 10_000 });
+    expect(db.cleared).toBe(0);
+    processor.stop('test done');
+  });
+
+  it('a node that never answers the tree check does not pin the run: pause and resume go on', async () => {
+    // the first check hangs for good (a node that takes the connection and
+    // never answers); the resumed run's check gets an answer
+    const { processor, memory } = makeChain(
+      { height: 6n, tree: chainAt(6n) },
+      {
+        anchor: (h, call) =>
+          call === 0 ? new Promise<MerkleRoot>(() => undefined) : Promise.resolve(rootOf(chainAt(h))),
+      },
+    );
+    void processor.sync().catch(() => undefined);
+    await tick();
+    processor.pause();
+    processor.resume();
+    await caughtUp(memory);
     expect(memory()).toEqual(chainAt(TIP));
     processor.stop('test done');
   });

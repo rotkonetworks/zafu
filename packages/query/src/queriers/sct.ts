@@ -1,4 +1,4 @@
-import { Client } from '@connectrpc/connect';
+import { Client, type CallOptions } from '@connectrpc/connect';
 import { createClient } from './utils';
 import { SctService } from '@penumbra-zone/protobuf';
 import { SctQuerierInterface } from '@penumbrafi/types/querier';
@@ -26,7 +26,7 @@ export class SctQuerier implements SctQuerierInterface {
     return this.client.sctFrontier(req);
   }
 
-  epochByBlockHeight(req: EpochByHeightRequest): Promise<EpochByHeightResponse> {
-    return this.client.epochByHeight(req);
+  epochByBlockHeight(req: EpochByHeightRequest, opts?: CallOptions): Promise<EpochByHeightResponse> {
+    return this.client.epochByHeight(req, opts);
   }
 }

@@ -3,6 +3,7 @@ import {
   adoptLegacyStart,
   penumbraHeightAt,
   resolveStart,
+  resyncStart,
   runPercent,
   sameTarget,
   settledTarget,
@@ -51,6 +52,23 @@ describe('resolveStart', () => {
 
   it('keeps a resolved start as it is', () => {
     expect(resolveStart({ creation: 5 }, TIP, NOW)).toEqual({ creation: 5 });
+  });
+});
+
+describe('resyncStart', () => {
+  it('keeps a known birthday, so the re-read skips what it never needed', () => {
+    expect(resyncStart({ creation: 4_200_000 })).toEqual({ creation: 4_200_000 });
+    expect(resyncStart({ since: 1_700_000_000_000 })).toEqual({ since: 1_700_000_000_000 });
+  });
+
+  it('undoes a "sync from now" start: the whole chain', () => {
+    expect(resyncStart('tip')).toEqual({ since: 0 });
+    expect(resyncStart({ creation: 5_000_000, frontier: 5_000_000 })).toEqual({ since: 0 });
+    expect(resyncStart(undefined)).toEqual({ since: 0 });
+  });
+
+  it('reads everything when asked, whatever was stored', () => {
+    expect(resyncStart({ creation: 4_200_000 }, true)).toEqual({ since: 0 });
   });
 });
 

@@ -36,8 +36,12 @@ export const createChainCheck = (deps: ChainCheckDeps) => {
   };
 
   return {
-    /** fresh services on a stored chain id: `release` lets their sync go on */
-    arm: (chainId: string, release: () => void) => {
+    /**
+     * fresh services on a stored chain id: `release` lets their sync go on,
+     * `confirmed` says the node answered with that very id (a release on no
+     * answer does not)
+     */
+    arm: (chainId: string, release: () => void, confirmed?: () => void) => {
       const mine = ++generation;
       clearTimeout(retry);
       const check = async (): Promise<void> => {
@@ -51,6 +55,9 @@ export const createChainCheck = (deps: ChainCheckDeps) => {
           console.warn(`[sync] the node serves ${node}, not ${chainId}; rebuilding`);
           deps.rebuild('chain id changed');
           return;
+        }
+        if (node === chainId) {
+          confirmed?.();
         }
         release();
         if (node === undefined) {
