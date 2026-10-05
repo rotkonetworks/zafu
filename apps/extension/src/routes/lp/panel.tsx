@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { cn } from '@repo/ui/lib/utils';
 import { useNow } from '../../components/scroll-page';
+import { Sensitive } from '../../components/sensitive';
 import { zecText } from '../../lp/math';
 import { openSheet, positionOf, show, worthOf } from './store';
 import { short, useAddQuote, useLp } from './screens';
@@ -152,7 +153,7 @@ export const Panel = ({ screen }: { screen: string }) => {
     ? [
         {
           k: 'on the way',
-          v: `${zecText(BigInt(s.flight!.amountZat))} zec`,
+          v: <Sensitive>{zecText(BigInt(s.flight!.amountZat))} zec</Sensitive>,
           c: 'text-zigner-gold',
         },
         { k: 'lp address', v: short(s.address) },
@@ -161,10 +162,20 @@ export const Panel = ({ screen }: { screen: string }) => {
       ? [
           {
             k: 'in the pool',
-            v: `${zecText(worth)} zec${s.zecUsd ? ` · ${usd2((Number(worth) / 1e8) * s.zecUsd)}` : ''}`,
+            v: (
+              <Sensitive>
+                {zecText(worth)} zec
+                {s.zecUsd ? ` · ${usd2((Number(worth) / 1e8) * s.zecUsd)}` : ''}
+              </Sensitive>
+            ),
           },
-          { k: 'share', v: `${((Number(p.units) / Number(t.pool.units)) * 100).toFixed(2)}%` },
-          { k: 'units', v: p.units.toLocaleString('en-US') },
+          {
+            k: 'share',
+            v: (
+              <Sensitive>{((Number(p.units) / Number(t.pool.units)) * 100).toFixed(2)}%</Sensitive>
+            ),
+          },
+          { k: 'units', v: <Sensitive>{p.units.toLocaleString('en-US')}</Sensitive> },
         ]
       : [
           { k: 'in the pool', v: 'nothing yet', c: 'text-fg-muted' },
@@ -213,7 +224,7 @@ export const Panel = ({ screen }: { screen: string }) => {
                 ? [
                     {
                       k: 'in the pool',
-                      v: `${zecText(BigInt(s.cache.zat))} zec`,
+                      v: <Sensitive>{zecText(BigInt(s.cache.zat))} zec</Sensitive>,
                       c: 'text-fg-muted',
                     },
                     { k: 'lp address', v: short(s.address), c: 'text-fg-muted' },
