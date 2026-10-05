@@ -46,3 +46,21 @@ export const mergeLoadedSpent = (
   }
   return live;
 };
+
+/**
+ * Read IndexedDB again if a rewind took notes back while the read was in
+ * flight: merged in, a read from before the rewind would hand the loop back
+ * the notes and spends it had just dropped (rewind-purge.ts).
+ */
+export const readAcrossRewinds = async <T>(
+  rewinds: () => number,
+  read: () => Promise<T>,
+): Promise<T> => {
+  for (;;) {
+    const before = rewinds();
+    const result = await read();
+    if (rewinds() === before) {
+      return result;
+    }
+  }
+};

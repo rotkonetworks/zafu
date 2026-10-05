@@ -342,8 +342,16 @@ describe('note trees on the real wasm', () => {
       [{ pool: 'orchard', height: 2_100, size: sizeAt(chain, 2_100), legacy: [] }],
     );
     const f = frontier(chain, 2_100);
-    expect(trees.check('orchard', 2_100, { frontier: f, root: wasm.tree_root_hex(f) })).toBe(false);
     const other = frontier(chain, 2_101);
+    // differs: asks without changing anything
+    trees.takeWrites();
+    expect(trees.differs('orchard', 2_100, wasm.tree_root_hex(f))).toBe(false);
+    expect(trees.differs('orchard', 2_100, wasm.tree_root_hex(other))).toBe(true);
+    expect(trees.differs('orchard', 2_099, wasm.tree_root_hex(other))).toBe(false);
+    expect(trees.differs('orchard', 2_100, undefined)).toBe(false);
+    expect(trees.differs('ironwood', 2_100, wasm.tree_root_hex(other))).toBe(false);
+    expect(trees.takeWrites()).toEqual([]);
+    expect(trees.check('orchard', 2_100, { frontier: f, root: wasm.tree_root_hex(f) })).toBe(false);
     expect(
       trees.check('orchard', 2_100, { frontier: other, root: wasm.tree_root_hex(other) }),
     ).toBe(true);

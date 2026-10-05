@@ -317,6 +317,12 @@ export interface Trees {
     server: { frontier: string; root: string } | undefined,
   ): boolean;
   /**
+   * Whether the pool's tree ends at `height` with a root other than the
+   * server's there: the blocks the wallet read are not the server's (a reorg,
+   * or a bad batch). Changes nothing.
+   */
+  differs(pool: TreePool, height: number, serverRoot: string | undefined): boolean;
+  /**
    * Roll every tree back to the newest checkpoint at or below `target` they all
    * retain (not below `floor`), or reseed them from the server at `target`.
    * Returns the height the trees now end at.
@@ -450,6 +456,12 @@ export const openTrees = async (
       }
       seed(pool, server.frontier, height);
       return true;
+    },
+    differs(pool, height, serverRoot) {
+      const t = trees[pool];
+      return (
+        !!t && !!serverRoot && t.latest_checkpoint() === height && t.root_at(height) !== serverRoot
+      );
     },
     async rewind(target, floor) {
       const pools = Object.keys(trees) as TreePool[];

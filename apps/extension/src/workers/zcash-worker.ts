@@ -102,7 +102,8 @@ import {
 } from '../state/sync-failure';
 import { startRun, stopRun, STOP_WAIT_MS, type RunSlot } from './sync-runs';
 import { errText, storageFailure } from '@penumbra-zone/query/error-text';
-import { mergeLoadedNotes, mergeLoadedSpent } from './wallet-state-merge';
+import { mergeLoadedNotes, mergeLoadedSpent, readAcrossRewinds } from './wallet-state-merge';
+import { rewindPurge } from './rewind-purge';
 import { storeFellBehind } from './store-reset';
 import { createBuildRegistry } from './build-abort';
 
@@ -372,6 +373,8 @@ interface WalletState extends RunSlot {
   noteTrees?: Trees;
   /** a recovery of notes the trees lost, which a send waits for */
   treeRecovery?: Promise<void>;
+  /** rewinds of the scan cursor so far: a read that spans one reads again */
+  rewinds?: number;
 }
 
 interface WasmModule extends DepositWasm {
@@ -1072,8 +1075,14 @@ const loadState = async (walletId: string): Promise<WalletState> => {
   const state = getOrCreateWalletState(walletId);
   // Read everything before touching `state`: the sync loop can run between
   // these awaits.
-  const notes = await idbGetAllByIndex<DecryptedNote>('notes', 'byWallet', walletId);
-  const spentRecords = await idbGetAllByIndex<{ nullifier: string }>('spent', 'byWallet', walletId);
+  const [notes, spentRecords] = await readAcrossRewinds(
+    () => state.rewinds ?? 0,
+    () =>
+      Promise.all([
+        idbGetAllByIndex<DecryptedNote>('notes', 'byWallet', walletId),
+        idbGetAllByIndex<{ nullifier: string }>('spent', 'byWallet', walletId),
+      ]),
+  );
 
   // A live sync run owns the note objects (see wallet-state-merge.ts).
   const syncing = !!state.stop && !state.stop.signal.aborted;
@@ -1292,12 +1301,20 @@ const saveBatch = async (
   ironwoodTreeSize?: number,
   /** note-tree rows describing the same batch */
   treeWrites?: readonly TreeWrite[],
+  /** what a rewind takes back (nullifiers), in the same transaction */
+  removed?: { notes: readonly string[]; spent: readonly string[] },
 ): Promise<void> => {
   const db = await getDb();
   const tx = db.transaction(['notes', 'spent', 'meta'], 'readwrite');
   const notesStore = tx.objectStore('notes');
   const spentStore = tx.objectStore('spent');
   const metaStore = tx.objectStore('meta');
+  for (const nf of removed?.notes ?? []) {
+    notesStore.delete([walletId, nf]);
+  }
+  for (const nf of removed?.spent ?? []) {
+    spentStore.delete([walletId, nf]);
+  }
   for (const note of [...notes, ...(updatedNotes ?? [])]) {
     notesStore.put({ ...note, walletId });
   }
@@ -2523,24 +2540,56 @@ const syncLoop = async (
     orchardTreeSize = trees.size('orchard') ?? orchardTreeSize;
     ironwoodTreeSize = trees.size('ironwood') ?? ironwoodTreeSize;
     recoverDue = true;
+    // What the range above `landed` taught the wallet goes with it: its notes
+    // and the spends seen in it (rewind-purge.ts). After a reorg they may no
+    // longer exist; the ones that do come back as the range is read again.
+    const stored = await idbGetAllByIndex<DecryptedNote>('notes', 'byWallet', walletId);
+    const known = new Map(stored.map(n => [n.nullifier, n]));
+    for (const n of state.notes) {
+      known.set(n.nullifier, n);
+    }
+    const { drop, unspend } = rewindPurge([...known.values()], landed);
+    const unspent = unspend.map(n => ({
+      ...n,
+      spent_by_txid: undefined,
+      spent_at_height: undefined,
+    }));
     await saveBatch(
       walletId,
       [],
       [],
       landed,
       orchardTreeSize,
-      undefined,
+      unspent,
       iwSupported ? ironwoodTreeSize : undefined,
       trees.takeWrites(),
+      {
+        notes: drop.map(n => n.nullifier),
+        spent: [...drop, ...unspend].map(n => n.nullifier),
+      },
     );
     target = landed;
+    // a read of the store that began before this rewind reads again
+    state.rewinds = (state.rewinds ?? 0) + 1;
 
     // Re-scanning a range re-pushes the notes it finds onto `state.notes`,
     // which is a plain array - leaving the already-known ones in place would
-    // double-count them in the balance. Notes at or below the rewind point
-    // are untouched; the ones above come back as the range is read again
-    // (IndexedDB keeps its copy either way, keyed by nullifier).
+    // double-count them in the balance.
     state.notes = state.notes.filter(n => n.height <= target);
+    for (const n of state.notes) {
+      if ((n.spent_at_height ?? 0) > target) {
+        n.spent_by_txid = undefined;
+        n.spent_at_height = undefined;
+      }
+    }
+    for (const n of [...drop, ...unspend]) {
+      state.spentNullifiers.delete(n.nullifier);
+    }
+    if (drop.length || unspend.length) {
+      console.warn(
+        `[zcash-worker] rewound to ${landed}: ${drop.length} notes and ${unspend.length} spends above it are read again`,
+      );
+    }
     return landed;
   };
 
@@ -2564,6 +2613,73 @@ const syncLoop = async (
     orchardTreeSize = trees.size('orchard') ?? orchardTreeSize;
     ironwoodTreeSize = trees.size('ironwood') ?? ironwoodTreeSize;
     return reseeded || iw;
+  };
+
+  /**
+   * Rewind the scan cursor by the next escalating distance and say so; false
+   * when the budget for this run is spent or there is nowhere to go.
+   */
+  const rewindOnce = async (why: string, cause?: unknown): Promise<boolean> => {
+    if (rewindsThisRun >= MAX_REWINDS_PER_RUN) {
+      return false;
+    }
+    const target = Math.max(rewindFloor, currentHeight - rewindDistanceForAttempt(rewindsThisRun));
+    if (target >= currentHeight) {
+      return false;
+    }
+    rewindsThisRun++;
+    console.warn(
+      `[zcash-worker] ${why} near ${currentHeight}; rewinding to ${target} ` +
+        `(attempt ${rewindsThisRun}/${MAX_REWINDS_PER_RUN})${cause === undefined ? '' : ':'}`,
+      ...(cause === undefined ? [] : [cause]),
+    );
+    currentHeight = await rewindScanCursor(target);
+    lastSaved = currentHeight;
+    workerSelf.postMessage({
+      type: 'sync-progress',
+      id: '',
+      network: 'zcash',
+      walletId,
+      payload: {
+        currentHeight,
+        chainHeight: currentHeight,
+        notesFound: state.notes.length,
+        blocksScanned: 0,
+      },
+    });
+    return true;
+  };
+
+  /**
+   * The trees against the server's tree state at `height`. Trees whose root
+   * differs read blocks the server no longer has (a reorg): the range is read
+   * again, which takes back the notes and spends found in it. Past the rewind
+   * budget the trees are reseeded instead. True when the cursor moved.
+   */
+  const reconcileTrees = async (height: number): Promise<boolean> => {
+    const ts = await client.getTreeState(height);
+    const iwRoot = wasmModule!.tree_root_hex_ironwood;
+    const differs =
+      trees.differs('orchard', height, wasmModule!.tree_root_hex(ts.orchardTree)) ||
+      (!!ts.ironwoodTree && !!iwRoot && trees.differs('ironwood', height, iwRoot(ts.ironwoodTree)));
+    if (differs && (await rewindOnce('note tree root differs from the server'))) {
+      return true;
+    }
+    if (checkTrees(height, ts)) {
+      recoverDue = true;
+      // a reseeded tree moves the sizes: store them with its rows
+      await saveBatch(
+        walletId,
+        [],
+        [],
+        height,
+        orchardTreeSize,
+        undefined,
+        iwSupported ? ironwoodTreeSize : undefined,
+        trees.takeWrites(),
+      );
+    }
+    return false;
   };
 
   // mempool watcher: only spawned when explicitly opted in AND on a zidecar
@@ -2723,20 +2839,9 @@ const syncLoop = async (
         // (a tree that differs is reseeded), then recover any notes the trees
         // do not hold - in the background of a send, never inside one
         try {
-          const syncTs = await client.getTreeState(currentHeight);
-          if (checkTrees(currentHeight, syncTs)) {
-            recoverDue = true;
-            // a reseeded tree moves the sizes: store them with its rows
-            await saveBatch(
-              walletId,
-              [],
-              [],
-              currentHeight,
-              orchardTreeSize,
-              undefined,
-              iwSupported ? ironwoodTreeSize : undefined,
-              trees.takeWrites(),
-            );
+          if (await reconcileTrees(currentHeight)) {
+            dropPipeline();
+            continue;
           }
         } catch (e) {
           console.warn(`[zcash-worker] note tree check failed: ${errText(e)}`);
@@ -3096,18 +3201,9 @@ const syncLoop = async (
       // reorg or a bad batch shows here); a tree that differs is reseeded
       if (currentHeight % TREE_CHECK_INTERVAL < batchSize) {
         try {
-          if (checkTrees(currentHeight, await client.getTreeState(currentHeight))) {
-            recoverDue = true;
-            await saveBatch(
-              walletId,
-              [],
-              [],
-              currentHeight,
-              orchardTreeSize,
-              undefined,
-              iwSupported ? ironwoodTreeSize : undefined,
-              trees.takeWrites(),
-            );
+          if (await reconcileTrees(currentHeight)) {
+            dropPipeline();
+            continue;
           }
         } catch {
           /* best-effort: the caught-up check runs again */
@@ -3153,40 +3249,16 @@ const syncLoop = async (
       // user about a tree root. Rewind the scan cursor by an escalating
       // distance and read the range again. The user only ever learns about
       // this if the budget runs out, and then only as "the chain changed".
-      if (isChainContinuityError(err) && rewindsThisRun < MAX_REWINDS_PER_RUN) {
-        const target = Math.max(
-          rewindFloor,
-          currentHeight - rewindDistanceForAttempt(rewindsThisRun),
-        );
-        if (target < currentHeight) {
-          rewindsThisRun++;
-          console.warn(
-            `[zcash-worker] chain continuity broken near ${currentHeight}; rewinding to ${target} ` +
-              `(attempt ${rewindsThisRun}/${MAX_REWINDS_PER_RUN}):`,
-            err,
-          );
-          try {
-            currentHeight = await rewindScanCursor(target);
-            lastSaved = currentHeight;
-            workerSelf.postMessage({
-              type: 'sync-progress',
-              id: '',
-              network: 'zcash',
-              walletId,
-              payload: {
-                currentHeight,
-                chainHeight: currentHeight,
-                notesFound: state.notes.length,
-                blocksScanned: 0,
-              },
-            });
+      if (isChainContinuityError(err)) {
+        try {
+          if (await rewindOnce('chain continuity broken', err)) {
             continue;
-          } catch (rewindErr) {
-            // The rewind itself failed (endpoint down mid-recovery, storage
-            // unavailable). Fall through and treat it as an ordinary failure
-            // so the real reason is the one that gets classified.
-            console.warn(`[zcash-worker] rewind failed: ${errText(rewindErr)}`);
           }
+        } catch (rewindErr) {
+          // The rewind itself failed (endpoint down mid-recovery, storage
+          // unavailable). Fall through and treat it as an ordinary failure
+          // so the real reason is the one that gets classified.
+          console.warn(`[zcash-worker] rewind failed: ${errText(rewindErr)}`);
         }
       }
 
