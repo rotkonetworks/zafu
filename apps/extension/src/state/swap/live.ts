@@ -59,7 +59,7 @@ export interface Gate {
 export const plain = (route: RouteId, e: unknown): string => {
   const name = ROUTES[route].label;
   const text = isEgressBlocked(e)
-    ? 'you blocked it in settings'
+    ? 'off in settings'
     : typeof e === 'string'
       ? e
       : (e instanceof Error && e.message) || 'could not quote this right now';
@@ -81,7 +81,7 @@ export const gates = (
         ? { route }
         : view?.why === 'default-off'
           ? { route, line: 'ask for a price', ask: true }
-          : { route, line: 'you blocked it in settings' };
+          : { route, line: 'off in settings' };
   });
 
 export const pairOf = ({ direction, token }: Pick<QuoteRequest, 'direction' | 'token'>) => ({

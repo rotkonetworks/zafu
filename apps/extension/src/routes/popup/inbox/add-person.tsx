@@ -30,6 +30,7 @@ import { useCardSync, useMyCards } from '../../../people/my-card';
 import { pairSeal, readB64Card } from '../../../people/cards';
 import type { CardAnswer, PeopleRoom } from '../../../people/vault';
 import { requestEgressOptIn } from '../../../net/egress-opt-in';
+import { setDestinationOptIn } from '../../../net/ledger';
 import { PEOPLE_RELAY } from '../../../config/people-relay';
 import { useNow } from '../../../hooks/use-now';
 import { hhmm } from '../../../utils/when';
@@ -68,6 +69,7 @@ const Cue = ({
 /** what the relay is doing for this card, honestly */
 const RelayCue = ({ onAllow }: { onAllow: () => void }) => {
   const slot = usePeopleSlot();
+  const turnOn = () => void setDestinationOptIn(PEOPLE_RELAY, 'allowed');
   return slot === 'needs-opt-in' ? (
     <Cue
       tone='warn'
@@ -78,11 +80,18 @@ const RelayCue = ({ onAllow }: { onAllow: () => void }) => {
         </button>
       }
     />
-  ) : slot === 'unreachable' || slot === 'offline' || slot === 'blocked' ? (
+  ) : slot === 'blocked' ? (
     <Cue
       tone='warn'
-      text={slot === 'blocked' ? 'the relay is blocked' : 'the relay is not answering'}
+      text='the relay is off'
+      meta={
+        <button type='button' onClick={turnOn} className='text-zigner-gold hover:underline'>
+          turn on
+        </button>
+      }
     />
+  ) : slot === 'unreachable' || slot === 'offline' ? (
+    <Cue tone='warn' text='the relay is not answering' />
   ) : slot === 'checked' ? (
     <Cue text='relay connected' />
   ) : (

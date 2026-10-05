@@ -236,7 +236,7 @@ describe('routes that cannot quote', () => {
     ]);
     expect(
       gates(pair, [view('near-swap', true), view('thorchain', false, 'you-blocked')] as never),
-    ).toEqual([{ route: 'near' }, { route: 'thor', line: 'you blocked it in settings' }]);
+    ).toEqual([{ route: 'near' }, { route: 'thor', line: 'off in settings' }]);
     expect(
       gates({ direction: 'from_zec', symbol: 'sol', chain: 'sol' }, egress.views as never)[1],
     ).toMatchObject({ route: 'thor', line: "doesn't trade sol on sol · near intents may" });
