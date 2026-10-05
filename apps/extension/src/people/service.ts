@@ -523,10 +523,27 @@ export const createPeopleService = (
       }
     },
     /** mark a thread read up to now */
+    /**
+     * The thread was seen. Written only when something in it was unread: a
+     * screen marks read on every change, and a write that changes nothing
+     * is still a change, so each one would ask for the next.
+     */
     read: (roomId: string) =>
       findRoom(roomId).then(
         rec =>
-          rec && writeItems(rec, t => ({ items: t?.items ?? [], read: Math.floor(now() / 1000) })),
+          rec &&
+          serial(async () => {
+            const threads = await deps.readThreads();
+            const t = threads?.[threadKey(rec)];
+            const seen = t?.read ?? 0;
+            if (!threads || !t?.items.some(i => !i.mine && i.ts > seen)) {
+              return;
+            }
+            // a peer's clock ahead of ours must not leave its line unread forever
+            const read = Math.max(Math.floor(now() / 1000), ...t.items.map(i => i.ts));
+            threads[threadKey(rec)] = { ...t, read };
+            await deps.writeThreads(threads);
+          }),
       ),
     /** the last zafu window closed: stop everything, abort what is in flight */
     close: () => {

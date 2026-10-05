@@ -66,11 +66,12 @@ const device = (
   const transport = vi.fn(() => relay.transport());
   const gate = vi.fn(async () => opts.gate ?? 'on');
   const clock = opts.clock ?? { t: Date.UTC(2026, 9, 3, 12) };
+  const writes = { threads: 0 };
   const service = createPeopleService({
     readRooms: async () => structuredClone(rooms),
     writeRooms: async r => ((rooms = structuredClone(r)), true),
     readThreads: async () => structuredClone(threads),
-    writeThreads: async t => ((threads = structuredClone(t)), true),
+    writeThreads: async t => ((threads = structuredClone(t)), writes.threads++, true),
     walletId: async () => walletId,
     identity: async () => ({
       pubkey,
@@ -90,6 +91,7 @@ const device = (
     statuses,
     thread: () => threads[threadKey(roomRec(walletId))],
     rooms: () => rooms,
+    writes,
   };
 };
 
@@ -231,5 +233,31 @@ describe('timers live only while a window is open', () => {
     await a.service.open();
     a.service.close();
     expect(signal?.aborted).toBe(true);
+  });
+});
+
+describe('marking a thread read', () => {
+  test('writes only when a line from someone else was unread: a re-render is not a write', async () => {
+    const relay = fakeRelay();
+    const clock = { t: Date.UTC(2026, 9, 3, 12) };
+    const a = device('a', relay, { clock });
+    const b = device('a', relay, { clock });
+    const id = roomRec('a').id;
+    expect(await a.service.say(id, 'hello')).toBe('sent');
+    clock.t += 60_000;
+    await b.service.open();
+    const before = b.writes.threads;
+    await b.service.read(id);
+    expect(b.writes.threads).toBe(before + 1);
+    expect(b.thread()?.read).toBe(Math.floor(clock.t / 1000));
+    // the screen asks again on every change: nothing new, nothing written
+    await b.service.read(id);
+    await b.service.read(id);
+    expect(b.writes.threads).toBe(before + 1);
+    // your own lines never make a thread unread
+    expect(await b.service.say(id, 'hi')).toBe('sent');
+    const after = b.writes.threads;
+    await b.service.read(id);
+    expect(b.writes.threads).toBe(after);
   });
 });
