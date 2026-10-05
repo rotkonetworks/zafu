@@ -25,7 +25,9 @@ import { getDiversifiedAddresses } from '../../../state/diversified-addresses';
 import { peopleAsk, peopleCall, useMyRooms } from '../../../people/client';
 import { addressesOf, givenOf, useMyCards } from '../../../people/my-card';
 import { cardRoomId } from '../../../people/cards';
-import { allowRelay, knownRelay } from '../../../people/use-invites';
+import { knownRelay } from '../../../people/use-invites';
+import { useRelayAsk } from '../../../people/relay-ask';
+import { DEFAULT_PEOPLE_RELAY, relayHost } from '../../../config/people-relay';
 import { viaLine } from '../../../links/land';
 import { ScreenHeader } from '../../../components/screen-header';
 import { PopupPath, contactPath, threadPath } from '../paths';
@@ -129,6 +131,12 @@ const Received = ({
     answer: string;
   }>();
   const [cancelled, setCancelled] = useState(false);
+  const relayAsk = useRelayAsk();
+  // a relay zafu does not know is named here, and asked about before saving
+  const [known, setKnown] = useState<boolean>();
+  useEffect(() => {
+    void knownRelay(card.relay).then(setKnown, () => setKnown(false));
+  }, [card.relay]);
   const theirName = card.name ?? '';
   const call = name.trim() || theirName;
   const zcash = addressesOf(card).find(a => a.network === 'zcash')?.address;
@@ -163,7 +171,7 @@ const Received = ({
   const save = async () => {
     setBusy(true);
     try {
-      if (!(await knownRelay(card.relay)) && !(await allowRelay(card.relay))) {
+      if (!(await knownRelay(card.relay)) && !(await relayAsk.ask(card.relay))) {
         return;
       }
       onSaving();
@@ -219,6 +227,14 @@ const Received = ({
             />
             unchanged since signed
           </Fact>
+          {card.relay !== DEFAULT_PEOPLE_RELAY && (
+            <Fact label='relay'>
+              <span className={cn('truncate', known === false && 'text-warn')}>
+                {relayHost(card.relay)}
+                {known === false ? ' · new to zafu' : ''}
+              </span>
+            </Fact>
+          )}
           <Fact label='seal'>check it when you meet</Fact>
         </div>
         <div className='flex flex-col gap-1.5'>
@@ -289,6 +305,7 @@ const Received = ({
           </>
         )}
       </footer>
+      {relayAsk.sheet}
     </>
   );
 };
@@ -407,7 +424,7 @@ export function CardPage() {
         <V1 card={read.card} via={via} />
       ) : !read.card ? (
         <Invalid
-          why='its signature does not hold: something in it changed after it was signed.'
+          why='it does not read: something in it changed after it was signed, or it names a relay zafu does not use.'
           next='please ask them for a new card, in person if you can.'
         />
       ) : mine ? (
