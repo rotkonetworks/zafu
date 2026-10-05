@@ -54,9 +54,13 @@ export const LpCard = ({ storeId }: { storeId?: string }) => {
             <span className='flex items-center gap-1.5 whitespace-nowrap text-[11px] text-fg-muted'>
               thorchain ·{' '}
               {moving
-                ? moving.kind === 'add'
-                  ? 'adding'
-                  : 'taking out'
+                ? moving.error
+                  ? 'needs you'
+                  : moving.stage === 'refunded'
+                    ? 'sent back'
+                    : moving.kind === 'add'
+                      ? 'adding'
+                      : 'taking out'
                 : readAgo(Date.now() - rec!.cache!.readAt)}
               <span className='i-lucide-eye size-[11px] text-warn' aria-hidden='true' />
             </span>

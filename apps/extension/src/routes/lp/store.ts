@@ -157,10 +157,11 @@ export const init = async () => {
   }
   const account = activeAccountIndex(s);
   const pocket = activePockets(s).find(p => p.account === account)?.name ?? 'main pocket';
-  const [rec, egress, view] = await Promise.all([
+  const [rec, egress, view, prefs] = await Promise.all([
     readLpPocket(storeId),
     lpEgress(),
     readEgressView(),
+    readLpPrefs(),
   ]);
   const flight = rec?.flight && resumed(rec.flight);
   set({
@@ -169,7 +170,7 @@ export const init = async () => {
     pocket,
     egress,
     blocked: view.find(d => d.id === THORNODE_DEST)?.why === 'you-blocked',
-    intro: egress.thornode ? null : 'first',
+    intro: needsAsk(view) ? (prefs.seen ? 'egress' : 'first') : null,
     cache: rec?.cache,
     flight,
     lp: rec?.address ? { index: rec.index, address: rec.address } : undefined,
@@ -185,7 +186,7 @@ export const init = async () => {
       set({ lp: { index: rec.index, address } });
     }
   }
-  if (egress.thornode) {
+  if (egress.thornode && !get().intro) {
     await ensureLpAddress();
     void tick();
   }
@@ -207,13 +208,36 @@ const ensureLpAddress = async () => {
   }
 };
 
-export const goEgress = () => set({ intro: 'egress' });
+/** a plain convenience, like the buy page's: the first look was seen, so the ask comes first */
+const PREFS = 'lpPrefs';
+const readLpPrefs = async (): Promise<{ seen?: boolean }> => {
+  const v = (await chrome.storage.local.get(PREFS))[PREFS] as unknown;
+  return v && typeof v === 'object' ? (v as { seen?: boolean }) : {};
+};
+
+/**
+ * The first look and the ask show while any of the three is still off and not
+ * blocked by the person: one already allowed for swaps doesn't skip the others.
+ */
+export const needsAsk = (view: { id: string; on: boolean; why: string }[]): boolean =>
+  LP_EGRESS.some(id => {
+    const d = view.find(v => v.id === id);
+    return !!d && !d.on && d.why !== 'you-blocked';
+  });
+
+export const goEgress = () => {
+  set({ intro: 'egress' });
+  void chrome.storage.local.set({ [PREFS]: { seen: true } });
+};
 export const goFirst = () => set({ intro: 'first' });
 
-/** the ask-once list's "allow and continue": thornode, midgard and the market price */
+/** the ask-once list's "allow and continue": thornode, midgard and the market price; one the person blocked stays blocked */
 export const allowEgress = async () => {
+  const view = await readEgressView();
   for (const id of LP_EGRESS) {
-    await setDestinationOptIn(id, 'allowed');
+    if (view.find(d => d.id === id)?.why !== 'you-blocked') {
+      await setDestinationOptIn(id, 'allowed');
+    }
   }
   await refreshEgress();
   set({ egress: await lpEgress(), intro: null, blocked: false });
@@ -424,7 +448,7 @@ export const retry = async () => {
   }
 };
 
-/** a refunded add: shield it back now */
+/** a refunded add, or a payout at the lp address: shield it back now */
 export const shieldItBack = async () => {
   const { flight, storeId, lp } = get();
   if (flight && storeId && lp) {

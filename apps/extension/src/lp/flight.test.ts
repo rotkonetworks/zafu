@@ -100,6 +100,11 @@ describe('a take-out in flight', () => {
     });
     expect(f.stage).toBe('arrive');
     expect(advance(f, { utxoZat: [15_000n] }).stage).toBe('arrive');
+    // a coin a little under the payout still counts; one far under does not
+    expect(advance(f, { utxoZat: [918_000n] }).stage).toBe('shield');
+    expect(advance(f, { utxoZat: [900_000n] }).stage).toBe('arrive');
+    // the person may shield it back before the coin is seen
+    expect(needs(shieldRefund(f))).toBe('shield');
     f = advance(f, { utxoZat: [919_000n] });
     expect(f.stage).toBe('shield');
     expect(needs(f)).toBe('shield');

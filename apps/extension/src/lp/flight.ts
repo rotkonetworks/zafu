@@ -227,16 +227,23 @@ export const advance = (f: Flight, x: Facts, now = Date.now()): Flight => {
       }
       return x.refundReason ? to(f, 'refused', { reason: x.refundReason }, now) : f;
     }
-    case 'arrive':
-      return f.outZat && x.utxoZat?.includes(BigInt(f.outZat)) ? to(f, 'shield', {}, now) : f;
+    case 'arrive': {
+      // the payout lands as one coin of its amount; a coin a little under it (a fee taken on the
+      // way) counts too, so a rounding THORChain does never leaves the zec sitting transparent
+      const want = f.outZat ? BigInt(f.outZat) : undefined;
+      return want && x.utxoZat?.some(v => v <= want && v >= (want * 99n) / 100n)
+        ? to(f, 'shield', {}, now)
+        : f;
+    }
     default:
       return f;
   }
 };
 
 /** a refunded add's coins, shielded back at the person's word */
+/** a refunded add's coins, or a payout that sits at the lp address, shielded back at the person's word */
 export const shieldRefund = (f: Flight, now = Date.now()): Flight =>
-  f.stage === 'refunded' ? to(f, 'shield', {}, now) : f;
+  f.stage === 'refunded' || f.stage === 'arrive' ? to(f, 'shield', {}, now) : f;
 
 export type StepState = 'done' | 'now' | 'later' | 'turned';
 

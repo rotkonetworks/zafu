@@ -153,21 +153,22 @@ export const FirstScreen = () => (
 
 /** LpEgress: thornode, midgard and prices, asked once */
 export const EgressScreen = () => {
-  const prices = useLp(s => s.egress.prices);
+  const on = useLp(s => s.egress);
+  const prices = on.prices;
   const hosts: Host[] = [
     {
       mark: 't',
       name: 'thornode',
       does: 'the pool, your position, its address, pauses',
-      host: 'gateway.liquify.com\n/thorchain_api',
-      c: 'text-zigner-gold',
+      host: on.thornode ? 'already allowed' : 'gateway.liquify.com\n/thorchain_api',
+      c: on.thornode ? 'text-fg-muted' : 'text-zigner-gold',
     },
     {
       mark: 'm',
       name: 'midgard',
       does: 'volume, fees, your history',
-      host: 'gateway.liquify.com\n/thorchain_midgard',
-      c: 'text-zigner-gold',
+      host: on.midgard ? 'already allowed' : 'gateway.liquify.com\n/thorchain_midgard',
+      c: on.midgard ? 'text-fg-muted' : 'text-zigner-gold',
     },
     {
       mark: '$',
@@ -719,6 +720,15 @@ export const TrackScreen = () => {
           <Button className='h-14 flex-1' onClick={() => void finish()}>
             {f.kind === 'add' && f.stage === 'credited' ? 'see your liquidity' : 'done'}
           </Button>
+        ) : f.stage === 'arrive' ? (
+          <>
+            <Button variant='secondary' className='h-14 w-[170px]' onClick={() => show('position')}>
+              in the background
+            </Button>
+            <Button className='h-14 flex-1' onClick={() => void shieldItBack()}>
+              shield it back now
+            </Button>
+          </>
         ) : (
           <Button variant='secondary' className='h-14 flex-1' onClick={() => show('position')}>
             keep going in the background
