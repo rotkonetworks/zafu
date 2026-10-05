@@ -13,6 +13,17 @@
 
 import { ThornodeRefusal, thornodeGet, thornodePost, THORNODE_URLS } from '../services/thornode';
 import { LP_POOL } from './math';
+import { THOR_AFFILIATE, zafuFeeBps } from '../config/swap-fee';
+import {
+  checkMinimum,
+  checkQuote,
+  memoLimit,
+  nodeRefusal,
+  PRICE_TOLERANCE_BPS,
+  ZEC_ASSET,
+  type InboundAddress,
+  type NodeQuote,
+} from '../state/swap/thornode';
 import { lpEgress, NotAllowed, THORNODE_DEST } from './thor';
 
 /** liquify first: it answers the cosmos REST; the other node is only failover */
@@ -169,4 +180,80 @@ export const sendRuneTx = async (
     );
   }
   return { txhash: t.txhash.toUpperCase(), gasUsed };
+};
+
+/** a zec -> rune quote, paid to the pocket's thor1; checked like the swap screen's */
+export interface RuneQuote {
+  at: number;
+  amountZat: bigint;
+  /** after THORChain's fees, 1e8 */
+  runeOut: bigint;
+  /** the price limit the memo carries, 1e8 */
+  atLeast: bigint;
+  memo: string;
+  vault: string;
+  /** THORChain's whole fee, in rune */
+  feeRune: bigint;
+  seconds?: number;
+  expiry: number;
+}
+
+/**
+ * Ask THORNode for zec -> rune to `thor1`, with zafu's affiliate as the swap
+ * screen sends it, and refuse what the swap screen refuses: a vault that is
+ * not the listed one, a memo past 80 bytes or naming another address, no
+ * price limit, an amount under the minimum.
+ */
+export const quoteRune = async (
+  amountZat: bigint,
+  thor1: string,
+  signal?: AbortSignal,
+): Promise<RuneQuote> => {
+  await allowed();
+  const name = 'thorchain';
+  const query = new URLSearchParams({
+    from_asset: ZEC_ASSET,
+    to_asset: 'THOR.RUNE',
+    amount: amountZat.toString(),
+    destination: thor1,
+    streaming_interval: '1',
+    liquidity_tolerance_bps: String(PRICE_TOLERANCE_BPS),
+    affiliate: THOR_AFFILIATE,
+    affiliate_bps: String(zafuFeeBps('thor')),
+  });
+  const [q, inbound] = await Promise.all([
+    thornodeGet<NodeQuote>(`/thorchain/quote/swap?${query}`, NODES, signal),
+    thornodeGet<InboundAddress[]>('/thorchain/inbound_addresses', NODES, signal),
+  ]).catch((e: unknown) => {
+    throw nodeRefusal(name, e, amountZat, 'zec');
+  });
+  checkQuote(name, q, inbound, 'ZEC', true, thor1);
+  checkMinimum(name, q, inbound.find(a => a.chain === 'ZEC')!, amountZat, 'zec');
+  return {
+    at: Date.now(),
+    amountZat,
+    runeOut: big(q.expected_amount_out),
+    atLeast: memoLimit(q.memo),
+    memo: q.memo,
+    vault: q.inbound_address,
+    feeRune: big(q.fees.total),
+    seconds: q.total_swap_seconds,
+    expiry: q.expiry * 1000,
+  };
+};
+
+/** has THORChain paid a swap out: its swap is final and nothing is left to send (tx/status) */
+export const readSwapped = async (txid: string, signal?: AbortSignal): Promise<boolean> => {
+  await allowed();
+  const s = await thornodeGet<{
+    stages?: Record<string, { completed?: boolean; pending?: boolean }>;
+  }>(`/thorchain/tx/status/${txid.toUpperCase()}`, NODES, signal).catch(
+    () => ({}) as { stages?: undefined },
+  );
+  const st = s.stages;
+  return (
+    !!st?.['swap_finalised']?.completed &&
+    !st['swap_status']?.pending &&
+    st['outbound_signed']?.completed !== false
+  );
 };

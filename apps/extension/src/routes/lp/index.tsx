@@ -19,6 +19,10 @@ import {
   cancelAndShieldBack,
   continueFlight,
   init,
+  startAdd2,
+  startRecover,
+  startRuneSwap,
+  startWithdraw2,
   openSheet,
   positionOf,
   show,
@@ -40,7 +44,9 @@ import {
   useLp,
   WithdrawScreen,
 } from './screens';
+import { RuneScreen, Withdraw2Screen } from './rune-screens';
 import { Panel } from './panel';
+import { pairedLive } from '../../lp/rune';
 
 type Screen =
   | 'loading'
@@ -53,7 +59,9 @@ type Screen =
   | 'add'
   | 'position'
   | 'withdraw'
-  | 'twoSided';
+  | 'twoSided'
+  | 'rune'
+  | 'withdraw2';
 
 export const screenOf = (s: LpState): Screen =>
   s.phase !== 'ready'
@@ -64,20 +72,22 @@ export const screenOf = (s: LpState): Screen =>
         ? s.intro
         : s.flight && !s.view
           ? 'track'
-          : (s.view ?? (positionOf(s) ? 'position' : 'add'));
+          : (s.view ?? (positionOf(s) || pairedLive(s.runeRead?.paired) ? 'position' : 'add'));
 
 const artOf = (s: Screen): ScrollArt =>
   s === 'first' || s === 'egress' || s === 'add' || s === 'locked'
     ? 'bamboo'
     : s === 'track' || s === 'blocked'
       ? 'enso'
-      : s === 'twoSided'
+      : s === 'twoSided' || s === 'rune'
         ? 'samurai'
         : 'castle';
 
 const BACK: Partial<Record<Screen, LpState['view']>> = {
   withdraw: 'position',
+  withdraw2: 'position',
   twoSided: 'add',
+  rune: 'twoSided',
 };
 
 export const LpPage = () => {
@@ -112,7 +122,7 @@ export const LpPage = () => {
   };
 
   const step: readonly [number, number, string] | undefined =
-    screen === 'add'
+    screen === 'add' || screen === 'twoSided'
       ? [1, 3, 'amount']
       : screen === 'track' && flight
         ? flight.kind === 'add'
@@ -122,7 +132,7 @@ export const LpPage = () => {
           : isDone(flight)
             ? [3, 3, 'back']
             : [2, 3, 'send']
-        : screen === 'withdraw'
+        : screen === 'withdraw' || screen === 'withdraw2'
           ? [1, 3, 'part']
           : undefined;
   const back =
@@ -158,12 +168,15 @@ export const LpPage = () => {
       <TrackScreen
         onContinue={() => void confirm(continueFlight)()}
         onCancel={() => void confirm(cancelAndShieldBack)()}
+        onRecover={() => void confirm(startRecover)()}
       />
     ),
     add: () => <AddScreen onAdd={() => void confirm(startAdd)()} />,
-    position: () => <PositionScreen />,
+    position: () => <PositionScreen onRecover={() => void confirm(startRecover)()} />,
     withdraw: () => <WithdrawScreen onOut={() => void confirm(startWithdraw)()} />,
-    twoSided: () => <TwoSidedScreen />,
+    twoSided: () => <TwoSidedScreen onAdd={() => void confirm(startAdd2)()} />,
+    rune: () => <RuneScreen onSwap={() => void confirm(startRuneSwap)()} />,
+    withdraw2: () => <Withdraw2Screen onOut={() => void confirm(startWithdraw2)()} />,
   };
 
   return (
@@ -197,8 +210,13 @@ export const LpPage = () => {
 
 /** LpPublic and LpHistory */
 const Sheets = () => {
-  const { sheet, address, mid } = useLp(
-    useShallow(s => ({ sheet: s.sheet, address: s.lp?.address, mid: s.mid })),
+  const { sheet, address, mid, thor1 } = useLp(
+    useShallow(s => ({
+      sheet: s.sheet,
+      address: s.lp?.address,
+      mid: s.mid,
+      thor1: s.rune?.on ? s.rune.address : undefined,
+    })),
   );
   const now = useNow();
   const close = () => openSheet(null);
@@ -214,6 +232,7 @@ const Sheets = () => {
         <p className='text-[13px] leading-relaxed text-fg'>
           this address and its share of the pool are public, and linked. your shielded zec stays
           private.
+          {thor1 && ' with rune, your rune address and lp address are linked as one position.'}
         </p>
         <Button className='h-[52px]' onClick={close}>
           understood

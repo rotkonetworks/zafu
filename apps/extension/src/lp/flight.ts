@@ -18,6 +18,8 @@
  *             refunded -> recover -> recovering -> shield -> shielded
  *  withdraw2: ask (from the thor1) -> payout -> arrive -> shield -> shielded
  *                                         \-> received (paid all in rune)
+ *  swap:      fund -> settle -> send -> seen -> received (zec to rune, paid to the thor1)
+ *                                          \-> refunded -> shield -> shielded
  */
 
 import type { PayoutAs } from './math';
@@ -47,7 +49,7 @@ export type Stage =
 export interface Flight {
   v: 1;
   id: string;
-  kind: 'add' | 'withdraw' | 'add2' | 'withdraw2';
+  kind: 'add' | 'withdraw' | 'add2' | 'withdraw2' | 'swap';
   stage: Stage;
   /** what goes to the vault: the add, or the withdraw's dust ask (zat, decimal) */
   amountZat: string;
@@ -111,7 +113,7 @@ export class StaleFlight extends Error {
 }
 
 export const DONE: ReadonlySet<Stage> = new Set(['credited', 'shielded', 'refused', 'received']);
-export const PAIRED_KINDS: ReadonlySet<Flight['kind']> = new Set(['add2', 'withdraw2']);
+export const PAIRED_KINDS: ReadonlySet<Flight['kind']> = new Set(['add2', 'withdraw2', 'swap']);
 export const isPaired = (f: Pick<Flight, 'kind'>): boolean => PAIRED_KINDS.has(f.kind);
 export const isDone = (f: Flight): boolean => DONE.has(f.stage);
 
@@ -136,7 +138,7 @@ const STAGES: ReadonlySet<string> = new Set([
   'received',
 ]);
 
-const KINDS: ReadonlySet<string> = new Set(['add', 'withdraw', 'add2', 'withdraw2']);
+const KINDS: ReadonlySet<string> = new Set(['add', 'withdraw', 'add2', 'withdraw2', 'swap']);
 
 /** a stored value is a flight only if it has the shape this build writes */
 export const isFlight = (v: unknown): v is Flight => {
@@ -200,7 +202,7 @@ export const needs = (f: Flight): Step | undefined =>
 
 /** the stage a funded add moves to: the rune half first when there is one */
 const afterFund = (f: Flight): Stage =>
-  f.kind === 'add2' ? 'rune' : f.kind === 'add' ? 'send' : 'ask';
+  f.kind === 'add2' ? 'rune' : f.kind === 'add' || f.kind === 'swap' ? 'send' : 'ask';
 
 /** before a send leaves: written first, so a crash mid-send is never sent again */
 export const sending = (f: Flight): Flight => ({ ...f, sending: f.stage });
@@ -264,6 +266,8 @@ export interface Facts {
   height?: number;
   /** the position under the thor1, two-sided only */
   paired?: { units: bigint; pendingRune: bigint; pendingAsset: bigint };
+  /** a swap to rune: THORChain has paid it out */
+  swapped?: boolean;
 }
 
 /**
@@ -310,6 +314,9 @@ export const advance = (f: Flight, x: Facts, now = Date.now()): Flight => {
           { outZat: s.out.zat.toString(), outTxid: s.out.txid, reason: x.refundReason ?? f.reason },
           now,
         );
+      }
+      if (f.kind === 'swap') {
+        return x.swapped ? to(f, 'received', {}, now) : f;
       }
       if (f.stage === 'seen') {
         return s?.observed ? to(f, 'credit', {}, now) : f;
@@ -424,6 +431,7 @@ const ORDER: Record<Flight['kind'], Stage[]> = {
   withdraw: ['fund', 'settle', 'ask', 'payout', 'arrive', 'shield', 'shielded'],
   add2: ['fund', 'settle', 'rune', 'half', 'send', 'seen', 'credit', 'credited'],
   withdraw2: ['ask', 'payout', 'arrive', 'shield', 'shielded'],
+  swap: ['fund', 'settle', 'send', 'seen', 'received'],
 };
 
 /** where the flight stands in its own order: a refund is past the send */
@@ -432,7 +440,9 @@ const rank = (f: Flight): number =>
     ? 3.5
     : f.stage === 'received'
       ? 99
-      : (f.stage === 'shield' || f.stage === 'shielded') && (f.kind === 'add' || f.kind === 'add2')
+      : (f.stage === 'shield' || f.stage === 'shielded') &&
+          f.kind !== 'withdraw' &&
+          f.kind !== 'withdraw2'
         ? 99
         : Math.max(0, ORDER[f.kind].indexOf(f.stage));
 
@@ -580,6 +590,19 @@ export const stepLines = (f: Flight, t: LineText): StepLine[] => {
   }
   if (f.kind === 'withdraw2') {
     return pairedOutLines(f, t, line, z, at);
+  }
+  if (f.kind === 'swap' && !f.cancelled && f.stage !== 'refunded' && !f.outZat) {
+    return [
+      line(
+        0,
+        'fund',
+        'shield out to your lp address',
+        f.fundZat ? `${z(f.fundZat)} zec` : undefined,
+      ),
+      line(1, 'settle', 'one block to settle', 'zcash confirmation'),
+      line(2, 'send', 'sent to thorchain', `${z(f.amountZat)} zec · memo ${f.memo}`),
+      line(3, 'seen', 'swapped to rune', `paid to ${t.thor ?? 'your rune address'}`),
+    ];
   }
   if (f.cancelled) {
     return [

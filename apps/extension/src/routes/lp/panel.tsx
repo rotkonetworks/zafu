@@ -9,7 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { cn } from '@repo/ui/lib/utils';
 import { useNow } from '../../components/scroll-page';
 import { Sensitive } from '../../components/sensitive';
-import { zecText } from '../../lp/math';
+import { pairedWithdraw, runeText, zecText } from '../../lp/math';
 import { openSheet, positionOf, show, worthOf } from './store';
 import { short, useAddQuote, useLp } from './screens';
 
@@ -119,6 +119,8 @@ export const Panel = ({ screen }: { screen: string }) => {
       egress: s.egress,
       readErr: s.readErr,
       blocked: s.blocked,
+      thor1: s.rune?.on ? s.rune.address : undefined,
+      runeRead: s.rune?.on ? s.runeRead : undefined,
     })),
   );
   const { a, q, small } = useAddQuote();
@@ -148,7 +150,48 @@ export const Panel = ({ screen }: { screen: string }) => {
   const gap = t && s.zecUsd ? (t.pool.zecUsd / s.zecUsd - 1) * 100 : undefined;
   const days = s.mid?.since ? Math.max(0, Math.floor((now - s.mid.since) / 86_400_000)) : undefined;
   const inFlight =
-    s.flight && s.flight.kind === 'add' && !['credited', 'refunded'].includes(s.flight.stage);
+    s.flight &&
+    (s.flight.kind === 'add' || s.flight.kind === 'add2') &&
+    !['credited', 'refunded', 'shielded', 'received'].includes(s.flight.stage);
+  const rr = s.runeRead;
+  const paired = rr?.paired;
+  const pairedOut =
+    paired && t ? pairedWithdraw(t.pool, paired.units, 10_000, t.minSlipBps, 'both') : undefined;
+  const withRune: R[] = s.thor1
+    ? [
+        { k: 'rune address', v: short(s.thor1) },
+        { k: 'lp address', v: short(s.address) },
+        rr
+          ? { k: 'holds', v: <Sensitive>{runeText(rr.balance)} rune</Sensitive> }
+          : { k: 'holds', v: s.blocked ? 'off' : 'not read', tag: true },
+        ...(paired && paired.units > 0n && pairedOut
+          ? [
+              {
+                k: 'in the pool',
+                v: (
+                  <Sensitive>
+                    {zecText(pairedOut.zat)} zec + {runeText(pairedOut.rune)} rune
+                  </Sensitive>
+                ),
+              },
+            ]
+          : paired && (paired.pendingRune > 0n || paired.pendingAsset > 0n)
+            ? [
+                {
+                  k: 'waiting',
+                  v: (
+                    <Sensitive>
+                      {paired.pendingRune > 0n
+                        ? `${runeText(paired.pendingRune)} rune`
+                        : `${zecText(paired.pendingAsset)} zec`}
+                    </Sensitive>
+                  ),
+                  c: 'text-warn',
+                },
+              ]
+            : []),
+      ]
+    : [];
   const yours: R[] = inFlight
     ? [
         {
@@ -326,6 +369,14 @@ export const Panel = ({ screen }: { screen: string }) => {
             ]}
           />
           <Group t='yours' src={tSrc} live tint={!!p || !!inFlight} rows={yours} />
+          {s.thor1 && (
+            <Group
+              t='with rune · linked'
+              src={rr ? `thornode · ${ago(now, rr.at)}` : ''}
+              live={!!rr}
+              rows={withRune}
+            />
+          )}
         </>
       )}
       <div className='flex-1' />

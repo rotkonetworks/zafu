@@ -61,6 +61,8 @@ export interface DriveDeps {
   runeSend?: (memo: string, rune: bigint) => Promise<string>;
   /** the position under the thor1 */
   paired?: () => Promise<PairedPosition | undefined>;
+  /** a swap to rune: has THORChain paid it out */
+  swapped?: (txid: string) => Promise<boolean>;
   /**
    * Write `f` over the stored flight it was made from (same id and rev) and
    * hand back what was written; throws StaleFlight when the stored one moved
@@ -108,7 +110,8 @@ const payable = async (f: Flight, d: DriveDeps): Promise<{ inbound: ZecInbound; 
     throw new Error('this memo is longer than 80 bytes · nothing was sent');
   }
   const v = await d.vault();
-  if (isAdd(f) ? v.addPaused : v.outPaused) {
+  // a swap is not liquidity: its quote already checked that zec trades
+  if (f.kind !== 'swap' && (isAdd(f) ? v.addPaused : v.outPaused)) {
     throw new Error(PAUSED_LINE[isAdd(f) ? 'add' : 'withdraw']);
   }
   await checkVault(v.inbound.address, true);
@@ -152,6 +155,9 @@ export const observe = async (f: Flight, d: DriveDeps, to: string): Promise<Fact
     if (x.seen.out?.refund && d.refundReason) {
       x.refundReason = await d.refundReason(asked).catch(() => undefined);
     }
+  }
+  if (f.kind === 'swap' && f.stage === 'seen' && f.sendTxid && d.swapped && !x.seen?.out?.refund) {
+    x.swapped = await d.swapped(f.sendTxid);
   }
   if (
     d.paired &&
