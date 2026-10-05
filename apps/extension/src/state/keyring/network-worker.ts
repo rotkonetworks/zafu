@@ -28,7 +28,12 @@
 import { errText } from '@penumbra-zone/query/error-text';
 import type { NetworkType, VaultUnlock } from './types';
 import { isValidInternalSender } from '../../senders/internal';
-import type { SealedVault, WorkerKey } from '../../shared/vault-seal';
+import {
+  sealCallTo,
+  type SealedReply,
+  type SealedVault,
+  type WorkerKey,
+} from '../../shared/vault-seal';
 import type { DepositPlan, DepositRequest } from '../../workers/transparent-deposit';
 import type { StopOutcome } from '../../workers/build-abort';
 
@@ -1812,45 +1817,52 @@ async function relayProveRequest(worker: Worker, id: string, request: unknown): 
 
 // ── FROST multisig worker helpers ──
 
+/**
+ * A call whose arguments or reply hold FROST secrets (round state, a key
+ * package, nonces, the viewing-key secret): both are sealed under a key this
+ * call shares with the worker alone, so the extension message bus, and every
+ * context the reply is rebroadcast to, sees only ciphertext.
+ */
+const secretCall = async <T>(type: NetworkWorkerMessage['type'], args: unknown): Promise<T> => {
+  const { sealed, open } = await sealCallTo(
+    await callWorker<WorkerKey>('zcash', 'vault-key'),
+    args,
+  );
+  return (await open(await callWorker<SealedReply>('zcash', type, { sealed }))) as T;
+};
+
 /** DKG round 1: generate ephemeral identity + signed commitment */
 export const frostDkgPart1InWorker = async (
   maxSigners: number,
   minSigners: number,
-): Promise<{ secret: string; broadcast: string }> => {
-  return callWorker('zcash', 'frost-dkg-part1', { maxSigners, minSigners });
-};
+): Promise<{ secret: string; broadcast: string }> =>
+  secretCall('frost-dkg-part1', { maxSigners, minSigners });
 
 /** DKG round 2: process signed round1 broadcasts */
 export const frostDkgPart2InWorker = async (
   secretHex: string,
   peerBroadcasts: string[],
-): Promise<{ secret: string; peer_packages: string[] }> => {
-  return callWorker('zcash', 'frost-dkg-part2', {
-    secretHex,
-    peerBroadcasts: JSON.stringify(peerBroadcasts),
-  });
-};
+): Promise<{ secret: string; peer_packages: string[] }> =>
+  secretCall('frost-dkg-part2', { secretHex, peerBroadcasts: JSON.stringify(peerBroadcasts) });
 
 /** DKG round 3: finalize - returns key package + public key package */
 export const frostDkgPart3InWorker = async (
   secretHex: string,
   round1Broadcasts: string[],
   round2Packages: string[],
-): Promise<{ key_package: string; public_key_package: string; ephemeral_seed: string }> => {
-  return callWorker('zcash', 'frost-dkg-part3', {
+): Promise<{ key_package: string; public_key_package: string; ephemeral_seed: string }> =>
+  secretCall('frost-dkg-part3', {
     secretHex,
     round1Broadcasts: JSON.stringify(round1Broadcasts),
     round2Packages: JSON.stringify(round2Packages),
   });
-};
 
 /** signing round 1: generate nonces + signed commitments */
 export const frostSignRound1InWorker = async (
   ephemeralSeedHex: string,
   keyPackageHex: string,
-): Promise<{ nonces: string; commitments: string }> => {
-  return callWorker('zcash', 'frost-sign-round1', { ephemeralSeedHex, keyPackageHex });
-};
+): Promise<{ nonces: string; commitments: string }> =>
+  secretCall('frost-sign-round1', { ephemeralSeedHex, keyPackageHex });
 
 /** signed FROST share - wrapping is required for cross-party aggregator (poker-escrow) to extract the signer identifier */
 export const frostSpendSignInWorker = async (
@@ -1860,8 +1872,8 @@ export const frostSpendSignInWorker = async (
   sighashHex: string,
   alphaHex: string,
   commitments: string[],
-): Promise<string> => {
-  return callWorker('zcash', 'frost-spend-sign', {
+): Promise<string> =>
+  secretCall('frost-spend-sign', {
     ephemeralSeedHex,
     keyPackageHex,
     noncesHex,
@@ -1869,7 +1881,6 @@ export const frostSpendSignInWorker = async (
     alphaHex,
     commitments: JSON.stringify(commitments),
   });
-};
 
 /** coordinator: aggregate shares into SpendAuth signature */
 export const frostSpendAggregateInWorker = async (
@@ -1905,22 +1916,16 @@ export const frostDeriveAddressFromSkInWorker = async (
   publicKeyPackageHex: string,
   skHex: string,
   diversifierIndex: number,
-): Promise<string> => {
-  return callWorker('zcash', 'frost-derive-address-from-sk', {
-    publicKeyPackageHex,
-    skHex,
-    diversifierIndex,
-  });
-};
+): Promise<string> =>
+  secretCall('frost-derive-address-from-sk', { publicKeyPackageHex, skHex, diversifierIndex });
 
 /**
  * host-only: sample a random 32-byte `sk` (hex) for nk/rivk derivation.
  * the host then broadcasts this sk to peers in its R1 message so every
  * participant can reconstruct the same UFVK locally.
  */
-export const frostSampleFvkSkInWorker = async (): Promise<string> => {
-  return callWorker('zcash', 'frost-sample-fvk-sk', {});
-};
+export const frostSampleFvkSkInWorker = async (): Promise<string> =>
+  secretCall('frost-sample-fvk-sk', {});
 
 /**
  * derive the Orchard-only UFVK string (`uview1…`) from the FROST group
@@ -1932,9 +1937,7 @@ export const frostDeriveUfvkInWorker = async (
   publicKeyPackageHex: string,
   skHex: string,
   mainnet: boolean,
-): Promise<string> => {
-  return callWorker('zcash', 'frost-derive-ufvk', { publicKeyPackageHex, skHex, mainnet });
-};
+): Promise<string> => secretCall('frost-derive-ufvk', { publicKeyPackageHex, skHex, mainnet });
 
 /** Multisig verifier: parse outputs of an unsigned v5 tx using the FROST UFVK
  * so each joiner can derive (recipient, amount, is_change) per Orchard action
@@ -2120,6 +2123,8 @@ export const finalizeDelegationInWorker = async (a: {
   return callWorker('zcash', 'finalize-delegation', a);
 };
 
+/** ZKP #2 + signed cast. Callers go through services/voting/cast.ts, which
+ *  seals the bundle before anything is sent. */
 export const castVoteHotInWorker = async (a: {
   network: string;
   hotkeySecretHex: string;
@@ -2127,14 +2132,16 @@ export const castVoteHotInWorker = async (a: {
   delegationStateJson: string;
   vanWitnessJson: string;
   voteJson: string;
-  submitAt: number;
 }): Promise<{
   proposalId: number;
   /** POST /shielded-vote/v1/cast-vote body */
   wire: string;
-  /** recovery bundle: persist it, shares are rebuilt from it once the vote lands */
+  /** recovery bundle (share secrets, can rebuild shares that carry the
+   *  choice): sealed storage only; shares are rebuilt from it once the vote
+   *  lands */
   commitmentBundleJson: string;
-  /** the bundle's delegation state for its next cast (authority bit cleared) */
+  /** the bundle's delegation state for its next cast (authority bit
+   *  cleared); store it only once the cast is on chain */
   nextDelegationStateJson: string;
 }> => {
   return callWorker('zcash', 'cast-vote-hot-wire', a);

@@ -5,7 +5,7 @@
  * relay directly, the worker does.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
@@ -16,6 +16,7 @@ import { RelaySlot } from '../../../people/relay-slot';
 import type { ThreadItem } from '../../../people/vault';
 import { useFrostRoom } from '../../../people/use-frost-room';
 import { useSharedBalance } from '../../../hooks/use-shared-balance';
+import { useStickToBottom } from '../../../hooks/use-stick-to-bottom';
 import { fmtZec } from '../home/format';
 import { PopupPath, groupInvitePath } from '../paths';
 import { KeyCard, MakeSharedSheet } from './shared-wallet';
@@ -79,7 +80,6 @@ export function GroupPage() {
   const [making, setMaking] = useState(false);
   const [sending, setSending] = useState(false);
   const { requestAuth, PasswordModal } = usePasswordGate();
-  const scrollRef = useRef<HTMLDivElement>(null);
   useWatchRoom(room ? roomId : undefined);
   const shared = useFrostRoom(room);
   const held = useSharedBalance(shared.seat);
@@ -132,12 +132,14 @@ export function GroupPage() {
   const cardsIn = (from: number, to: number) =>
     cards.filter(x => x.at > from && x.at <= to).map(x => x.node);
 
+  // the view moves for a new line or card, never for a room record changing one
+  const scroll = useStickToBottom(items.length + cards.length, !!last?.mine);
+  const here = !!room;
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-    if (room && last && !last.mine && last.ts > (thread?.read ?? 0)) {
+    if (here && last && !last.mine && last.ts > (thread?.read ?? 0)) {
       void peopleCall('read', { roomId }).catch(() => undefined);
     }
-  }, [room, roomId, last, thread?.read]);
+  }, [here, roomId, last, thread?.read]);
 
   const say = (text: string, retry?: string) =>
     void peopleSay(roomId, text, retry).catch(() => undefined);
@@ -164,7 +166,11 @@ export function GroupPage() {
         onInvite={room.group?.mine ? () => navigate(groupInvitePath(G)) : undefined}
       />
       <RelaySlot />
-      <div ref={scrollRef} className='flex grow flex-col gap-3 overflow-y-auto px-3.5 pb-2 pt-3.5'>
+      <div
+        ref={scroll.ref}
+        onScroll={scroll.onScroll}
+        className='flex grow flex-col gap-3 overflow-y-auto px-3.5 pb-2 pt-3.5'
+      >
         {items.length === 0 && !c && (
           <span className='self-center text-[11px] text-fg-dim'>no messages yet</span>
         )}

@@ -22,5 +22,7 @@ export const useSyncProgress = () => {
     height: sync?.height,
     from: sync?.from ?? 0,
     error,
+    /** sync stopped: local data could not be read or written */
+    storageStopped: sync?.stopped === 'storage',
   };
 };

@@ -104,6 +104,7 @@ import { startUiOpenSession } from './ui-open-session';
 import { startPeopleRelay } from './people/sw';
 import { penumbraTiming } from './penumbra/timing';
 import { createChainCheck } from './penumbra/chain-check';
+import { createStorageReopen } from './penumbra/storage-reopen';
 import { requestStopAllSync } from './state/keyring/network-worker';
 import { stampSeenVersion } from './state/moved-notice';
 import { idleFor } from './state/idle-activity';
@@ -202,49 +203,24 @@ const chainCheck = createChainCheck({
 });
 const runChainCheck = chainCheck.run;
 
-/**
- * Penumbra's database connection died under the block processor (the browser
- * closed it, or the backing store failed): build the services again, which
- * opens a fresh connection, a few times with a growing wait. A full disk or a
- * database from a newer build is said once and left alone, since a new
- * connection cannot fix it. Nothing is rebuilt while every window is closed;
- * the next window to open does it.
- */
-const reopenPenumbraStorage = (() => {
-  const MAX = 3;
-  let tries = 0;
-  let waiting = false;
-  const reopen = () => {
-    waiting = false;
-    void rebuilds.request('penumbra storage reopen', true);
-  };
-  return {
-    failed: (e: unknown) => {
-      if (storageFailure(e) === 'fatal' || tries >= MAX) {
-        console.error(
-          `[sync] penumbra sync stopped: local data could not be read or written (${errText(e)}). reload zafu to try again`,
-        );
-        return;
-      }
-      tries++;
-      const wait = 5_000 * 2 ** (tries - 1);
-      console.warn(`[sync] penumbra storage closed (${errText(e)}); reopening in ${wait / 1000}s`);
-      waiting = true;
-      // a window that opened during the wait already reopened it (onOpen)
-      setTimeout(() => {
-        if (waiting && (ui.open || keepPenumbraSyncing)) {
-          reopen();
-        }
-      }, wait);
-    },
-    /** a window opened: a reopen held back while every window was closed goes now */
-    onOpen: () => {
-      if (waiting) {
-        reopen();
-      }
-    },
-  };
-})();
+/** penumbra storage failures: reopen a few times, then stop and say so (penumbra/storage-reopen.ts) */
+const reopenPenumbraStorage = createStorageReopen({
+  reopen: () => void rebuilds.request('penumbra storage reopen', true),
+  mayReopen: () => ui.open || keepPenumbraSyncing,
+  kind: e => storageFailure(e),
+  stopped: () =>
+    void localExtStorage
+      .get('penumbraSync')
+      .then(cur => cur && localExtStorage.set('penumbraSync', { ...cur, stopped: 'storage' }))
+      .catch(() => undefined),
+  height: async () => (await localExtStorage.get('penumbraSync'))?.height,
+});
+chrome.storage.onChanged.addListener((c, area) => {
+  const height = (c['penumbraSync']?.newValue as { height?: unknown } | undefined)?.height;
+  if (area === 'local' && typeof height === 'number') {
+    reopenPenumbraStorage.progressed(height);
+  }
+});
 
 /** a fresh block processor, before anything can start it */
 const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: boolean }) => {
@@ -253,13 +229,17 @@ const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: bo
   if (!ui.open && !keepPenumbraSyncing) {
     bp.pause();
   }
+  // a stored tree is only ever wiped (self-heal) once the node confirmed the chain
+  bp.chainConfirmed = chain.confirmed;
   if (chain.confirmed) {
     chainCheck.drop();
     return;
   }
   // confirmed, or the node did not answer in time: sync goes on as it would
   // have (see penumbra/chain-check.ts)
-  chainCheck.arm(chain.id, bp.hold());
+  chainCheck.arm(chain.id, bp.hold(), () => {
+    bp.chainConfirmed = true;
+  });
 };
 
 // The graceful network-error handler (unhandledrejection + error) is registered

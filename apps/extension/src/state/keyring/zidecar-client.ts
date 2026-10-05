@@ -1,7 +1,8 @@
 /**
  * zidecar grpc-web client
  *
- * connects to zidecar server for trustless zcash sync
+ * rotko-hosted zidecar: the standard lightwalletd calls plus mempool watch and
+ * the tip used by the cross-check. Trusted for chain data, as any node.
  * uses raw protobuf encoding (no grpc-web library needed)
  */
 

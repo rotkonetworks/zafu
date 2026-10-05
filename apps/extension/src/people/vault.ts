@@ -108,7 +108,16 @@ export interface PeopleRoom {
      */
     answers?: PairCard[];
     /** v2: their latest verified card, base64url, and when they confirmed holding yours */
-    v2?: { latest?: string; confirmed?: number; confirmDue?: boolean; closed?: number };
+    v2?: {
+      latest?: string;
+      confirmed?: number;
+      confirmDue?: boolean;
+      closed?: number;
+      /** a newer card that changes their name or network: kept until you say yes */
+      pending?: string;
+      /** the revision you said no to; an older or equal one is never asked again */
+      declined?: number;
+    };
     /** they asked you into a deal group (people/deal): its code and name */
     deal?: { code: string; group: string; at: number };
   };
@@ -125,15 +134,37 @@ export interface CardRoom {
   shown: number;
   copied?: number;
   shared?: number;
-  state: 'waiting' | 'answered' | 'cancelled';
-  /** their verified answer, base64url */
+  /**
+   * waiting: watched for answers; answered: you chose one; cancelling: the
+   * signed close has not left yet (retried); cancelled: it did
+   */
+  state: 'waiting' | 'answered' | 'cancelling' | 'cancelled';
+  /** answers that verified, until you choose one: none becomes the person by itself */
+  answers?: CardAnswer[];
+  /** answer keys you said were not the person; never offered again */
+  dismissed?: string[];
+  /** the answer you chose, base64url */
   answer?: string;
+  /** ms: you compared the seal before saving them */
+  checked?: number;
   /** how the answer came */
   via?: 'relay' | 'memo';
   /** answered by memo: the block it was mined in */
   height?: number;
   /** ms */
   at?: number;
+}
+
+/** one verified answer to a card you showed */
+export interface CardAnswer {
+  /** the answer card, base64url */
+  b64: string;
+  via: 'relay' | 'memo';
+  /** came in a box only you open (or a shielded memo); false: an older zafu sent it plain */
+  sealed: boolean;
+  /** ms */
+  at: number;
+  height?: number;
 }
 
 /** what an answering card says about the person on the other side */

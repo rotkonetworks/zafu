@@ -31,6 +31,11 @@ export class NoteTree {
     free(): void;
     [Symbol.dispose](): void;
     append_blocks(start_position: number, blocks: Uint8Array, marked: Uint32Array, checkpoint_from: number): void;
+    /**
+     * keeps `old`'s marks in shards whose root this tree confirms; returns
+     * how many were carried
+     */
+    carry_marks(old: NoteTree): number;
     checkpoint_at_or_below(height: number): number | undefined;
     insert_frontier(frontier_hex: string, height: number): void;
     /**
@@ -54,6 +59,11 @@ export class NoteTree {
      * the checkpoint at `height`; returns how many were inserted
      */
     recover(frontier_hex: string, blocks: Uint8Array, positions: Uint32Array, height: number): number;
+    /**
+     * marks `positions` by replaying shard `index` alone (see
+     * `NoteTreeCore::recover_shard`); returns how many were marked
+     */
+    recover_shard(index: number, first_position: number, blocks: Uint8Array, positions: Uint32Array): number;
     /**
      * hex root at the checkpoint, or undefined if it is not retained
      */
@@ -290,8 +300,11 @@ export function apply_signature_contributions(pczt_hex: string, contributions_js
  *   `generate_voting_hotkey`); the governance output target.
  * * `notes_json` — `[NoteInfoDto]` (the delegated notes).
  * * `round_params_json` — `RoundParamsDto`.
- * * `consensus_branch_id` — branch id at the snapshot height (host resolves via
- *   lightwalletd).
+ * * `consensus_branch_id` — branch id the host's node reports (lightwalletd).
+ *   It must have the Ironwood pool (NU6.3 or later, NU7 included), and so
+ *   must the snapshot height. It only selects the note protocol: the PCZT is
+ *   always built under TX1 v1's V6 / NU6.3 profile, the one the vote chain
+ *   rebuilds the signed digest under.
  * * `round_name` — display memo text.
  * * `network` — "mainnet" | "testnet" | "regtest".
  * * `bundle_index` — delegation bundle index (echoed into `delegation_state`).
@@ -463,12 +476,16 @@ export function build_unsigned_transparent_transaction(utxos_json: string, pubke
 export function build_vote_commitment_wire(hotkey_secret_hex: string, round_params_json: string, delegation_state_json: string, van_witness_json: string, vote_json: string, network: string): string;
 
 /**
- * Build the helper-server share payloads (`[VoteShareWire]`) for one HOT vote.
+ * Build the helper-share payloads (`[VoteShareWire]`, `POST {helper}/shielded-vote/v1/shares`)
+ * for a vote that is already on chain.
  *
- * `submit_at` is the unix-seconds submission time stamped into each share.
- * Runs the ZKP #2 proof.
+ * `commitment_bundle_json` is the recovery bundle `cast_vote_hot_wire`
+ * returned for this vote; `vc_tree_position` is the vote commitment's leaf
+ * index in the round's commitment tree, known once the cast-vote transaction
+ * is included. No proof runs here, so the shares match the submitted
+ * commitment.
  */
-export function build_vote_shares_wire(hotkey_secret_hex: string, round_params_json: string, delegation_state_json: string, van_witness_json: string, vote_json: string, network: string, submit_at: bigint): string;
+export function build_vote_shares_from_recovery(commitment_bundle_json: string, vc_tree_position: bigint, submit_at: bigint): string;
 
 /**
  * One-shot witness + path builder used for initial backfill: replays blocks
@@ -481,14 +498,28 @@ export function build_vote_shares_wire(hotkey_secret_hex: string, round_params_j
 export function build_witnesses_and_paths(tree_state_hex: string, compact_blocks_json: string, note_positions_json: string): any;
 
 /**
- * Build BOTH the commitment wire and share wires from a SINGLE proof run.
+ * Build the `POST /cast-vote` body plus what the host keeps for after it lands.
  *
- * Prefer this over calling the two builders separately: ZKP #2 is expensive and
- * each of `build_vote_commitment_wire` / `build_vote_shares_wire` runs it once.
- * Returns `SignedVoteCommitmentView`-shaped JSON
- * `{ proposal_id, wire, shares, commitment_bundle_json }`.
+ * Runs ZKP #2 once. Returns
+ * `{ proposal_id, wire, commitment_bundle_json, next_delegation_state_json }`.
+ *
+ * No helper shares come back from here: a share commits to the vote's leaf
+ * index in the round's commitment tree (`vc_tree_position`), which only
+ * exists once the cast-vote transaction is included. Shares built before
+ * that carry a guessed position, and the helper's reveal for them never
+ * matches the tree, so the vote silently drops out of the tally. Build them
+ * with [`build_vote_shares_from_recovery`] from `commitment_bundle_json` and
+ * the included position.
+ *
+ * `commitment_bundle_json` holds the share secrets (it can rebuild shares,
+ * which carry `vote_decision`): store it encrypted.
+ *
+ * `next_delegation_state_json` is this bundle's state for its next cast
+ * (this proposal's authority bit cleared). Store it only after the cast is
+ * on chain: if the cast never lands, the old state is still the valid one,
+ * and a cleared bit would lock the proposal out of a retry.
  */
-export function cast_vote_hot_wire(hotkey_secret_hex: string, round_params_json: string, delegation_state_json: string, van_witness_json: string, vote_json: string, network: string, submit_at: bigint): string;
+export function cast_vote_hot_wire(hotkey_secret_hex: string, round_params_json: string, delegation_state_json: string, van_witness_json: string, vote_json: string, network: string): string;
 
 /**
  * Ironwood (NU6.3 / v6) sibling of `complete_orchard_pczt`: inject the
@@ -1135,9 +1166,9 @@ export interface InitOutput {
     readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number];
     readonly build_unsigned_transparent_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
     readonly build_vote_commitment_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
-    readonly build_vote_shares_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
+    readonly build_vote_shares_from_recovery: (a: number, b: number, c: bigint, d: bigint) => [number, number, number, number];
     readonly build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
-    readonly cast_vote_hot_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
+    readonly cast_vote_hot_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
     readonly complete_ironwood_pczt: (a: number, b: number, c: any, d: any) => [number, number, number, number];
     readonly complete_orchard_pczt: (a: number, b: number, c: any, d: any) => [number, number, number, number];
     readonly complete_shielding_pczt: (a: number, b: number, c: number, d: number) => [number, number, number, number];
@@ -1186,6 +1217,7 @@ export interface InitOutput {
     readonly ledger_ufvk_remaining_bytes: (a: any) => [number, number, number];
     readonly ledger_validate_pczt: (a: number, b: number) => [number, number];
     readonly notetree_append_blocks: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+    readonly notetree_carry_marks: (a: number, b: number) => [number, number, number];
     readonly notetree_checkpoint_at_or_below: (a: number, b: number) => number;
     readonly notetree_insert_frontier: (a: number, b: number, c: number, d: number) => [number, number];
     readonly notetree_insert_subtree_roots: (a: number, b: number, c: number, d: number) => [number, number, number];
@@ -1199,6 +1231,7 @@ export interface InitOutput {
     readonly notetree_next_position: (a: number) => [number, number];
     readonly notetree_oldest_checkpoint: (a: number) => number;
     readonly notetree_recover: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
+    readonly notetree_recover_shard: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly notetree_root_at: (a: number, b: number) => [number, number, number, number];
     readonly notetree_take_changes: (a: number) => [number, number, number];
     readonly notetree_truncate: (a: number, b: number) => [number, number, number];

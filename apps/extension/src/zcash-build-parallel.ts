@@ -371,18 +371,8 @@ async function executeBuild(req: ProveRequest): Promise<unknown> {
 
     case 'cast_vote_hot_wire':
       // (hotkey_secret_hex, round_params_json, delegation_state_json,
-      //  van_witness_json, vote_json, network, submit_at) - runs ZKP #2.
-      // submit_at crosses postMessage as a stringified bigint, same
-      // convention as the amount/fee args on the core send builders above.
-      result = wasm['cast_vote_hot_wire'](
-        a[0],
-        a[1],
-        a[2],
-        a[3],
-        a[4],
-        a[5],
-        BigInt(a[6] as string),
-      );
+      //  van_witness_json, vote_json, network) - runs ZKP #2.
+      result = wasm['cast_vote_hot_wire'](a[0], a[1], a[2], a[3], a[4], a[5]);
       break;
 
     default:

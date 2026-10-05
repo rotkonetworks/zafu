@@ -127,4 +127,31 @@ describe('seed boundary', () => {
       expect(body, handler).not.toMatch(/\bmnemonic\b/);
     }
   });
+
+  test('FROST secrets cross the message bus only sealed, both ways', () => {
+    const secret = {
+      frostDkgPart1InWorker: 'frost-dkg-part1',
+      frostDkgPart2InWorker: 'frost-dkg-part2',
+      frostDkgPart3InWorker: 'frost-dkg-part3',
+      frostSignRound1InWorker: 'frost-sign-round1',
+      frostSpendSignInWorker: 'frost-spend-sign',
+      frostDeriveAddressFromSkInWorker: 'frost-derive-address-from-sk',
+      frostSampleFvkSkInWorker: 'frost-sample-fvk-sk',
+      frostDeriveUfvkInWorker: 'frost-derive-ufvk',
+    };
+    for (const [fn, op] of Object.entries(secret)) {
+      const start = NETWORK.indexOf(`export const ${fn} = `);
+      const body = NETWORK.slice(start, NETWORK.indexOf('\nexport ', start + 1));
+      expect(start, fn).toBeGreaterThan(-1);
+      expect(body, fn).toMatch(new RegExp(`secretCall\\('${op}'`));
+      expect(body, fn).not.toMatch(/callWorker\(/);
+      // the worker takes this op only sealed, and answers it sealed
+      const at = WORKER.indexOf(`case '${op}':`);
+      const handler = WORKER.slice(at, WORKER.indexOf('\n      case ', at + 1));
+      expect(handler, op).toMatch(/await sealedFrost\(id, payload,/);
+      expect(handler, op).not.toMatch(/postMessage/);
+    }
+    expect(NETWORK).toMatch(/sealCallTo\(\s*await callWorker<WorkerKey>\('zcash', 'vault-key'\)/);
+    expect(WORKER).toMatch(/payload: await call\.reply\(run\(call\.args\)\)/);
+  });
 });

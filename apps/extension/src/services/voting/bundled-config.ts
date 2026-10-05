@@ -19,12 +19,14 @@
  *            the repo's `main` branch - eef477e was its tip at fetch time)
  *            sha256 9716ca40771b253caa185e84b33d6487e78048664fcb4cb5f0f8ef11402aff81
  *
- * `rounds` (each round id's `ea_pk` and endorsement signatures) is bundled
- * too, as the endorsement cross-check. The vote servers' `/shielded-vote/v1/rounds`
- * now also return each round's `ea_pk`, `nc_root` and `nullifier_imt_root`
- * (vote-sdk 1.6, see api.ts's ChainRoundDto), so a round opened after this
- * build ships still has the keys casting needs; it lists with `inConfig:
- * false` until the bundled map is refreshed. Don't build a github fetch for it.
+ * `rounds` (each round id's `ea_pk` and endorsement signatures) is the only
+ * source of a round's ea_pk (./round-auth.ts verifies the signatures). The
+ * vote servers' `/shielded-vote/v1/rounds` also report each round's `ea_pk`,
+ * `nc_root` and `nullifier_imt_root` (vote-sdk 1.6), but a server's ea_pk is
+ * only a cross-check, and the roots are used only when two servers agree
+ * (api.ts `fetchRoundParams`). A round opened after this build ships lists
+ * with `inConfig: false` and cannot be voted on until the bundled map is
+ * refreshed. Don't build a github fetch for it.
  */
 
 import type { StaticVotingConfig, VotingServiceConfig } from './types';

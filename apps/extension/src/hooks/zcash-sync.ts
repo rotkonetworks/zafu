@@ -26,6 +26,8 @@ export interface ZcashSyncState {
   workerSyncHeight: number;
   /** chain height from worker progress (may differ slightly from chainTip) */
   workerChainHeight: number;
+  /** notes found but not in the note tree yet: they cannot be spent until then */
+  notesPreparing: number;
   isLoading: boolean;
   error: Error | null;
   /**
@@ -53,6 +55,8 @@ export function useZcashWorkerSync() {
   // The same failure, classified. Kept alongside the Error so callers that
   // only need "did sync fail" are unaffected.
   const [workerFailure, setWorkerFailure] = useState<SyncFailure | null>(null);
+  // notes found but not yet in the note tree (recovered a shard at a time)
+  const [notesPreparing, setNotesPreparing] = useState(0);
 
   // reset on wallet switch
   useEffect(() => {
@@ -60,6 +64,7 @@ export function useZcashWorkerSync() {
     setWorkerChainHeight(0);
     setWorkerError(null);
     setWorkerFailure(null);
+    setNotesPreparing(0);
   }, [activeWalletId]);
 
   // listen for sync errors relayed from the worker (network-worker.ts) and
@@ -101,6 +106,9 @@ export function useZcashWorkerSync() {
         setWorkerError(null);
         setWorkerFailure(null);
       }
+      if (typeof detail.preparing === 'number') {
+        setNotesPreparing(detail.preparing);
+      }
       if (typeof detail.chainHeight === 'number') {
         setWorkerChainHeight(detail.chainHeight);
         setWorkerError(null);
@@ -130,7 +138,7 @@ export function useZcashWorkerSync() {
     });
   }, [activeWalletId]);
 
-  return { workerSyncHeight, workerChainHeight, workerError, workerFailure };
+  return { workerSyncHeight, workerChainHeight, workerError, workerFailure, notesPreparing };
 }
 
 export function useZcashSyncStatus(): ZcashSyncState {
@@ -143,7 +151,8 @@ export function useZcashSyncStatus(): ZcashSyncState {
   // Full network isolation: only poll the zidecar when ACTIVELY on zcash, not
   // merely when zcash is enabled - a wallet viewing penumbra touches no zcash RPC.
   const zcashActive = useStore(selectActiveNetwork) === 'zcash';
-  const { workerSyncHeight, workerChainHeight, workerError, workerFailure } = useZcashWorkerSync();
+  const { workerSyncHeight, workerChainHeight, workerError, workerFailure, notesPreparing } =
+    useZcashWorkerSync();
 
   const {
     data: chainTip,
@@ -167,6 +176,7 @@ export function useZcashSyncStatus(): ZcashSyncState {
     chainTip: chainTip ?? null,
     workerSyncHeight,
     workerChainHeight,
+    notesPreparing,
     isLoading: tipLoading,
     // workerError (sync loop / auto-sync failures) takes precedence over the
     // tip query error - it's the one the user actually needs to act on.

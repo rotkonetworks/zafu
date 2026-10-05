@@ -16,12 +16,11 @@
  *     local store is IndexedDB in an extension, not SQLite on a phone; the
  *     failure shapes ("blocked", "QuotaExceededError") are different even
  *     though the user-facing meaning is identical.
- *   - `parseFatal` → `consensus`. vizor talks to lightwalletd and can only
- *     fail to *parse* what it is handed. zafu additionally VERIFIES what the
- *     endpoint serves (the Ligerito header proof), so its equivalent
- *     terminal, node-attributable
- *     failure is "this endpoint served data the wallet could not verify".
- *     That is a stronger claim than a parse error and deserves its own kind.
+ *   - `parseFatal` → `consensus`: "this endpoint served data the wallet
+ *     cannot use" (a refused batch, a branch id with no pool), terminal and
+ *     node-attributable. zafu does not verify the chain against a proof; the
+ *     node is trusted for chain data, and this kind only names data that is
+ *     inconsistent on its face.
  *   - vizor defaults an unclassified error to *retry*; zafu defaults it to
  *     *visible* (`autoRetries: false`). This is a money path: a
  *     classification bug must never turn a real failure into a silent

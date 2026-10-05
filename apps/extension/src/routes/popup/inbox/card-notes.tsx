@@ -1,7 +1,9 @@
 /**
  * The lines zafu writes into a thread about the relationship (Cv2DoneYou,
  * Cv2DoneThem, Cv2MemoArrived, Cv2Update, Cv2UpdateSheet): saved, confirmed,
- * answered by memo, and a signed card that changed something.
+ * answered by memo, and a signed card that changed something. A card that
+ * changes their name or network waits for your yes; one that changes the
+ * pair key is never taken.
  */
 
 import { useState } from 'react';
@@ -9,26 +11,40 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import type { CardV2 } from '@repo/wallet/networks/zcash/card-v2';
-import { changed, readNote, type Note } from '../../../people/cards';
+import { changed, readB64Card, readNote, type Note } from '../../../people/cards';
+import { peopleCall } from '../../../people/client';
 import { addressesOf } from '../../../people/my-card';
 import type { ThreadItem } from '../../../people/vault';
 import { sealPath } from '../paths';
-import { hhmm } from './add-person';
+import { hhmm } from '../../../utils/when';
 import { shortAddress } from './threads';
 
-const WHAT: Record<ReturnType<typeof changed>[number], string> = {
+type Field = ReturnType<typeof changed>[number];
+
+const WHAT: Record<Field, string> = {
   zcash: 'address',
   penumbra: 'penumbra address',
   relay: 'relay',
   caps: 'way to reach them',
+  name: 'name',
+  testnet: 'network',
+  pairKa: 'pair key',
 };
 
-const shown = (c: CardV2, k: ReturnType<typeof changed>[number]) =>
+const shown = (c: CardV2, k: Field) =>
   k === 'zcash' || k === 'penumbra'
     ? shortAddress(addressesOf(c).find(a => a.network === k)?.address ?? 'none')
     : k === 'relay'
       ? new URL(c.relay).host
-      : String(c.caps);
+      : k === 'name'
+        ? c.name || 'no name'
+        : k === 'testnet'
+          ? c.testnet
+            ? 'testnet'
+            : 'mainnet'
+          : k === 'pairKa'
+            ? `${c.pairKa.slice(0, 8)}…`
+            : String(c.caps);
 
 const Line = ({ icon, children }: { icon?: string; children: React.ReactNode }) => (
   <span className='flex items-center gap-1.5 self-center text-[11px] text-fg-muted'>
@@ -42,11 +58,14 @@ const UpdateSheet = ({
   name,
   at,
   onClose,
+  ask,
 }: {
   note: Extract<Note, { ev: 'update' }>;
   name: string;
   at: number;
   onClose: () => void;
+  /** still waiting for your yes: take it, or keep what you have */
+  ask?: (yes: boolean) => void;
 }) => {
   const keys = changed(note.from, note.to);
   return (
@@ -77,12 +96,33 @@ const UpdateSheet = ({
           <span className='text-fg-high'>{hhmm(at)}</span>
         </div>
       </div>
-      {keys.includes('zcash') && (
-        <span className='text-[11px] text-fg-muted'>
-          paying {name} uses the new address from now
-        </span>
+      {ask ? (
+        <>
+          <span className='text-[11px] text-fg-muted'>
+            {keys.includes('testnet')
+              ? `paying ${name} would use a ${note.to.testnet ? 'testnet' : 'mainnet'} address. `
+              : ''}
+            nothing changes until you say yes
+          </span>
+          <div className='flex gap-2'>
+            <Button variant='secondary' className='flex-1' onClick={() => ask(false)}>
+              keep the old card
+            </Button>
+            <Button className='flex-1' onClick={() => ask(true)}>
+              use the new card
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          {keys.includes('zcash') && (
+            <span className='text-[11px] text-fg-muted'>
+              paying {name} uses the new address from now
+            </span>
+          )}
+          <Button onClick={onClose}>done</Button>
+        </>
       )}
-      <Button onClick={onClose}>done</Button>
     </Sheet>
   );
 };
@@ -92,11 +132,14 @@ export const NoteLine = ({
   name,
   contactId,
   sealChecked,
+  pending,
 }: {
   item: ThreadItem;
   name: string;
   contactId?: string;
   sealChecked?: boolean;
+  /** the pair room's held card (base64url), if one waits for your yes */
+  pending?: string;
 }) => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -151,8 +194,15 @@ export const NoteLine = ({
       );
     case 'closed':
       return <Line>{name} closed this relationship</Line>;
+    case 'refused':
+      return (
+        <Line icon='i-lucide-shield-x'>
+          a card for {name} came with another pair key · zafu kept the one you have
+        </Line>
+      );
     case 'update': {
       const keys = changed(note.from, note.to);
+      const asking = note.held && contactId && readB64Card(pending)?.revision === note.to.revision;
       return (
         <>
           <button
@@ -162,11 +212,29 @@ export const NoteLine = ({
           >
             <span className='i-lucide-pen-line size-3.5 text-zigner-gold' aria-hidden='true' />
             {name}&apos;s {WHAT[keys[0] ?? 'zcash']} changed · signed by {name}
+            {asking ? ' · please look' : ''}
             <span className='i-lucide-chevron-right size-3.5' aria-hidden='true' />
           </button>
-          {open && <UpdateSheet note={note} name={name} at={at} onClose={() => setOpen(false)} />}
+          {open && (
+            <UpdateSheet
+              note={note}
+              name={name}
+              at={at}
+              onClose={() => setOpen(false)}
+              {...(asking
+                ? {
+                    ask: (yes: boolean) =>
+                      void peopleCall('card-adopt', { contactId, yes })
+                        .catch(() => undefined)
+                        .finally(() => setOpen(false)),
+                  }
+                : {})}
+            />
+          )}
         </>
       );
     }
+    default:
+      return null;
   }
 };

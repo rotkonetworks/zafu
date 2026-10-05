@@ -12,6 +12,10 @@
  * carries its ephemeral pubkey in a separate field - is never confused with this.
  *
  * wire: [0x01 suite][xwing_ct 1120][nonce 12][aes-256-gcm ciphertext+tag]
+ *
+ * `aad` (optional) binds the box to its context, such as what it is for and
+ * who it is for: the same bytes must be given to open it, so a box lifted
+ * into another context fails at the AEAD instead of opening there.
  */
 
 import { gcm } from '@noble/ciphers/aes.js';
@@ -37,12 +41,16 @@ const deriveKey = (sharedSecret: Uint8Array): Uint8Array =>
  * Seal `plaintext` to a recipient's X-Wing public key (1216 bytes). Returns the
  * self-contained wire bytes; the recipient needs only their secret to open it.
  */
-export function sealXWing(recipientPublicKey: Uint8Array, plaintext: Uint8Array): Uint8Array {
+export function sealXWing(
+  recipientPublicKey: Uint8Array,
+  plaintext: Uint8Array,
+  aad?: Uint8Array,
+): Uint8Array {
   const { sharedSecret, cipherText } = xwingEncapsulate(recipientPublicKey);
   const key = deriveKey(sharedSecret);
   sharedSecret.fill(0);
   const nonce = randomBytes(NONCE_LEN);
-  const sealed = gcm(key, nonce).encrypt(plaintext);
+  const sealed = gcm(key, nonce, aad).encrypt(plaintext);
   key.fill(0);
 
   const out = new Uint8Array(HEADER_LEN + sealed.length);
@@ -55,11 +63,16 @@ export function sealXWing(recipientPublicKey: Uint8Array, plaintext: Uint8Array)
 
 /**
  * Open a sealed box with the recipient's 32-byte X-Wing SEED (derive it from the
- * mnemonic; the seed is the secret key). Throws on a wrong suite, a truncated
- * wire, or an authentication failure (a tampered ciphertext, or the wrong key -
- * ML-KEM implicit rejection surfaces here at the AEAD, exactly as intended).
+ * mnemonic; the seed is the secret key) and the `aad` it was sealed with.
+ * Throws on a wrong suite, a truncated wire, or an authentication failure (a
+ * tampered ciphertext, the wrong key, or another `aad` - ML-KEM implicit
+ * rejection surfaces here at the AEAD, exactly as intended).
  */
-export function openXWing(recipientSeed: Uint8Array, wire: Uint8Array): Uint8Array {
+export function openXWing(
+  recipientSeed: Uint8Array,
+  wire: Uint8Array,
+  aad?: Uint8Array,
+): Uint8Array {
   if (wire.length < HEADER_LEN) {
     throw new Error('sealed box: wire too short');
   }
@@ -76,7 +89,7 @@ export function openXWing(recipientSeed: Uint8Array, wire: Uint8Array): Uint8Arr
   const key = deriveKey(sharedSecret);
   sharedSecret.fill(0);
   try {
-    return gcm(key, nonce).decrypt(sealed);
+    return gcm(key, nonce, aad).decrypt(sealed);
   } finally {
     key.fill(0);
   }

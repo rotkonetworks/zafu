@@ -16,7 +16,8 @@
  *   answers  16   sha256(their inception key)[0..16], when answering theirs
  *   zcash    43   raw orchard receiver, made for this one person
  *   penumbra 80   raw penumbra address, only while penumbra is on
- *   relay    u8 len + host[:port][/path]; https assumed, `http://` kept; 0 = relay.zafu.pro
+ *   relay    u8 len + host[:port][/path]; https assumed, `http://` only for
+ *            a loopback host (a relay on this computer); 0 = relay.zafu.pro
  *   caps     u16be capability bits ({@link Cap})
  *   name     u8 len + UTF-8, at most 32 bytes; 0 = no name (the default)
  *   created  u32be unix minutes
@@ -57,6 +58,8 @@ export const Cap = {
   calls: 4,
   deals: 8,
   discovery: 16,
+  /** answers to this card are sealed to its pair key (people/card-answer) */
+  sealed: 32,
 } as const;
 
 export interface CardV2 {
@@ -90,13 +93,20 @@ const dec = new TextDecoder('utf-8', { fatal: true });
 export const answersOf = (keyHex: string): string =>
   bytesToHex(sha256(hexToBytes(keyHex))).slice(0, 32);
 
+/** plain http only reaches a relay on this computer; anywhere else it is https */
+const LOOPBACK = /^http:\/\/(localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:\/|$)/;
+
+/** a relay url a card may carry: https anywhere, http only to loopback */
+export const cardRelayOk = (relay: string): boolean =>
+  /^https:\/\/[^\s/]+/.test(relay) || LOOPBACK.test(relay);
+
 const relayBytes = (relay: string): Uint8Array => {
   const r = relay.replace(/\/+$/, '');
   if (!r || r === CARD_DEFAULT_RELAY) {
     return new Uint8Array();
   }
-  if (!/^https?:\/\/[^\s/]+/.test(r)) {
-    throw new Error('a card names its relay by an https or http url');
+  if (!cardRelayOk(r)) {
+    throw new Error('a card names its relay by an https url (http only on this computer)');
   }
   const b = enc.encode(r.replace(/^https:\/\//, ''));
   if (b.length > 120) {
@@ -158,20 +168,35 @@ const body = (c: CardV2): Uint8Array => {
 
 const preimage = (b: Uint8Array) => new Uint8Array([...enc.encode(CARD_V2_DOMAIN), ...b]);
 
+/** a key whose signatures mean something: a valid point, not of small order */
+const strongKey = (keyHex: string): boolean => {
+  try {
+    return !ed25519.Point.fromHex(keyHex).isSmallOrder();
+  } catch {
+    return false;
+  }
+};
+
+/** strict RFC 8032 verification (not ZIP-215), against a key of full order */
+const verifies = (sig: Uint8Array, msg: Uint8Array, keyHex: string): boolean =>
+  strongKey(keyHex) && ed25519.verify(sig, msg, keyHex, { zip215: false });
+
 /** the signed card; `seed` is the relationship's ed25519 secret and must be `card.key`'s */
 export const signCardV2 = (card: CardV2, seed: Uint8Array): Uint8Array => {
-  if (bytesToHex(ed25519.getPublicKey(seed)) !== card.key) {
+  if (bytesToHex(ed25519.getPublicKey(seed)) !== card.key || !strongKey(card.key)) {
     throw new Error('a card is signed by its own relationship key');
   }
   const b = body(card);
   return new Uint8Array([...b, ...ed25519.sign(preimage(b), seed)]);
 };
 
-const relayOf = (host: string): string => {
+/** the relay a card names, or null when it names plain http off this computer */
+const relayOf = (host: string): string | null => {
   if (!host) {
     return CARD_DEFAULT_RELAY;
   }
-  return /^https?:\/\//.test(host) ? host : `https://${host}`;
+  const url = /^https?:\/\//.test(host) ? host : `https://${host}`;
+  return cardRelayOk(url) ? url : null;
 };
 
 /** a signed v2 card, or null when it does not parse or its signature does not hold */
@@ -221,7 +246,8 @@ const parse = (bytes: Uint8Array): { card: CardV2; end: number } | null => {
     });
     const signed = b.subarray(0, at);
     const sig = take(SIG);
-    if (b.subarray(at).some(x => x !== 0) || !ed25519.verify(sig, preimage(signed), key)) {
+    const relay = relayOf(host);
+    if (!relay || b.subarray(at).some(x => x !== 0) || !verifies(sig, preimage(signed), key)) {
       return null;
     }
     const card: CardV2 = {
@@ -233,7 +259,7 @@ const parse = (bytes: Uint8Array): { card: CardV2; end: number } | null => {
       ...(zcash ? { zcash } : {}),
       ...(penumbra ? { penumbra } : {}),
       ...(flags & 8 ? { testnet: true } : {}),
-      relay: relayOf(host),
+      relay,
       caps,
       ...(name ? { name } : {}),
       created,

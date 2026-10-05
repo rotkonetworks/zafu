@@ -11,18 +11,15 @@
  * per-wallet record of where its sync starts. A wallet whose start was
  * written as 'tip' (sync from now) keeps asking for 'tip' after a plain
  * clear, which would just skip the same history again. Before clearing, this
- * pins the active wallet's start to `{ since: 0 }` - the same "read the whole
- * chain" value turn-on and the wallet-services self-heal already use - so the
- * resync actually reads from the beginning.
+ * sets the active wallet's start with `resyncStart`: a "sync from now" start
+ * becomes `{ since: 0 }` (the whole chain), while a known birthday is kept, so
+ * the re-read does not trial-decrypt years it never needed to.
  */
 
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../state';
 import { getActiveWalletJson } from '../state/wallets';
-import { startsOf, type PenumbraStart } from '../penumbra/start';
-
-/** the wallet's real start: every block decrypted, nothing skipped */
-const READ_FROM_START: PenumbraStart = { since: 0 };
+import { resyncStart, startsOf } from '../penumbra/start';
 
 /** the penumbra wallet in view, or undefined when none is active */
 const activeWalletId = (): string | undefined => getActiveWalletJson(useStore.getState())?.id;
@@ -34,11 +31,14 @@ const activeWalletId = (): string | undefined => getActiveWalletJson(useStore.ge
  * reloads the extension; resolves once the clear has been requested, not
  * once it finishes.
  */
-export const resyncPenumbraFromStart = async (): Promise<void> => {
+export const resyncPenumbraFromStart = async (everything = false): Promise<void> => {
   const walletId = activeWalletId();
   if (walletId) {
     const starts = startsOf(await localExtStorage.get('penumbraStarts')) ?? {};
-    await localExtStorage.set('penumbraStarts', { ...starts, [walletId]: READ_FROM_START });
+    await localExtStorage.set('penumbraStarts', {
+      ...starts,
+      [walletId]: resyncStart(starts[walletId], everything),
+    });
   }
   try {
     await chrome.runtime.sendMessage({ type: 'ClearCache', network: 'penumbra' });

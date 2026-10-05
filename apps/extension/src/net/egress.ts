@@ -26,6 +26,7 @@
 
 import {
   decideEgress,
+  decideRedirect,
   type EgressDecision,
   type EgressRealm,
   type EgressTable,
@@ -186,7 +187,7 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
       // nodes, so nothing stops the hop), but its answer never reaches the
       // caller unless the final url passes the same policy.
       if (response.redirected) {
-        const landed = checkEgress(response.url);
+        const landed = decideRedirect(urlOf(input), response.url, realm ?? 'worker', table);
         if (!landed.allow) {
           void response.body?.cancel().catch(() => undefined);
           refuse(landed);
@@ -233,7 +234,7 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
         if (
           this.readyState === XMLHttpRequest.HEADERS_RECEIVED &&
           this.responseURL &&
-          !checkEgress(this.responseURL).allow
+          !decideRedirect(String(url), this.responseURL, realm ?? 'worker', table).allow
         ) {
           this.abort();
         }

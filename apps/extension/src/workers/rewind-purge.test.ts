@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { rewindPurge } from './rewind-purge';
+import {
+  allowMismatchRewind,
+  MISMATCH_REWIND_WINDOW_MS,
+  MISMATCH_REWINDS_PER_WINDOW,
+  rewindPurge,
+} from './rewind-purge';
 
 describe('rewindPurge', () => {
   // the regtest reorg this guards: a send at 3236 spent a note from 127 and
@@ -29,5 +34,26 @@ describe('rewindPurge', () => {
 
   test('a rewind above everything takes nothing', () => {
     expect(rewindPurge(notes, 10_000)).toEqual({ drop: [], unspend: [] });
+  });
+});
+
+describe('allowMismatchRewind', () => {
+  test('a few per hour, then refused until the oldest ages out', () => {
+    let h: number[] = [];
+    const t0 = 1_000_000;
+    for (let i = 0; i < MISMATCH_REWINDS_PER_WINDOW; i++) {
+      h = allowMismatchRewind(h, t0 + i)!;
+      expect(h).toBeDefined();
+    }
+    expect(allowMismatchRewind(h, t0 + 10)).toBeUndefined();
+    expect(allowMismatchRewind(h, t0 + MISMATCH_REWIND_WINDOW_MS)).toHaveLength(
+      MISMATCH_REWINDS_PER_WINDOW,
+    );
+  });
+
+  test('entries stamped in the future (a clock set back) are ignored, like the reseed rule', () => {
+    const now = 5_000_000;
+    const future = Array(MISMATCH_REWINDS_PER_WINDOW).fill(now + 10_000);
+    expect(allowMismatchRewind(future, now)).toEqual([now]);
   });
 });

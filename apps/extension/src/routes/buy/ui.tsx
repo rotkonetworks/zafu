@@ -1,20 +1,12 @@
 /** the buy page's small shared pieces: its store hook, its clock, its column */
 
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { buyStore, type BuyState } from './store';
 
 export const useBuy = <T,>(sel: (s: BuyState) => T): T => useStore(buyStore, sel);
 
-/** the clock the waits show: re-renders the caller once a second */
-export const useNow = (ms = 1000): number => {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), ms);
-    return () => clearInterval(id);
-  }, [ms]);
-  return now;
-};
+export { useNow } from '../../hooks/use-now';
 
 export const Column = ({
   title,

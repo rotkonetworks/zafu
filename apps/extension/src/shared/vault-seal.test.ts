@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { base64ToUint8Array, uint8ArrayToBase64 } from '@penumbrafi/types/base64';
 import { Key } from '@repo/encryption/key';
-import { issueWorkerKey, openKeySeal, sealKeyTo } from './vault-seal';
+import { issueWorkerKey, openCall, openKeySeal, sealCallTo, sealKeyTo } from './vault-seal';
 
 const session = async () => {
   const { key } = await Key.create('a password');
@@ -52,5 +52,35 @@ describe('vault seal', () => {
     const bytes = base64ToUint8Array(seal.wrapped);
     bytes[0] = bytes[0]! ^ 1;
     expect(await openKeySeal({ ...seal, wrapped: uint8ArrayToBase64(bytes) })).toBeNull();
+  });
+
+  test('a secret call: arguments and reply cross only sealed, and only the caller reads the reply', async () => {
+    const to = await issueWorkerKey();
+    const args = { keyPackageHex: 'cafe'.repeat(16), ephemeralSeedHex: 'beef'.repeat(16) };
+    const { sealed, open } = await sealCallTo(to, args);
+    expect(JSON.stringify(sealed)).not.toContain('cafe');
+    expect(JSON.stringify(sealed)).not.toContain('beef');
+    const call = await openCall(sealed);
+    expect(call!.args).toEqual(args);
+    const reply = await call!.reply({ nonces: 'f00d'.repeat(16) });
+    expect(JSON.stringify(reply)).not.toContain('f00d');
+    expect(await open(reply)).toEqual({ nonces: 'f00d'.repeat(16) });
+    // the worker key is spent: the same call never opens twice
+    expect(await openCall(sealed)).toBeNull();
+    // and a reply cannot be taken for a call
+    const other = await sealCallTo(await issueWorkerKey(), args);
+    await expect(other.open(reply)).rejects.toThrow();
+  });
+
+  test('a secret call opens only with its own worker key, untampered', async () => {
+    const [a, b] = [await issueWorkerKey(), await issueWorkerKey()];
+    const { sealed } = await sealCallTo(a, { x: 1 });
+    expect(await openCall({ ...sealed, id: b.id })).toBeNull();
+    expect(await openCall(undefined)).toBeNull();
+    const c = await issueWorkerKey();
+    const tampered = await sealCallTo(c, { x: 1 });
+    const bytes = base64ToUint8Array(tampered.sealed.ct);
+    bytes[0] = bytes[0]! ^ 1;
+    expect(await openCall({ ...tampered.sealed, ct: uint8ArrayToBase64(bytes) })).toBeNull();
   });
 });

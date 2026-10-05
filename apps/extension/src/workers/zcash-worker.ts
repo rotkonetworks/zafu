@@ -40,17 +40,18 @@ import {
 import { nu63ActivationHeight } from '../config/feature-flags';
 import {
   applyTreeWrites,
-  LEGACY_META_KEYS,
   legacyWitnesses,
   loadTree,
   MAX_CHECKPOINTS,
   openTrees,
   RECOVERY_ROUNDING,
+  retiredLegacy,
   treePaths,
   withoutWitness,
   type LegacyIronwoodRow,
   type LegacyNoteRecord,
   type NoteTree,
+  type RecoveryProgress,
   type TreeBlock,
   type TreeChain,
   type TreePool,
@@ -58,6 +59,7 @@ import {
   type TreeWrite,
 } from './note-trees';
 import { crossCheckTip, pickIndependentPeer } from './cross-verify';
+import { ironwoodBranchRefusal } from './branch-ids';
 import { checkEgress } from '../net/egress';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 import { BlockPrefetcher } from './block-prefetcher';
@@ -82,7 +84,7 @@ import {
   type DepositWasm,
 } from './transparent-deposit';
 import { assertProveRequest, type ProveRequest } from '../shared/prove-guard';
-import { issueWorkerKey, type SealedVault } from '../shared/vault-seal';
+import { issueWorkerKey, openCall, type SealedCall, type SealedVault } from '../shared/vault-seal';
 import {
   parseExpiryHeight,
   reconcileSentTxs,
@@ -103,7 +105,7 @@ import {
 import { startRun, stopRun, STOP_WAIT_MS, type RunSlot } from './sync-runs';
 import { errText, storageFailure } from '@penumbra-zone/query/error-text';
 import { mergeLoadedNotes, mergeLoadedSpent, readAcrossRewinds } from './wallet-state-merge';
-import { rewindPurge } from './rewind-purge';
+import { allowMismatchRewind, rewindPurge } from './rewind-purge';
 import { storeFellBehind } from './store-reset';
 import { createBuildRegistry } from './build-abort';
 
@@ -456,6 +458,9 @@ interface WasmModule extends DepositWasm {
     anchor_height: number,
   ): unknown;
   tree_root_hex(tree_state_hex: string): string;
+  /** leaves in a zcashd-format frontier (the orchard pool) */
+  frontier_tree_size?: (tree_state_hex: string) => bigint;
+  frontier_tree_size_ironwood?: (tree_state_hex: string) => bigint;
 
   // ── NU6.3 ironwood pool (frozen interface contract, Section 2) ──
   // All optional: pre-ironwood wasm blobs don't export them, so every call
@@ -677,15 +682,7 @@ const cborWrapPczt = (pczt: Uint8Array): Uint8Array => {
  * v5 layout: [4B header][4B versionGroupId][4B consensusBranchId]...
  * NU5 branch ID in LE: B4 D0 D6 C2
  */
-/**
- * Consensus branch ids that have the ironwood pool: NU6.3 (0x37a5165b) and NU7
- * (0x77190ad9, testnet from 4,465,026). The ironwood builders bind the
- * endpoint's branch id into the transaction; we fail closed unless
- * GetLightdInfo reports one of these. `GetLightdInfo` returns it as a
- * lowercase hex string with no `0x` prefix.
- */
-const IRONWOOD_BRANCH_IDS_HEX = new Set(['37a5165b', '77190ad9']);
-const IRONWOOD_BRANCH_IDS_TEXT = 'NU6.3 0x37a5165b or NU7 0x77190ad9';
+// which branch ids carry the ironwood pool on which network: branch-ids.ts
 /** Placeholder branch id from a pre-activation / not-yet-real fork. Never build against it. */
 const PLACEHOLDER_BRANCH_ID_HEX = 'ffffffff';
 
@@ -739,6 +736,12 @@ const patchBranchId = (buf: Uint8Array): void => {
     buf[11] = NU5_BRANCH_ID_LE[3]!;
   }
 };
+
+/** whether the running sync's note tree holds a note (so its send needs no recovery) */
+const heldBy =
+  (walletId: string, pool: NotePool) =>
+  (n: DecryptedNote): boolean =>
+    walletStates.get(walletId)?.noteTrees?.get(pool)?.is_marked(n.position) ?? false;
 
 /** stop the wallet's sync and wait until its loop and mempool watcher have ended */
 const stopSync = async (state: WalletState): Promise<void> => {
@@ -1015,6 +1018,14 @@ const idbGet = async <T>(store: string, key: IDBValidKey): Promise<T | undefined
   });
 };
 
+/** one row of a wallet's `meta` store */
+const idbPutMeta = async (walletId: string, key: string, value: unknown): Promise<void> => {
+  const db = await getDb();
+  const tx = db.transaction('meta', 'readwrite');
+  tx.objectStore('meta').put({ walletId, key, value });
+  await txComplete(tx);
+};
+
 const idbGetAllByIndex = async <T>(
   store: string,
   indexName: string,
@@ -1152,6 +1163,8 @@ const appendCborAnchorTime = (cbor: Uint8Array, unixSeconds: number): Uint8Array
 
 /** blocks between comparisons of the note trees with the server's tree state */
 const TREE_CHECK_INTERVAL = 5_000;
+/** pause before asking the same node again about a root that differs */
+const SECOND_ANSWER_DELAY_MS = 3_000;
 
 /**
  * Heights per `GetCompactBlocks` request on the catch-up path.
@@ -1361,10 +1374,15 @@ const writeTreeRows = async (walletId: string, writes: readonly TreeWrite[]): Pr
 
 /** mainnet NU6.3 activation: below it the ironwood tree is empty */
 const NU63_MAINNET = nu63ActivationHeight(true);
+/** NU5 activation, the orchard pool's first block */
+const NU5_HEIGHT = { mainnet: 1_687_104, testnet: 1_842_420 } as const;
 
 /** the server's public tree state, roots and blocks, as the trees ask for them */
-const treeChain = (client: WitnessClient & Pick<ZcashClient, 'getSubtreeRoots'>): TreeChain => ({
-  async frontierAt(pool, height) {
+const treeChain = (
+  client: WitnessClient & Pick<ZcashClient, 'getSubtreeRoots'>,
+  mainnet: boolean,
+): TreeChain => {
+  const frontierAt: TreeChain['frontierAt'] = async (pool, height) => {
     if (height <= 0) {
       return '';
     }
@@ -1373,10 +1391,31 @@ const treeChain = (client: WitnessClient & Pick<ZcashClient, 'getSubtreeRoots'>)
       return ts.orchardTree;
     }
     return ts.ironwoodTree || (height < NU63_MAINNET ? '' : undefined);
-  },
-  subtreeRoots: (pool, start) => client.getSubtreeRoots(pool, start),
-  blocks: (pool, from, to, signal) => fetchPoolBlocks(client, pool, from, to, signal),
-});
+  };
+  return {
+    frontierAt,
+    async sizeAt(pool, height) {
+      const f = await frontierAt(pool, height);
+      if (f === undefined) {
+        return undefined;
+      }
+      if (f === '') {
+        return 0;
+      }
+      const size =
+        pool === 'ironwood'
+          ? wasmModule?.frontier_tree_size_ironwood?.(f)
+          : wasmModule?.frontier_tree_size?.(f);
+      return size === undefined ? undefined : Number(size);
+    },
+    subtreeRoots: (pool, start) => client.getSubtreeRoots(pool, start),
+    blocks: (pool, from, to, signal) => fetchPoolBlocks(client, pool, from, to, signal),
+    poolStart: pool =>
+      pool === 'ironwood'
+        ? nu63ActivationHeight(mainnet)
+        : NU5_HEIGHT[mainnet ? 'mainnet' : 'testnet'],
+  };
+};
 
 /**
  * Per-note witnesses the wallet stored before the trees: orchard ones on the
@@ -1393,33 +1432,40 @@ const readLegacyWitnesses = async (walletId: string, spent: ReadonlySet<string>)
 
 /**
  * Write a run's opened trees and the sizes they end at, and drop what the
- * per-note era stored now that the trees hold it: the `witnesses-ironwood`
- * rows, the witness fields on note records, the frontier meta. One
- * transaction.
+ * per-note era stored for each pool that now has a tree: the
+ * `witnesses-ironwood` rows, the witness fields on orchard note records, the
+ * frontier meta. A pool left without a tree (a server with no tree state for
+ * it) keeps its legacy witnesses for a later run to migrate. One transaction.
  */
 const saveTreeStart = async (
   walletId: string,
   stale: readonly LegacyNoteRecord[],
   treeWrites: readonly TreeWrite[],
   sizes: { orchardTreeSize: number; ironwoodTreeSize: number },
+  seeded: { orchard: boolean; ironwood: boolean },
 ): Promise<void> => {
+  const retired = retiredLegacy(seeded);
   const db = await getDb();
   const tx = db.transaction(['notes', 'meta', 'witnesses-ironwood'], 'readwrite');
   const notes = tx.objectStore('notes');
-  for (const n of stale) {
-    notes.put({ ...withoutWitness(n), walletId });
+  if (retired.orchardWitnessFields) {
+    for (const n of stale) {
+      notes.put({ ...withoutWitness(n), walletId });
+    }
   }
-  const iw = tx.objectStore('witnesses-ironwood');
-  const keys: IDBValidKey[] = await new Promise((resolve, reject) => {
-    const req = iw.index('byWallet').getAllKeys(walletId);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error('witness rows unreadable'));
-  });
-  for (const key of keys) {
-    iw.delete(key);
+  if (retired.ironwoodRows) {
+    const iw = tx.objectStore('witnesses-ironwood');
+    const keys: IDBValidKey[] = await new Promise((resolve, reject) => {
+      const req = iw.index('byWallet').getAllKeys(walletId);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error ?? new Error('witness rows unreadable'));
+    });
+    for (const key of keys) {
+      iw.delete(key);
+    }
   }
   const meta = tx.objectStore('meta');
-  for (const key of LEGACY_META_KEYS) {
+  for (const key of retired.metaKeys) {
     meta.delete([walletId, key]);
   }
   meta.put({ walletId, key: 'orchardTreeSize', value: sizes.orchardTreeSize });
@@ -1683,8 +1729,18 @@ const selectNotes = (
   // a transaction spends from exactly one pool; pre-ironwood callers all
   // spend orchard, so notes without a pool tag (legacy records) qualify
   pool: NotePool = 'orchard',
+  // notes the note tree already holds: when they cover the target, a send
+  // never waits for the recovery of the others
+  held?: (n: DecryptedNote) => boolean,
 ): DecryptedNote[] => {
   const unspent = notes.filter(n => !spentNullifiers.has(n.nullifier) && poolOf(n) === pool);
+  if (held) {
+    const ready = unspent.filter(held);
+    const readyTotal = ready.reduce((sum, n) => sum + BigInt(n.value), 0n);
+    if (ready.length < unspent.length && readyTotal >= target) {
+      return selectNotes(ready, spentNullifiers, target, pool);
+    }
+  }
   unspent.sort((a, b) => Number(BigInt(b.value) - BigInt(a.value)));
   const selected: DecryptedNote[] = [];
   let total = 0n;
@@ -1732,8 +1788,14 @@ const fetchPoolBlocks = async (
   signal?: AbortSignal,
 ): Promise<TreeBlock[]> => {
   const ranges: [number, number][] = [];
-  for (let s = start; s <= end; s += TREE_FETCH_BATCH) {
-    ranges.push([s, Math.min(s + TREE_FETCH_BATCH - 1, end)]);
+  // a short range (a dense shard: 65536 leaves in a few hundred spam-era
+  // blocks) is split across the concurrent requests instead of one
+  const batch = Math.max(
+    1,
+    Math.min(TREE_FETCH_BATCH, Math.ceil((end - start + 1) / TREE_FETCH_CONCURRENCY)),
+  );
+  for (let s = start; s <= end; s += batch) {
+    ranges.push([s, Math.min(s + batch - 1, end)]);
   }
   const results = new Array<TreeBlock[]>(ranges.length);
   let next = 0;
@@ -2060,7 +2122,12 @@ const buildWitnesses = async (
   const t0 = performance.now();
   const loop = walletStates.get(walletId);
   const live = loop?.stop && !loop.stop.signal.aborted ? loop : undefined;
-  await live?.treeRecovery?.catch(() => undefined);
+  // a send of notes the tree holds never waits for a recovery; one that needs
+  // a lost note waits for the pass in progress (one shard step, bounded)
+  const liveTree = live?.noteTrees?.get(pool);
+  if (!liveTree || notes.some(n => !liveTree.is_marked(n.position))) {
+    await live?.treeRecovery?.catch(() => undefined);
+  }
   let tree = live?.noteTrees?.get(pool);
   let owned: NoteTree | undefined;
   if (!tree) {
@@ -2440,9 +2507,10 @@ const syncLoop = async (
   // load the trees, or seed them from the server at this height, taking the
   // per-note witnesses an older version stored (then those are dropped)
   const legacy = await readLegacyWitnesses(walletId, state.spentNullifiers);
+  const mainnet = (state.keys as { is_mainnet?: () => boolean } | null)?.is_mainnet?.() ?? true;
   const trees = await openTrees(
     () => new TreeCtor(MAX_CHECKPOINTS),
-    treeChain(client),
+    treeChain(client, mainnet),
     await readTreeRows(walletId),
     [
       {
@@ -2465,31 +2533,64 @@ const syncLoop = async (
   );
   orchardTreeSize = trees.size('orchard') ?? orchardTreeSize;
   ironwoodTreeSize = trees.size('ironwood') ?? ironwoodTreeSize;
-  await saveTreeStart(walletId, legacy.stale, trees.takeWrites(), {
-    orchardTreeSize,
-    ironwoodTreeSize,
-  });
+  await saveTreeStart(
+    walletId,
+    legacy.stale,
+    trees.takeWrites(),
+    { orchardTreeSize, ironwoodTreeSize },
+    { orchard: !!trees.get('orchard'), ironwood: !!trees.get('ironwood') },
+  );
   state.noteTrees = trees;
-  // notes the trees do not hold are recovered once the loop is caught up
+  // notes the trees do not hold are recovered once the loop is caught up, a
+  // shard at a time for at most RECOVERY_BUDGET_MS per pass, so the loop keeps
+  // scanning in between; a shard that fails waits (with backoff) while the
+  // others go on. Returns true while notes are left to recover.
   let recoverDue = true;
   const unspentOf = (pool: TreePool) =>
     state.notes.filter(n => poolOf(n) === pool && !state.spentNullifiers.has(n.nullifier));
-  const recoverLost = async () => {
+  const recoverLost = async (): Promise<boolean> => {
+    let pending = false;
     const job = (async () => {
+      const progress: Record<string, RecoveryProgress> = {};
       for (const pool of ['orchard', 'ironwood'] as const) {
-        await trees.recover(pool, unspentOf(pool), signal);
+        const p = await trees.recover(pool, unspentOf(pool), signal);
+        // each finished shard is written at once: a stop resumes from here
+        await writeTreeRows(walletId, trees.takeWrites());
+        progress[pool] = p;
+        // notes in a shard that failed wait for its retry, not for this loop
+        pending ||= p.left > p.waiting;
       }
-      await writeTreeRows(walletId, trees.takeWrites());
+      const left = progress['orchard']!.left + progress['ironwood']!.left;
+      const recovered = progress['orchard']!.recovered + progress['ironwood']!.recovered;
+      if (left > 0 || recovered > 0) {
+        const waiting = progress['orchard']!.waiting + progress['ironwood']!.waiting;
+        console.log(
+          `[zcash-worker] note recovery: ${recovered} marked, ${left} left (${waiting} waiting for a retry)`,
+        );
+        // the sync strip says how many notes are still being prepared
+        workerSelf.postMessage({
+          type: 'sync-progress',
+          id: '',
+          network: 'zcash',
+          walletId,
+          payload: { preparing: left },
+        });
+      }
+      return left > 0;
     })();
-    state.treeRecovery = job;
+    state.treeRecovery = job.then(() => undefined);
     try {
-      await job;
+      const left = await job;
+      recoverDue = left;
     } catch (e) {
       recoverDue = true;
-      console.warn(`[zcash-worker] note recovery failed, retrying later: ${errText(e)}`);
+      if (!signal.aborted) {
+        console.warn(`[zcash-worker] note recovery failed, retrying later: ${errText(e)}`);
+      }
     } finally {
       state.treeRecovery = undefined;
     }
+    return pending;
   };
 
   console.log(
@@ -2549,18 +2650,13 @@ const syncLoop = async (
       known.set(n.nullifier, n);
     }
     const { drop, unspend } = rewindPurge([...known.values()], landed);
-    const unspent = unspend.map(n => ({
-      ...n,
-      spent_by_txid: undefined,
-      spent_at_height: undefined,
-    }));
     await saveBatch(
       walletId,
       [],
       [],
       landed,
       orchardTreeSize,
-      unspent,
+      unspend.map(n => ({ ...n, spent_by_txid: undefined, spent_at_height: undefined })),
       iwSupported ? ironwoodTreeSize : undefined,
       trees.takeWrites(),
       {
@@ -2593,45 +2689,96 @@ const syncLoop = async (
     return landed;
   };
 
+  const serverTree = (pool: TreePool, ts: { orchardTree: string; ironwoodTree?: string }) => {
+    if (pool === 'orchard') {
+      return { frontier: ts.orchardTree, root: wasmModule!.tree_root_hex(ts.orchardTree) };
+    }
+    const iwRoot = wasmModule!.tree_root_hex_ironwood;
+    return ts.ironwoodTree && iwRoot
+      ? { frontier: ts.ironwoodTree, root: iwRoot(ts.ironwoodTree) }
+      : undefined;
+  };
+  /**
+   * A second answer before a tree that differs is replaced: the opted-in
+   * independent operator when there is one, else the same node a moment later
+   * (a node behind a balancer that answered from a lagging backend, most often).
+   */
+  const secondAnswer = (pool: TreePool, height: number) => async () => {
+    const peer = zidecar ? pickIndependentPeer(serverUrl) : undefined;
+    const second =
+      peer && checkEgress(peer.url).allow ? zcashClient(peer.url, peer.backend) : undefined;
+    if (!second) {
+      await sleepUnlessAborted(signal, SECOND_ANSWER_DELAY_MS);
+    }
+    signal.throwIfAborted();
+    return serverTree(pool, await (second ?? client).getTreeState(height));
+  };
   /** compare both trees with the server's tree state at `height`; true when one was reseeded */
-  const checkTrees = (
+  const checkTrees = async (
     height: number,
     ts: { orchardTree: string; ironwoodTree?: string },
-  ): boolean => {
-    const reseeded = trees.check('orchard', height, {
-      frontier: ts.orchardTree,
-      root: wasmModule!.tree_root_hex(ts.orchardTree),
-    });
-    const iwRoot = wasmModule!.tree_root_hex_ironwood;
-    const iw =
-      ts.ironwoodTree && iwRoot
-        ? trees.check('ironwood', height, {
-            frontier: ts.ironwoodTree,
-            root: iwRoot(ts.ironwoodTree),
-          })
-        : false;
+  ): Promise<boolean> => {
+    const reseeded = await trees.check(
+      'orchard',
+      height,
+      serverTree('orchard', ts),
+      secondAnswer('orchard', height),
+    );
+    const iwServer = serverTree('ironwood', ts);
+    const iw = iwServer
+      ? await trees.check('ironwood', height, iwServer, secondAnswer('ironwood', height))
+      : false;
     orchardTreeSize = trees.size('orchard') ?? orchardTreeSize;
     ironwoodTreeSize = trees.size('ironwood') ?? ironwoodTreeSize;
     return reseeded || iw;
   };
 
   /**
-   * Rewind the scan cursor by the next escalating distance and say so; false
-   * when the budget for this run is spent or there is nowhere to go.
+   * A tree whose root differs from the server's at `height`, twice (the same
+   * second answer `check` asks for), read blocks the server no longer has: a
+   * reorg. The scan cursor is rewound and the range read again, which takes
+   * back the notes and spends found in it. Bounded twice over, so a server
+   * cannot make the wallet re-read at will: the run's rewind budget, and
+   * MISMATCH_REWINDS_PER_WINDOW per wallet per hour (stored). Past either, the
+   * reseed rule of `check` applies. True when the cursor moved.
    */
-  const rewindOnce = async (why: string, cause?: unknown): Promise<boolean> => {
-    if (rewindsThisRun >= MAX_REWINDS_PER_RUN) {
+  const rewindOnMismatch = async (
+    height: number,
+    ts: { orchardTree: string; ironwoodTree?: string },
+  ): Promise<boolean> => {
+    const pools = (['orchard', 'ironwood'] as const).filter(pool =>
+      trees.differs(pool, height, serverTree(pool, ts)?.root),
+    );
+    if (pools.length === 0 || rewindsThisRun >= MAX_REWINDS_PER_RUN) {
       return false;
     }
-    const target = Math.max(rewindFloor, currentHeight - rewindDistanceForAttempt(rewindsThisRun));
-    if (target >= currentHeight) {
+    const target = Math.max(rewindFloor, height - rewindDistanceForAttempt(rewindsThisRun));
+    if (target >= height) {
       return false;
     }
+    let agreed = false;
+    for (const pool of pools) {
+      const second = await secondAnswer(pool, height)().catch(() => undefined);
+      agreed ||= !!second && second.root === serverTree(pool, ts)?.root;
+    }
+    if (!agreed || !trees.differs(pools[0]!, height, serverTree(pools[0]!, ts)?.root)) {
+      return false;
+    }
+    const earlier = (await idbGet<{ value: number[] }>('meta', [walletId, 'mismatchRewinds']))
+      ?.value;
+    const history = allowMismatchRewind(Array.isArray(earlier) ? earlier : [], Date.now());
+    if (!history) {
+      console.warn(
+        `[zcash-worker] ${pools.join(' and ')} note tree root at ${height} differs, rewind refused: ` +
+          'enough were taken this hour',
+      );
+      return false;
+    }
+    await idbPutMeta(walletId, 'mismatchRewinds', history);
     rewindsThisRun++;
     console.warn(
-      `[zcash-worker] ${why} near ${currentHeight}; rewinding to ${target} ` +
-        `(attempt ${rewindsThisRun}/${MAX_REWINDS_PER_RUN})${cause === undefined ? '' : ':'}`,
-      ...(cause === undefined ? [] : [cause]),
+      `[zcash-worker] ${pools.join(' and ')} note tree root at ${height} differs from the server's ` +
+        `(twice); rewinding to ${target} (attempt ${rewindsThisRun}/${MAX_REWINDS_PER_RUN})`,
     );
     currentHeight = await rewindScanCursor(target);
     lastSaved = currentHeight;
@@ -2648,38 +2795,6 @@ const syncLoop = async (
       },
     });
     return true;
-  };
-
-  /**
-   * The trees against the server's tree state at `height`. Trees whose root
-   * differs read blocks the server no longer has (a reorg): the range is read
-   * again, which takes back the notes and spends found in it. Past the rewind
-   * budget the trees are reseeded instead. True when the cursor moved.
-   */
-  const reconcileTrees = async (height: number): Promise<boolean> => {
-    const ts = await client.getTreeState(height);
-    const iwRoot = wasmModule!.tree_root_hex_ironwood;
-    const differs =
-      trees.differs('orchard', height, wasmModule!.tree_root_hex(ts.orchardTree)) ||
-      (!!ts.ironwoodTree && !!iwRoot && trees.differs('ironwood', height, iwRoot(ts.ironwoodTree)));
-    if (differs && (await rewindOnce('note tree root differs from the server'))) {
-      return true;
-    }
-    if (checkTrees(height, ts)) {
-      recoverDue = true;
-      // a reseeded tree moves the sizes: store them with its rows
-      await saveBatch(
-        walletId,
-        [],
-        [],
-        height,
-        orchardTreeSize,
-        undefined,
-        iwSupported ? ironwoodTreeSize : undefined,
-        trees.takeWrites(),
-      );
-    }
-    return false;
   };
 
   // mempool watcher: only spawned when explicitly opted in AND on a zidecar
@@ -2791,11 +2906,10 @@ const syncLoop = async (
       const chainHeight = await getChainTip();
 
       // Cross-check the tip against an INDEPENDENT operator, once per
-      // catch-up. The Ligerito header proof has no constraint system, so the
-      // chain state this endpoint reports is not bound to consensus by
-      // anything we can verify locally; cross-verification is the design's
-      // own stated mitigation and had zero call sites. Advisory, not fatal:
-      // a lagging or unreachable peer is far more common than an attack.
+      // catch-up. The node is trusted for chain data: nothing it reports is
+      // bound to consensus by anything we can verify locally, so a second
+      // operator is the only check there is. Advisory, not fatal: a lagging
+      // or unreachable peer is far more common than an attack.
       //
       // Gated on the user's own "zcash tip cross-check" opt-in BEFORE the
       // attempt, not just left to the egress guard to refuse: egress still
@@ -2839,9 +2953,24 @@ const syncLoop = async (
         // (a tree that differs is reseeded), then recover any notes the trees
         // do not hold - in the background of a send, never inside one
         try {
-          if (await reconcileTrees(currentHeight)) {
+          const syncTs = await client.getTreeState(currentHeight);
+          if (await rewindOnMismatch(currentHeight, syncTs)) {
             dropPipeline();
             continue;
+          }
+          if (await checkTrees(currentHeight, syncTs)) {
+            recoverDue = true;
+            // a reseeded tree moves the sizes: store them with its rows
+            await saveBatch(
+              walletId,
+              [],
+              [],
+              currentHeight,
+              orchardTreeSize,
+              undefined,
+              iwSupported ? ironwoodTreeSize : undefined,
+              trees.takeWrites(),
+            );
           }
         } catch (e) {
           console.warn(`[zcash-worker] note tree check failed: ${errText(e)}`);
@@ -2857,9 +2986,10 @@ const syncLoop = async (
           walletId,
           payload: { currentHeight, chainHeight, notesFound: state.notes.length, blocksScanned: 0 },
         });
-        if (recoverDue) {
-          recoverDue = false;
-          await recoverLost();
+        // a pass with notes still to recover goes straight on (after the tip
+        // check above), so recovery never holds the scan for more than a pass
+        if (recoverDue && (await recoverLost())) {
+          continue;
         }
         await sleepUnlessAborted(signal, 10000);
         continue;
@@ -3201,9 +3331,23 @@ const syncLoop = async (
       // reorg or a bad batch shows here); a tree that differs is reseeded
       if (currentHeight % TREE_CHECK_INTERVAL < batchSize) {
         try {
-          if (await reconcileTrees(currentHeight)) {
+          const batchTs = await client.getTreeState(currentHeight);
+          if (await rewindOnMismatch(currentHeight, batchTs)) {
             dropPipeline();
             continue;
+          }
+          if (await checkTrees(currentHeight, batchTs)) {
+            recoverDue = true;
+            await saveBatch(
+              walletId,
+              [],
+              [],
+              currentHeight,
+              orchardTreeSize,
+              undefined,
+              iwSupported ? ironwoodTreeSize : undefined,
+              trees.takeWrites(),
+            );
           }
         } catch {
           /* best-effort: the caught-up check runs again */
@@ -3249,16 +3393,40 @@ const syncLoop = async (
       // user about a tree root. Rewind the scan cursor by an escalating
       // distance and read the range again. The user only ever learns about
       // this if the budget runs out, and then only as "the chain changed".
-      if (isChainContinuityError(err)) {
-        try {
-          if (await rewindOnce('chain continuity broken', err)) {
+      if (isChainContinuityError(err) && rewindsThisRun < MAX_REWINDS_PER_RUN) {
+        const target = Math.max(
+          rewindFloor,
+          currentHeight - rewindDistanceForAttempt(rewindsThisRun),
+        );
+        if (target < currentHeight) {
+          rewindsThisRun++;
+          console.warn(
+            `[zcash-worker] chain continuity broken near ${currentHeight}; rewinding to ${target} ` +
+              `(attempt ${rewindsThisRun}/${MAX_REWINDS_PER_RUN}):`,
+            err,
+          );
+          try {
+            currentHeight = await rewindScanCursor(target);
+            lastSaved = currentHeight;
+            workerSelf.postMessage({
+              type: 'sync-progress',
+              id: '',
+              network: 'zcash',
+              walletId,
+              payload: {
+                currentHeight,
+                chainHeight: currentHeight,
+                notesFound: state.notes.length,
+                blocksScanned: 0,
+              },
+            });
             continue;
+          } catch (rewindErr) {
+            // The rewind itself failed (endpoint down mid-recovery, storage
+            // unavailable). Fall through and treat it as an ordinary failure
+            // so the real reason is the one that gets classified.
+            console.warn(`[zcash-worker] rewind failed: ${errText(rewindErr)}`);
           }
-        } catch (rewindErr) {
-          // The rewind itself failed (endpoint down mid-recovery, storage
-          // unavailable). Fall through and treat it as an ordinary failure
-          // so the real reason is the one that gets classified.
-          console.warn(`[zcash-worker] rewind failed: ${errText(rewindErr)}`);
         }
       }
 
@@ -3476,6 +3644,25 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
   };
 };
 
+/**
+ * A FROST call that carries secrets: its arguments open only with the key
+ * this worker issued for it, and its reply is sealed back under the same
+ * key, so neither crosses the extension message bus in the clear.
+ */
+const sealedFrost = async (id: string, payload: unknown, run: (args: unknown) => unknown) => {
+  await initWasm();
+  const call = await openCall((payload as { sealed?: SealedCall } | undefined)?.sealed);
+  if (!call) {
+    throw new Error('this key step did not open in the worker. please try again.');
+  }
+  workerSelf.postMessage({
+    type: 'frost-result',
+    id,
+    network: 'zcash',
+    payload: await call.reply(run(call.args)),
+  });
+};
+
 // ── message handler ──
 
 workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
@@ -3552,7 +3739,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // Defensive: validate enum values from cross-context payload.
         // Silent coercion of an unknown backend to 'zidecar' is a privacy
         // regression - a user configured to talk to a third-party
-        // lightwalletd would end up hitting the trustless code path (with
+        // lightwalletd would end up hitting the zidecar code path (with
         // its zidecar-only RPCs) and either fail loudly OR, worse, succeed
         // against a server that happens to implement those endpoints with
         // a different trust model. Reject unknown explicitly.
@@ -3861,8 +4048,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // FROST cold device (which requires attested anchors) accepts the
         // bundle. Best-effort: on lightwalletd, server error, or signing
         // disabled we emit an unattested bundle (still imports on non-FROST
-        // devices). The anchor was already cross-checked against zidecar's
-        // tree-state during witness building, so it isn't arbitrary.
+        // devices). The anchor was already compared with the same node's
+        // tree state during witness building, and the attestation comes from
+        // that same operator: it says the node stands behind the anchor, not
+        // that the anchor is proven. The node is trusted for chain data.
         // Attestation is orchard-only for now: zidecar's SignAnchor verifies the
         // anchor against its orchard tree-state, so an ironwood anchor would not
         // match and returns unavailable. Ironwood bundles ship unattested - fine
@@ -4812,6 +5001,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           sendState.spentNullifiers,
           amountZat + estFee,
           sendActivePool,
+          heldBy(walletId, sendActivePool),
         );
 
         // compute exact fee (n active-pool spends + 1 output + change?)
@@ -4865,11 +5055,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                   'ironwood send is unavailable until NU6.3 activates',
               );
             }
-            if (!IRONWOOD_BRANCH_IDS_HEX.has(iwReportedBranchHex)) {
-              throw new Error(
-                `endpoint consensus branch id 0x${iwReportedBranchHex} has no ironwood pool ` +
-                  `(expected ${IRONWOOD_BRANCH_IDS_TEXT}); refusing to build ironwood send`,
-              );
+            const iwRefusal = ironwoodBranchRefusal(
+              iwReportedBranchHex,
+              sendPayload.mainnet,
+              'ironwood send',
+            );
+            if (iwRefusal) {
+              throw new Error(iwRefusal);
             }
             emitProgress('NU6.3 active', `branch id 0x${iwReportedBranchHex}`);
 
@@ -5392,6 +5584,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           sendState.spentNullifiers,
           amountZat + estFee,
           pcztPool,
+          heldBy(walletId, pcztPool),
         );
         const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
         const hasChange =
@@ -5452,11 +5645,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 'ironwood send is unavailable until NU6.3 activates',
             );
           }
-          if (!IRONWOOD_BRANCH_IDS_HEX.has(iwReportedBranchHex)) {
-            throw new Error(
-              `endpoint consensus branch id 0x${iwReportedBranchHex} has no ironwood pool ` +
-                `(expected ${IRONWOOD_BRANCH_IDS_TEXT}); refusing to build ironwood send`,
-            );
+          const iwRefusal = ironwoodBranchRefusal(
+            iwReportedBranchHex,
+            sendPayload.mainnet,
+            'ironwood send',
+          );
+          if (iwRefusal) {
+            throw new Error(iwRefusal);
           }
           emitProgress('NU6.3 active', `branch id 0x${iwReportedBranchHex}`);
 
@@ -5871,11 +6066,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               'turnstile migration is unavailable until NU6.3 activates',
           );
         }
-        if (!IRONWOOD_BRANCH_IDS_HEX.has(reportedBranchHex)) {
-          throw new Error(
-            `endpoint consensus branch id 0x${reportedBranchHex} has no ironwood pool ` +
-              `(expected ${IRONWOOD_BRANCH_IDS_TEXT}); refusing to build turnstile migration`,
-          );
+        const migrateRefusal = ironwoodBranchRefusal(
+          reportedBranchHex,
+          migratePayload.mainnet,
+          'turnstile migration',
+        );
+        if (migrateRefusal) {
+          throw new Error(migrateRefusal);
         }
         emitProgress('NU6.3 active', `branch id 0x${reportedBranchHex}`);
 
@@ -6295,6 +6492,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             multiState.spentNullifiers,
             amountZat + estFee,
             'orchard',
+            heldBy(walletId, 'orchard'),
           );
 
           // compute exact fee
@@ -6847,73 +7045,65 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       // ── FROST multisig ──
 
-      case 'frost-dkg-part1': {
-        await initWasm();
-        const { maxSigners, minSigners } = payload as { maxSigners: number; minSigners: number };
-        const result = JSON.parse(wasmModule!.frost_dkg_part1(maxSigners, minSigners));
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+      case 'frost-dkg-part1':
+        await sealedFrost(id, payload, a => {
+          const { maxSigners, minSigners } = a as { maxSigners: number; minSigners: number };
+          return JSON.parse(wasmModule!.frost_dkg_part1(maxSigners, minSigners));
+        });
         return;
-      }
 
-      case 'frost-dkg-part2': {
-        await initWasm();
-        const { secretHex, peerBroadcasts } = payload as {
-          secretHex: string;
-          peerBroadcasts: string;
-        };
-        const result = JSON.parse(wasmModule!.frost_dkg_part2(secretHex, peerBroadcasts));
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+      case 'frost-dkg-part2':
+        await sealedFrost(id, payload, a => {
+          const { secretHex, peerBroadcasts } = a as { secretHex: string; peerBroadcasts: string };
+          return JSON.parse(wasmModule!.frost_dkg_part2(secretHex, peerBroadcasts));
+        });
         return;
-      }
 
-      case 'frost-dkg-part3': {
-        await initWasm();
-        const { secretHex, round1Broadcasts, round2Packages } = payload as {
-          secretHex: string;
-          round1Broadcasts: string;
-          round2Packages: string;
-        };
-        const result = JSON.parse(
-          wasmModule!.frost_dkg_part3(secretHex, round1Broadcasts, round2Packages),
-        );
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+      case 'frost-dkg-part3':
+        await sealedFrost(id, payload, a => {
+          const { secretHex, round1Broadcasts, round2Packages } = a as {
+            secretHex: string;
+            round1Broadcasts: string;
+            round2Packages: string;
+          };
+          return JSON.parse(
+            wasmModule!.frost_dkg_part3(secretHex, round1Broadcasts, round2Packages),
+          );
+        });
         return;
-      }
 
-      case 'frost-sign-round1': {
-        await initWasm();
-        const { ephemeralSeedHex, keyPackageHex } = payload as {
-          ephemeralSeedHex: string;
-          keyPackageHex: string;
-        };
-        const result = JSON.parse(wasmModule!.frost_sign_round1(ephemeralSeedHex, keyPackageHex));
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
-        return;
-      }
-
-      case 'frost-spend-sign': {
-        await initWasm();
-        const { ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex, commitments } =
-          payload as {
+      case 'frost-sign-round1':
+        await sealedFrost(id, payload, a => {
+          const { ephemeralSeedHex, keyPackageHex } = a as {
             ephemeralSeedHex: string;
             keyPackageHex: string;
-            noncesHex: string;
-            sighashHex: string;
-            alphaHex: string;
-            commitments: string;
           };
-        // signed variant - coordinator (zafu/poker-escrow) extracts signer identifier from VK
-        const result = wasmModule!.frost_spend_sign_round2_signed(
-          ephemeralSeedHex,
-          keyPackageHex,
-          noncesHex,
-          sighashHex,
-          alphaHex,
-          commitments,
-        );
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+          return JSON.parse(wasmModule!.frost_sign_round1(ephemeralSeedHex, keyPackageHex));
+        });
         return;
-      }
+
+      case 'frost-spend-sign':
+        await sealedFrost(id, payload, a => {
+          const { ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex, commitments } =
+            a as {
+              ephemeralSeedHex: string;
+              keyPackageHex: string;
+              noncesHex: string;
+              sighashHex: string;
+              alphaHex: string;
+              commitments: string;
+            };
+          // signed variant - coordinator (zafu/poker-escrow) extracts signer identifier from VK
+          return wasmModule!.frost_spend_sign_round2_signed(
+            ephemeralSeedHex,
+            keyPackageHex,
+            noncesHex,
+            sighashHex,
+            alphaHex,
+            commitments,
+          );
+        });
+        return;
 
       case 'frost-spend-aggregate': {
         await initWasm();
@@ -6946,40 +7136,35 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         return;
       }
 
-      case 'frost-derive-address-from-sk': {
-        await initWasm();
-        const { publicKeyPackageHex, skHex, diversifierIndex } = payload as {
-          publicKeyPackageHex: string;
-          skHex: string;
-          diversifierIndex: number;
-        };
-        const rawHex = wasmModule!.frost_derive_address_from_sk(
-          publicKeyPackageHex,
-          skHex,
-          diversifierIndex,
-        );
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: rawHex });
+      case 'frost-derive-address-from-sk':
+        await sealedFrost(id, payload, a => {
+          const { publicKeyPackageHex, skHex, diversifierIndex } = a as {
+            publicKeyPackageHex: string;
+            skHex: string;
+            diversifierIndex: number;
+          };
+          return wasmModule!.frost_derive_address_from_sk(
+            publicKeyPackageHex,
+            skHex,
+            diversifierIndex,
+          );
+        });
         return;
-      }
 
-      case 'frost-sample-fvk-sk': {
-        await initWasm();
-        const skHex = wasmModule!.frost_sample_fvk_sk();
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: skHex });
+      case 'frost-sample-fvk-sk':
+        await sealedFrost(id, payload, () => wasmModule!.frost_sample_fvk_sk());
         return;
-      }
 
-      case 'frost-derive-ufvk': {
-        await initWasm();
-        const { publicKeyPackageHex, skHex, mainnet } = payload as {
-          publicKeyPackageHex: string;
-          skHex: string;
-          mainnet: boolean;
-        };
-        const ufvk = wasmModule!.frost_derive_ufvk(publicKeyPackageHex, skHex, mainnet);
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: ufvk });
+      case 'frost-derive-ufvk':
+        await sealedFrost(id, payload, a => {
+          const { publicKeyPackageHex, skHex, mainnet } = a as {
+            publicKeyPackageHex: string;
+            skHex: string;
+            mainnet: boolean;
+          };
+          return wasmModule!.frost_derive_ufvk(publicKeyPackageHex, skHex, mainnet);
+        });
         return;
-      }
 
       case 'frost-parse-tx-outputs': {
         await initWasm();
@@ -7344,7 +7529,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           delegationStateJson: string;
           vanWitnessJson: string;
           voteJson: string;
-          submitAt: number;
         };
         const raw = JSON.parse(
           (await proveViaOffscreen({
@@ -7356,15 +7540,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               cv.vanWitnessJson,
               cv.voteJson,
               cv.network,
-              // stringified bigint over postMessage, same convention as the
-              // core send builders' amount/fee args.
-              String(cv.submitAt),
             ],
           })) as string,
         ) as {
           proposal_id: number;
           wire: unknown;
-          shares: unknown;
           commitment_bundle_json: string;
           next_delegation_state_json: string;
         };
@@ -7466,12 +7646,31 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
           return note;
         });
+        // The witness pool is the notes' own pool, never a default: a tree
+        // path from the other pool's tree is a root the proof cannot match.
+        // Voting notes are Ironwood (V3) only; the 0.12 delegation circuit
+        // rejects others, so refuse here before any tree work.
+        const notePools = [...new Set(orderedNotes.map(poolOf))];
+        if (notePools.length !== 1) {
+          throw new Error(
+            `get-merkle-witnesses: notes from ${notePools.join(' and ') || 'no'} pools; ` +
+              'a delegation bundle holds notes from one pool',
+          );
+        }
+        const snapshotPool = notePools[0]!;
+        if (snapshotPool !== 'ironwood') {
+          throw new Error(
+            `get-merkle-witnesses: ${snapshotPool} notes cannot be delegated; voting takes ironwood notes`,
+          );
+        }
+        if (witnessPool && witnessPool !== snapshotPool) {
+          throw new Error(
+            `get-merkle-witnesses: asked for ${witnessPool} witnesses for ${snapshotPool} notes`,
+          );
+        }
         const witnessClient = makeZcashClient(witnessServerUrl);
         // the snapshot height exactly: from the tree when it still retains that
         // checkpoint, else by a replay to it (voting only; spends never replay)
-        // voting notes are Ironwood/V3 only (the 0.12 delegation circuit
-        // rejects others), so that is the default snapshot pool
-        const snapshotPool = witnessPool ?? 'ironwood';
         const fromTree = await buildWitnesses(
           witnessClient,
           walletId,

@@ -63,8 +63,6 @@ export interface NetworkConfig {
   restEndpoint?: string;
   /** Chain ID */
   chainId?: string;
-  /** Short description of the sync model shown in endpoint settings */
-  syncDescription?: string;
   /** Whether this is a cosmos/IBC chain */
   isIbcChain?: boolean;
   /** Bech32 address prefix for cosmos chains */
@@ -136,8 +134,6 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     enabled: false,
     endpoint: 'https://penumbra.rotko.net',
     chainId: 'penumbra-1',
-    syncDescription:
-      'Compact blocks verified by state commitment tree. Trial-decrypted locally - keys never leave this device.',
     bech32Prefix: 'penumbra',
   },
   zcash: {
@@ -147,8 +143,6 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     decimals: 8,
     enabled: false,
     endpoint: 'https://zcash.rotko.net',
-    syncDescription:
-      'Zidecar sync - header chain checked against a Ligerito proof. Every block is scanned on this device: notes are found by trial decryption and spends by matching nullifiers, so the server never learns which notes are yours. Keys never leave this device.',
     memoSyncStrategy: 'private',
     mempoolWatch: 'off',
     backend: 'zidecar',

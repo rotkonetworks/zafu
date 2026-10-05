@@ -33,3 +33,23 @@ export const rewindPurge = <N extends RewindableNote>(
   drop: notes.filter(n => n.height > target),
   unspend: notes.filter(n => n.height <= target && (n.spent_at_height ?? 0) > target),
 });
+
+/** rewinds a root that differs may cause, per wallet, in MISMATCH_REWIND_WINDOW_MS */
+export const MISMATCH_REWINDS_PER_WINDOW = 3;
+export const MISMATCH_REWIND_WINDOW_MS = 60 * 60_000;
+
+/**
+ * Whether a root that differs from the server's (twice) may rewind the scan
+ * now, given when the earlier ones happened. The server is asked for the
+ * root, so it could otherwise make the wallet throw away and re-read its
+ * recent blocks on every check: a few per hour covers real reorgs, and past
+ * that the trees are left to the reseed rule (two answers, once an hour).
+ * Returns the history to store, or undefined when refused.
+ */
+export const allowMismatchRewind = (
+  earlier: readonly number[],
+  now: number,
+): number[] | undefined => {
+  const recent = earlier.filter(t => t <= now && now - t < MISMATCH_REWIND_WINDOW_MS);
+  return recent.length < MISMATCH_REWINDS_PER_WINDOW ? [...recent, now] : undefined;
+};
