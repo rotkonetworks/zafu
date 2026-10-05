@@ -229,12 +229,12 @@ export const SettingsConnections = () => {
       <Sheet
         open={confirm !== undefined}
         onOpenChange={open => !open && setConfirm(undefined)}
-        title={`block ${confirm?.label ?? ''}?`}
+        title={`turn off ${confirm?.label ?? ''}?`}
       >
         <p className='text-body text-fg-muted lowercase'>
           {confirm?.networks.length
-            ? `${confirm.networks.join(' and ')} cannot sync while this is blocked.`
-            : 'your network cannot be reached while this is blocked.'}
+            ? `${confirm.networks.join(' and ')} will stop syncing while this is off.`
+            : 'your network will not be reachable while this is off.'}
         </p>
         <div className='flex flex-col gap-2'>
           <Button
@@ -246,10 +246,10 @@ export const SettingsConnections = () => {
               setConfirm(undefined);
             }}
           >
-            block
+            turn off
           </Button>
           <Button variant='secondary' onClick={() => setConfirm(undefined)}>
-            not now
+            keep it on
           </Button>
         </div>
       </Sheet>

@@ -398,7 +398,7 @@ export const AnimatedQrScanner = ({
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'failed to start camera';
       if (/Permission|NotAllowed/.test(msg)) {
-        setError('camera permission denied');
+        setError('camera access is off');
       } else if (/NotFound|no camera/i.test(msg)) {
         setError('no camera found');
       } else {

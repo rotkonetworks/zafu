@@ -198,7 +198,7 @@ const AskOnce = () => (
       </Button>
     </div>
     <span className='text-xs text-fg-dim'>
-      each one can be blocked later in everything zafu talks to
+      each one can be turned off later in everything zafu talks to
     </span>
   </Column>
 );
