@@ -6,6 +6,7 @@
 
 import { cn } from '@repo/ui/lib/utils';
 import { requestEgressOptIn } from '../net/egress-opt-in';
+import { refreshEgress } from '../net/egress';
 import { setDestinationOptIn } from '../net/ledger';
 import { PEOPLE_RELAY } from '../config/people-relay';
 import { hhmm } from '../utils/when';
@@ -21,7 +22,10 @@ export const RelaySlot = ({ waiting }: { waiting?: string }) => {
       ok => ok && again(),
       () => undefined,
     );
-  const turnOn = () => void setDestinationOptIn(PEOPLE_RELAY, 'allowed').then(again);
+  const turnOn = () =>
+    void setDestinationOptIn(PEOPLE_RELAY, 'allowed')
+      .then(refreshEgress)
+      .then(again);
   const line: { text: string; action?: [string, () => void]; tone?: 'warn' } | undefined = waiting
     ? { text: waiting }
     : slot === 'checking'
