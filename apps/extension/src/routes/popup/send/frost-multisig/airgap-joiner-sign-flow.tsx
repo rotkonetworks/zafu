@@ -151,7 +151,7 @@ export function FrostAirgapJoinerSignFlow({
                   kind: 'refuse',
                   reasons: [
                     'host did not publish the PCZT bytes - everything shown here would be host-authored text bound to nothing',
-                    'refusing to release a share against an unverifiable request',
+                    "zafu keeps your share back · this request can't be checked",
                   ],
                 });
               } else if (!ms.orchardFvkUview) {
@@ -159,7 +159,7 @@ export function FrostAirgapJoinerSignFlow({
                   kind: 'refuse',
                   reasons: [
                     'this wallet has no viewing key on file, so the PCZT cannot be decoded',
-                    'refusing to release a share against an unverifiable request',
+                    "zafu keeps your share back · this request can't be checked",
                   ],
                 });
               } else if (!fee.ok) {
@@ -186,7 +186,7 @@ export function FrostAirgapJoinerSignFlow({
                       kind: 'refuse',
                       reasons: [
                         `could not parse the published PCZT: ${err instanceof Error ? err.message : 'parse failed'}`,
-                        'refusing to release a share against an unverifiable request',
+                        "zafu keeps your share back · this request can't be checked",
                       ],
                     });
                   }
@@ -206,7 +206,7 @@ export function FrostAirgapJoinerSignFlow({
         );
       } catch (err) {
         if (!cancelled) {
-          onError(err instanceof Error ? err.message : 'failed to join room');
+          onError(err instanceof Error ? err.message : "the room didn't open · please try again");
         }
       }
     })();
@@ -305,7 +305,7 @@ export function FrostAirgapJoinerSignFlow({
       setTrigger2(new TextEncoder().encode(trigger));
       setStep('r2-out');
     } catch (err) {
-      onError(err instanceof Error ? err.message : 'round 1 failed');
+      onError(err instanceof Error ? err.message : "round 1 didn't finish");
     }
   };
 
@@ -332,7 +332,7 @@ export function FrostAirgapJoinerSignFlow({
     } catch (err) {
       sessionRef.current?.abort.abort();
       sessionRef.current = null;
-      onError(err instanceof Error ? err.message : 'round 2 failed');
+      onError(err instanceof Error ? err.message : "round 2 didn't finish");
     }
   };
 
@@ -437,7 +437,7 @@ export function FrostAirgapJoinerSignFlow({
             <div className='border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
               <div className='flex items-center gap-2 text-body text-red-400'>
                 <span className='i-ph-shield-warning size-4' />
-                cannot verify - signing refused
+                zafu couldn&apos;t check this · it won&apos;t sign
               </div>
               <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
                 {verdict.reasons.map((r, i) => (
@@ -450,7 +450,7 @@ export function FrostAirgapJoinerSignFlow({
             <div className='border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
               <div className='flex items-center gap-2 text-body text-red-400'>
                 <span className='i-ph-shield-warning size-4' />
-                mismatch - host claim disagrees with tx bytes
+                the host&apos;s summary differs from the transaction itself
               </div>
               <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
                 {verdict.reasons.map((r, i) => (
@@ -478,7 +478,7 @@ export function FrostAirgapJoinerSignFlow({
                   onChange={e => setAcknowledged(e.target.checked)}
                   className='mt-0.5'
                 />
-                <span>I see the mismatch. Override and sign at my own risk.</span>
+                <span>i see the difference and sign anyway, at my own risk.</span>
               </label>
             </div>
           )}
@@ -489,7 +489,7 @@ export function FrostAirgapJoinerSignFlow({
           </p>
           <div className='grid grid-cols-2 gap-2'>
             <Button variant='secondary' onClick={cancel}>
-              reject
+              don&apos;t sign
             </Button>
             <Button variant='primary' onClick={approve} disabled={approveDisabled}>
               {verdict.kind === 'mismatch' ? 'approve anyway' : 'approve & sign'}

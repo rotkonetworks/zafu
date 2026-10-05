@@ -268,7 +268,9 @@ export function AnimatedQrDisplay({
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'failed to re-fountain frames');
+          setError(
+            e instanceof Error ? e.message : "zafu couldn't draw this code · please try again",
+          );
         }
       }
     })();
@@ -296,7 +298,7 @@ export function AnimatedQrDisplay({
     try {
       return buildFrames(data, urType, bytesToB64Chars(density));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'failed to encode payload');
+      setError(e instanceof Error ? e.message : "zafu couldn't draw this code · please try again");
       return [];
     }
   }, [data, urFrames, urType, density, urSource, urDensityFrames]);

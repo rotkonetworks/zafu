@@ -264,12 +264,12 @@ export function VotePage() {
 
       {proposalsQuery.error && (
         <div className='text-center py-12'>
-          <p className='text-sm text-red-400'>failed to load proposals</p>
+          <p className='text-sm text-red-400'>proposals didn't load · please try again</p>
           <button
             onClick={() => void proposalsQuery.refetch()}
             className='text-sm text-zigner-gold hover:underline mt-1'
           >
-            retry
+            try again
           </button>
         </div>
       )}

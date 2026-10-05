@@ -586,7 +586,7 @@ void (async () => {
       patch[key] = {
         ...value,
         status: 'unknown',
-        error: 'interrupted - the extension restarted; check activity',
+        error: 'zafu restarted while this ran · please look in activity',
         updatedAt: Date.now(),
       };
     }

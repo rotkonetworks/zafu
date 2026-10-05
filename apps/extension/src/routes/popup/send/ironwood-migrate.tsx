@@ -274,7 +274,9 @@ export function IronwoodMigrate({
           // stopped: the stop already put the screen where it belongs
           return;
         }
-        setError(err instanceof Error ? err.message : 'failed to build migration transaction');
+        setError(
+          err instanceof Error ? err.message : "zafu couldn't build the move · nothing was moved",
+        );
         setStep('error');
       }
       return;
@@ -319,7 +321,9 @@ export function IronwoodMigrate({
       if (isBuildStopped(err)) {
         return;
       }
-      setError(err instanceof Error ? err.message : 'failed to build migration transaction');
+      setError(
+        err instanceof Error ? err.message : "zafu couldn't build the move · nothing was moved",
+      );
       setStep('error');
     }
   }, [isHotWallet, getVaultUnlock, ufvk, walletId, serverUrl, accountIndex, mainnet, backend]);
@@ -354,7 +358,11 @@ export function IronwoodMigrate({
         setStep('complete');
       } catch (err) {
         unsignedRef.current = null;
-        setError(err instanceof Error ? err.message : 'failed to extract / broadcast migration');
+        setError(
+          err instanceof Error
+            ? err.message
+            : "the move didn't reach the network · please look at home before trying again",
+        );
         setStep('error');
       }
     },
@@ -617,7 +625,7 @@ export function IronwoodMigrate({
               <h2 className='text-lg'>migration not available yet</h2>
               <p className='max-w-sm text-center text-sm text-fg-muted leading-snug'>
                 orchard to ironwood migration becomes available once NU6.3 activates on the network.
-                your orchard funds are safe in the meantime - nothing is required until then.
+                your orchard funds are safe in the meantime - nothing to do until then.
               </p>
               <Button variant='primary' onClick={onClose} className='mt-2 w-full'>
                 got it
@@ -630,8 +638,10 @@ export function IronwoodMigrate({
             <div className='w-16 h-16 bg-red-500/20 flex items-center justify-center'>
               <span className='i-ph-x w-8 h-8 text-red-400' />
             </div>
-            <h2 className='text-lg'>migration failed</h2>
-            <p className='text-sm text-red-400 text-center'>{error ?? 'an error occurred'}</p>
+            <h2 className='text-lg'>the move didn't go through</h2>
+            <p className='text-sm text-red-400 text-center'>
+              {error ?? 'something broke on our side, not yours · nothing was moved'}
+            </p>
             <div className='flex gap-2 w-full mt-4'>
               <Button variant='secondary' onClick={onClose} className='flex-1'>
                 close

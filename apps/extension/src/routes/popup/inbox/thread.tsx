@@ -775,7 +775,7 @@ export function ThreadPage() {
         </form>
       ) : (
         <p className='shrink-0 border-t border-border-soft px-4 py-3 text-[11px] text-fg-muted'>
-          {address ? 'this wallet cannot send on this network' : 'they left no address to answer'}
+          {address ? "this wallet doesn't send on this network" : 'they left no address to answer'}
         </p>
       )}
 

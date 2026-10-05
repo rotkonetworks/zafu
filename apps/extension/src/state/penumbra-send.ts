@@ -109,7 +109,7 @@ export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, ge
 
     // validate penumbra address format
     if (!recipient.startsWith('penumbra1')) {
-      throw new Error('invalid penumbra address (must start with penumbra1)');
+      throw new Error("this doesn't look like a penumbra address · they start with penumbra1");
     }
 
     set(state => {
@@ -132,7 +132,7 @@ export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, ge
       // get return address for memo
       const addressResponse = await viewClient.addressByIndex({ addressIndex: { account } });
       if (!addressResponse.address) {
-        throw new Error('failed to get return address');
+        throw new Error("zafu couldn't make a return address · please try again");
       }
 
       const memoPlaintext = memo
@@ -239,7 +239,7 @@ export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, ge
       });
       return planRequest;
     } catch (err) {
-      const error = err instanceof Error ? err.message : 'unknown error';
+      const error = err instanceof Error ? err.message : 'something broke on our side, not yours';
       set(state => {
         state.penumbraSend.loading = false;
         state.penumbraSend.error = error;

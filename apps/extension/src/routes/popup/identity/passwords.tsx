@@ -185,7 +185,7 @@ export const PasswordsPage = () => {
           <StatusSlot tone='info' icon='i-ph-info'>
             <span>
               {keyInfo
-                ? 'this wallet has no recovery phrase on this device, so it cannot make passwords.'
+                ? "this wallet has no recovery phrase on this device, so it doesn't make passwords."
                 : 'no wallet to derive from yet.'}
             </span>
           </StatusSlot>

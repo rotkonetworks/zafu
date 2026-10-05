@@ -622,12 +622,12 @@ export const createContactsSlice =
         const { KeyPrint: KP } = await import('@repo/encryption/key-print');
         const key = await Key.recreate(password, KP.fromJson(data.keyPrint));
         if (!key) {
-          throw new Error('wrong password');
+          throw new Error("that password doesn't open this backup");
         }
 
         const plaintext = await key.unseal(Box.fromJson(data.data));
         if (!plaintext) {
-          throw new Error('failed to decrypt contacts');
+          throw new Error("this backup didn't open · nothing was changed");
         }
 
         const imported = JSON.parse(plaintext) as {
@@ -745,11 +745,11 @@ export const createContactsSlice =
         const { KeyPrint: KP } = await import('@repo/encryption/key-print');
         const key = await Key.recreate(password, KP.fromJson(data.keyPrint));
         if (!key) {
-          throw new Error('wrong password');
+          throw new Error("that password doesn't open this backup");
         }
         const plaintext = await key.unseal(Box.fromJson(data.data));
         if (!plaintext) {
-          throw new Error('failed to decrypt backup');
+          throw new Error("this backup didn't open · nothing was changed");
         }
         const parsed = JSON.parse(plaintext) as {
           /** backups made before ids were kept carry no ids */

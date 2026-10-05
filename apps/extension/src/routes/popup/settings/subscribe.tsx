@@ -253,7 +253,7 @@ export const SubscribePage = () => {
       return;
     }
     if (!zcashEnabled) {
-      setError('enable zcash network first to pay with ZEC');
+      setError('paying in zec needs zcash on · please turn it on in networks');
       setPayState('error');
       return;
     }
@@ -310,7 +310,7 @@ export const SubscribePage = () => {
       const msg = e instanceof Error ? e.message : String(e);
       setError(
         msg.includes('insufficient') || msg.includes('balance') || msg.includes('not enough')
-          ? 'insufficient balance - you need at least ' + amountZec + ' ZEC'
+          ? "the balance doesn't cover this yet · it needs " + amountZec + ' zec'
           : msg,
       );
       setPayState('error');
@@ -383,7 +383,7 @@ export const SubscribePage = () => {
       const msg = e instanceof Error ? e.message : String(e);
       setError(
         msg.includes('insufficient') || msg.includes('balance') || msg.includes('not enough')
-          ? 'insufficient balance - you need at least ' + amountZec + ' ZEC'
+          ? "the balance doesn't cover this yet · it needs " + amountZec + ' zec'
           : msg,
       );
       setPayState('error');
@@ -403,7 +403,7 @@ export const SubscribePage = () => {
   const handleZignerSignatureScanned = useCallback(
     async (data: string) => {
       if (!isZcashSignatureQR(data)) {
-        setError('invalid signature qr');
+        setError("that code isn't zigner's answer · please scan again");
         setPayState('error');
         return;
       }
@@ -435,7 +435,11 @@ export const SubscribePage = () => {
         startPolling();
       } catch (e) {
         unsignedTxRef.current = null;
-        setError(e instanceof Error ? e.message : 'failed to broadcast transaction');
+        setError(
+          e instanceof Error
+            ? e.message
+            : "it didn't reach the network · please look at home before trying again",
+        );
         setPayState('error');
       }
     },

@@ -49,7 +49,7 @@ export const nearPrices = async (): Promise<Map<string, number>> =>
 
 const STATUS: Record<SwapStatus | 'none', SwapStatusView> = {
   SUCCESS: { phase: 'done', line: 'swap complete' },
-  FAILED: { phase: 'failed', line: 'swap failed' },
+  FAILED: { phase: 'failed', line: "the swap didn't go through" },
   REFUNDED: {
     phase: 'refunded',
     line: 'near intents sent it back to your refund address · it is safe',

@@ -159,8 +159,8 @@ export const SettingsMultisig = () => {
           ) : (
             <div className='flex flex-col gap-2'>
               <p className='text-xs text-red-400'>
-                permanently delete this multisig wallet? this cannot be undone - you would need to
-                run DKG again.
+                delete this multisig wallet? it can&apos;t be undone; the co-signers would need to
+                make a new one together.
               </p>
               {delError && (
                 <p className='border border-red-500/40 bg-red-500/5 p-2 text-body text-red-300'>

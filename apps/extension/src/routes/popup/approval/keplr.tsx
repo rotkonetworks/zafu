@@ -125,7 +125,7 @@ export const KeplrApproval = () => {
     } catch (err) {
       await respond({
         approved: false,
-        error: err instanceof Error ? err.message : 'signing failed',
+        error: err instanceof Error ? err.message : "it wasn't signed · please try again",
       });
     } finally {
       setBusy(false);
@@ -199,7 +199,7 @@ export const KeplrApproval = () => {
           disabled={busy}
           className='flex-1 bg-elev-2 px-3 py-2.5 text-sm text-fg-muted transition-colors hover:bg-elev-1 disabled:opacity-50'
         >
-          reject
+          not now
         </button>
         <button
           type='button'

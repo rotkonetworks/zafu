@@ -121,7 +121,7 @@ export const CosmosSign = () => {
           setStep('error');
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'failed to load sign data');
+        setError(e instanceof Error ? e.message : "this request didn't load · please try again");
         setStep('error');
       }
     };
@@ -142,7 +142,7 @@ export const CosmosSign = () => {
   const handleScan = useCallback(
     async (hex: string) => {
       if (!isCosmosSignatureQR(hex)) {
-        setError('invalid signature QR - expected 64-byte cosmos signature');
+        setError("that code isn't zigner's answer · please scan again");
         setStep('error');
         return;
       }
@@ -175,7 +175,11 @@ export const CosmosSign = () => {
         setTxHash(result.txHash);
         setStep('success');
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'broadcast failed');
+        setError(
+          e instanceof Error
+            ? e.message
+            : "it didn't reach the network · please look at home before trying again",
+        );
         setStep('error');
       }
     },
@@ -236,8 +240,8 @@ export const CosmosSign = () => {
             <QrDisplay
               data={signData.signRequestQr}
               size={840}
-              title='Scan with Zigner'
-              description='Open Zigner on your air-gapped device and scan this QR code to sign the transaction.'
+              title='scan with zigner'
+              description='open zigner and scan this code to sign'
               showCopy
             />
           </div>
@@ -250,7 +254,7 @@ export const CosmosSign = () => {
             size='md'
             onClick={() => setStep('scan-qr')}
           >
-            Scan Signed Response
+            scan zigner's answer
           </Button>
           <Button
             variant='danger'
@@ -258,7 +262,7 @@ export const CosmosSign = () => {
             size='md'
             onClick={handleClose}
           >
-            Cancel
+            cancel
           </Button>
         </div>
       </div>
@@ -272,8 +276,8 @@ export const CosmosSign = () => {
         <QrScanner
           onScan={handleScan}
           onClose={() => setStep('show-qr')}
-          title='Scan Signed QR'
-          description='Scan the signed transaction QR code from Zigner'
+          title="scan zigner's answer"
+          description="point the camera at zigner's answer"
         />
       </div>
     );
@@ -304,7 +308,7 @@ export const CosmosSign = () => {
           <p className='text-label text-fg-muted tabular break-all text-center'>{txHash}</p>
         )}
         <Button variant='primary' onClick={handleClose} className='mt-4'>
-          Done
+          done
         </Button>
       </div>
     );
@@ -322,10 +326,10 @@ export const CosmosSign = () => {
             setStep(signData ? 'show-qr' : 'loading');
           }}
         >
-          Try Again
+          try again
         </Button>
         <Button variant='danger' onClick={handleClose}>
-          Cancel
+          cancel
         </Button>
       </div>
     </div>

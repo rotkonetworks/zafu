@@ -144,15 +144,15 @@ export const ZcashVotePage = () => {
 
       {votingQ.error && (
         <div className='py-12 text-center'>
-          <p className='text-body text-red-400'>failed to load voting rounds</p>
+          <p className='text-body text-red-400'>voting rounds didn't load · please try again</p>
           <p className='mt-1 text-label text-fg-muted'>
-            {votingQ.error instanceof Error ? votingQ.error.message : 'network error'}
+            {votingQ.error instanceof Error ? votingQ.error.message : "the network didn't answer"}
           </p>
           <button
             onClick={() => void votingQ.refetch()}
             className='mt-2 text-body text-zigner-gold hover:underline'
           >
-            retry
+            try again
           </button>
         </div>
       )}

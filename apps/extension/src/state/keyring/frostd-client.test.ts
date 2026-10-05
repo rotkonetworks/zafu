@@ -147,7 +147,7 @@ describe('FrostdClient', () => {
 
     const client = new FrostdClient('https://relay.example');
     await expect(client.login('aabb', async () => new Uint8Array(64))).rejects.toThrow(
-      /cannot reach the relay at https:\/\/relay\.example/,
+      /the relay at https:\/\/relay\.example isn't answering/,
     );
   });
 });

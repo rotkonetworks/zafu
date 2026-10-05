@@ -49,7 +49,7 @@ export const BackupModal = ({ open, title, walletLabel, onConfirm, onClose }: Pr
       await onConfirm(passphrase);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'export failed');
+      setError(e instanceof Error ? e.message : "the backup wasn't made · please try again");
     } finally {
       setWorking(false);
     }
@@ -59,12 +59,12 @@ export const BackupModal = ({ open, title, walletLabel, onConfirm, onClose }: Pr
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
       <div className='w-full max-w-sm border border-border-soft bg-elev-1 p-4'>
         <h2 className='text-lg'>{title}</h2>
-        <p className='mt-1 text-label text-fg-muted'>Exporting &quot;{walletLabel}&quot;.</p>
+        <p className='mt-1 text-label text-fg-muted'>exporting &quot;{walletLabel}&quot;</p>
 
         <div className='mt-3 border border-amber-500/40 bg-amber-500/5 p-2 text-label text-amber-300'>
           <span className='i-ph-warning mr-1 inline-block size-3 align-text-bottom' />
-          This file contains the FROST share. Anyone with the file AND the passphrase can sign as
-          this signer. The passphrase cannot be reset - losing it means the backup is unusable.
+          this file holds your share. anyone with the file and the passphrase can sign as you. the
+          passphrase can&apos;t be reset, so without it the backup can&apos;t be opened.
         </div>
 
         <label className='mt-3 block text-xs text-fg-muted'>

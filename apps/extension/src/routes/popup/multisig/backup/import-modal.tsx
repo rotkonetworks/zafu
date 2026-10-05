@@ -43,7 +43,7 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
       const env = await readEnvelopeFromFile(file);
       setEnvelope(env);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'failed to read backup');
+      setError(e instanceof Error ? e.message : "this file didn't open");
     } finally {
       setWorking(false);
     }
@@ -60,7 +60,7 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
       onImported(summary);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'import failed');
+      setError(e instanceof Error ? e.message : "it wasn't added · please try again");
     } finally {
       setWorking(false);
     }
@@ -76,7 +76,7 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
         {!envelope ? (
           <>
             <p className='mt-1 text-label text-fg-muted'>
-              Select an encrypted backup file (.json) you created earlier.
+              choose a backup file (.json) you made earlier
             </p>
             <label className='mt-3 flex cursor-pointer flex-col items-center gap-2 border border-dashed border-border-soft bg-elev-2 px-4 py-6 hover:bg-elev-3 transition-colors'>
               <span className='i-ph-file-arrow-up size-6 text-fg-muted' />

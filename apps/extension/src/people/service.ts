@@ -136,7 +136,7 @@ const FIRST_WINDOWS = 12;
 
 export class PeopleNeedsRelay extends Error {
   constructor(readonly gate: Exclude<Gate, 'on'>) {
-    super(gate === 'blocked' ? 'the relay is blocked' : 'the relay is not allowed yet');
+    super(gate === 'blocked' ? 'the relay is off' : 'the relay is not on yet');
   }
 }
 

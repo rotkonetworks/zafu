@@ -106,7 +106,7 @@ export const QrScanner = ({
         devices.find((d: MediaDeviceInfo) => /back|rear|environment/i.test(d.label)) || devices[0];
 
       if (!camera) {
-        throw new Error('No camera found');
+        throw new Error('no camera found');
       }
 
       // request higher resolution + continuous autofocus for sharper QR capture
@@ -155,7 +155,7 @@ export const QrScanner = ({
       // differently, so message-only matching missed Brave and the camera just
       // died with no guidance (the reported "camera won't pop up in Brave").
       const name = err instanceof DOMException ? err.name : '';
-      const msg = err instanceof Error ? err.message : 'Failed to start camera';
+      const msg = err instanceof Error ? err.message : "the camera didn't start · please try again";
       const isPermission =
         name === 'NotAllowedError' ||
         name === 'SecurityError' ||
@@ -200,13 +200,13 @@ export const QrScanner = ({
         }
         setError('permission');
       } else if (isInUse) {
-        setError('Camera is in use by another app. Close it and retry.');
+        setError('another app is using the camera · please close it, then try again');
       } else if (isNotFound) {
         setError(
-          'No camera found. On Brave, Shields/privacy settings can hide the camera - allow it for this extension, or paste the QR data instead.',
+          'no camera found. on brave, shields can hide the camera · it can be allowed for zafu, or the code can be pasted instead.',
         );
       } else {
-        setError(msg || 'Failed to start camera');
+        setError(msg || "the camera didn't start · please try again");
       }
       onErrorRef.current?.(msg);
     }
@@ -277,11 +277,11 @@ export const QrScanner = ({
             </div>
             {error === 'permission' ? (
               <>
-                <p className='text-xs text-red-400'>camera access is required to scan QR codes</p>
+                <p className='text-xs text-red-400'>scanning needs the camera</p>
                 <p className='text-label text-fg-muted leading-snug max-w-[16rem]'>
-                  if nothing happens, your browser is blocking the camera. on Brave, open Shields or
-                  site settings for this extension and allow camera, then retry. you can also paste
-                  the QR data manually.
+                  if nothing happens, the browser is keeping the camera off. on brave, open shields
+                  or the site settings for zafu and allow the camera, then try again. the code can
+                  also be pasted.
                 </p>
                 <div className='flex gap-2'>
                   <Button variant='secondary' size='sm' onClick={handleClose}>
@@ -294,7 +294,7 @@ export const QrScanner = ({
                       void startScanning();
                     }}
                   >
-                    retry
+                    try again
                   </Button>
                 </div>
               </>
@@ -312,7 +312,7 @@ export const QrScanner = ({
                       void startScanning();
                     }}
                   >
-                    retry
+                    try again
                   </Button>
                 </div>
               </>

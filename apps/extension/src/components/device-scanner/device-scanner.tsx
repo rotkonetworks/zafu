@@ -103,7 +103,7 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
   const handleMultipartComplete = useCallback(
     (bytes: Uint8Array, urType: string) => {
       if (urType !== 'zcash-accounts') {
-        setScreen({ kind: 'scan', error: `unsupported code: ur:${urType}.` });
+        setScreen({ kind: 'scan', error: `zafu doesn't know this code yet (ur:${urType})` });
         return;
       }
       const result = parseConnectCodeBytes(bytes);

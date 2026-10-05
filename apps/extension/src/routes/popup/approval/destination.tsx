@@ -78,8 +78,7 @@ export const DestinationApproval = () => {
         <div className='flex flex-col gap-3'>
           {/* what is being decided, in the user's terms */}
           <p className='text-sm text-fg-muted'>
-            allow this host as a network destination for your wallet? requests to it would be
-            permitted from now on.
+            may zafu talk to this host? it stays on until you turn it off.
           </p>
 
           {/* why - a human label for the purpose the wallet assigned */}

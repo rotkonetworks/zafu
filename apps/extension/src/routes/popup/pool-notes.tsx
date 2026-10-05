@@ -390,7 +390,7 @@ const TransparentSection = ({
         </div>
       ) : utxoError ? (
         <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-          <p className='text-sm text-red-400'>failed to load transparent funds</p>
+          <p className='text-sm text-red-400'>transparent funds didn't load · please try again</p>
         </div>
       ) : utxos.length === 0 ? (
         <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
@@ -456,7 +456,7 @@ const ShieldedSection = ({
         </div>
       ) : error ? (
         <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-          <p className='text-sm text-red-400'>failed to load notes</p>
+          <p className='text-sm text-red-400'>notes didn't load · please try again</p>
           <button
             type='button'
             onClick={refetch}

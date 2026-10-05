@@ -38,7 +38,7 @@ export const SettingsZigner = () => {
       setConfirmDeleteVault(null);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      setError(`failed to remove wallet: ${message}`);
+      setError(`it wasn't removed · ${message}`);
     } finally {
       setDeletingVaultId(null);
     }
@@ -158,9 +158,7 @@ export const SettingsZigner = () => {
                         size='sm'
                         onClick={() => setConfirmDeleteVault(vault.id)}
                         disabled={keyInfos.length <= 1}
-                        title={
-                          keyInfos.length <= 1 ? 'cannot remove the last wallet' : 'remove wallet'
-                        }
+                        title={keyInfos.length <= 1 ? 'the last wallet stays' : 'remove wallet'}
                       >
                         <TrashIcon className='size-4 text-fg-muted hover:text-red-400' />
                       </Button>

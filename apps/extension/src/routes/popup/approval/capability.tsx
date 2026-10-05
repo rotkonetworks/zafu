@@ -51,7 +51,7 @@ export const CapabilityApproval = () => {
   const scope = params.get('scope') === 'zafu' ? 'zafu' : 'site';
 
   if (!capability || !(capability in CAPABILITY_META)) {
-    return <div className='p-4 text-red-400'>invalid capability request</div>;
+    return <div className='p-4 text-red-400'>zafu couldn't read this request</div>;
   }
 
   const meta = CAPABILITY_META[capability];
