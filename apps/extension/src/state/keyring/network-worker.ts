@@ -1311,15 +1311,28 @@ export const planTransparentDepositInWorker = (
  * lp.html's rune account for a pocket that opted in to adding with rune: its
  * thor1 address at `index` (m/44'/931'/0'/0/index), derived in the worker.
  */
-export const thorAddressInWorker = async (vault: VaultUnlock, index: number): Promise<string> =>
-  callWorker('zcash', 'thor-address', { vault: await sealFor('zcash', vault), index });
+export const thorAddressInWorker = async (key: ThorKeyIn, index: number): Promise<string> =>
+  callWorker('zcash', 'thor-address', { ...(await keyPayload(key)), index });
+
+/**
+ * Where the worker gets a rune key: a sealed vault or box it opens itself
+ * (seed, random), or a viewing key (fvk). Never a phrase or raw key.
+ */
+export type ThorKeyIn =
+  | { source: 'seed' | 'random'; vault: VaultUnlock }
+  | { source: 'fvk'; fvk: string };
+
+const keyPayload = async (key: ThorKeyIn) =>
+  key.source === 'fvk'
+    ? { source: key.source, fvk: key.fvk }
+    : { source: key.source, vault: await sealFor('zcash', key.vault) };
 
 /** one rune MsgDeposit, signed in the worker: the signed TxRaw, base64. Nothing is broadcast here */
 export const signThorDepositInWorker = async (
-  vault: VaultUnlock,
-  req: ThorDepositRequest,
+  key: ThorKeyIn,
+  req: Omit<ThorDepositRequest, 'source' | 'fvk'>,
 ): Promise<string> =>
-  callWorker('zcash', 'thor-sign-deposit', { ...req, vault: await sealFor('zcash', vault) });
+  callWorker('zcash', 'thor-sign-deposit', { ...req, ...(await keyPayload(key)) });
 
 /** build, sign (the worker opens the vault) and broadcast the reviewed deposit */
 export const sendTransparentDepositInWorker = async (

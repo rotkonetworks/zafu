@@ -14,6 +14,7 @@
  */
 
 import { mnemonicToSeedSync } from 'bip39';
+import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha2';
 import { ripemd160 } from '@noble/hashes/legacy';
 import { secp256k1 } from '@noble/curves/secp256k1';
@@ -82,4 +83,75 @@ export const deriveThorAddress = (mnemonic: string, index: number): string => {
   const k = deriveThorKey(mnemonic, index);
   k.privateKey.fill(0);
   return k.address;
+};
+
+/** a key from 32 raw bytes (a random key zafu made at opt-in), as hex */
+export const thorKeyFromHex = (hex: string, prefix = THOR_PREFIX): ThorKey => {
+  if (!/^[0-9a-f]{64}$/.test(hex)) {
+    throw new Error('this rune key is not well formed');
+  }
+  const privateKey = hexBytes(hex);
+  if (!secp256k1.utils.isValidSecretKey(privateKey)) {
+    privateKey.fill(0);
+    throw new Error('this rune key is not well formed');
+  }
+  const publicKey = secp256k1.getPublicKey(privateKey, true);
+  return { address: thorAddressOf(publicKey, prefix), publicKey, privateKey };
+};
+
+/** a fresh random key for a cold wallet's rune account, as hex; the caller seals it at once */
+export const randomThorKeyHex = (): string => {
+  const k = secp256k1.utils.randomSecretKey();
+  const hex = Array.from(k, b => b.toString(16).padStart(2, '0')).join('');
+  k.fill(0);
+  return hex;
+};
+
+/** the HKDF info prefix of a viewing-key rune account; v1 is fixed forever */
+export const FVK_RUNE_INFO = 'zafu-thorchain-rune-v1';
+
+const N = secp256k1.Point.CURVE().n;
+
+const hexBytes = (hex: string): Uint8Array => {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+};
+
+/**
+ * A rune key from a wallet's viewing key, for cold wallets that chose it.
+ * Anyone holding the viewing key can derive this key: it is a convenience,
+ * not custody, and the page says so.
+ *
+ * Precisely (reproducible with any HKDF-SHA256 and secp256k1):
+ *   ikm   = UTF-8 bytes of the wallet's unified full viewing key string
+ *           (`uview1...`) exactly as zafu stores it: its `ufvk`, or its
+ *           `orchardFvk` when that field holds the uview string
+ *   salt  = empty
+ *   info  = ASCII "zafu-thorchain-rune-v1" || uint32 big-endian(index)
+ *   okm   = HKDF-SHA256(ikm, salt, info, 48 bytes)
+ *   d     = (okm as a big-endian integer mod (n - 1)) + 1, n the secp256k1 order
+ *   key   = d as 32 big-endian bytes; address = bech32("thor", ripemd160(sha256(compressed d·G)))
+ * 48 bytes reduced mod n-1 keeps the bias under 2^-128 (as RFC 9380 hash_to_field).
+ */
+export const deriveThorKeyFromFvk = (fvk: string, index: number, prefix = THOR_PREFIX): ThorKey => {
+  if (!fvk || !Number.isSafeInteger(index) || index < 0 || index > 0xffffffff) {
+    throw new Error('this viewing key or index is not valid');
+  }
+  const tag = new TextEncoder().encode(FVK_RUNE_INFO);
+  const info = new Uint8Array(tag.length + 4);
+  info.set(tag);
+  new DataView(info.buffer).setUint32(tag.length, index, false);
+  const okm = hkdf(sha256, new TextEncoder().encode(fvk), new Uint8Array(0), info, 48);
+  let x = 0n;
+  for (const b of okm) {
+    x = (x << 8n) | BigInt(b);
+  }
+  okm.fill(0);
+  const d = (x % (N - 1n)) + 1n;
+  const privateKey = hexBytes(d.toString(16).padStart(64, '0'));
+  const publicKey = secp256k1.getPublicKey(privateKey, true);
+  return { address: thorAddressOf(publicKey, prefix), publicKey, privateKey };
 };

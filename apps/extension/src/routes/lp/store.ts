@@ -27,6 +27,7 @@ import {
   signThorDepositInWorker,
   spawnNetworkWorker,
   thorAddressInWorker,
+  type ThorKeyIn,
 } from '../../state/keyring/network-worker';
 import { refreshEgress } from '../../net/egress';
 import { setDestinationOptIn } from '../../net/ledger';
@@ -77,7 +78,10 @@ import {
   saveFlight,
   type LpCache,
   type LpRune,
+  type RuneSource,
 } from '../../lp/store';
+import { randomThorKeyHex } from '@repo/wallet/networks/thorchain/derive';
+import { selectActiveZcashWallet } from '../../state/wallets';
 import {
   NO_ACCOUNT_LINE,
   pairedLive,
@@ -153,6 +157,10 @@ export interface LpState {
   error?: string;
   /** the pocket's rune opt-in, as stored; undefined until the person chose rune here */
   rune?: LpRune;
+  /** a cold wallet's choice at the opt-in: a new key here (default) or the viewing key */
+  runeChoice: 'random' | 'fvk';
+  /** the bound wallet signs on a device: the opt-in offers the choice */
+  cold?: boolean;
   /** the thor1's balance, account and paired position: read only while the opt-in is on */
   runeRead?: RuneRead;
   runeErr?: string;
@@ -176,6 +184,7 @@ const initial: LpState = {
   pocket: 'main pocket',
   payoutAs: 'both',
   swapAmt: '',
+  runeChoice: 'random',
 };
 
 /** the zcash network fee of a shield-out to a t-address, about: two orchard actions and the t-output */
@@ -357,6 +366,7 @@ const boot = async () => {
     phase: 'ready',
     storeId,
     keyId: key.id,
+    cold: isColdKey(key.type),
     account,
     pocket,
     away: false,
@@ -876,13 +886,51 @@ const runeOn = () => {
   return r?.on && r.address ? r : undefined;
 };
 
+/** this page's wallet: for the cold choice and its viewing key */
+const boundWallet = () => {
+  const s = useStore.getState();
+  const k = s.keyRing.keyInfos.find(x => x.id === get().keyId);
+  return { key: k, zcash: selectActiveZcashWallet(s) };
+};
+
+/** a cold wallet (no phrase in zafu) chooses where its rune key comes from; a hot one never does */
+export const isColdKey = (type?: string) => !!type && type !== 'mnemonic';
+
+/** the wallet's unified viewing key string, exactly as stored (the fvk source's input) */
+const viewingKey = (): string | undefined => {
+  const z = boundWallet().zcash;
+  return z?.ufvk ?? (z?.orchardFvk?.startsWith('uview') ? z.orchardFvk : undefined);
+};
+
+/** what the worker opens for this pocket's rune key: the sealed seed, the sealed random key, or the viewing key */
+const runeKeyIn = async (rune: LpRune): Promise<ThorKeyIn> => {
+  const away = awayLine();
+  if (away) {
+    throw new Error(away);
+  }
+  if (rune.source === 'seed') {
+    return { source: 'seed', vault: await vaultOf() };
+  }
+  if (rune.source === 'random') {
+    if (!rune.box) {
+      throw new Error('this rune key could not be opened · nothing was sent');
+    }
+    return { source: 'random', vault: useStore.getState().keyRing.getBoxUnlock(rune.box) };
+  }
+  const fvk = viewingKey();
+  if (!fvk) {
+    throw new Error("this wallet's viewing key is not here · nothing was sent");
+  }
+  return { source: 'fvk', fvk };
+};
+
 /** derive the thor1 for the pocket's rune index in the worker, and keep it on the record */
 const deriveRune = async () => {
   const { storeId, rune } = get();
   if (!storeId || !rune?.on) {
     return;
   }
-  const address = await thorAddressInWorker(await vaultOf(), rune.index);
+  const address = await thorAddressInWorker(await runeKeyIn(rune), rune.index);
   await changeLp(book => {
     const p = book[storeId];
     return p?.rune?.on && p.rune.index === rune.index
@@ -927,7 +975,13 @@ export const chooseRune = async () => {
     set({ error: 'the lp address is not ready yet · please try again in a moment' });
     return;
   }
-  const r = await optInRune(storeId);
+  const cold = isColdKey(boundWallet().key?.type);
+  const source: RuneSource = cold ? get().runeChoice : 'seed';
+  const r = await optInRune(storeId, source, async () => {
+    // made only now, at the opt-in, and sealed at once like a seed
+    const hex = randomThorKeyHex();
+    return useStore.getState().keyRing.sealSecret(hex);
+  });
   if (!r) {
     return;
   }
@@ -959,7 +1013,12 @@ export const stopRune = async () => {
   await optOutRune(storeId);
   runeReads++;
   set({
-    rune: get().rune && { index: get().rune!.index, on: false },
+    rune: get().rune && {
+      index: get().rune!.index,
+      on: false,
+      source: get().rune!.source,
+      ...(get().rune!.box ? { box: get().rune!.box } : {}),
+    },
     runeRead: undefined,
     runeErr: undefined,
     swapQuote: undefined,
@@ -982,7 +1041,7 @@ const runeSend = async (memo: string, rune: bigint): Promise<string> => {
       'your rune address holds less than this needs with its network fee · nothing was sent',
     );
   }
-  const tx = await signThorDepositInWorker(await vaultOf(), {
+  const tx = await signThorDepositInWorker(await runeKeyIn(r), {
     index: r.index,
     expected: r.address!,
     rune: rune.toString(),
@@ -1181,3 +1240,5 @@ export const startRuneSwap = async () => {
   );
   set({ swapQuote: undefined, swapAmt: '' });
 };
+
+export const setRuneChoice = (runeChoice: LpState['runeChoice']) => set({ runeChoice });

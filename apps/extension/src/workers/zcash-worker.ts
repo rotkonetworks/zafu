@@ -79,8 +79,9 @@ import { unsealVault, withSpendKeys, type SpendKeysCtor } from './hot-sign';
 import {
   checkThorRequest,
   signThorDeposit,
-  thorAddressFromPhrase,
+  thorAddressFrom,
   type ThorDepositRequest,
+  type ThorKeySource,
 } from './thor-sign';
 import {
   planDeposit,
@@ -3742,12 +3743,19 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       // lp.html's rune account, only after the person opted in there (workers/thor-sign.ts)
       case 'thor-address': {
-        const { vault, index } = payload as { vault?: SealedVault; index: number };
+        const { vault, index, source, fvk } = payload as {
+          vault?: SealedVault;
+          index: number;
+          source: ThorKeySource;
+          fvk?: string;
+        };
+        // a viewing-key account needs no sealed secret; seed and random open theirs here
+        const secret = source === 'fvk' ? (fvk ?? '') : await unsealVault(vault);
         workerSelf.postMessage({
           type: 'address',
           id,
           network: 'zcash',
-          payload: thorAddressFromPhrase(await unsealVault(vault), index),
+          payload: thorAddressFrom(source, secret, index),
         });
         return;
       }
@@ -3755,11 +3763,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       case 'thor-sign-deposit': {
         const { vault, ...req } = payload as ThorDepositRequest & { vault?: SealedVault };
         checkThorRequest(req);
+        const secret = req.source === 'fvk' ? (req.fvk ?? '') : await unsealVault(vault);
         workerSelf.postMessage({
           type: 'tx-result',
           id,
           network: 'zcash',
-          payload: signThorDeposit(await unsealVault(vault), req),
+          payload: signThorDeposit(secret, req),
         });
         return;
       }

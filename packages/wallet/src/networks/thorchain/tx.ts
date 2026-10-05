@@ -193,3 +193,27 @@ export const buildSignedThorTx = (
     signBytes,
   };
 };
+
+/** a signed TxRaw's SignDoc bytes and first signature: for checking a signature zafu made */
+export const signedParts = (
+  txBytes: Uint8Array,
+  accountNumber: bigint,
+  chainId = THOR_CHAIN_ID,
+): { signBytes: Uint8Array; signature: Uint8Array } => {
+  const tx = TxRaw.decode(txBytes);
+  const signature = tx.signatures[0];
+  if (!signature) {
+    throw new Error('this tx is not signed');
+  }
+  return {
+    signBytes: SignDoc.encode(
+      SignDoc.fromPartial({
+        bodyBytes: tx.bodyBytes,
+        authInfoBytes: tx.authInfoBytes,
+        chainId,
+        accountNumber,
+      }),
+    ).finish(),
+    signature,
+  };
+};

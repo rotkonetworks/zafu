@@ -1,8 +1,11 @@
 /**
- * The liquidity page's thorchain account, inside the zcash worker. The page
- * hands over the sealed vault (never the phrase); the worker opens it,
- * derives m/44'/931'/0'/0/{index}, and either says the address or signs one
- * rune MsgDeposit and wipes the key. Broadcasting stays on the page, behind
+ * The liquidity page's thorchain account, inside the zcash worker. Its key
+ * comes from one of three sources, recorded per pocket at the opt-in:
+ *  - seed:   a hot wallet's phrase, m/44'/931'/0'/0/{index} (sealed vault in)
+ *  - random: a key zafu made for a cold wallet, sealed like a seed (sealed box in)
+ *  - fvk:    a cold wallet's viewing key, HKDF as in thorchain/derive.ts
+ * The worker opens what it is given, makes the key, and either says the
+ * address or signs one rune MsgDeposit and wipes the key. Broadcasting stays on the page, behind
  * its egress check: this file never talks to a network.
  *
  * Called only after the person chose "add with rune too" on lp.html; nothing
@@ -10,13 +13,36 @@
  */
 
 import {
-  deriveThorAddress,
   deriveThorKey,
+  deriveThorKeyFromFvk,
   isThorAddress,
+  thorKeyFromHex,
+  type ThorKey,
 } from '@repo/wallet/networks/thorchain/derive';
 import { buildSignedThorTx, runeDeposit } from '@repo/wallet/networks/thorchain/tx';
 
+export type ThorKeySource = 'seed' | 'random' | 'fvk';
+
+/**
+ * The key for `source`: `secret` is the opened phrase (seed), the opened
+ * hex (random) or the viewing key string (fvk).
+ */
+export const thorKeyOf = (source: ThorKeySource, secret: string, index: number): ThorKey => {
+  if (!Number.isSafeInteger(index) || index < 1) {
+    throw new Error('this rune address index is not valid');
+  }
+  return source === 'seed'
+    ? deriveThorKey(secret, index)
+    : source === 'random'
+      ? thorKeyFromHex(secret)
+      : deriveThorKeyFromFvk(secret, index);
+};
+
 export interface ThorDepositRequest {
+  /** where the pocket's rune key comes from */
+  source: ThorKeySource;
+  /** fvk only: the viewing key string, exactly as stored */
+  fvk?: string;
   /** the pocket's thorchain index */
   index: number;
   /** the address every read was made against: a different derivation refuses */
@@ -30,6 +56,9 @@ export interface ThorDepositRequest {
 
 /** a well-formed request, or the reason it isn't; checked before the phrase is opened */
 export const checkThorRequest = (r: ThorDepositRequest): void => {
+  if (!['seed', 'random', 'fvk'].includes(r.source) || (r.source === 'fvk' && !r.fvk)) {
+    throw new Error('this rune key source is not valid');
+  }
   if (!Number.isSafeInteger(r.index) || r.index < 1) {
     throw new Error('this rune address index is not valid');
   }
@@ -44,11 +73,10 @@ export const checkThorRequest = (r: ThorDepositRequest): void => {
   }
 };
 
-export const thorAddressFromPhrase = (phrase: string, index: number): string => {
-  if (!Number.isSafeInteger(index) || index < 1) {
-    throw new Error('this rune address index is not valid');
-  }
-  return deriveThorAddress(phrase, index);
+export const thorAddressFrom = (source: ThorKeySource, secret: string, index: number): string => {
+  const k = thorKeyOf(source, secret, index);
+  k.privateKey.fill(0);
+  return k.address;
 };
 
 const toBase64 = (b: Uint8Array): string => {
@@ -60,9 +88,9 @@ const toBase64 = (b: Uint8Array): string => {
 };
 
 /** the signed TxRaw, base64; the key is wiped before this returns */
-export const signThorDeposit = (phrase: string, r: ThorDepositRequest): string => {
+export const signThorDeposit = (secret: string, r: ThorDepositRequest): string => {
   checkThorRequest(r);
-  const key = deriveThorKey(phrase, r.index);
+  const key = thorKeyOf(r.source, secret, r.index);
   try {
     if (key.address !== r.expected) {
       throw new Error('this rune address is not the one zafu read · nothing was signed');

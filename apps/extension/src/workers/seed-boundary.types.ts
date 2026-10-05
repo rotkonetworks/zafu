@@ -27,10 +27,12 @@ export const phraseIsNotAVault = () => [
   // @ts-expect-error a phrase is not a VaultUnlock
   nw.deriveAddressInWorker('zcash', 'a phrase', 0),
   // @ts-expect-error a phrase is not a VaultUnlock
-  nw.thorAddressInWorker('a phrase', 1),
+  nw.thorAddressInWorker({ source: 'seed', vault: 'a phrase' }, 1),
+  // @ts-expect-error a raw key is not a VaultUnlock
+  nw.thorAddressInWorker({ source: 'random', vault: 'ab'.repeat(32) }, 1),
   nw.signThorDepositInWorker(
     // @ts-expect-error a phrase is not a VaultUnlock
-    'a phrase',
+    { source: 'seed', vault: 'a phrase' },
     {
       index: 1,
       expected: 'thor1',

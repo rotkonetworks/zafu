@@ -7,6 +7,7 @@
  * storage effects in wallet-entries.
  */
 
+import { Box } from '@repo/encryption/box';
 import { AllSlices, SliceCreator } from '..';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
@@ -134,6 +135,16 @@ export interface KeyRingSlice {
   getMnemonic: (vaultId: string) => Promise<string>;
   /** a mnemonic vault, sealed, for the zcash worker to open itself (see VaultUnlock) */
   getVaultUnlock: (vaultId: string) => Promise<VaultUnlock>;
+  /**
+   * A secret sealed under the session key exactly as a seed is (an inner box
+   * string, re-sealed by a password change like any other). Used for a cold
+   * wallet's random rune key on lp.html.
+   */
+  sealSecret: (plaintext: string) => Promise<string>;
+  /** such a box, for the zcash worker to open itself, like getVaultUnlock */
+  getBoxUnlock: (box: string) => VaultUnlock;
+  /** open such a box here: only for the encrypted personal backup */
+  openSealed: (box: string) => Promise<string>;
   getMultisigSecrets: (
     vaultId: string,
   ) => Promise<{ keyPackage: string; ephemeralSeed: string } | null>;
@@ -1099,6 +1110,21 @@ export const createKeyRingSlice =
               seal: await sealSessionKeyTo(ctx, to),
             })),
         };
+      },
+
+      sealSecret: (plaintext: string) => encrypt(ctx, plaintext),
+
+      getBoxUnlock: (box: string) => ({
+        sealTo: to => keyUse(async () => ({ box, seal: await sealSessionKeyTo(ctx, to) })),
+      }),
+
+      openSealed: async (box: string) => {
+        const key = await requireKey(ctx);
+        const plain = await key.unseal(Box.fromJson(JSON.parse(box)));
+        if (!plain) {
+          throw new Error('this sealed key could not be opened');
+        }
+        return plain;
       },
 
       getMultisigSecrets: async (vaultId: string) => {

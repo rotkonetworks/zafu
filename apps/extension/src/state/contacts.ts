@@ -722,7 +722,7 @@ export const createContactsSlice =
         };
         const lp = await exportLp(ownerOf);
         // only the pockets that chose to add with rune too: their opt-in and index, never a key
-        const lpRune = await exportLpRune(ownerOf);
+        const lpRune = await exportLpRune(ownerOf, box => get().keyRing.openSealed(box));
         const plaintext = JSON.stringify({
           lp,
           lpRune,
@@ -864,6 +864,7 @@ export const createContactsSlice =
         await restoreLpRune(
           parsed.lpRune,
           owner => get().keyRing.keyInfos.find(k => pocketOwner(k) === owner)?.id,
+          plain => get().keyRing.sealSecret(plain),
         );
         if (parsed.passwordLogins !== undefined) {
           await restorePasswordLogins(parsed.passwordLogins, mode);

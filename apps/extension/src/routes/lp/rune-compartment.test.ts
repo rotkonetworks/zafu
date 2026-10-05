@@ -102,7 +102,7 @@ describe('a pocket that never chose rune', () => {
   });
 
   it('a rune choice that was turned off reads nothing either', async () => {
-    lpStore.setState({ rune: { index: 3, on: false } });
+    lpStore.setState({ rune: { index: 3, on: false, source: 'seed' } });
     await refreshRune();
     await refresh();
     await settle();
@@ -113,7 +113,7 @@ describe('a pocket that never chose rune', () => {
 
 describe('a pocket that chose rune', () => {
   it('reads its thor1 through the thornode gateway, and only while thornode is on', async () => {
-    lpStore.setState({ rune: { index: 3, on: true, address: THOR1 } });
+    lpStore.setState({ rune: { index: 3, on: true, source: 'seed', address: THOR1 } });
     await refreshRune();
     const cosmos = urls.filter(u => u.includes('/cosmos/'));
     expect(cosmos.length).toBeGreaterThan(0);
@@ -133,11 +133,15 @@ describe('a pocket that chose rune', () => {
 describe('an add while a half already waits', () => {
   it('is refused, so the new zec never pairs with the old half', async () => {
     await changeLp(() => ({
-      'vault-a': { index: 21, address: LP, rune: { index: 3, on: true, address: THOR1 } },
+      'vault-a': {
+        index: 21,
+        address: LP,
+        rune: { index: 3, on: true, source: 'seed', address: THOR1 },
+      },
     }));
     const pool = { asset: 2_349_956_151n, rune: 4_115_368_117_505n, units: 3_902_179_720_724n };
     lpStore.setState({
-      rune: { index: 3, on: true, address: THOR1 },
+      rune: { index: 3, on: true, source: 'seed', address: THOR1 },
       amt: '0.01',
       shieldedZat: 100_000_000n,
       thor: {

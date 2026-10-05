@@ -42,11 +42,13 @@ import {
   zecText,
 } from '../../lp/math';
 import { pairedLive, reserveOf } from '../../lp/rune';
+import type { RuneSource } from '../../lp/store';
 import {
   ADD_FEES,
   allowEgress,
   ASK_CAP_LINE,
   chooseRune,
+  setRuneChoice,
   mayStopRune,
   runeHalfOf,
   runeNeedOf,
@@ -494,6 +496,7 @@ const PairedBlock = ({ onRecover }: { onRecover: () => void }) => {
         )}
         <LpAddressRow />
         <RuneAddressRow />
+        <SourceRow />
       </Table>
       {waiting ? (
         <Button
@@ -1134,6 +1137,68 @@ export const BlockedScreen = () => {
   );
 };
 
+/** where the pocket's rune key comes from, in one honest line */
+export const SOURCE_LINE: Record<RuneSource, string> = {
+  seed: 'from your recovery phrase',
+  random: 'kept in zafu and its backup, not on your device',
+  fvk: 'anyone with this viewing key can also move this rune',
+};
+
+const SourceRow = ({ w }: { w?: string }) => {
+  const source = useLp(s => s.rune?.source);
+  return source ? (
+    <Row k='rune key' w={w} h='h-[52px]'>
+      <span className={cn('text-[13px]', source === 'fvk' ? 'text-warn' : 'text-fg')}>
+        {SOURCE_LINE[source]}
+      </span>
+    </Row>
+  ) : null;
+};
+
+/** the cold wallet's one choice at the opt-in: a new key here (default), or the viewing key */
+const ColdChoice = () => {
+  const choice = useLp(s => s.runeChoice);
+  const options: ['random' | 'fvk', string, string][] = [
+    ['random', 'make a new key here', SOURCE_LINE.random],
+    ['fvk', "use my device's viewing key", SOURCE_LINE.fvk],
+  ];
+  return (
+    <div
+      role='radiogroup'
+      aria-label='rune key'
+      className='flex flex-col border border-border-soft'
+    >
+      {options.map(([v, t, line], i) => (
+        <button
+          key={v}
+          type='button'
+          role='radio'
+          aria-checked={choice === v}
+          onClick={() => setRuneChoice(v)}
+          className={cn(
+            'flex min-h-[64px] items-center gap-3.5 px-[18px] py-2 text-left',
+            i && 'border-t border-border-soft',
+            choice === v ? 'bg-zigner-gold/10' : 'bg-elev-1 hover:bg-elev-2',
+          )}
+        >
+          <span
+            className={cn(
+              'size-3 shrink-0 border',
+              choice === v ? 'border-zigner-gold bg-zigner-gold' : 'border-border-hard',
+            )}
+          />
+          <span className='flex flex-1 flex-col gap-1'>
+            <span className='text-sm text-fg-high'>{t}</span>
+            <span className={cn('text-xs', v === 'fvk' ? 'text-warn' : 'text-fg-muted')}>
+              {line}
+            </span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+};
+
 /** the thor1 row: public, and linked to the lp address as one position */
 export const RuneAddressRow = ({ w }: { w?: string }) => {
   const address = useLp(s => s.rune?.address);
@@ -1157,6 +1222,7 @@ export const TwoSidedScreen = ({ onAdd }: { onAdd: () => void }) => {
   const s = useLp(
     useShallow(s => ({
       on: !!s.rune?.on,
+      cold: !!s.cold,
       thor: s.thor,
       zecUsd: s.zecUsd,
       runeRead: s.runeRead,
@@ -1208,8 +1274,14 @@ export const TwoSidedScreen = ({ onAdd }: { onAdd: () => void }) => {
             </span>
           </div>
         </div>
+        {s.cold && <ColdChoice />}
         <Table>
-          <Row k='rune address' w='w-[110px]' h='h-[52px]' side='from your recovery phrase'>
+          <Row
+            k='rune address'
+            w='w-[110px]'
+            h='h-[52px]'
+            side={s.cold ? undefined : SOURCE_LINE.seed}
+          >
             made when you choose this
           </Row>
           <Row k='rune from' w='w-[110px]' h='h-[52px]'>
@@ -1377,6 +1449,7 @@ export const TwoSidedScreen = ({ onAdd }: { onAdd: () => void }) => {
         </Row>
         <LpAddressRow w='w-[92px]' />
         <RuneAddressRow w='w-[92px]' />
+        <SourceRow w='w-[92px]' />
       </Table>
       <span className='flex items-center gap-2 text-xs text-fg-muted'>
         <EyeIcon className='size-3.5' />

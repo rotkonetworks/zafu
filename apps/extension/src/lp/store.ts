@@ -38,9 +38,19 @@ export interface LpCache {
  * is read or shown, and the index stays so a later opt-in brings back the same
  * thor1 (it is seed-derived, m/44'/931'/0'/0/index; no key is ever stored).
  */
+export type RuneSource = 'seed' | 'random' | 'fvk';
+
 export interface LpRune {
   index: number;
   on: boolean;
+  /**
+   * where the key comes from: a hot wallet's phrase (seed), a key zafu made
+   * for a cold wallet (random, sealed in `box`), or a cold wallet's viewing
+   * key (fvk). Records from before this field are seed.
+   */
+  source: RuneSource;
+  /** random only: the key as hex, sealed under the session key like a seed */
+  box?: string;
   /** the derived thor1, kept while on; derived again in the worker when missing */
   address?: string;
 }
@@ -57,12 +67,32 @@ export interface LpPocket {
 /** the HD counter the rune accounts are handed out from; written only on an opt-in */
 export const RUNE_COUNTER = 'thorchain-lp';
 
-const isRune = (v: unknown): v is LpRune =>
-  !!v &&
-  typeof v === 'object' &&
-  Number.isSafeInteger((v as LpRune).index) &&
-  (v as LpRune).index > 0 &&
-  typeof (v as LpRune).on === 'boolean';
+const SOURCES: ReadonlySet<string> = new Set(['seed', 'random', 'fvk']);
+
+/** a stored rune record; one from before `source` is a seed one. A random one needs its box */
+const runeOf = (v: unknown): LpRune | undefined => {
+  const r = v as Partial<LpRune> | undefined;
+  if (
+    !r ||
+    typeof r !== 'object' ||
+    !Number.isSafeInteger(r.index) ||
+    (r.index ?? 0) < 1 ||
+    typeof r.on !== 'boolean'
+  ) {
+    return undefined;
+  }
+  const source = r.source ?? 'seed';
+  if (!SOURCES.has(source) || (source === 'random' && typeof r.box !== 'string')) {
+    return undefined;
+  }
+  return {
+    index: r.index!,
+    on: r.on,
+    source,
+    ...(source === 'random' ? { box: r.box } : {}),
+    ...(r.on && typeof r.address === 'string' ? { address: r.address } : {}),
+  };
+};
 
 export type LpBook = Record<string, LpPocket>;
 
@@ -88,17 +118,7 @@ const clean = (v: unknown): LpBook => {
             ? p.cache
             : undefined,
         flight: isFlight(p.flight) ? p.flight : undefined,
-        ...(isRune(p.rune)
-          ? {
-              rune: {
-                index: p.rune.index,
-                on: p.rune.on,
-                ...(p.rune.on && typeof p.rune.address === 'string'
-                  ? { address: p.rune.address }
-                  : {}),
-              },
-            }
-          : {}),
+        ...(runeOf(p.rune) ? { rune: runeOf(p.rune) } : {}),
       };
     }
   }
@@ -267,61 +287,112 @@ export const restoreLp = async (
 };
 
 /**
- * The person chose "add with rune too" for this pocket: its rune index, the
- * one it had before when it was turned off, else the next from the counter.
- * The address is derived by the caller (in the worker) and patched in.
+ * The person chose "add with rune too" for this pocket: its rune index (the
+ * one it had before when it was turned off, else the next from the counter)
+ * and its key source. A pocket that had a source keeps it, so a later opt-in
+ * brings back the same address. `fresh` gives a random key's sealed box,
+ * asked for only when one is needed.
  */
-export const optInRune = async (storeId: string): Promise<LpRune | undefined> => {
-  const had = (await readLpPocket(storeId))?.rune;
+export const optInRune = async (
+  storeId: string,
+  source: RuneSource = 'seed',
+  fresh?: () => Promise<string>,
+): Promise<LpRune | undefined> => {
+  const rec = await readLpPocket(storeId);
+  if (!rec) {
+    return undefined;
+  }
+  const had = rec.rune;
   const index = had?.index ?? (await nextHdIndex(RUNE_COUNTER));
+  const use = had?.source ?? source;
+  const box = use === 'random' ? (had?.box ?? (fresh ? await fresh() : undefined)) : undefined;
+  if (use === 'random' && !box) {
+    return undefined;
+  }
   let out: LpRune | undefined;
   await changeLp(book => {
     const p = book[storeId];
     if (!p) {
       return book;
     }
-    out = {
-      index: p.rune?.index ?? index,
-      on: true,
-      address: p.rune?.on ? p.rune.address : undefined,
-    };
+    const prev = p.rune;
+    out = prev
+      ? { ...prev, on: true, address: prev.on ? prev.address : undefined }
+      : { index, on: true, source: use, ...(box ? { box } : {}) };
     return { ...book, [storeId]: { ...p, rune: out } };
   });
   return out;
 };
 
-/** "stop using rune here": the opt-in is forgotten, the index kept for a later one */
+/** "stop using rune here": the opt-in is forgotten, the index, source and sealed key kept for a later one */
 export const optOutRune = (storeId: string): Promise<boolean> =>
   changeLp(book => {
     const p = book[storeId];
     return p?.rune
-      ? { ...book, [storeId]: { ...p, rune: { index: p.rune.index, on: false } } }
+      ? {
+          ...book,
+          [storeId]: {
+            ...p,
+            rune: {
+              index: p.rune.index,
+              on: false,
+              source: p.rune.source,
+              ...(p.rune.box ? { box: p.rune.box } : {}),
+            },
+          },
+        }
       : book;
   });
 
-/** the backup's rune part: owner -> account -> { index, on }; undefined when no pocket ever opted in */
-export type LpRuneBackup = Record<string, Record<string, { index: number; on: boolean }>>;
+/**
+ * The backup's rune part: owner -> account -> { index, on, source, key? }.
+ * `key` (the random key, hex) rides only for a random source, inside the
+ * personal backup's own encryption; seed and fvk carry the flag alone, since
+ * their key is derived again. Undefined when no pocket ever opted in.
+ */
+export type LpRuneBackup = Record<
+  string,
+  Record<string, { index: number; on: boolean; source: RuneSource; key?: string }>
+>;
 
 export const exportLpRune = async (
   ownerOf: (walletId: string) => string | undefined,
+  openSealed?: (box: string) => Promise<string>,
 ): Promise<LpRuneBackup | undefined> => {
   const out: LpRuneBackup = {};
   for (const [storeId, p] of Object.entries(await readLp())) {
-    const owner = p.rune && ownerOf(parsePocketStoreId(storeId).walletId);
-    if (p.rune && owner) {
-      (out[owner] ??= {})[String(parsePocketStoreId(storeId).account)] = {
-        index: p.rune.index,
-        on: p.rune.on,
-      };
+    const { walletId, account } = parsePocketStoreId(storeId);
+    const owner = p.rune && ownerOf(walletId);
+    if (!p.rune || !owner) {
+      continue;
     }
+    const key =
+      p.rune.source === 'random' && p.rune.box && openSealed
+        ? await openSealed(p.rune.box)
+        : undefined;
+    // a random key that could not be opened is not written as if it were safe
+    if (p.rune.source === 'random' && !key) {
+      continue;
+    }
+    (out[owner] ??= {})[String(account)] = {
+      index: p.rune.index,
+      on: p.rune.on,
+      source: p.rune.source,
+      ...(key ? { key } : {}),
+    };
   }
   return Object.keys(out).length ? out : undefined;
 };
 
-/** put the rune opt-ins back on pockets that have an lp record, and raise the counter past them */
+/**
+ * Put the rune opt-ins back on pockets that have an lp record, and raise the
+ * counter past them. A random key is sealed again under this install's key;
+ * a random entry without its key is skipped (it could not sign).
+ */
 export const restoreLpRune = async (
   backup: unknown,
   walletOf: (owner: string) => string | undefined,
+  seal?: (plaintext: string) => Promise<string>,
 ) => {
   if (!backup || typeof backup !== 'object') {
     return;
@@ -332,12 +403,35 @@ export const restoreLpRune = async (
     if (!walletId || !pockets || typeof pockets !== 'object') {
       continue;
     }
-    for (const [acct, r] of Object.entries(pockets as Record<string, unknown>)) {
+    for (const [acct, raw] of Object.entries(pockets as Record<string, unknown>)) {
       const account = Number(acct);
-      if (isRune(r) && Number.isInteger(account)) {
-        add[pocketStoreId(walletId, account)] = { index: r.index, on: r.on };
-        await raiseHdIndex(RUNE_COUNTER, r.index);
+      const r = (raw ?? {}) as { index?: unknown; on?: unknown; source?: unknown; key?: unknown };
+      const source = r.source ?? 'seed';
+      if (
+        typeof r !== 'object' ||
+        !Number.isSafeInteger(r.index) ||
+        (r.index as number) < 1 ||
+        typeof r.on !== 'boolean' ||
+        typeof source !== 'string' ||
+        !SOURCES.has(source) ||
+        !Number.isInteger(account)
+      ) {
+        continue;
       }
+      let box: string | undefined;
+      if (source === 'random') {
+        if (typeof r.key !== 'string' || !/^[0-9a-f]{64}$/.test(r.key) || !seal) {
+          continue;
+        }
+        box = await seal(r.key);
+      }
+      add[pocketStoreId(walletId, account)] = {
+        index: r.index as number,
+        on: r.on,
+        source: source as RuneSource,
+        ...(box ? { box } : {}),
+      };
+      await raiseHdIndex(RUNE_COUNTER, r.index as number);
     }
   }
   if (!Object.keys(add).length) {
