@@ -24,10 +24,15 @@ import {
   changeFlight,
   changeLp,
   exportLp,
+  exportLpRune,
+  optInRune,
+  optOutRune,
   patchLpPocket,
   readLp,
   readLpPocket,
   restoreLp,
+  restoreLpRune,
+  RUNE_COUNTER,
   saveFlight,
 } from './store';
 
@@ -221,5 +226,58 @@ describe('one writer at a time, in storage', () => {
     const stored = (await readLpPocket(ID))?.flight;
     expect(stored?.cancelled).toBe(true);
     expect(stored?.stage).toBe('shield');
+  });
+});
+
+describe('the rune opt-in', () => {
+  test('none until chosen: no record, no counter, nothing for the backup', async () => {
+    await changeLp(() => ({ 'vault-a': { index: 21, address: LP } }));
+    expect((await readLpPocket('vault-a'))?.rune).toBeUndefined();
+    expect(await exportLpRune(() => 'zid-a')).toBeUndefined();
+    expect(localMock.get('cosmosChainCounters')).toBeUndefined();
+  });
+
+  test('chosen: an index from its own counter, sealed with the book; off keeps the index', async () => {
+    await changeLp(() => ({ 'vault-a': { index: 21, address: LP } }));
+    const r = await optInRune('vault-a');
+    expect(r).toEqual({ index: 1, on: true, address: undefined });
+    expect(localMock.get('cosmosChainCounters')).toEqual({ [RUNE_COUNTER]: 1 });
+    await patchLpPocket('vault-a', { rune: { ...r!, address: 'thor1abc' } });
+    expect(JSON.stringify(localMock.get('zecLp'))).not.toContain('thor1abc');
+    await optOutRune('vault-a');
+    expect((await readLpPocket('vault-a'))?.rune).toEqual({ index: 1, on: false });
+    // a later opt-in brings back the same index, not a new one
+    expect((await optInRune('vault-a'))?.index).toBe(1);
+    expect(localMock.get('cosmosChainCounters')).toEqual({ [RUNE_COUNTER]: 1 });
+  });
+
+  test('a pocket without an lp record cannot opt in', async () => {
+    expect(await optInRune('vault-none')).toBeUndefined();
+  });
+
+  test('the backup carries only { index, on } (never an address), and a restore raises the counter', async () => {
+    await changeLp(() => ({
+      'vault-a': { index: 21, address: LP, rune: { index: 7, on: true, address: 'thor1abc' } },
+      'vault-a#2': { index: 4, address: 't1other' },
+    }));
+    const backup = await exportLpRune(id => (id === 'vault-a' ? 'zid-a' : undefined));
+    expect(backup).toEqual({ 'zid-a': { '0': { index: 7, on: true } } });
+    expect(JSON.stringify(backup)).not.toContain('thor1');
+
+    localMock.delete('zecLp');
+    await restoreLp({ 'zid-a': { '0': 21 } }, () => 'vault-new');
+    await restoreLpRune(backup, owner => (owner === 'zid-a' ? 'vault-new' : undefined));
+    expect((await readLpPocket('vault-new'))?.rune).toEqual({ index: 7, on: true });
+    expect(localMock.get('cosmosChainCounters')).toEqual({ [RUNE_COUNTER]: 7 });
+    // the next opt-in elsewhere never reuses 7
+    await changeLp(b => ({ ...b, 'vault-new#3': { index: 9 } }));
+    expect((await optInRune('vault-new#3'))?.index).toBe(8);
+  });
+
+  test('junk rune backups restore nothing', async () => {
+    await changeLp(() => ({ v: { index: 2 } }));
+    await restoreLpRune({ z: { '0': { index: -1, on: true }, '1': 'x' } }, () => 'v');
+    await restoreLpRune('junk', () => 'v');
+    expect((await readLpPocket('v'))?.rune).toBeUndefined();
   });
 });

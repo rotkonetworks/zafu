@@ -423,7 +423,7 @@ export const AddScreen = ({ onAdd }: { onAdd: () => void }) => {
         onClick={() => show('twoSided')}
         className='self-center text-xs text-fg-muted hover:text-fg-high'
       >
-        with rune too, later
+        with rune too
       </button>
     </div>
   );

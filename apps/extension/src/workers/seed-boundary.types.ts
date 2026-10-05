@@ -31,6 +31,13 @@ export const phraseIsNotAVault = () => [
   nw.signThorDepositInWorker(
     // @ts-expect-error a phrase is not a VaultUnlock
     'a phrase',
-    { index: 1, expected: 'thor1', rune: '0', memo: '-:ZEC.ZEC:10000', accountNumber: '1', sequence: '0' },
+    {
+      index: 1,
+      expected: 'thor1',
+      rune: '0',
+      memo: '-:ZEC.ZEC:10000',
+      accountNumber: '1',
+      sequence: '0',
+    },
   ),
 ];
