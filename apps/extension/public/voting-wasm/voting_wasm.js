@@ -13,8 +13,11 @@ import { startWorkers } from './snippets/wasm-bindgen-rayon-38edf6e439f6d70d/src
  *   `generate_voting_hotkey`); the governance output target.
  * * `notes_json` — `[NoteInfoDto]` (the delegated notes).
  * * `round_params_json` — `RoundParamsDto`.
- * * `consensus_branch_id` — branch id at the snapshot height (host resolves via
- *   lightwalletd).
+ * * `consensus_branch_id` — branch id the host's node reports (lightwalletd).
+ *   It must have the Ironwood pool (NU6.3 or later, NU7 included), and so
+ *   must the snapshot height. It only selects the note protocol: the PCZT is
+ *   always built under TX1 v1's V6 / NU6.3 profile, the one the vote chain
+ *   rebuilds the signed digest under.
  * * `round_name` — display memo text.
  * * `network` — "mainnet" | "testnet" | "regtest".
  * * `bundle_index` — delegation bundle index (echoed into `delegation_state`).
@@ -147,20 +150,35 @@ export function build_vote_shares_from_recovery(commitment_bundle_json, vc_tree_
 }
 
 /**
- * Build the helper-server share payloads (`[VoteShareWire]`) for one HOT vote.
+ * Build the `POST /cast-vote` body plus what the host keeps for after it lands.
  *
- * `submit_at` is the unix-seconds submission time stamped into each share.
- * Runs the ZKP #2 proof.
+ * Runs ZKP #2 once. Returns
+ * `{ proposal_id, wire, commitment_bundle_json, next_delegation_state_json }`.
+ *
+ * No helper shares come back from here: a share commits to the vote's leaf
+ * index in the round's commitment tree (`vc_tree_position`), which only
+ * exists once the cast-vote transaction is included. Shares built before
+ * that carry a guessed position, and the helper's reveal for them never
+ * matches the tree, so the vote silently drops out of the tally. Build them
+ * with [`build_vote_shares_from_recovery`] from `commitment_bundle_json` and
+ * the included position.
+ *
+ * `commitment_bundle_json` holds the share secrets (it can rebuild shares,
+ * which carry `vote_decision`): store it encrypted.
+ *
+ * `next_delegation_state_json` is this bundle's state for its next cast
+ * (this proposal's authority bit cleared). Store it only after the cast is
+ * on chain: if the cast never lands, the old state is still the valid one,
+ * and a cleared bit would lock the proposal out of a retry.
  * @param {string} hotkey_secret_hex
  * @param {string} round_params_json
  * @param {string} delegation_state_json
  * @param {string} van_witness_json
  * @param {string} vote_json
  * @param {string} network
- * @param {bigint} submit_at
  * @returns {string}
  */
-export function build_vote_shares_wire(hotkey_secret_hex, round_params_json, delegation_state_json, van_witness_json, vote_json, network, submit_at) {
+export function cast_vote_hot_wire(hotkey_secret_hex, round_params_json, delegation_state_json, van_witness_json, vote_json, network) {
     let deferred8_0;
     let deferred8_1;
     try {
@@ -176,54 +194,7 @@ export function build_vote_shares_wire(hotkey_secret_hex, round_params_json, del
         const len4 = WASM_VECTOR_LEN;
         const ptr5 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len5 = WASM_VECTOR_LEN;
-        const ret = wasm.build_vote_shares_wire(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5, submit_at);
-        var ptr7 = ret[0];
-        var len7 = ret[1];
-        if (ret[3]) {
-            ptr7 = 0; len7 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred8_0 = ptr7;
-        deferred8_1 = len7;
-        return getStringFromWasm0(ptr7, len7);
-    } finally {
-        wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
-    }
-}
-
-/**
- * Build BOTH the commitment wire and share wires from a SINGLE proof run.
- *
- * Prefer this over calling the two builders separately: ZKP #2 is expensive and
- * each of `build_vote_commitment_wire` / `build_vote_shares_wire` runs it once.
- * Returns `SignedVoteCommitmentView`-shaped JSON
- * `{ proposal_id, wire, shares, commitment_bundle_json }`.
- * @param {string} hotkey_secret_hex
- * @param {string} round_params_json
- * @param {string} delegation_state_json
- * @param {string} van_witness_json
- * @param {string} vote_json
- * @param {string} network
- * @param {bigint} submit_at
- * @returns {string}
- */
-export function cast_vote_hot_wire(hotkey_secret_hex, round_params_json, delegation_state_json, van_witness_json, vote_json, network, submit_at) {
-    let deferred8_0;
-    let deferred8_1;
-    try {
-        const ptr0 = passStringToWasm0(hotkey_secret_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(round_params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(delegation_state_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(van_witness_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len3 = WASM_VECTOR_LEN;
-        const ptr4 = passStringToWasm0(vote_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len4 = WASM_VECTOR_LEN;
-        const ptr5 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len5 = WASM_VECTOR_LEN;
-        const ret = wasm.cast_vote_hot_wire(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5, submit_at);
+        const ret = wasm.cast_vote_hot_wire(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
         var ptr7 = ret[0];
         var len7 = ret[1];
         if (ret[3]) {
@@ -347,33 +318,6 @@ export function pir_fetch_imt_proofs(pir_base_url, nullifiers_json, js_fetch) {
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.pir_fetch_imt_proofs(ptr0, len0, ptr1, len1, js_fetch);
     return ret;
-}
-
-/**
- * Self-contained delegation-proof feasibility probe.
- *
- * Builds synthetic wallet notes / Merkle witnesses / IMT non-membership
- * proofs entirely inside wasm (no host-supplied inputs) and runs a REAL
- * K=14 halo2 delegation proof via `zcash_voting::selftest`. Exists purely to
- * measure whether K=14 proving completes inside a wasm32 module and how
- * long it takes; the extension does not call this in production flows.
- *
- * Returns JSON `{"ok":bool,"proof_len":N,"error":string|null}`. Timing is
- * deliberately left to the JS caller (`Date.now()` around the call) since
- * `std::time::Instant` panics on bare wasm32-unknown-unknown.
- * @returns {string}
- */
-export function selftest_prove_delegation() {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-        const ret = wasm.selftest_prove_delegation();
-        deferred1_0 = ret[0];
-        deferred1_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-    }
 }
 
 /**
@@ -750,7 +694,9 @@ function __wbg_get_imports(memory) {
                 postMessage(result);
             };
             `;
-            const ret = typeof URL.createObjectURL === 'undefined' ? "data:application/javascript," + encodeURIComponent(val) : URL.createObjectURL(new Blob([val], { type: "text/javascript" }));
+            // LOCAL PATCH: extension CSP refuses blob: workers; load the shipped copy.
+            void val;
+            const ret = new URL("./wait_async_worker.js", import.meta.url).href;
             const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
             const len1 = WASM_VECTOR_LEN;
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);

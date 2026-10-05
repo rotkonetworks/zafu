@@ -24,6 +24,7 @@ import type { VotingRound, RoundStatus, VotingProposal } from '../../../services
 
 // round status is a category, not an alarm - fg tokens only (DESIGN.md).
 const STATUS_STYLE: Record<RoundStatus, string> = {
+  starting: 'text-fg-muted',
   active: 'text-fg-high',
   tallying: 'text-fg-muted',
   completed: 'text-fg-muted',
@@ -95,7 +96,9 @@ export const ZcashVotePage = () => {
     if (r.isTest && !showTest) {
       return false;
     }
-    return filter === 'active' ? r.status === 'active' : r.status !== 'active';
+    // a round still starting is upcoming, not past
+    const current = r.status === 'active' || r.status === 'starting';
+    return filter === 'active' ? current : !current;
   });
 
   const tabClass = (on: boolean) =>
