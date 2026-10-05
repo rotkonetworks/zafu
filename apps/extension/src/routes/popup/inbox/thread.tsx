@@ -10,7 +10,7 @@
  * field is the transport; one tap sends the next message as a memo instead.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
@@ -58,6 +58,7 @@ import { NoteLine } from './card-notes';
 import { sourceLine } from '../contacts/seal';
 import { useCardSync } from '../../../people/my-card';
 import { useFrostRoom } from '../../../people/use-frost-room';
+import { useStickToBottom } from '../../../hooks/use-stick-to-bottom';
 import { DOOR_MS } from '../../../people/door';
 import { KeyCard } from './shared-wallet';
 import { DealSheet } from './deal-sheet';
@@ -474,7 +475,6 @@ export function ThreadPage() {
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const addressSource = useContactAddressSource();
   const { address: ownAddress } = useActiveAddress();
-  const scrollRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState('');
   const [money, setMoney] = useState(false);
   const [dealing, setDealing] = useState(false);
@@ -545,34 +545,18 @@ export function ThreadPage() {
         ...(shared.ceremony ? [{ key: shared.ceremony.id, t: shared.ceremony.at * 1000 }] : []),
         ...shared.payments.map(p => ({ key: p.id, t: p.at * 1000, p })),
       ].sort((a, b) => a.t - b.t),
-    [messages, relay, shared.ceremony],
+    [messages, relay, shared.ceremony, shared.payments],
   );
 
-  // whether the reader is at (or very near) the bottom right now; updated on
-  // every scroll so a later effect can tell "they're reading history" from
-  // "they're caught up"
-  const stuckToBottomRef = useRef(true);
-  const onScroll = () => {
-    const el = scrollRef.current;
-    if (el) {
-      stuckToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    }
-  };
-
-  // a new row snaps the view to the bottom only if the reader was already
-  // there, or the new row is the user's own send - scrolled-up history, or a
-  // read flag flipping on an older message, must never yank the view
-  useEffect(() => {
-    const last = rows.at(-1);
-    const mine = last
-      ? 'm' in last
-        ? last.m.direction === 'sent'
-        : 'it' in last && last.it.mine
-      : false;
-    if (stuckToBottomRef.current || mine) {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-    }
-  }, [rows.length]);
+  const lastRow = rows.at(-1);
+  const scroll = useStickToBottom(
+    rows.length,
+    lastRow
+      ? 'm' in lastRow
+        ? lastRow.m.direction === 'sent'
+        : 'it' in lastRow && !!lastRow.it?.mine
+      : false,
+  );
 
   // mark incoming messages read as they appear, independent of scrolling
   const unreadIds = useMemo(
@@ -664,8 +648,8 @@ export function ThreadPage() {
 
       {room && <RelaySlot />}
       <div
-        ref={scrollRef}
-        onScroll={onScroll}
+        ref={scroll.ref}
+        onScroll={scroll.onScroll}
         className='flex grow flex-col gap-3 overflow-y-auto px-3.5 pb-2 pt-3.5'
       >
         {rows.map((r, i) => (
