@@ -1287,11 +1287,13 @@ export const shieldInWorker = async (
   mainnet: boolean,
   /** lets stopBuildInWorker stop this build before it broadcasts */
   cancelKey?: string,
+  /** shield only the coins on these addresses (the lp address); position in `tAddresses` still signs */
+  only?: string[],
 ): Promise<ShieldResult> => {
   return callWorker(
     network,
     'shield',
-    { vault: await sealFor(network, vault), serverUrl, tAddresses, mainnet, cancelKey },
+    { vault: await sealFor(network, vault), serverUrl, tAddresses, mainnet, cancelKey, only },
     walletId,
   );
 };

@@ -6,63 +6,14 @@
  */
 
 import { Button } from '@repo/ui/components/ui/button';
-import { cn } from '@repo/ui/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 import { payApp } from '../../buy/apps';
 import { clock, loadOffer, type OpenBuy } from '../../buy/machine';
 import { Column, useBuy, useNow } from './ui';
+import { StepLines } from '../../components/scroll-page';
 import { money, usdc2 } from '../../buy/fees';
 import { zec4 } from './amount';
 import { finish, swapNow, type BuyState, type Step } from './store';
-
-const hhmm = (t?: number) => (t ? new Date(t).toTimeString().slice(0, 5) : '');
-
-const Mark = ({ state }: { state: 'done' | 'now' | 'later' | 'bad' }) => (
-  <span
-    className={cn(
-      'grid size-[18px] shrink-0 place-items-center',
-      state === 'done' && 'text-green',
-      state === 'now' && 'text-zigner-gold',
-      state === 'bad' && 'text-warn',
-    )}
-  >
-    {state === 'done' ? (
-      <span className='i-lucide-check size-[18px]' aria-hidden='true' />
-    ) : state === 'now' ? (
-      <span
-        className='i-zafu-enso size-[18px] animate-spin motion-reduce:animate-none'
-        aria-hidden='true'
-      />
-    ) : state === 'bad' ? (
-      <span className='i-ph-warning size-[16px]' aria-hidden='true' />
-    ) : (
-      <span className='size-1.5 bg-border-hard' />
-    )}
-  </span>
-);
-
-const Lines = ({ steps }: { steps: Step[] }) => (
-  <div className='flex flex-col border border-border-soft bg-elev-1'>
-    {steps.map((s, i) => (
-      <div
-        key={s.t}
-        className={cn(
-          'flex min-h-14 items-center gap-3.5 px-[18px] py-2.5',
-          i && 'border-t border-border-soft',
-        )}
-      >
-        <Mark state={s.state} />
-        <span className='flex flex-1 flex-col gap-0.5'>
-          <span className={cn('text-sm', s.state === 'later' ? 'text-fg-muted' : 'text-fg-high')}>
-            {s.t}
-          </span>
-          {s.d && <span className='text-xs text-fg-muted'>{s.d}</span>}
-        </span>
-        <span className='text-xs tabular-nums text-fg-muted'>{hhmm(s.at)}</span>
-      </div>
-    ))}
-  </div>
-);
 
 /** a wait on one service: its steps, and its clock against what is usual */
 export const ProgressScreen = ({ title, usually }: { title: string; usually: string }) => {
@@ -78,7 +29,7 @@ export const ProgressScreen = ({ title, usually }: { title: string; usually: str
         </span>
         <span className='text-xs text-fg-muted'>{usually}</span>
       </div>
-      <Lines steps={steps} />
+      <StepLines steps={steps} />
       {error && <span className='text-xs text-warn'>{error}</span>}
     </Column>
   );
@@ -150,31 +101,7 @@ export const TrackScreen = () => {
   const steps = trackSteps(buy, now);
   return (
     <Column title={refund ? 'the swap did not go through' : 'your zec is on its way'}>
-      <div className='flex flex-col border border-border-soft bg-elev-1'>
-        {steps.map((s, i) => (
-          <div
-            key={s.t}
-            className={cn(
-              'flex min-h-14 items-center gap-3.5 px-[18px] py-2.5',
-              i && 'border-t border-border-soft',
-            )}
-          >
-            <Mark state={s.bad ? 'bad' : s.state} />
-            <span className='flex flex-1 flex-col gap-0.5'>
-              <span
-                className={cn(
-                  'text-sm',
-                  s.bad ? 'text-warn' : s.state === 'later' ? 'text-fg-muted' : 'text-fg-high',
-                )}
-              >
-                {s.t}
-              </span>
-              {s.d && <span className='text-xs text-fg-muted'>{s.d}</span>}
-            </span>
-            <span className='text-xs tabular-nums text-fg-muted'>{hhmm(s.at)}</span>
-          </div>
-        ))}
-      </div>
+      <StepLines steps={steps.map(s => ({ ...s, state: s.bad ? 'turned' : s.state }))} />
       {error && <span className='text-xs text-warn'>{error}</span>}
       {refund ? (
         <>

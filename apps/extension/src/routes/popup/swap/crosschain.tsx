@@ -7,6 +7,7 @@
  * signed or shown to pay.
  */
 
+import { LP_PRELOAD, openLpPage } from '../../../lp/open';
 import {
   useEffect,
   useLayoutEffect,
@@ -468,6 +469,22 @@ const RouteLine = ({
   );
 };
 
+/** a thorchain route this costs more than 5% against the market: its pool is thin */
+const DEEPEN_BPS = 500;
+
+/** "deepen this pool": opens lp.html, the zec liquidity page */
+const DeepenLink = () => (
+  <button
+    type='button'
+    data-preload={LP_PRELOAD}
+    onClick={openLpPage}
+    className='flex h-6 shrink-0 items-center gap-1 text-[11px] text-fg-muted hover:text-fg-high'
+  >
+    deepen this pool
+    <span className='i-lucide-arrow-up-right size-2.5 text-fg-dim' aria-hidden='true' />
+  </button>
+);
+
 /** where a remembered swap reopens */
 const stepOf = (s: OpenSwap): Step =>
   s.stage === 'thor-out'
@@ -766,6 +783,12 @@ export const CrosschainSwap = ({
               ? () => setPicked(g.route)
               : undefined,
         rank: q ? quotes.indexOf(q) : g.line || a?.error ? 99 : 50,
+        // thorchain's zec pool is thin or refusing: one quiet link to deepen it
+        deepen:
+          g.route === 'thor' &&
+          (q
+            ? q.vsMarketBps !== undefined && q.vsMarketBps <= -DEEPEN_BPS
+            : !!a?.error && !(a.error instanceof BelowMinimum)),
       };
     })
     .sort((x, y) => x.rank - y.rank);
@@ -1301,8 +1324,11 @@ export const CrosschainSwap = ({
                 )}
               </button>
               <div ref={routeList} className='flex flex-col'>
-                {lines.map(l => (
-                  <RouteLine key={l.route} {...l} />
+                {lines.map(({ deepen, ...l }) => (
+                  <div key={l.route} data-key={l.route} className='flex min-w-0 items-center gap-3'>
+                    <RouteLine {...l} />
+                    {deepen && <DeepenLink />}
+                  </div>
                 ))}
               </div>
             </div>

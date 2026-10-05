@@ -6653,7 +6653,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error('wasm not initialized');
         }
 
-        const { vault, serverUrl, tAddresses, mainnet } = payload as {
+        const { vault, serverUrl, tAddresses, mainnet, only } = payload as {
           /** the sealed vault this worker opens itself */
           vault: SealedVault;
           serverUrl: string;
@@ -6662,6 +6662,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           mainnet: boolean;
           /** the page's key for stopping this build (see build-abort.ts) */
           cancelKey?: string;
+          /** shield only these addresses' coins (the lp address), signed by their own index */
+          only?: string[];
         };
         const build = builds.begin((payload as { cancelKey?: string }).cancelKey);
         const progress = buildProgress(walletId);
@@ -6669,7 +6671,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const client = makeZcashClient(serverUrl);
         progress('fetching chain tip');
         const tip = await build.race(client.getTip());
-        const allUtxos = await build.race(client.getAddressUtxos(tAddresses));
+        const allUtxos = await build.race(client.getAddressUtxos(only ?? tAddresses));
         if (allUtxos.length === 0) {
           throw new Error('no transparent UTXOs to shield');
         }

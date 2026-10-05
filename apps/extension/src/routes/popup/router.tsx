@@ -12,6 +12,7 @@ import { screen, type PreloadHandle } from './route-modules';
 import { routePreloads } from './route-preloads';
 import { registerRoutePreload } from './preload';
 import { BUY_PRELOAD, preloadBuyPage } from '../../buy/open';
+import { LP_PRELOAD, preloadLpPage } from '../../lp/open';
 
 /**
  * Skeleton placeholder while the first screen hydrates (its loaders and its
@@ -276,5 +277,7 @@ export const popupRoutes: RouteObject[] = [
 registerRoutePreload('sheet:wallets', routePreloads.wallets);
 // buy.html opens in its own tab: intent on a buy entry warms its code, never its data
 registerRoutePreload(BUY_PRELOAD, preloadBuyPage);
+// lp.html likewise: its code, never a read of the pool
+registerRoutePreload(LP_PRELOAD, preloadLpPage);
 
 export const popupRouter = createHashRouter(popupRoutes);
