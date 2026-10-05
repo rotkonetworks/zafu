@@ -2,7 +2,13 @@
 
 import { describe, expect, test } from 'vitest';
 import { Key } from '@repo/encryption/key';
-import { deleteVoteCast, loadVoteCast, purgeVotingRound, saveVoteCast } from './persistence';
+import {
+  deleteVoteCast,
+  loadVoteCast,
+  purgeVotingRound,
+  saveVoteCast,
+  VoteCastExists,
+} from './persistence';
 
 const storages = async () => {
   const { key } = await Key.create('pw');
@@ -37,20 +43,49 @@ describe('sealed vote casts', () => {
     expect(await loadVoteCast(local, session, 'w', 'r', 37)).toEqual(cast);
   });
 
-  test('a box moved to another wallet, round or proposal is refused', async () => {
+  test('the storage key is a hash: it names no wallet, round or proposal', async () => {
     const { mem, local, session } = await storages();
     await saveVoteCast(local, session, 'w', 'r', cast);
+    await saveVoteCast(local, session, 'w', 'r', { ...cast, proposalId: 17 });
+    const keys = Object.keys(mem.get('votingCasts') as Record<string, string>);
+    expect(keys).toHaveLength(1);
+    expect(keys[0]).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test('a box moved to another wallet or round is refused', async () => {
+    const { mem, local, session } = await storages();
+    await saveVoteCast(local, session, 'w', 'r', cast);
+    const [box] = Object.values(mem.get('votingCasts') as Record<string, string>);
+    await saveVoteCast(local, session, 'x', 'r', { ...cast, proposalId: 5 });
     const casts = mem.get('votingCasts') as Record<string, string>;
-    mem.set('votingCasts', { 'w:r:17': casts['w:r:37'], 'x:r:37': casts['w:r:37'] });
-    await expect(loadVoteCast(local, session, 'w', 'r', 17)).rejects.toThrow(/mismatch/);
+    for (const k of Object.keys(casts)) casts[k] = box!;
     await expect(loadVoteCast(local, session, 'x', 'r', 37)).rejects.toThrow(/mismatch/);
+  });
+
+  test('create refuses to overwrite a stored cast', async () => {
+    const { local, session } = await storages();
+    await saveVoteCast(local, session, 'w', 'r', cast, { create: true });
+    await expect(
+      saveVoteCast(local, session, 'w', 'r', { ...cast, wire: '{}' }, { create: true }),
+    ).rejects.toBeInstanceOf(VoteCastExists);
+    expect((await loadVoteCast(local, session, 'w', 'r', 37))!.wire).toBe(cast.wire);
+  });
+
+  test('concurrent saves under the lock keep every cast', async () => {
+    const { local, session } = await storages();
+    await Promise.all(
+      [1, 2, 3, 4, 5].map(p => saveVoteCast(local, session, 'w', 'r', { ...cast, proposalId: p })),
+    );
+    for (const p of [1, 2, 3, 4, 5]) {
+      expect(await loadVoteCast(local, session, 'w', 'r', p)).not.toBeNull();
+    }
   });
 
   test('delete and the round purge drop it', async () => {
     const { local, session } = await storages();
     await saveVoteCast(local, session, 'w', 'r', cast);
     await saveVoteCast(local, session, 'w', 'r', { ...cast, proposalId: 17 });
-    await deleteVoteCast(local, 'w', 'r', 37);
+    await deleteVoteCast(local, session, 'w', 'r', 37);
     expect(await loadVoteCast(local, session, 'w', 'r', 37)).toBeNull();
     await purgeVotingRound(local, 'w', 'r');
     expect(await loadVoteCast(local, session, 'w', 'r', 17)).toBeNull();

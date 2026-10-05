@@ -103,8 +103,9 @@ refreshing zafu-wasm leaves it untouched, and vice versa.
 
 ### 2026-10-05 (2) - post-merge review fixes
 
-- source repo: zcli, branch `fix/voting-review`, rev `2e50b9c` (on master
-  `e3b3522`): crate `crates/voting-wasm`, `--features parallel`, built with
+- source repo: zcli, branch `fix/voting-review`, rev `2359748` (on master
+  `e3b3522`; 2e50b9c plus the review nits: `cast_vote_hot` no longer builds
+  share payloads at all): crate `crates/voting-wasm`, `--features parallel`, built with
   `crates/voting-wasm/build-wasm.sh` (which now runs the `wasm-opt` step
   below and both local patches itself).
 - why: `cast_vote_hot_wire` returned helper shares built from a guessed tree
@@ -134,12 +135,14 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
 
 - toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
   wasm-bindgen CLI 0.2.126, wasm-opt (binaryen) 130.
-- size: post `-Oz` 6,384,567 bytes.
+- size: post `-Oz` 6,384,377 bytes.
 - sha256(voting_wasm_bg.wasm) =
-  1e13e0ee7379b779e762f15058cbb9d1a3613dee289970618422ec3b4fc77cdd
+  c80303a3f005e551cfa6fc1348798f6648341135ed934814d6fb7d4b9a36fb05
 - sha256(voting_wasm.js) =
   2809ce92892bbd208a96ae3a34c6552d0bea74ae16376d07685047db252e6404
-  (both reproduced byte for byte from a second build at the rev above).
+- sha256(wait_async_worker.js) =
+  bb9ceb4f6173068738dbb4e12b12eb58a6b26c2757172d892c7126f7b3a5ec22
+  (all three reproduced byte for byte from a second build at the rev above).
 - shared imported memory: `(memory $mimport$0 25 32768 shared)`.
 - tests: `cargo test --release -p zcash_voting -p voting-wasm` 114 passed;
   `local_chain_e2e` against a local svoted v1.6.1-rc.5 (now also reading

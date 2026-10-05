@@ -4,6 +4,9 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   castPosition,
   castVote,
+  confirmRefusal,
+  lookupTx,
+  operatorOf,
   fetchRoundParams,
   fetchRounds,
   postVoteTx,
@@ -173,6 +176,85 @@ describe('fetchRoundParams', () => {
   });
 });
 
+describe('operators', () => {
+  test('a registrable domain is one operator; IPs and single labels stand alone', () => {
+    expect(operatorOf('https://147-182-192-212.sslip.io')).toBe('sslip.io');
+    expect(operatorOf('https://134-209-215-69.sslip.io/')).toBe('sslip.io');
+    expect(operatorOf('https://prod.vote-chain-primary.valargroup.org')).toBe('valargroup.org');
+    expect(operatorOf('http://127.0.0.1:21317')).toBe('127.0.0.1');
+    expect(operatorOf('http://localhost:21317')).toBe('localhost');
+  });
+
+  test('the bundled config has two sslip.io hosts that count once', () => {
+    const ops = BUNDLED_SERVICE_CONFIG.vote_servers.map(s => operatorOf(s.url));
+    expect(ops.filter(o => o === 'sslip.io')).toHaveLength(2);
+    expect(new Set(ops).size).toBe(ops.length - 1);
+  });
+
+  test('two hosts of one operator are not a quorum', async () => {
+    const one = withServers('https://147-182-192-212.sslip.io', 'https://134-209-215-69.sslip.io');
+    stubFetch(() => ({ body: { round: prodRound } }));
+    await expect(fetchRoundParams(one, ROUND_ID)).rejects.toThrow(/1 of the 2 independent/);
+  });
+});
+
+describe('lookupTx', () => {
+  const two = withServers('https://a.example', 'https://b.example');
+  const HASH = 'EF'.repeat(32);
+
+  test('a 404 asks the next server before calling it pending', async () => {
+    stubFetch(url =>
+      url.startsWith('https://a.example') ? { status: 404 } : { body: { height: 7, code: 0 } },
+    );
+    expect(await lookupTx(two, HASH)).toMatchObject({ state: 'included', operator: 'b.example' });
+    stubFetch(() => ({ status: 404 }));
+    expect(await lookupTx(two, HASH)).toEqual({ state: 'pending' });
+    expect(calls).toHaveLength(2);
+  });
+});
+
+describe('confirmRefusal', () => {
+  const three = withServers('https://a.example', 'https://b.example', 'https://c.example');
+  const HASH = '12'.repeat(32);
+  const refused = { ok: false, status: 422, message: 'nope', txHash: HASH, rejected: true };
+
+  test('a second operator that refuses too confirms it', async () => {
+    stubFetch(url =>
+      url.includes('/tx/')
+        ? { status: 404 }
+        : { status: 422, body: { tx_hash: HASH, code: 1, log: 'nope' } },
+    );
+    const res = await confirmRefusal(three, '/shielded-vote/v1/cast-vote', '{}', refused, [
+      'a.example',
+    ]);
+    expect(res).toMatchObject({ rejected: true, confirmed: true });
+    // the refusing operator is never asked again
+    expect(calls.some(c => c.url.startsWith('https://a.example'))).toBe(false);
+  });
+
+  test('another operator that accepts it overrules the refusal', async () => {
+    stubFetch(url =>
+      url.includes('/tx/') ? { status: 404 } : { body: { tx_hash: HASH, code: 0 } },
+    );
+    const res = await confirmRefusal(three, '/shielded-vote/v1/cast-vote', '{}', refused, [
+      'a.example',
+    ]);
+    expect(res).toMatchObject({ ok: true, txHash: HASH });
+  });
+
+  test('with no other operator answering it stays unconfirmed', async () => {
+    stubFetch(() => new TypeError('down'));
+    const res = await confirmRefusal(three, '/shielded-vote/v1/cast-vote', '{}', refused, [
+      'a.example',
+    ]);
+    expect(res.confirmed).not.toBe(true);
+    const alone = withServers('https://a.example', 'https://a2.a.example');
+    expect(
+      await confirmRefusal(alone, '/shielded-vote/v1/cast-vote', '{}', refused, ['a.example']),
+    ).toMatchObject({ rejected: true, confirmed: false });
+  });
+});
+
 describe('vote-chain POSTs', () => {
   const two = withServers('https://a.example', 'https://b.example');
   const HASH = 'AB'.repeat(32);
@@ -243,7 +325,12 @@ describe('vote-chain POSTs', () => {
     );
     const res = await castVote(two, '{}');
     expect(res).toMatchObject({ ok: false, unknown: true, txHash: HASH });
-    expect(calls).toHaveLength(2);
+    // one 404 is not "pending": both servers are asked
+    expect(calls.map(c => c.url)).toEqual([
+      'https://a.example/shielded-vote/v1/cast-vote',
+      `https://a.example/shielded-vote/v1/tx/${HASH}`,
+      `https://b.example/shielded-vote/v1/tx/${HASH}`,
+    ]);
   });
 
   test('a 5xx without a hash fails over', async () => {
@@ -359,7 +446,7 @@ describe('helper shares', () => {
     stubFetch(() => ({ body: { status: 'queued' } }));
     const shares = Array.from({ length: 16 }, (_, i) => ({ share_index: i }));
     const res = await submitShares(five, JSON.stringify(shares));
-    expect(res).toEqual({ total: 16, queued: 16, errors: [] });
+    expect(res).toEqual({ total: 16, queued: [...Array(16).keys()], errors: [] });
     expect(calls).toHaveLength(16 * 3);
     for (const c of calls) {
       expect(Array.isArray(JSON.parse(String(c.init?.body)))).toBe(false);
@@ -370,5 +457,13 @@ describe('helper shares', () => {
         .map(c => new URL(c.url).host);
       expect(new Set(hosts).size).toBe(3);
     }
+  });
+
+  test('shares already queued are not sent again', async () => {
+    stubFetch(() => ({ body: { status: 'queued' } }));
+    const shares = [0, 1, 2, 3].map(i => ({ share_index: i }));
+    const res = await submitShares(config, JSON.stringify(shares), { skip: [0, 2] });
+    expect(res.queued.sort()).toEqual([0, 1, 2, 3]);
+    expect(calls.map(c => JSON.parse(String(c.init?.body)).share_index).sort()).toEqual([1, 3]);
   });
 });

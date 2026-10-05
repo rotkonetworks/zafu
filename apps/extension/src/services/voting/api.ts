@@ -70,6 +70,24 @@ const firstReachable = async <T>(
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 };
 
+/**
+ * Who runs a vote server, as far as the config can tell: the registrable
+ * domain of its URL (the last two labels; an IP or single-label host stands
+ * for itself). Two hosts under one domain - the two `*.sslip.io` entries,
+ * say - count as one operator for every "independent servers agree" check.
+ */
+export const operatorOf = (url: string): string => {
+  const host = new URL(url).hostname.toLowerCase();
+  if (/^[\d.]+$/.test(host) || host.includes(':') || !host.includes('.')) {
+    return host;
+  }
+  return host.split('.').slice(-2).join('.');
+};
+
+const serverBases = (config: VotingServiceConfig): string[] => [
+  ...new Set(config.vote_servers.map(s => s.url.replace(/\/$/, ''))),
+];
+
 /* wire DTO → domain --------------------------------------------------- */
 
 interface ChainRoundDto {
@@ -249,10 +267,10 @@ export const roundParamsJson = (p: RoundParams): string =>
  * The round's parameters, fit to build a delegation and casts on.
  *
  * `ea_pk` comes from the bundled endorsement only (see ./round-auth.ts). The
- * snapshot height and roots are unsigned, so they are read from `quorum`
- * distinct vote servers and must agree exactly; any server that answers with
+ * snapshot height and roots are unsigned, so they are read from servers of
+ * `quorum` distinct operators (see `operatorOf`) and must agree exactly; any server that answers with
  * other values, or with an ea_pk other than the endorsed one, stops it. A
- * config with fewer reachable servers than `quorum` cannot cast.
+ * config with fewer reachable operators than `quorum` cannot cast.
  */
 export const fetchRoundParams = async (
   config: VotingServiceConfig,
@@ -264,10 +282,9 @@ export const fetchRoundParams = async (
   if (!eaPkHex) {
     throw new Error(`round ${id} has no endorsed election key in this zafu build`);
   }
-  const bases = [...new Set(config.vote_servers.map(s => s.url.replace(/\/$/, '')))];
   let agreed: RoundParams | undefined;
-  let answers = 0;
-  for (const base of bases) {
+  const operators = new Set<string>();
+  for (const base of serverBases(config)) {
     let dto: ChainRoundDto;
     try {
       const body = await getJson<{ round?: ChainRoundDto } & ChainRoundDto>(
@@ -311,13 +328,14 @@ export const fetchRoundParams = async (
       throw new Error(`vote servers disagree on round ${id}'s snapshot`);
     }
     agreed = answer;
-    answers += 1;
-    if (answers >= quorum) {
+    operators.add(operatorOf(base));
+    if (operators.size >= quorum) {
       return agreed;
     }
   }
   throw new Error(
-    `round ${id}: ${answers} of the ${quorum} vote servers needed to confirm its snapshot answered`,
+    `round ${id}: ${operators.size} of the ${quorum} independent vote-server operators ` +
+      'needed to confirm its snapshot answered',
   );
 };
 
@@ -371,6 +389,10 @@ export interface VoteTxResult {
   txHash?: string;
   rejected?: boolean;
   unknown?: boolean;
+  /** the operator (see `operatorOf`) whose answer this is */
+  operator?: string;
+  /** a refusal two independent operators agree on */
+  confirmed?: boolean;
 }
 
 /** Same shape for each submission kind. */
@@ -401,8 +423,8 @@ const isTimeout = (e: unknown): boolean =>
 /** A tx's state on the vote chain, from `GET /tx/{hash}`. */
 export type TxLookup =
   | { state: 'pending' }
-  | { state: 'included'; height: number; events: TxEvent[] }
-  | { state: 'failed'; height: number; code: number; log: string };
+  | { state: 'included'; height: number; events: TxEvent[]; operator: string }
+  | { state: 'failed'; height: number; code: number; log: string; operator: string };
 
 export interface TxEvent {
   type: string;
@@ -410,19 +432,31 @@ export interface TxEvent {
 }
 
 /**
- * Look a tx up by hash on the vote servers. 404 means not in a block (yet).
- * GETs are safe to retry, so this fails over freely.
+ * Look a tx up by hash. A 404 from one server is not taken as "pending":
+ * the next server is asked, and the tx is pending only when every server
+ * that answers says so. `exclude` skips one operator's servers (to get a
+ * second opinion). GETs are safe to retry, so this fails over freely.
  */
-export const lookupTx = async (config: VotingServiceConfig, txHash: string): Promise<TxLookup> =>
-  firstReachable(
-    config.vote_servers.map(s => s.url),
-    async base => {
+export const lookupTx = async (
+  config: VotingServiceConfig,
+  txHash: string,
+  { exclude }: { exclude?: readonly string[] } = {},
+): Promise<TxLookup> => {
+  let answered = false;
+  let last: unknown = new Error('no vote servers to ask');
+  for (const base of serverBases(config)) {
+    const operator = operatorOf(base);
+    if (exclude?.includes(operator)) {
+      continue;
+    }
+    try {
       const resp = await fetch(`${base}/shielded-vote/v1/tx/${txHash}`, {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       if (resp.status === 404) {
-        return { state: 'pending' } as const;
+        answered = true;
+        continue;
       }
       if (!resp.ok && resp.status !== 422) {
         throw new Error(`HTTP ${resp.status} from ${new URL(base).host}`);
@@ -438,11 +472,18 @@ export const lookupTx = async (config: VotingServiceConfig, txHash: string): Pro
         throw new Error(`tx ${txHash}: no height from ${new URL(base).host}`);
       }
       if (resp.status === 422 || (body.code ?? 0) !== 0) {
-        return { state: 'failed', height, code: body.code ?? 0, log: body.log ?? '' } as const;
+        return { state: 'failed', height, code: body.code ?? 0, log: body.log ?? '', operator };
       }
-      return { state: 'included', height, events: body.events ?? [] } as const;
-    },
-  );
+      return { state: 'included', height, events: body.events ?? [], operator };
+    } catch (e) {
+      last = e;
+    }
+  }
+  if (answered) {
+    return { state: 'pending' };
+  }
+  throw last instanceof Error ? last : new Error(String(last));
+};
 
 /** Settle an ambiguous submission by its hash: only an included tx is accepted. */
 const settleByHash = async (
@@ -454,10 +495,17 @@ const settleByHash = async (
   try {
     const tx = await lookupTx(config, txHash);
     if (tx.state === 'included') {
-      return { ok: true, status, message: 'included', txHash };
+      return { ok: true, status, message: 'included', txHash, operator: tx.operator };
     }
     if (tx.state === 'failed') {
-      return { ok: false, status, message: tx.log || message, txHash, rejected: true };
+      return {
+        ok: false,
+        status,
+        message: tx.log || message,
+        txHash,
+        rejected: true,
+        operator: tx.operator,
+      };
     }
   } catch {
     // unreachable: the outcome stays unknown
@@ -493,6 +541,7 @@ export const postVoteTx = async (
   let ambiguous = mayBeOnChain;
   let last = 'no vote servers configured';
   for (const base of config.vote_servers.map(s => s.url.replace(/\/$/, ''))) {
+    const operator = operatorOf(base);
     let resp: Response;
     try {
       resp = await fetch(`${base}${path}`, {
@@ -518,7 +567,7 @@ export const postVoteTx = async (
     const body: unknown = await resp.json().catch(() => undefined);
     const txHash = txHashOf(body);
     if (resp.ok) {
-      return { ok: true, status: resp.status, message: 'accepted', txHash };
+      return { ok: true, status: resp.status, message: 'accepted', txHash, operator };
     }
     if (resp.status === 400) {
       return {
@@ -527,6 +576,7 @@ export const postVoteTx = async (
         message: messageOf(body, 'refused'),
         txHash,
         rejected: true,
+        operator,
       };
     }
     if (resp.status === 422) {
@@ -536,7 +586,7 @@ export const postVoteTx = async (
           ? settleByHash(config, txHash, 422, message)
           : { ok: false, status: 422, message, unknown: true };
       }
-      return { ok: false, status: 422, message, txHash, rejected: true };
+      return { ok: false, status: 422, message, txHash, rejected: true, operator };
     }
     if (resp.status === 504) {
       return txHash
@@ -554,6 +604,65 @@ export const postVoteTx = async (
   return ambiguous
     ? { ok: false, status: 0, message: last, unknown: true }
     : { ok: false, status: 0, message: last };
+};
+
+/**
+ * A second, independent opinion on a refusal. One operator's 400/422 or
+ * failed /tx is never enough to give a vote up: it could be wrong, or lie.
+ *
+ * Asks only servers of operators not in `refusedBy`: first by tx hash (an
+ * included tx means the vote stands), then by sending the identical body.
+ * The refusal is `confirmed` only when another operator refuses it too and
+ * no server holds the tx in a block. An acceptance elsewhere comes back `ok`.
+ * When no other operator answers, it stays an unconfirmed refusal.
+ */
+export const confirmRefusal = async (
+  config: VotingServiceConfig,
+  path: string,
+  bodyJson: string,
+  refused: VoteTxResult,
+  refusedBy: readonly string[],
+): Promise<VoteTxResult> => {
+  const others: VotingServiceConfig = {
+    ...config,
+    vote_servers: config.vote_servers.filter(s => !refusedBy.includes(operatorOf(s.url))),
+  };
+  if (!others.vote_servers.length) {
+    return { ...refused, confirmed: false };
+  }
+  if (refused.txHash) {
+    const tx = await lookupTx(others, refused.txHash).catch(() => undefined);
+    if (tx?.state === 'included') {
+      return {
+        ok: true,
+        status: 200,
+        message: 'included',
+        txHash: refused.txHash,
+        operator: tx.operator,
+      };
+    }
+    if (tx?.state === 'failed') {
+      return {
+        ...refused,
+        message: tx.log || refused.message,
+        operator: tx.operator,
+        confirmed: true,
+      };
+    }
+  }
+  const again = await postVoteTx(others, path, bodyJson);
+  if (again.ok || !again.rejected) {
+    return again;
+  }
+  // refused twice; still make sure it is not in a block under its hash
+  const hash = again.txHash ?? refused.txHash;
+  if (hash) {
+    const tx = await lookupTx(others, hash).catch(() => undefined);
+    if (tx?.state === 'included') {
+      return { ok: true, status: 200, message: 'included', txHash: hash, operator: tx.operator };
+    }
+  }
+  return { ...again, confirmed: true };
 };
 
 /**
@@ -713,19 +822,29 @@ const shuffled = <T>(items: readonly T[]): T[] => {
 /**
  * Send each share (build_vote_shares_from_recovery's array) to half the
  * helpers, rounded up, picked at random per share, one share per request
- * (zcash_voting's `share_submission_target_count`). Resolves to how many of
- * the shares at least one helper queued.
+ * (zcash_voting's `share_submission_target_count`). Resolves to the
+ * share_index of every share at least one helper queued.
+ *
+ * Shares in `skip` (already queued by a helper) are not sent again. vote-sdk
+ * helpers do take an identical re-send (`"status": "duplicate"`, keyed on
+ * round, share index, proposal and tree position), but a re-send would go to
+ * a new random set of helpers and widen who holds that share, and a changed
+ * `submit_at` is a 409 conflict. So only the missing ones go out.
  */
 export const submitShares = async (
   config: VotingServiceConfig,
   sharesJson: string,
-): Promise<{ total: number; queued: number; errors: string[] }> => {
-  const shares = JSON.parse(sharesJson) as unknown[];
-  const helpers = [...new Set(config.vote_servers.map(s => s.url.replace(/\/$/, '')))];
+  { skip = [] }: { skip?: readonly number[] } = {},
+): Promise<{ total: number; queued: number[]; errors: string[] }> => {
+  const shares = JSON.parse(sharesJson) as { share_index: number }[];
+  const helpers = serverBases(config);
   const perShare = Math.ceil(helpers.length / 2);
   const errors: string[] = [];
-  const results = await Promise.all(
+  const queued = await Promise.all(
     shares.map(async share => {
+      if (skip.includes(share.share_index)) {
+        return share.share_index;
+      }
       const body = JSON.stringify(share);
       const sent = await Promise.all(
         shuffled(helpers)
@@ -733,8 +852,12 @@ export const submitShares = async (
           .map(h => submitShare(h, body)),
       );
       sent.filter(r => !r.ok).forEach(r => errors.push(r.message));
-      return sent.some(r => r.ok);
+      return sent.some(r => r.ok) ? share.share_index : undefined;
     }),
   );
-  return { total: shares.length, queued: results.filter(Boolean).length, errors };
+  return {
+    total: shares.length,
+    queued: queued.filter((i): i is number => i !== undefined),
+    errors,
+  };
 };
