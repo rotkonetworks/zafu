@@ -39,7 +39,13 @@ import {
   peopleRelays,
   type PeopleRelaySetting,
 } from '../config/people-relay';
-import { PEOPLE_MESSAGE, PEOPLE_STATUS_KEY, PEOPLE_WATCH_PORT } from './protocol';
+import {
+  PEOPLE_ASKING_KEY,
+  PEOPLE_MESSAGE,
+  PEOPLE_STATUS_KEY,
+  PEOPLE_WATCH_PORT,
+  type PeopleAsking,
+} from './protocol';
 import { readRooms, readThreads, writeRooms, writeThreads, type PeopleRoom } from './vault';
 import {
   chain,
@@ -142,9 +148,21 @@ const deals = createDeals({
   group: (svc, name) => groups.ops['group-create']({ name }, svc),
 });
 
+/** the asks waiting at your open doors, as counts (the tab's badge reads these) */
+export const askingOf = (rooms: PeopleRoom[]): PeopleAsking[] =>
+  rooms.flatMap(r =>
+    r.kind === 'door' && r.group?.mine && r.group.requests?.length && r.until
+      ? [{ walletId: r.walletId, n: r.group.requests.length, until: r.until }]
+      : [],
+  );
+
 export const peopleDeps: PeopleDeps = {
   readRooms,
-  writeRooms,
+  writeRooms: async rooms => {
+    const ok = await writeRooms(rooms);
+    await chrome.storage.session.set({ [PEOPLE_ASKING_KEY]: askingOf(rooms) });
+    return ok;
+  },
   readThreads,
   writeThreads,
   walletId: async () => useStore.getState().keyRing.selectedKeyInfo?.id,

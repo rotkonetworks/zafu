@@ -16,6 +16,18 @@ import { RelaySlot } from '../../../people/relay-slot';
 import { CODE_RE, OLD_CODE_RE, isRelayGated, normalizeCode } from '../../../people/protocol';
 import type { DoorCard } from '../../../people/groups';
 import { PopupPath, groupPath } from '../paths';
+import { looksLikeLink, parseLink } from '../../../links/router';
+import { NickField } from './nick-field';
+
+/** the code in what was typed or pasted: a bare code, or a zafu: or zafu.pro/j link */
+const codeIn = (text: string): string | undefined => {
+  if (looksLikeLink(text)) {
+    const p = parseLink(text);
+    return p.ok && p.intent.kind === 'join' ? p.intent.code : undefined;
+  }
+  const c = normalizeCode(text);
+  return CODE_RE.test(c) ? c : undefined;
+};
 
 type Step =
   | { kind: 'reading' }
@@ -31,6 +43,7 @@ export function GroupJoinPage() {
   const code = normalizeCode(params.get('code') ?? '');
   const via = params.get('via');
   const [typed, setTyped] = useState('');
+  const [nick, setNick] = useState('');
   const [step, setStep] = useState<Step>({ kind: 'reading' });
   const [asking, setAsking] = useState(false);
   const rooms = useMyRooms();
@@ -73,7 +86,7 @@ export function GroupJoinPage() {
 
   const ask = () => {
     setAsking(true);
-    void peopleAsk('door-ask', { code })
+    void peopleAsk('door-ask', { code, nick: nick.trim() })
       .catch(() => setStep({ kind: 'failed' }))
       .finally(() => setAsking(false));
   };
@@ -86,17 +99,27 @@ export function GroupJoinPage() {
           className='flex flex-col gap-3 px-4 py-[18px]'
           onSubmit={e => {
             e.preventDefault();
-            setParams({ code: normalizeCode(typed), via: 'typed' });
+            const c = codeIn(typed);
+            if (c) {
+              setParams({ code: c, via: 'typed' });
+            }
           }}
         >
           <Input
             aria-label='code'
-            placeholder='673-chaos-mail-kite'
+            placeholder='a code or a zafu.pro/j link'
             value={typed}
-            onChange={e => setTyped(e.target.value)}
+            onChange={e => {
+              setTyped(e.target.value);
+              // a whole code or link pasted in opens at once
+              const c = codeIn(e.target.value);
+              if (c && e.target.value.length - typed.length > 1) {
+                setParams({ code: c, via: 'typed' });
+              }
+            }}
             autoFocus
           />
-          <Button type='submit' disabled={!CODE_RE.test(normalizeCode(typed))}>
+          <Button type='submit' disabled={!codeIn(typed)}>
             open
           </Button>
           {OLD_CODE_RE.test(code || normalizeCode(typed)) && (
@@ -147,10 +170,11 @@ export function GroupJoinPage() {
         )}
       </div>
       <div className='flex flex-col gap-3 px-4 pb-4'>
+        {card && !asked && <NickField value={nick} onChange={setNick} />}
         {card && (
-          <span className='flex items-center justify-center gap-1.5 text-[11px] text-fg-muted'>
-            <span className='i-lucide-shield size-3' aria-hidden='true' />
-            joining shares your name, not your wallet
+          <span className='flex items-center justify-center gap-1.5 text-center text-[11px] text-fg-muted'>
+            <span className='i-lucide-shield size-3 shrink-0' aria-hidden='true' />
+            joining shares the name you choose here, or a word name made for this group
           </span>
         )}
         <div className='flex gap-2'>

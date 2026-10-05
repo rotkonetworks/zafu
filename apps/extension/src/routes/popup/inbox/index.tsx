@@ -29,13 +29,21 @@ import { PopupPath, groupPath, threadPath } from '../paths';
 import { useIdentity } from '../identity/use-identity';
 import { deriveThreads, previewOf, shortAddress, whenOf, type DirectThread } from './threads';
 import { useThreadName } from './use-thread-name';
-import { useMyRooms, useOpenPeople, usePeople, useThread } from '../../../people/client';
+import {
+  useMyRooms,
+  useOpenPeople,
+  usePeople,
+  useThread,
+  useWatchRoom,
+} from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import { InviteRows } from '../../../people/invite-rows';
 import { usePairCards } from '../../../people/use-invites';
 import { useCardSync } from '../../../people/my-card';
 import { notePreview } from '../../../people/cards';
 import { WaitingCards } from './waiting-cards';
+import { asksOf } from './join-asks';
+import { useMemberName } from './use-member-name';
 import { threadKey, unreadOf, type PeopleRoom } from '../../../people/vault';
 
 const zec = (zat: bigint) => (Number(zat) / 1e8).toFixed(2);
@@ -133,12 +141,13 @@ const GroupRow = memo(({ wallet, balance }: { wallet: ZcashWalletJson; balance?:
 GroupRow.displayName = 'GroupRow';
 
 /** a group on the people relay: its last line, and how many you have not read */
-const RoomRow = memo(({ room }: { room: PeopleRoom }) => {
+const RoomRow = memo(({ room, asking }: { room: PeopleRoom; asking: number }) => {
   const navigate = useNavigate();
   const thread = useThread(room);
+  const nameFor = useMemberName(room);
   const last = thread?.items[thread.items.length - 1];
   const unread = unreadOf(thread);
-  const who = last && (last.mine ? 'you' : (room.group?.names?.[last.author] ?? last.name));
+  const who = last && (last.mine ? 'you' : nameFor(last.author, last.name));
   return (
     <button
       type='button'
@@ -160,6 +169,11 @@ const RoomRow = memo(({ room }: { room: PeopleRoom }) => {
           {last ? `${who}: ${last.body}` : 'no messages yet'}
         </span>
       </span>
+      {asking > 0 && (
+        <span className='flex h-[18px] shrink-0 items-center border border-gold-line px-[5px] text-[11px] text-zigner-gold'>
+          {asking} asking
+        </span>
+      )}
       {unread > 0 && (
         <span className='flex h-[18px] min-w-[18px] shrink-0 items-center justify-center bg-hanko px-[5px] text-[11px] text-fg-high'>
           {unread}
@@ -170,20 +184,42 @@ const RoomRow = memo(({ room }: { room: PeopleRoom }) => {
 });
 RoomRow.displayName = 'RoomRow';
 
+/** an open door of yours, read every 4 s while people is on screen, so an ask shows at once */
+const DoorWatch = ({ id }: { id: string }) => {
+  useWatchRoom(id);
+  return null;
+};
+
 const Groups = () => {
+  const navigate = useNavigate();
   const wallets = useStore(selectVisibleMultisigWallets);
   const onZcash = useStore(s => selectActiveNetwork(s) === 'zcash');
   const balances = useMultisigBalances(wallets, onZcash);
-  const rooms = useMyRooms().filter(r => r.kind === 'group' && r.joined);
-  if (!wallets.length && !rooms.length) {
-    return null;
-  }
+  const all = useMyRooms();
+  const rooms = all.filter(r => r.kind === 'group' && r.joined);
+  const doors = rooms.flatMap(r => {
+    const { door, asks } = asksOf(all, r.group!.G);
+    return door ? [{ G: r.group!.G, id: door.id, asks: asks.length }] : [];
+  });
   return (
     <section className='flex flex-col gap-1.5'>
-      <h2 className='text-xs tracking-[0.04em] text-fg-muted'>groups</h2>
+      <div className='flex items-baseline justify-between'>
+        <h2 className='text-xs tracking-[0.04em] text-fg-muted'>groups</h2>
+        <button
+          type='button'
+          data-preload={PopupPath.INBOX_JOIN}
+          onClick={() => navigate(PopupPath.INBOX_JOIN)}
+          className='text-xs text-zigner-gold hover:underline'
+        >
+          join a group
+        </button>
+      </div>
+      {doors.map(d => (
+        <DoorWatch key={d.id} id={d.id} />
+      ))}
       <div className='flex flex-col'>
         {rooms.map(r => (
-          <RoomRow key={r.id} room={r} />
+          <RoomRow key={r.id} room={r} asking={doors.find(d => d.G === r.group!.G)?.asks ?? 0} />
         ))}
         {wallets.map(w => (
           <GroupRow key={w.id} wallet={w} balance={balances[w.id]} />

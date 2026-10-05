@@ -18,7 +18,8 @@ import { DEFAULT_PEOPLE_RELAY } from '../config/people-relay';
 import { GROUP_ROOM_PLAINTEXT_BYTES, ZAFU_GROUP_APP_SCOPE } from '@zafu/zirc/room';
 import { readCardPayload } from '../state/contact-share';
 import type { Contact } from '../state/contacts';
-import { shortXid, type XidKeys } from '../state/identity';
+import type { XidKeys } from '../state/identity';
+import { wordName } from './word-name';
 import { encodeWire } from './door';
 import { groupId } from './groups';
 import { hasMemoInvite, readMemoInvite } from './memo-door';
@@ -165,7 +166,7 @@ export const createInvites = (deps: InviteDeps) => {
       encodeWire({
         kind: 'ask',
         key: keys.pubkey,
-        name: shortXid(keys.xid),
+        name: wordName(keys.pubkey),
         seal: keys.xwingPublicKey,
       }),
       'action',

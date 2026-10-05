@@ -27,6 +27,7 @@ import {
   CODE_RE,
 } from './door';
 import { ephemeralIdentity, identityOf } from './keys';
+import { wordName } from './word-name';
 import type { PeopleRoom, Thread } from './vault';
 
 // every door here runs the real scrypt (N 2^16, 64 MiB) once per member: about
@@ -92,6 +93,7 @@ const wallet = (
   return {
     service,
     op,
+    groups,
     room: (id: string) => rooms.find(r => r.id === id),
     lines: (id: string) =>
       threads[threadKey({ walletId, id })]?.items.map(i => `${i.name}: ${i.body}`),
@@ -105,7 +107,10 @@ describe('a group through its door', () => {
     const a = wallet('wa', ALICE, transport, clock);
     const b = wallet('wb', BOB, transport, clock);
 
-    const { id, code } = (await a.op('group-create', { name: 'treasury' })) as unknown as {
+    const { id, code } = (await a.op('group-create', {
+      name: 'treasury',
+      nick: 'alice',
+    })) as unknown as {
       id: string;
       code: string;
     };
@@ -114,7 +119,7 @@ describe('a group through its door', () => {
 
     clock.t += 30_000;
     const card = await b.op('door-peek', { code });
-    expect(card).toMatchObject({ G, group: 'treasury', count: 1 });
+    expect(card).toMatchObject({ G, group: 'treasury', count: 1, from: 'alice' });
     await b.op('door-ask', { code });
 
     clock.t += 30_000;
@@ -123,6 +128,35 @@ describe('a group through its door', () => {
     expect(asks).toHaveLength(1);
     const bobKey = deriveRoomKeys(BOB, 0, G).pubkey;
     expect(asks[0]!.key).toBe(bobKey);
+    // a pass that read the ask before "allow" and lands after it
+    const stale = structuredClone(a.room(doorId(G))!);
+    const bob = deriveRoomKeys(BOB, 0, G);
+    const late = await a.groups.handlers.door(
+      stale,
+      [
+        {
+          body: encodeWire({ kind: 'ask', key: bobKey, name: 'x', seal: bob.xwingPublicKey }),
+          author: bobKey,
+          ts: Math.floor(clock.t / 1000),
+        } as never,
+      ],
+      a.service.api,
+    );
+    // and a pass over the group room that read its roster before "allow"
+    const aliceRoomKey = deriveRoomKeys(ALICE, 0, G).pubkey;
+    const staleRoster = await a.groups.handlers.group(
+      structuredClone(a.room(groupId(G))!),
+      [
+        {
+          body: encodeWire({ kind: 'names', names: {} }),
+          author: aliceRoomKey,
+          ts: Math.floor(clock.t / 1000),
+        } as never,
+      ],
+      a.service.api,
+    );
+    // bob chose no name: the founder sees his word name for this group, never hex
+    expect(asks[0]!.name).toBe(wordName(bobKey));
 
     await a.op('group-allow', { G, key: bobKey });
     expect(a.room(groupId(G))?.group?.members.map(m => m.key)).toEqual([
@@ -130,6 +164,10 @@ describe('a group through its door', () => {
       bobKey,
     ]);
     expect(a.room(doorId(G))?.group?.requests).toEqual([]);
+    await a.service.api.updateRoom(doorId(G), r => (late ? late(r) : r));
+    expect(a.room(doorId(G))?.group?.requests).toEqual([]);
+    await a.service.api.updateRoom(groupId(G), r => (staleRoster ? staleRoster(r) : r));
+    expect(a.room(groupId(G))?.group?.members.map(m => m.key)).toEqual([aliceRoomKey, bobKey]);
 
     clock.t += 30_000;
     await b.service.open(); // opens the invite, joins the group
@@ -150,12 +188,17 @@ describe('a group through its door', () => {
     expect(await b.service.say(groupId(G), 'paying her today?')).toBe('sent');
     clock.t += 10_000;
     await a.service.check();
-    const aKey = deriveRoomKeys(ALICE, 0, G);
-    const short = (k: string) => k.slice(0, 8);
     expect(a.lines(groupId(G))).toEqual([
-      `${short(aKey.xid)}: alice sent the logo files`,
-      `${short(deriveRoomKeys(BOB, 0, G).xid)}: paying her today?`,
+      'alice: alice sent the logo files',
+      `${wordName(bobKey)}: paying her today?`,
     ]);
+    // the roster names agree on both sides
+    const aliceKey = deriveRoomKeys(ALICE, 0, G).pubkey;
+    expect(b.room(groupId(G))?.group?.members.map(m => m.name)).toEqual([
+      'alice',
+      wordName(bobKey),
+    ]);
+    expect(a.room(groupId(G))?.group?.names?.[aliceKey]).toBe('alice');
     expect(b.lines(groupId(G))).toEqual(a.lines(groupId(G)));
 
     // once allowed, the ask is not shown again on the next pass

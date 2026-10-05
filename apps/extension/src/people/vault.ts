@@ -74,6 +74,8 @@ export interface PeopleRoom {
     requests?: JoinRequest[];
     /** asks the founder said no to: never shown again */
     declined?: string[];
+    /** asks the founder let in from this door: never shown again either */
+    allowed?: string[];
     /** a door: the group it opens, and its code (founder side only) */
     code?: string;
     /** joiner side: the invite was opened and the group joined */

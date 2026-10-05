@@ -3,11 +3,12 @@
 import { ed25519 } from '@noble/curves/ed25519';
 import { bytesToHex } from '@noble/hashes/utils';
 import type { RoomIdentity } from '@zafu/zirc/room';
-import { shortXid, type XidKeys } from '../state/identity';
+import type { XidKeys } from '../state/identity';
+import { wordName } from './word-name';
 
-export const identityOf = (k: Pick<XidKeys, 'pubkey' | 'xid' | 'seed'>): RoomIdentity => ({
+export const identityOf = (k: Pick<XidKeys, 'pubkey' | 'seed'>): RoomIdentity => ({
   pubkey: k.pubkey,
-  name: shortXid(k.xid),
+  name: wordName(k.pubkey),
   sign: data => Promise.resolve(bytesToHex(ed25519.sign(data, k.seed))),
   verify,
 });
@@ -26,7 +27,7 @@ export const ephemeralIdentity = (): RoomIdentity => {
   const pubkey = bytesToHex(ed25519.getPublicKey(seed));
   return {
     pubkey,
-    name: pubkey.slice(0, 8),
+    name: wordName(pubkey),
     sign: data => Promise.resolve(bytesToHex(ed25519.sign(data, seed))),
     verify,
   };

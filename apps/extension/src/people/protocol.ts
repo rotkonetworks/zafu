@@ -4,6 +4,18 @@ export const PEOPLE_MESSAGE = 'zafu_people';
 export const PEOPLE_WATCH_PORT = 'zafu-people-watch:';
 /** chrome.storage.session: the slot under a title */
 export const PEOPLE_STATUS_KEY = 'peopleStatus';
+/**
+ * session storage: who waits at your open doors, per wallet, so the tab can
+ * show it without opening the vault. Counts only, never names or keys.
+ */
+export const PEOPLE_ASKING_KEY = 'peopleAsking';
+export interface PeopleAsking {
+  walletId: string;
+  /** asks waiting at this door */
+  n: number;
+  /** ms: the door closes */
+  until: number;
+}
 
 /**
  * The worker's "the relay is gated" errors cross the message boundary as
