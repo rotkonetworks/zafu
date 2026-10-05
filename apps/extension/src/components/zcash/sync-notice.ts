@@ -21,11 +21,14 @@ export const syncNotice = ({
   online,
   catchingUp,
   failure,
+  preparing,
 }: {
   online: boolean;
   /** a send is catching up the note tree; `left` only from a measured rate */
   catchingUp?: { left?: string };
   failure?: SyncFailure | null;
+  /** notes found but not in the note tree yet (recovered in the background) */
+  preparing?: number;
 }): SyncNoticeSpec | undefined =>
   !online
     ? { tone: 'warn', text: OFFLINE_MESSAGE, action: { label: 'retry now', kind: 'retry' } }
@@ -33,4 +36,12 @@ export const syncNotice = ({
       ? { tone: 'gold', text: 'catching up the note tree', meta: catchingUp.left }
       : failure
         ? { tone: 'warn', text: failure.message, detail: failure.raw, action: failure.action }
-        : undefined;
+        : preparing
+          ? {
+              tone: 'gold',
+              text:
+                preparing === 1
+                  ? 'preparing 1 note to spend'
+                  : `preparing ${preparing} notes to spend`,
+            }
+          : undefined;

@@ -35,5 +35,15 @@ describe('syncNotice', () => {
 
   it('is quiet when nothing is wrong', () => {
     expect(syncNotice({ online: true, failure: null })).toBeUndefined();
+    expect(syncNotice({ online: true, failure: null, preparing: 0 })).toBeUndefined();
+  });
+
+  it('says how many notes are still being prepared, below a failure', () => {
+    expect(syncNotice({ online: true, preparing: 3 })).toEqual({
+      tone: 'gold',
+      text: 'preparing 3 notes to spend',
+    });
+    expect(syncNotice({ online: true, preparing: 1 })?.text).toBe('preparing 1 note to spend');
+    expect(syncNotice({ online: true, preparing: 2, failure: nodeDown })?.tone).toBe('warn');
   });
 });
