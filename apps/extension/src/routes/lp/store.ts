@@ -25,12 +25,21 @@ import { setDestinationOptIn } from '../../net/ledger';
 import { readEgressView } from '../../net/egress-opt-in';
 import { claimTAddress, tAddressAt } from '../../hooks/use-transparent-addresses';
 import { drive, type DriveDeps } from '../../lp/drive';
-import { isDone, needs, resumed, shieldRefund, startFlight, type Flight } from '../../lp/flight';
+import {
+  cancelFlight,
+  isDone,
+  needs,
+  resumed,
+  shieldRefund,
+  startFlight,
+  type Flight,
+} from '../../lp/flight';
 import {
   ADD_MEMO,
   afterFee,
   DEFAULT_ADD,
   parseZec,
+  quoteAdd,
   withdrawMemo,
   withdrawZec,
 } from '../../lp/math';
@@ -80,6 +89,10 @@ export interface LpState {
   /** why the last read failed, in one calm line */
   readErr?: string;
   flight?: Flight;
+  /** the flight the person confirmed in this tab: only that one sends */
+  confirmed?: string;
+  /** a reopened add whose price moved since its confirm: shown, and continue asks again */
+  moved?: { was?: number; now: number };
   shieldedZat?: bigint;
   error?: string;
 }
@@ -377,8 +390,10 @@ const runFlight = async () => {
   try {
     await spawnNetworkWorker('zcash');
     let f = flight;
-    for (let i = 0; i < 4; i++) {
-      const next = await drive(f, depsOf(storeId, lp), thor?.inbound?.address ?? '');
+    // a flight from before this tab watches, and waits for the person to say continue
+    const mayAct = get().confirmed === flight.id;
+    for (let i = 0; i < (mayAct ? 4 : 1); i++) {
+      const next = await drive(f, depsOf(storeId, lp), thor?.inbound?.address ?? '', mayAct);
       const moved = next.stage !== f.stage || !!next.error;
       f = next;
       if (!moved || !needs(f)) {
@@ -410,10 +425,12 @@ export const startAdd = async () => {
   if (!storeId || !lp || !thor || !a || thor.addPaused) {
     return;
   }
+  const { q } = quoteNow(a);
   const f = startFlight('add', a, ADD_MEMO, {
     unitsBefore: (thor.position?.units ?? 0n).toString(),
+    costPct: q?.costPct,
   });
-  set({ flight: f, view: null });
+  set({ flight: f, view: null, confirmed: f.id, moved: undefined });
   await patchLpPocket(storeId, { flight: f });
   await runFlight();
 };
@@ -434,24 +451,82 @@ export const startWithdraw = async () => {
       thor.inbound.outboundFee,
     ).toString(),
   });
-  set({ flight: f, view: null });
+  set({ flight: f, view: null, confirmed: f.id });
   await patchLpPocket(storeId, { flight: f });
   await runFlight();
 };
 
-/** a stopped step: the person asks it to run again */
-export const retry = async () => {
-  const { flight } = get();
-  if (flight?.error) {
-    await depsOf(get().storeId!, get().lp!).save({ ...flight, error: undefined });
-    await runFlight();
-  }
+/** an add's quote against the pool as last read */
+const quoteNow = (a: bigint) => {
+  const { thor, zecUsd } = get();
+  return {
+    q: thor
+      ? quoteAdd(thor.pool, a, zecUsd ? { zec: zecUsd, rune: thor.runeUsd } : undefined)
+      : undefined,
+  };
 };
 
-/** a refunded add, or a payout at the lp address: shield it back now */
+/** a price that moved this much against the person since the confirm asks again */
+const MOVED_PP = 1;
+
+/**
+ * The person said continue (after the password) on a flight waiting from
+ * before this tab, or on a stopped step: read the pool and vault again, and
+ * for an add compare its cost with the one confirmed; a worse price is shown
+ * and needs a second continue. The vault and pauses are read once more right
+ * before the send itself (drive.ts).
+ */
+export const continueFlight = async () => {
+  const { flight, storeId, lp, moved } = get();
+  if (!flight || !storeId || !lp || isDone(flight)) {
+    return;
+  }
+  await refresh();
+  const t = get().thor;
+  if (!t) {
+    set({ error: 'thornode did not answer · nothing was sent' });
+    return;
+  }
+  if (flight.kind === 'add' && needs({ ...flight, error: undefined }) === 'send') {
+    const now = quoteNow(BigInt(flight.amountZat)).q?.costPct;
+    const was = flight.costPct;
+    if (!moved && now !== undefined && now > (was ?? 0) + MOVED_PP) {
+      set({ moved: { was, now } });
+      return;
+    }
+  }
+  if (flight.kind === 'withdraw' && flight.stage === 'ask' && !positionOf({ thor: t })) {
+    set({ error: 'nothing is left to take out at this address · nothing was sent' });
+    return;
+  }
+  set({ confirmed: flight.id, moved: undefined, error: undefined });
+  if (flight.error) {
+    await depsOf(storeId, lp).save({ ...flight, error: undefined });
+  }
+  await runFlight();
+};
+
+/** cancel before the pool got anything: dropped, or shielded back from the lp address */
+export const cancelAndShieldBack = async () => {
+  const { flight, storeId, lp } = get();
+  if (!flight || !storeId || !lp) {
+    return;
+  }
+  const next = cancelFlight(flight);
+  if (!next) {
+    await finish();
+    return;
+  }
+  set({ confirmed: next.id, moved: undefined });
+  await depsOf(storeId, lp).save(next);
+  await runFlight();
+};
+
+/** a refunded add, or a payout at the lp address: shield it back now (the person confirmed) */
 export const shieldItBack = async () => {
   const { flight, storeId, lp } = get();
   if (flight && storeId && lp) {
+    set({ confirmed: flight.id });
     await depsOf(storeId, lp).save(shieldRefund(flight));
     await runFlight();
   }
@@ -460,7 +535,7 @@ export const shieldItBack = async () => {
 /** the tracker's last button: forget a finished (or kept) flight */
 export const finish = async () => {
   const { storeId } = get();
-  set({ flight: undefined, view: null });
+  set({ flight: undefined, view: null, confirmed: undefined, moved: undefined });
   if (storeId) {
     await patchLpPocket(storeId, { flight: undefined });
   }

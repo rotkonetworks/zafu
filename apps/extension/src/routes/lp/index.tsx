@@ -16,6 +16,8 @@ import { usePasswordGate } from '../../hooks/password-gate';
 import { isDone } from '../../lp/flight';
 import { zecText } from '../../lp/math';
 import {
+  cancelAndShieldBack,
+  continueFlight,
   init,
   openSheet,
   positionOf,
@@ -145,7 +147,12 @@ export const LpPage = () => {
     first: () => <FirstScreen />,
     egress: () => <EgressScreen />,
     blocked: () => <BlockedScreen />,
-    track: () => <TrackScreen />,
+    track: () => (
+      <TrackScreen
+        onContinue={() => void confirm(continueFlight)()}
+        onCancel={() => void confirm(cancelAndShieldBack)()}
+      />
+    ),
     add: () => <AddScreen onAdd={() => void confirm(startAdd)()} />,
     position: () => <PositionScreen />,
     withdraw: () => <WithdrawScreen onOut={() => void confirm(startWithdraw)()} />,

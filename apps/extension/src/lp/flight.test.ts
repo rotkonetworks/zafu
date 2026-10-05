@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   advance,
+  cancelFlight,
+  cancellable,
   isDone,
   isFlight,
   needs,
@@ -166,5 +168,38 @@ describe('the tracker lines', () => {
     expect(lines.map(l => l.state)).toEqual(['done', 'now', 'later', 'later', 'later']);
     expect(lines[0]!.at).toBe(f.at.settle);
     expect(lines[2]!.d).toBe('memo +:ZEC.ZEC · 0.0100 zec');
+  });
+});
+
+describe('cancel before the pool gets it', () => {
+  it('drops a flight that moved nothing', () => {
+    expect(cancelFlight(startFlight('add', 1n, ADD_MEMO))).toBeUndefined();
+  });
+
+  it('shields back what reached the lp address, and says so', () => {
+    const f = advance(sent(sending(startFlight('add', 1_000_000n, ADD_MEMO)), 'fund'), {
+      short: 0n,
+    });
+    expect(cancellable(f)).toBe(true);
+    const c = cancelFlight(f)!;
+    expect(c.stage).toBe('shield');
+    expect(c.cancelled).toBe(true);
+    expect(needs(c)).toBe('shield');
+    expect(cancellable(c)).toBe(false);
+    const done = sent(sending(c), 'back');
+    expect(isDone(done)).toBe(true);
+    expect(stepLines(done, T).map(l => l.t)).toEqual([
+      'cancelled · nothing went to the pool',
+      'shielded back to main pocket',
+    ]);
+  });
+
+  it('cannot cancel once the pool has the send', () => {
+    const f = sent(
+      sending(advance(sent(sending(startFlight('add', 1n, ADD_MEMO)), 'f'), { short: 0n })),
+      'b',
+    );
+    expect(cancellable(f)).toBe(false);
+    expect(cancelFlight(f)).toBe(f);
   });
 });

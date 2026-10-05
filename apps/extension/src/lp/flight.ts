@@ -39,6 +39,8 @@ export interface Flight {
   memo: string;
   /** a withdraw's basis points */
   bps?: number;
+  /** an add's cost vs market at the confirm, percent: a reopened tab compares against it */
+  costPct?: number;
   /** a withdraw's expected payout, before its fee, at the review */
   expectZat?: string;
   /** what the shield-out moved to the lp address */
@@ -57,6 +59,8 @@ export interface Flight {
   sending?: Stage;
   /** stopped: one calm line, the flight waits for the person */
   error?: string;
+  /** the person cancelled before the pool got it: whatever reached the lp address is shielded back */
+  cancelled?: true;
   /** when each stage began */
   at: Partial<Record<Stage, number>>;
   started: number;
@@ -241,6 +245,25 @@ export const advance = (f: Flight, x: Facts, now = Date.now()): Flight => {
 };
 
 /** a refunded add's coins, shielded back at the person's word */
+/**
+ * Cancel before the pool got anything: with nothing moved yet the flight is
+ * simply dropped (undefined); once zec sits at the lp address (a shield-out,
+ * or coins already there) it is shielded back. Past the send, there is
+ * nothing to cancel.
+ */
+export const cancelFlight = (f: Flight, now = Date.now()): Flight | undefined =>
+  f.stage === 'fund' && !f.fundTxid && !f.sending
+    ? undefined
+    : f.stage === 'fund' || f.stage === 'settle' || f.stage === 'send' || f.stage === 'ask'
+      ? to({ ...f, cancelled: true, sending: undefined }, 'shield', {}, now)
+      : f;
+
+/** may this flight still be cancelled (nothing has reached the pool) */
+export const cancellable = (f: Flight): boolean =>
+  !f.cancelled &&
+  (f.stage === 'fund' || f.stage === 'settle' || f.stage === 'send' || f.stage === 'ask') &&
+  !f.sendTxid;
+
 /** a refunded add's coins, or a payout that sits at the lp address, shielded back at the person's word */
 export const shieldRefund = (f: Flight, now = Date.now()): Flight =>
   f.stage === 'refunded' || f.stage === 'arrive' ? to(f, 'shield', {}, now) : f;
@@ -291,6 +314,16 @@ export const stepLines = (
     at: stateAt(f, i) === 'done' ? at(ORDER[f.kind][i + 1] ?? s) : undefined,
     state: stateAt(f, i),
   });
+  if (f.cancelled) {
+    return [
+      { t: 'cancelled · nothing went to the pool', at: at('shield'), state: 'turned' },
+      {
+        t: `shielded back to ${t.pocket}`,
+        at: at('shielded'),
+        state: f.stage === 'shielded' ? 'done' : 'now',
+      },
+    ];
+  }
   if (f.kind === 'add') {
     const head = [
       line(

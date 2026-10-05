@@ -13,7 +13,7 @@ import { cn } from '@repo/ui/lib/utils';
 import { AskOnce, Column, StepLines, useNow, type Host } from '../../components/scroll-page';
 import { clock } from '../../buy/machine';
 import { depositFeeZat } from '../../workers/transparent-deposit';
-import { stepLines } from '../../lp/flight';
+import { cancellable, isDone, needs, stepLines, type Flight } from '../../lp/flight';
 import {
   ADD_MEMO,
   afterFee,
@@ -37,7 +37,6 @@ import {
   lpStore,
   openSheet,
   positionOf,
-  retry,
   setAmount,
   setPart,
   shieldItBack,
@@ -635,9 +634,32 @@ export const WithdrawScreen = ({ onOut }: { onOut: () => void }) => {
 };
 
 /** LpAdding, LpWithdrawing, LpRefunded: the flight's real steps and clock */
-export const TrackScreen = () => {
+/** where a flight from before this tab stands, in one line */
+const waitLine = (f: Flight): string =>
+  f.stage === 'shield'
+    ? 'your zec is waiting to be shielded back · at your lp address'
+    : f.kind === 'add'
+      ? `your add is waiting to be sent · ${zecText(BigInt(f.amountZat))} zec to thorchain`
+      : `your take-out is waiting to be sent · the ask to thorchain`;
+
+export const TrackScreen = ({
+  onContinue,
+  onCancel,
+}: {
+  /** password, then the re-checks, then the next send */
+  onContinue: () => void;
+  onCancel: () => void;
+}) => {
   const s = useLp(
-    useShallow(s => ({ flight: s.flight, address: s.lp?.address, pocket: s.pocket, err: s.error })),
+    useShallow(s => ({
+      flight: s.flight,
+      address: s.lp?.address,
+      pocket: s.pocket,
+      err: s.error,
+      confirmed: s.confirmed,
+      moved: s.moved,
+      paused: s.flight?.kind === 'withdraw' ? s.thor?.outPaused : s.thor?.addPaused,
+    })),
   );
   const now = useNow();
   const f = s.flight;
@@ -645,6 +667,11 @@ export const TrackScreen = () => {
     return null;
   }
   const lines = stepLines(f, { zec: zecText, address: short(s.address), pocket: s.pocket });
+  // a send this tab was not asked for: it waits for continue, with the password
+  const held =
+    !isDone(f) &&
+    !!needs({ ...f, error: undefined, sending: undefined }) &&
+    (s.confirmed !== f.id || !!f.error);
   const done = lines.filter(l => l.state === 'done').length;
   const refunded = f.stage === 'refunded';
   const finished = f.stage === 'credited' || f.stage === 'shielded' || f.stage === 'refused';
@@ -686,11 +713,33 @@ export const TrackScreen = () => {
         />
       </div>
       <StepLines steps={lines} />
-      {f.error || s.err ? (
+      {held ? (
+        <div className='flex flex-col divide-y divide-border-soft border border-zigner-gold/40 bg-elev-1'>
+          <span className='px-3.5 py-3 text-[13px] text-fg-high'>{waitLine(f)}</span>
+          {s.moved && (
+            <span className='px-3.5 py-2.5 text-xs text-warn'>
+              the pool moved · this add now costs {pct(s.moved.now)}
+              {s.moved.was !== undefined && (
+                <>
+                  , not <span className='line-through'>{pct(s.moved.was)}</span>
+                </>
+              )}
+            </span>
+          )}
+          {s.paused && (
+            <span className='px-3.5 py-2.5 text-xs text-warn'>
+              thorchain has paused this right now · nothing will be sent until it opens
+            </span>
+          )}
+          {(f.error ?? s.err) && (
+            <span className='px-3.5 py-2.5 text-xs text-fg'>{f.error ?? s.err}</span>
+          )}
+        </div>
+      ) : f.error || s.err ? (
         <div className='flex min-h-11 items-center gap-2.5 border border-warn/40 px-3.5 py-2'>
           <span className='flex-1 text-xs text-fg'>{f.error ?? s.err}</span>
           {f.error && (
-            <Button variant='secondary' size='sm' onClick={() => void retry()}>
+            <Button variant='secondary' size='sm' onClick={onContinue}>
               try again
             </Button>
           )}
@@ -707,7 +756,26 @@ export const TrackScreen = () => {
         </div>
       )}
       <Buttons>
-        {refunded ? (
+        {held ? (
+          <>
+            {cancellable(f) ? (
+              <Button variant='secondary' className='h-14 w-[200px]' onClick={onCancel}>
+                {f.stage === 'fund' && !f.fundTxid ? 'cancel' : 'cancel and shield back'}
+              </Button>
+            ) : (
+              <Button
+                variant='secondary'
+                className='h-14 w-[170px]'
+                onClick={() => show('position')}
+              >
+                not now
+              </Button>
+            )}
+            <Button className='h-14 flex-1' disabled={!!s.paused} onClick={onContinue}>
+              {s.moved ? `continue at ${pct(s.moved.now)}` : 'continue'}
+            </Button>
+          </>
+        ) : refunded ? (
           <>
             <Button variant='secondary' className='h-14 w-[170px]' onClick={() => void finish()}>
               keep it there

@@ -156,3 +156,30 @@ describe('watching', () => {
     expect(f.shieldTxid).toBe('shield-txid');
   });
 });
+
+describe('a flight from before this tab', () => {
+  it('watches and moves on, but never sends without the person saying continue', async () => {
+    const { d } = deps({ plan: async () => ({ fee: '15000', change: '0', short: '0' }) });
+    // after the shield-out: the block lands while the tab is reopened
+    const f = sent(sending(add()), 'fund');
+    const next = await drive(f, d, TEX_VAULT, false);
+    expect(next.stage).toBe('send');
+    expect(d.deposit).not.toHaveBeenCalled();
+    expect(d.vault).not.toHaveBeenCalled();
+    // continue: the vault is read fresh, then the deposit leaves
+    const after = await drive(next, d, TEX_VAULT, true);
+    expect(d.vault).toHaveBeenCalled();
+    expect(d.deposit).toHaveBeenCalledTimes(1);
+    expect(after.stage).toBe('seen');
+  });
+
+  it('does not shield back on its own either', async () => {
+    const { d } = deps();
+    const f = {
+      ...startFlight('withdraw', 15_000n, withdrawMemo(10_000)),
+      stage: 'shield' as const,
+    };
+    expect((await drive(f, d, TEX_VAULT, false)).stage).toBe('shield');
+    expect(d.shieldBack).not.toHaveBeenCalled();
+  });
+});

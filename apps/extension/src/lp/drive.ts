@@ -125,10 +125,21 @@ export const act = async (f: Flight, d: DriveDeps): Promise<Flight> => {
   }
 };
 
-/** one turn: look, move on, send; the record is saved when it changed */
-export const drive = async (f: Flight, d: DriveDeps, to: string): Promise<Flight> => {
+/**
+ * One turn: look, move on, and send only when `mayAct` (the person confirmed
+ * this flight in this tab). A reopened tab watches but never sends on its own.
+ * The record is saved when it changed.
+ */
+export const drive = async (
+  f: Flight,
+  d: DriveDeps,
+  to: string,
+  mayAct = true,
+): Promise<Flight> => {
   let next = advance(f, await observe(f, d, to));
-  next = await act(next, d);
+  if (mayAct) {
+    next = await act(next, d);
+  }
   if (next !== f) {
     await d.save(next);
   }
