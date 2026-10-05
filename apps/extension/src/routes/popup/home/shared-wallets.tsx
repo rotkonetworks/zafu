@@ -34,7 +34,7 @@ const SharedRow = ({ w }: { w: ZcashWalletJson }) => {
         </span>
       }
       label={w.label}
-      description={`${ms.threshold} of ${ms.maxSigners}`}
+      description={`${ms.threshold} of ${ms.maxSigners}${ms.room && !ms.backedUpAt ? ' · never backed up' : ''}`}
       value={hide ? '•••••' : zat === undefined ? '…' : fmtZecHero(Number(zat) / 1e8)}
       onPress={() =>
         room?.startsWith('g:')

@@ -82,7 +82,7 @@ import {
   type DepositWasm,
 } from './transparent-deposit';
 import { assertProveRequest, type ProveRequest } from '../shared/prove-guard';
-import { issueWorkerKey, type SealedVault } from '../shared/vault-seal';
+import { issueWorkerKey, openCall, type SealedCall, type SealedVault } from '../shared/vault-seal';
 import {
   parseExpiryHeight,
   reconcileSentTxs,
@@ -3402,6 +3402,25 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
     pendingIronwood,
     pendingTotal: pendingOrchard + pendingIronwood,
   };
+};
+
+/**
+ * A FROST call that carries secrets: its arguments open only with the key
+ * this worker issued for it, and its reply is sealed back under the same
+ * key, so neither crosses the extension message bus in the clear.
+ */
+const sealedFrost = async (id: string, payload: unknown, run: (args: unknown) => unknown) => {
+  await initWasm();
+  const call = await openCall((payload as { sealed?: SealedCall } | undefined)?.sealed);
+  if (!call) {
+    throw new Error('this key step did not open in the worker. please try again.');
+  }
+  workerSelf.postMessage({
+    type: 'frost-result',
+    id,
+    network: 'zcash',
+    payload: await call.reply(run(call.args)),
+  });
 };
 
 // ── message handler ──
@@ -6775,73 +6794,65 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       // ── FROST multisig ──
 
-      case 'frost-dkg-part1': {
-        await initWasm();
-        const { maxSigners, minSigners } = payload as { maxSigners: number; minSigners: number };
-        const result = JSON.parse(wasmModule!.frost_dkg_part1(maxSigners, minSigners));
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+      case 'frost-dkg-part1':
+        await sealedFrost(id, payload, a => {
+          const { maxSigners, minSigners } = a as { maxSigners: number; minSigners: number };
+          return JSON.parse(wasmModule!.frost_dkg_part1(maxSigners, minSigners));
+        });
         return;
-      }
 
-      case 'frost-dkg-part2': {
-        await initWasm();
-        const { secretHex, peerBroadcasts } = payload as {
-          secretHex: string;
-          peerBroadcasts: string;
-        };
-        const result = JSON.parse(wasmModule!.frost_dkg_part2(secretHex, peerBroadcasts));
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+      case 'frost-dkg-part2':
+        await sealedFrost(id, payload, a => {
+          const { secretHex, peerBroadcasts } = a as { secretHex: string; peerBroadcasts: string };
+          return JSON.parse(wasmModule!.frost_dkg_part2(secretHex, peerBroadcasts));
+        });
         return;
-      }
 
-      case 'frost-dkg-part3': {
-        await initWasm();
-        const { secretHex, round1Broadcasts, round2Packages } = payload as {
-          secretHex: string;
-          round1Broadcasts: string;
-          round2Packages: string;
-        };
-        const result = JSON.parse(
-          wasmModule!.frost_dkg_part3(secretHex, round1Broadcasts, round2Packages),
-        );
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+      case 'frost-dkg-part3':
+        await sealedFrost(id, payload, a => {
+          const { secretHex, round1Broadcasts, round2Packages } = a as {
+            secretHex: string;
+            round1Broadcasts: string;
+            round2Packages: string;
+          };
+          return JSON.parse(
+            wasmModule!.frost_dkg_part3(secretHex, round1Broadcasts, round2Packages),
+          );
+        });
         return;
-      }
 
-      case 'frost-sign-round1': {
-        await initWasm();
-        const { ephemeralSeedHex, keyPackageHex } = payload as {
-          ephemeralSeedHex: string;
-          keyPackageHex: string;
-        };
-        const result = JSON.parse(wasmModule!.frost_sign_round1(ephemeralSeedHex, keyPackageHex));
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
-        return;
-      }
-
-      case 'frost-spend-sign': {
-        await initWasm();
-        const { ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex, commitments } =
-          payload as {
+      case 'frost-sign-round1':
+        await sealedFrost(id, payload, a => {
+          const { ephemeralSeedHex, keyPackageHex } = a as {
             ephemeralSeedHex: string;
             keyPackageHex: string;
-            noncesHex: string;
-            sighashHex: string;
-            alphaHex: string;
-            commitments: string;
           };
-        // signed variant - coordinator (zafu/poker-escrow) extracts signer identifier from VK
-        const result = wasmModule!.frost_spend_sign_round2_signed(
-          ephemeralSeedHex,
-          keyPackageHex,
-          noncesHex,
-          sighashHex,
-          alphaHex,
-          commitments,
-        );
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+          return JSON.parse(wasmModule!.frost_sign_round1(ephemeralSeedHex, keyPackageHex));
+        });
         return;
-      }
+
+      case 'frost-spend-sign':
+        await sealedFrost(id, payload, a => {
+          const { ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex, commitments } =
+            a as {
+              ephemeralSeedHex: string;
+              keyPackageHex: string;
+              noncesHex: string;
+              sighashHex: string;
+              alphaHex: string;
+              commitments: string;
+            };
+          // signed variant - coordinator (zafu/poker-escrow) extracts signer identifier from VK
+          return wasmModule!.frost_spend_sign_round2_signed(
+            ephemeralSeedHex,
+            keyPackageHex,
+            noncesHex,
+            sighashHex,
+            alphaHex,
+            commitments,
+          );
+        });
+        return;
 
       case 'frost-spend-aggregate': {
         await initWasm();
@@ -6874,40 +6885,35 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         return;
       }
 
-      case 'frost-derive-address-from-sk': {
-        await initWasm();
-        const { publicKeyPackageHex, skHex, diversifierIndex } = payload as {
-          publicKeyPackageHex: string;
-          skHex: string;
-          diversifierIndex: number;
-        };
-        const rawHex = wasmModule!.frost_derive_address_from_sk(
-          publicKeyPackageHex,
-          skHex,
-          diversifierIndex,
-        );
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: rawHex });
+      case 'frost-derive-address-from-sk':
+        await sealedFrost(id, payload, a => {
+          const { publicKeyPackageHex, skHex, diversifierIndex } = a as {
+            publicKeyPackageHex: string;
+            skHex: string;
+            diversifierIndex: number;
+          };
+          return wasmModule!.frost_derive_address_from_sk(
+            publicKeyPackageHex,
+            skHex,
+            diversifierIndex,
+          );
+        });
         return;
-      }
 
-      case 'frost-sample-fvk-sk': {
-        await initWasm();
-        const skHex = wasmModule!.frost_sample_fvk_sk();
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: skHex });
+      case 'frost-sample-fvk-sk':
+        await sealedFrost(id, payload, () => wasmModule!.frost_sample_fvk_sk());
         return;
-      }
 
-      case 'frost-derive-ufvk': {
-        await initWasm();
-        const { publicKeyPackageHex, skHex, mainnet } = payload as {
-          publicKeyPackageHex: string;
-          skHex: string;
-          mainnet: boolean;
-        };
-        const ufvk = wasmModule!.frost_derive_ufvk(publicKeyPackageHex, skHex, mainnet);
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: ufvk });
+      case 'frost-derive-ufvk':
+        await sealedFrost(id, payload, a => {
+          const { publicKeyPackageHex, skHex, mainnet } = a as {
+            publicKeyPackageHex: string;
+            skHex: string;
+            mainnet: boolean;
+          };
+          return wasmModule!.frost_derive_ufvk(publicKeyPackageHex, skHex, mainnet);
+        });
         return;
-      }
 
       case 'frost-parse-tx-outputs': {
         await initWasm();

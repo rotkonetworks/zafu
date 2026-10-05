@@ -143,6 +143,20 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage, onSend }: CardProps) 
           </span>
           <span className='font-mono text-[11px] text-fg-muted'>{shortAddress(seat.address)}</span>
         </div>
+        {!seat.multisig?.backedUpAt && (
+          <button
+            type='button'
+            onClick={() => navigate(PopupPath.SETTINGS_MULTISIG_BACKUP)}
+            className='flex min-h-11 items-center gap-2.5 border-t border-border-soft px-3.5 py-2 text-left hover:bg-elev-2'
+          >
+            <span className='size-3.5 shrink-0 border border-warn' aria-hidden='true' />
+            <span className='flex grow flex-col gap-0.5'>
+              <span className='text-xs text-fg-high'>back up your key</span>
+              <span className='text-[11px] text-warn'>not in your recovery phrase</span>
+            </span>
+            <span className='i-lucide-chevron-right size-4 text-fg-muted' aria-hidden='true' />
+          </button>
+        )}
         <div className='flex gap-2 border-t border-border-soft px-3.5 py-2.5'>
           <CopyButton text={seat.address} label='copy address' />
           {onSend && (
@@ -195,7 +209,7 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage, onSend }: CardProps) 
                     ? m === COURT
                       ? 'opens later'
                       : 'not here yet'
-                    : c.deal && step === 0 && m !== c.by
+                    : step === 0 && m !== c.by
                       ? 'to agree'
                       : 'making a share'}
               </span>
@@ -203,12 +217,14 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage, onSend }: CardProps) 
           );
         })}
       </div>
-      {c.deal && mine && c.by !== me && !kept?.ok ? (
+      {!bad && mine && c.by !== me && !kept?.ok ? (
         <div className='flex flex-col gap-2 border-t border-border-soft px-3.5 py-3'>
           <span className='text-xs text-fg'>
-            {c.k === c.members.length
-              ? 'both of you sign to release it. if one of you stops answering, it stays locked.'
-              : 'you both sign to release it, or one of you with the one who decides.'}
+            {!c.deal
+              ? `${who(c.by)} asks to make ${c.label || 'a shared wallet'} together · any ${c.k} of ${c.members.length} can send`
+              : c.k === c.members.length
+                ? 'both of you sign to release it. if one of you stops answering, it stays locked.'
+                : 'you both sign to release it, or one of you with the one who decides.'}
           </span>
           <Button
             size='sm'

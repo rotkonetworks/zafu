@@ -2,7 +2,9 @@
  * A shared wallet's balance (a group's, a deal's, any multisig seat): its
  * viewing key syncs in the zcash worker beside the active wallet while a
  * screen shows it, from the seat's birthday, and the balance is read as the
- * worker moves. Shared wallets are never part of the home total.
+ * worker moves, at most once per {@link READ_MS}. A read that finds the same
+ * balance changes nothing, so a row does not draw again for it. Shared
+ * wallets are never part of the home total.
  */
 
 import { useEffect, useState } from 'react';
@@ -16,6 +18,9 @@ import {
 import type { ZcashWalletJson } from '../state/wallets';
 import { resolveBirthday } from './zcash-auto-sync';
 
+/** the least time between two balance reads of one shared wallet */
+const READ_MS = 15_000;
+
 export const useSharedBalance = (w: ZcashWalletJson | undefined): bigint | undefined => {
   const url = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const backend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
@@ -27,11 +32,19 @@ export const useSharedBalance = (w: ZcashWalletJson | undefined): bigint | undef
       return;
     }
     let live = true;
-    const read = () =>
+    let readAt = 0;
+    const read = () => {
+      readAt = Date.now();
       void getBalanceInWorker('zcash', id).then(
-        b => live && setBal({ id, zat: BigInt(b) }),
+        b => {
+          const zat = BigInt(b);
+          if (live) {
+            setBal(cur => (cur?.id === id && cur.zat === zat ? cur : { id, zat }));
+          }
+        },
         () => undefined,
       );
+    };
     void (async () => {
       await spawnNetworkWorker('zcash');
       // a seat without a uview key reads what an earlier sync left
@@ -41,9 +54,11 @@ export const useSharedBalance = (w: ZcashWalletJson | undefined): bigint | undef
       }
       read();
     })().catch(() => undefined);
-    const onSync = (e: Event) => (e as CustomEvent).detail?.network === 'zcash' && read();
+    // progress comes many times a second during a catch-up: read on it only when due
+    const onSync = (e: Event) =>
+      (e as CustomEvent).detail?.network === 'zcash' && Date.now() - readAt >= READ_MS && read();
     window.addEventListener('network-sync-progress', onSync);
-    const t = setInterval(read, 15_000);
+    const t = setInterval(read, READ_MS);
     return () => {
       live = false;
       clearInterval(t);

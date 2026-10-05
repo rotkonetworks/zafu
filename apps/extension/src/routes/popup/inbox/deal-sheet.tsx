@@ -2,8 +2,9 @@
  * "make a deal" in a 1:1 thread (Cv2DealSet, Cv2Escrow, Cv2EscrowPerson):
  * the terms, then who signs to release it. The two of you (2 of 2) is the
  * default and costs nothing; adding someone who decides makes it 2 of 3:
- * zafu court (its seat waits for the escrow service) or a contact you both
- * can reach, in a small deal group.
+ * a contact you both can reach, in a small deal group. zafu court is the
+ * other choice once its escrow service answers (COURT_OPEN); until then it is
+ * not offered, since its keys could never be made.
  */
 
 import { useState } from 'react';
@@ -18,7 +19,7 @@ import { useStore } from '../../../state';
 import { isMutual } from '../../../state/contacts';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { peopleAsk } from '../../../people/client';
-import { COURT, type Deal } from '../../../people/frost-room';
+import { COURT, COURT_OPEN, type Deal } from '../../../people/frost-room';
 import { startKeys } from '../../../people/use-frost-room';
 import { groupInvitePath } from '../paths';
 
@@ -149,13 +150,15 @@ export const DealSheet = ({
           meta='free'
           onClick={() => setWho('two')}
         />
-        <Choice
-          on={who === 'court'}
-          title='zafu court decides if you disagree'
-          line='2 of 3 · a panel of models and jev · opens later'
-          meta='[fee]'
-          onClick={() => setWho('court')}
-        />
+        {COURT_OPEN && (
+          <Choice
+            on={who === 'court'}
+            title='zafu court decides if you disagree'
+            line='2 of 3 · a panel of models and jev · opens later'
+            meta='[fee]'
+            onClick={() => setWho('court')}
+          />
+        )}
         <Choice
           on={who === 'person'}
           title='someone you both trust decides'

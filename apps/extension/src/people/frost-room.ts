@@ -18,20 +18,35 @@
  *   r1     {id, b, x}          each member's signed round-1 broadcast and
  *                              their X-Wing key for this room
  *   sk     {id, s}             the starter: the viewing-key secret, X-Wing
- *                              sealed to each member (never readable by a
- *                              later member of the room or by the relay)
- *   r2     {id, p}             each member's round-2 packages, sealed by frost
- *   fvk    {id, u, a}          each member's viewing key and address: every
- *                              device saves the wallet only when all match
+ *                              sealed to each member, bound to this ceremony
+ *                              and to that member (never readable by a later
+ *                              member of the room or by the relay)
+ *   r2     {id, p, h1}         each member's round-2 packages, sealed by frost,
+ *                              and a hash of every round-1 record it used
+ *   fvk    {id, h}             each member's commitment to the wallet it made:
+ *                              a hash of the ceremony, both rounds as it saw
+ *                              them, the group key, viewing key and address.
+ *                              The viewing key itself is never said: each
+ *                              device derives it from the group key and `sk`
  *
- * The latest valid `start` is the ceremony: a new one (another threshold, or
- * "start again without them") replaces the one before, and its records are
- * then ignored. The relay can withhold records (the ceremony waits) but cannot
- * forge one: authors are checked against the members the start names.
+ * Every member other than the starter agrees on their own device before it
+ * takes part. The latest valid `start` is the ceremony: a new one (another
+ * threshold, or "start again without them") replaces the one before, and its
+ * records are then ignored. The relay can withhold records (the ceremony
+ * waits) but cannot forge one: authors are checked against the members the
+ * start names.
+ *
+ * One record per author, kind and ceremony counts, and a second, different
+ * one is never taken in its place: a member who says two different things in
+ * one ceremony (two round-one broadcasts, say, to split the others' views)
+ * stops it, and so does any member whose round-one or wallet hash differs
+ * from this device's. Nothing is saved from a ceremony whose members did not
+ * all see the same records.
  */
 
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
-import { openXWing, sealXWing } from '@zafu/pq';
+import { sha256 } from '@noble/hashes/sha256';
+import { openXWing, sealXWing, XWING_LENGTHS } from '@zafu/pq';
 import type { RoomMessage } from '@zafu/zirc/room';
 import { decodeWire, encodeWire } from './door';
 import type { PeopleService } from './service';
@@ -39,6 +54,8 @@ import type { PeopleRoom } from './vault';
 
 /** zafu court: an arbiter seat drawn as a member; it answers once the escrow service exists */
 export const COURT = 'court';
+/** whether zafu court can be chosen: not until its escrow service answers, since its keys could never be made */
+export const COURT_OPEN = false;
 
 export interface Deal {
   /** zatoshi, as a decimal string */
@@ -61,14 +78,19 @@ export type FrostBody =
     }
   | { t: 'r1'; id: string; b: string; x: string }
   | { t: 'sk'; id: string; s: Record<string, string> }
-  | { t: 'r2'; id: string; p: string[] }
-  | { t: 'fvk'; id: string; u: string; a: string }
+  | { t: 'r2'; id: string; p: string[]; h1: string }
+  | { t: 'fvk'; id: string; h: string }
   // -- spending from it (people/room-sign) --
-  /** a payment from the shared wallet `w`, built: what every member reviews */
+  /**
+   * a payment from the shared wallet `w`, built by `by`: what every member
+   * reviews. Its id is a hash of everything else in it, so no other payment,
+   * and nobody else, can ever be said under the same id.
+   */
   | {
       t: 'prop';
       id: string;
       w: string;
+      by: string;
       to: string;
       amt: string;
       fee: string;
@@ -108,12 +130,20 @@ export interface FrostMine {
   seed?: string;
   u?: string;
   a?: string;
-  /** a deal someone else proposed: you agreed to make its keys */
+  /** the round-one records this device made its round two from, hashed */
+  h1?: string;
+  /** this device's commitment to the wallet it made (see {@link fvkHash}) */
+  fh?: string;
+  /** a ceremony someone else started: you agreed to make its keys */
   ok?: boolean;
   saved?: boolean;
   /** a payment: this member's round-one nonces (secret) and commitments, per spend */
   n?: string[];
   cm?: string[];
+  /** a payment: the hash of exactly what was reviewed and sealed (see room-sign reviewOf) */
+  rv?: string;
+  /** a payment, the proposer: whose commitments sign it, as first chosen */
+  set?: string[];
   /** the proposer's build handle, to complete what it built */
   cold?: string;
   /** a payment: this member's round-two shares, and the txid it left as */
@@ -166,14 +196,61 @@ export const packFrost = async (body: FrostBody): Promise<string[]> => {
   );
 };
 
-const str = (v: unknown, re = HEX): v is string => typeof v === 'string' && re.test(v);
+const ID = /^[0-9a-f]{32}$/;
+const H256 = /^[0-9a-f]{64}$/;
+const DIGITS = /^\d{1,16}$/;
+const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
+/** an address as a payment names it: bech32 or base58, nothing else */
+const ADDRESS = /^[A-Za-z0-9]{1,1024}$/;
+/** an X-Wing public key, hex */
+const XWING_HEX = new RegExp(`^[0-9a-f]{${XWING_LENGTHS.publicKey * 2}}$`);
 
-/** a body as one we read, or undefined */
-const readBody = (v: unknown): FrostBody | undefined => {
-  const x = v as Record<string, unknown>;
-  if (!x || typeof x !== 'object' || !str(x['id'], /^[0-9a-f]{32}$/)) {
+const str = (v: unknown, re = HEX): v is string => typeof v === 'string' && re.test(v);
+const text = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
+const list = (v: unknown, max: number, re = HEX): v is string[] =>
+  Array.isArray(v) && v.length >= 1 && v.length <= max && v.every(x => str(x, re));
+const keys = (v: unknown, max = 32): v is string[] =>
+  list(v, max, KEY) && new Set(v).size === v.length;
+
+const sha = (parts: unknown[]) => bytesToHex(sha256(enc.encode(JSON.stringify(parts))));
+
+/** a payment's id: a hash of all it says, its proposer included */
+export const propId = (p: Omit<Extract<FrostBody, { t: 'prop' }>, 'id' | 't'>): string =>
+  sha([
+    'zafu-frost-prop-v1',
+    p.w,
+    p.by,
+    p.to,
+    p.amt,
+    p.fee,
+    p.sighash,
+    p.alphas,
+    p.si,
+    p.pczt,
+  ]).slice(0, 32);
+
+const readDeal = (v: unknown): Deal | undefined => {
+  const d = v as Record<string, unknown> | null;
+  return d &&
+    typeof d === 'object' &&
+    str(d['amount'], DIGITS) &&
+    text(d['what'], 48) &&
+    (d['payer'] === 'proposer' || d['payer'] === 'other')
+    ? { amount: d['amount'], what: d['what'], payer: d['payer'] }
+    : undefined;
+};
+
+/**
+ * A body as one we read, or undefined. Every field is checked and the body is
+ * built again from the checked fields only, so nothing a peer adds (a label
+ * that is not text, a deal amount that is not a number) reaches a screen.
+ */
+export const readBody = (v: unknown): FrostBody | undefined => {
+  const x = v as Record<string, unknown> | null;
+  if (!x || typeof x !== 'object' || !str(x['id'], ID)) {
     return undefined;
   }
+  const id = x['id'];
   switch (x['t']) {
     case 'start': {
       const m = x['m'];
@@ -187,50 +264,99 @@ const readBody = (v: unknown): FrostBody | undefined => {
         typeof k === 'number' &&
         Number.isInteger(k) &&
         k >= 2 &&
-        k <= m.length;
-      return ok ? (x as FrostBody) : undefined;
+        k <= m.length &&
+        text(x['label'], 48) &&
+        (x['deal'] === undefined || !!readDeal(x['deal'])) &&
+        (x['r'] === undefined || str(x['r'], ID));
+      if (!ok) {
+        return undefined;
+      }
+      const deal = readDeal(x['deal']);
+      return {
+        t: 'start',
+        id,
+        k,
+        m: [...(m as string[])],
+        label: x['label'] as string,
+        ...(deal ? { deal } : {}),
+        ...(x['r'] !== undefined ? { r: x['r'] as string } : {}),
+      };
     }
     case 'r1':
-      return str(x['b']) && str(x['x']) ? (x as FrostBody) : undefined;
-    case 'sk':
-      return x['s'] && typeof x['s'] === 'object' ? (x as FrostBody) : undefined;
-    case 'r2':
-      return Array.isArray(x['p']) && x['p'].every(p => str(p)) ? (x as FrostBody) : undefined;
-    case 'fvk':
-      return typeof x['u'] === 'string' && typeof x['a'] === 'string'
-        ? (x as FrostBody)
+      return str(x['b']) && str(x['x'], XWING_HEX)
+        ? { t: 'r1', id, b: x['b'], x: x['x'] }
         : undefined;
-    case 'prop':
-      return str(x['w'], /^[0-9a-f]{32}$/) &&
-        typeof x['to'] === 'string' &&
-        str(x['amt'], /^\d{1,16}$/) &&
-        str(x['fee'], /^\d{1,16}$/) &&
-        str(x['sighash']) &&
-        str(x['pczt']) &&
-        Array.isArray(x['alphas']) &&
-        x['alphas'].every(a => str(a)) &&
-        Array.isArray(x['si']) &&
-        x['si'].length === x['alphas'].length &&
-        x['si'].every(i => Number.isInteger(i))
-        ? (x as FrostBody)
-        : undefined;
-    case 'c':
-    case 's': {
-      const v = x[x['t']];
-      return Array.isArray(v) && v.length <= 64 && v.every(c => str(c))
-        ? (x as FrostBody)
+    case 'sk': {
+      const s = x['s'] as Record<string, unknown> | null;
+      const e = s && typeof s === 'object' && !Array.isArray(s) ? Object.entries(s) : [];
+      return e.length >= 1 &&
+        e.length <= 32 &&
+        e.every(([k, b]) => KEY.test(k) && str(b, B64) && b.length <= 8192)
+        ? { t: 'sk', id, s: Object.fromEntries(e) as Record<string, string> }
         : undefined;
     }
+    case 'r2':
+      return list(x['p'], 32) && str(x['h1'], H256)
+        ? { t: 'r2', id, p: [...x['p']], h1: x['h1'] }
+        : undefined;
+    case 'fvk':
+      return str(x['h'], H256) ? { t: 'fvk', id, h: x['h'] } : undefined;
+    case 'prop': {
+      const si = x['si'];
+      if (
+        !(
+          str(x['w'], ID) &&
+          str(x['by'], KEY) &&
+          str(x['to'], ADDRESS) &&
+          str(x['amt'], DIGITS) &&
+          str(x['fee'], DIGITS) &&
+          str(x['sighash'], H256) &&
+          str(x['pczt']) &&
+          list(x['alphas'], 64, H256) &&
+          Array.isArray(si) &&
+          si.length === x['alphas'].length &&
+          si.every(i => Number.isInteger(i) && i >= 0 && i < 1024)
+        )
+      ) {
+        return undefined;
+      }
+      const body = {
+        t: 'prop' as const,
+        id,
+        w: x['w'],
+        by: x['by'],
+        to: x['to'],
+        amt: x['amt'],
+        fee: x['fee'],
+        sighash: x['sighash'],
+        alphas: [...x['alphas']],
+        si: [...(si as number[])],
+        pczt: x['pczt'],
+      };
+      // a payment said under an id that is not its own is not a payment
+      return propId(body) === id ? body : undefined;
+    }
+    case 'c':
+      return list(x['c'], 64) ? { t: 'c', id, c: [...x['c']] } : undefined;
+    case 's':
+      return list(x['s'], 64) ? { t: 's', id, s: [...x['s']] } : undefined;
     case 'set':
-      return Array.isArray(x['m']) && x['m'].every(k => str(k, KEY)) ? (x as FrostBody) : undefined;
+      return keys(x['m']) ? { t: 'set', id, m: [...x['m']] } : undefined;
     case 'no':
-      return x as FrostBody;
+      return { t: 'no', id };
     case 'sent':
-      return str(x['tx'], /^[0-9a-f]{64}$/) ? (x as FrostBody) : undefined;
+      return str(x['tx'], H256) ? { t: 'sent', id, tx: x['tx'] } : undefined;
     default:
       return undefined;
   }
 };
+
+/** the messages a room holds, each read again: one kept from an older build that does not read now is left out */
+export const readMsgs = (msgs: FrostMsg[] | undefined): FrostMsg[] =>
+  (msgs ?? []).flatMap(m => {
+    const body = readBody(m?.body);
+    return body && typeof m.from === 'string' && Number.isFinite(m.at) ? [{ ...m, body }] : [];
+  });
 
 /**
  * The room handler: fold `kc` records into whole messages. Pieces that have
@@ -296,20 +422,27 @@ export const foldFrost = async (
 };
 
 /**
- * What a room keeps: one message per author, kind and ceremony (a repeat
- * replaces the one before), and only the last few ceremonies.
+ * What a room keeps: the first message per author, kind and ceremony (a
+ * repeat of the same message is dropped), and only the last few ceremonies
+ * and payments. A later message that differs from the first is never taken
+ * in its place: one such copy is kept beside it, so every reader sees that its
+ * author said two things (see {@link ceremonyOf} and room-sign proposalsOf).
  */
 const pruneMsgs = (all: FrostMsg[]): FrostMsg[] => {
-  const one = new Map<string, FrostMsg>();
-  for (const m of [...all].sort((a, b) => a.at - b.at)) {
-    one.set(`${m.from}:${m.body.t}:${m.body.id}`, m);
+  const seen = new Map<string, string[]>();
+  const msgs: FrostMsg[] = [];
+  for (const m of readMsgs(all).sort((a, b) => a.at - b.at)) {
+    const key = `${m.from}:${m.body.t}:${m.body.id}`;
+    const said = JSON.stringify(m.body);
+    const before = seen.get(key) ?? [];
+    if (before.includes(said) || before.length >= 2) {
+      continue;
+    }
+    seen.set(key, [...before, said]);
+    msgs.push(m);
   }
-  const msgs = [...one.values()];
   const last = (t: FrostBody['t'], n: number) =>
-    msgs
-      .filter(m => m.body.t === t)
-      .slice(-n)
-      .map(m => m.body.id);
+    [...new Set(msgs.filter(m => m.body.t === t).map(m => m.body.id))].slice(-n);
   const keep = new Set([...last('start', KEEP_CEREMONIES), ...last('prop', KEEP_PROPOSALS)]);
   return msgs.filter(m => keep.has(m.body.id));
 };
@@ -328,8 +461,11 @@ export interface Ceremony {
   deal?: Deal;
   r1: Map<string, { b: string; x: string }>;
   sk?: Record<string, string>;
-  r2: Map<string, string[]>;
-  fvk: Map<string, { u: string; a: string }>;
+  r2: Map<string, { p: string[]; h1: string }>;
+  /** each member's commitment to the wallet it made */
+  fvk: Map<string, string>;
+  /** members who said two different things of one kind in it: it cannot finish */
+  split: Set<string>;
 }
 
 /** how far a member got: 0 nothing yet, 1 round one, 2 round two, 3 their keys checked */
@@ -338,13 +474,16 @@ export const stepOf = (c: Ceremony, member: string): number =>
 
 /**
  * The ceremony a room is in: the latest start by someone allowed, naming only
- * people allowed, and the records its members wrote for it.
+ * people allowed, and the records its members wrote for it. The first record
+ * of each kind per member counts; a second, different one marks that member
+ * as split, and the ceremony then stops.
  */
 export const ceremonyOf = (
   msgs: FrostMsg[] | undefined,
   allowed: (key: string) => boolean,
 ): Ceremony | undefined => {
-  const starts = (msgs ?? []).filter(
+  const all = readMsgs(msgs);
+  const starts = all.filter(
     (m): m is FrostMsg & { body: Extract<FrostBody, { t: 'start' }> } =>
       m.body.t === 'start' &&
       m.body.m.includes(m.from) &&
@@ -372,18 +511,42 @@ export const ceremonyOf = (
     r1: new Map(),
     r2: new Map(),
     fvk: new Map(),
+    split: new Set(),
   };
-  for (const { from, at, body } of msgs ?? []) {
+  // a start's id belongs to one start: another under it (another author, or
+  // other terms) would take over its consent, so both stop it instead
+  const said = JSON.stringify(s);
+  for (const m of all) {
+    const twin = m.body.t === 'start' && m.body.id === s.id;
+    if (twin && (m.from !== start.from || JSON.stringify(m.body) !== said)) {
+      c.split.add(start.from).add(m.from);
+    }
+  }
+  const first = new Map<string, string>();
+  for (const { from, at, body } of all) {
     if (body.id !== c.id || !c.members.includes(from)) {
       continue;
     }
+    if (body.t === 'start' && from !== c.by) {
+      continue;
+    }
+    const key = `${from}:${body.t}`;
+    const said = JSON.stringify(body);
+    const before = first.get(key);
+    if (before !== undefined) {
+      if (before !== said) {
+        c.split.add(from);
+      }
+      continue;
+    }
+    first.set(key, said);
     c.last = Math.max(c.last, at);
     if (body.t === 'r1') {
       c.r1.set(from, { b: body.b, x: body.x });
     } else if (body.t === 'r2') {
-      c.r2.set(from, body.p);
+      c.r2.set(from, { p: body.p, h1: body.h1 });
     } else if (body.t === 'fvk') {
-      c.fvk.set(from, { u: body.u, a: body.a });
+      c.fvk.set(from, body.h);
     } else if (body.t === 'sk' && from === c.by) {
       c.sk = body.s;
     }
@@ -423,9 +586,15 @@ export const restartOf = (
     : undefined;
 };
 
-/** every member checked their keys, and they do not match */
+/**
+ * The ceremony cannot finish as it stands: someone said two different
+ * things in it, members made round two from different round-one records, or
+ * every member checked their keys and they do not match.
+ */
 export const mismatched = (c: Ceremony): boolean =>
-  c.members.every(m => c.fvk.has(m)) && new Set([...c.fvk.values()].map(f => f.u + f.a)).size > 1;
+  c.split.size > 0 ||
+  new Set([...c.r2.values()].map(r => r.h1)).size > 1 ||
+  (c.members.every(m => c.fvk.has(m)) && new Set(c.fvk.values()).size > 1);
 
 /** who a room lets take part: a group's roster, or the two people of a pair room */
 export const allowedIn = (room: PeopleRoom, me: string): ((key: string) => boolean) => {
@@ -529,6 +698,52 @@ export interface Me {
 export type FrostStatus = 'idle' | 'waiting' | 'mismatch' | 'done';
 
 /**
+ * The round-one records a member makes its round two from, hashed with the
+ * ceremony they belong to: every member must arrive at the same one, or some
+ * member showed different devices different round-one broadcasts.
+ */
+export const r1Hash = (c: Ceremony, me: string, own: { b: string; x: string }): string =>
+  sha([
+    'zafu-frost-r1-v1',
+    c.id,
+    c.k,
+    c.members,
+    c.members.map(m => {
+      const r = m === me ? own : c.r1.get(m);
+      return [m, r?.b ?? '', r?.x ?? ''];
+    }),
+  ]);
+
+/**
+ * What a member commits to once its keys are made: the ceremony, both rounds
+ * as this device saw them, the group key, and the viewing key and address it
+ * derived. Members compare this, never the viewing key itself.
+ */
+export const fvkHash = (
+  c: Ceremony,
+  me: string,
+  own: { h1: string; p: string[] },
+  pkp: string,
+  u: string,
+  a: string,
+): string =>
+  sha([
+    'zafu-frost-fvk-v1',
+    c.id,
+    own.h1,
+    c.members.map(m => {
+      const r = m === me ? own : c.r2.get(m);
+      return [m, r?.h1 ?? '', r?.p ?? []];
+    }),
+    pkp,
+    u,
+    a,
+  ]);
+
+/** the viewing-key secret's box for one member: bound to this ceremony and to them */
+const skAad = (c: Ceremony, member: string) => enc.encode(`zafu-frost-sk-v1:${c.id}:${member}`);
+
+/**
  * Do every step this device can do now, and say where it stands. Safe to call
  * again at any time: what is kept decides what was done, never memory.
  */
@@ -547,8 +762,12 @@ export const advance = async (
   if (mine.saved) {
     return 'done';
   }
-  // a deal's keys are made once the other side agrees to its terms
-  if (c.deal && c.by !== me.pubkey && !mine.ok) {
+  // a ceremony that cannot finish stops for everyone, before anyone is asked to agree to it
+  if (mismatched(c)) {
+    return 'mismatch';
+  }
+  // keys are made once this member agreed, on this device, to what the start says
+  if (c.by !== me.pubkey && !mine.ok) {
     return 'waiting';
   }
   const send = async (body: FrostBody) => io.post(await packFrost(body), `${body.t}:${body.id}`);
@@ -557,11 +776,11 @@ export const advance = async (
   if (mine.b1 && !c.r1.has(me.pubkey)) {
     await send({ t: 'r1', id: c.id, b: mine.b1, x: me.xwingPublicKey });
   }
-  if (mine.p2 && !c.r2.has(me.pubkey)) {
-    await send({ t: 'r2', id: c.id, p: mine.p2 });
+  if (mine.p2 && mine.h1 && !c.r2.has(me.pubkey)) {
+    await send({ t: 'r2', id: c.id, p: mine.p2, h1: mine.h1 });
   }
-  if (mine.u && mine.a && !c.fvk.has(me.pubkey)) {
-    await send({ t: 'fvk', id: c.id, u: mine.u, a: mine.a });
+  if (mine.fh && !c.fvk.has(me.pubkey)) {
+    await send({ t: 'fvk', id: c.id, h: mine.fh });
   }
 
   if (!mine.b1) {
@@ -577,19 +796,27 @@ export const advance = async (
   if (c.by === me.pubkey && !c.sk) {
     mine = await io.keep(c.id, { sk: mine.sk ?? (await frost.sampleSk()) });
     const s = Object.fromEntries(
-      others.map(m => [m, b64(sealXWing(hexToBytes(c.r1.get(m)!.x), hexToBytes(mine.sk!)))]),
+      others.map(m => [
+        m,
+        b64(sealXWing(hexToBytes(c.r1.get(m)!.x), hexToBytes(mine.sk!), skAad(c, m))),
+      ]),
     );
     await send({ t: 'sk', id: c.id, s });
   }
   if (!mine.s2) {
+    const h1 = r1Hash(c, me.pubkey, { b: mine.b1!, x: me.xwingPublicKey });
     const r = await frost.part2(mine.s1!, theirB);
-    mine = await io.keep(c.id, { s2: r.secret, p2: r.peer_packages });
-    await send({ t: 'r2', id: c.id, p: mine.p2! });
+    mine = await io.keep(c.id, { s2: r.secret, p2: r.peer_packages, h1 });
+    await send({ t: 'r2', id: c.id, p: mine.p2!, h1: mine.h1! });
+  }
+  // a round two made before its round-one records were hashed cannot be checked
+  if (!mine.h1) {
+    return 'mismatch';
   }
   let sk = mine.sk;
   if (!sk && c.sk?.[me.pubkey]) {
     try {
-      sk = bytesToHex(openXWing(me.xwingSeed, unb64(c.sk[me.pubkey]!)));
+      sk = bytesToHex(openXWing(me.xwingSeed, unb64(c.sk[me.pubkey]!), skAad(c, me.pubkey)));
     } catch {
       return 'mismatch';
     }
@@ -597,14 +824,19 @@ export const advance = async (
   if (!sk || !others.every(m => c.r2.has(m))) {
     return 'waiting';
   }
-  if (!mine.u) {
+  // every member made its round two from the same round-one records as this device
+  if (others.some(m => c.r2.get(m)!.h1 !== mine.h1)) {
+    return 'mismatch';
+  }
+  if (!mine.fh) {
     const r = await frost.part3(
       mine.s2!,
       theirB,
-      others.flatMap(m => c.r2.get(m)!),
+      others.flatMap(m => c.r2.get(m)!.p),
     );
     const u = await frost.ufvk(r.public_key_package, sk);
     const a = await frost.address(r.public_key_package, sk);
+    const fh = fvkHash(c, me.pubkey, { h1: mine.h1, p: mine.p2! }, r.public_key_package, u, a);
     mine = await io.keep(c.id, {
       sk,
       kp: r.key_package,
@@ -612,13 +844,14 @@ export const advance = async (
       seed: r.ephemeral_seed,
       u,
       a,
+      fh,
     });
-    await send({ t: 'fvk', id: c.id, u: mine.u!, a: mine.a! });
+    await send({ t: 'fvk', id: c.id, h: mine.fh! });
   }
   if (!others.every(m => c.fvk.has(m))) {
     return 'waiting';
   }
-  if (others.some(m => c.fvk.get(m)!.u !== mine.u || c.fvk.get(m)!.a !== mine.a)) {
+  if (others.some(m => c.fvk.get(m) !== mine.fh)) {
     return 'mismatch';
   }
   await io.save({
