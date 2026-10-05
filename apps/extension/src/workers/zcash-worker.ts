@@ -77,6 +77,12 @@ import {
 } from './pocket-keys';
 import { unsealVault, withSpendKeys, type SpendKeysCtor } from './hot-sign';
 import {
+  checkThorRequest,
+  signThorDeposit,
+  thorAddressFromPhrase,
+  type ThorDepositRequest,
+} from './thor-sign';
+import {
   planDeposit,
   sendDeposit,
   type DepositChain,
@@ -276,7 +282,9 @@ interface WorkerMessage {
     | 'build-vote-shares-from-recovery'
     | 'pir-fetch-imt-proofs'
     | 'get-consensus-branch-id'
-    | 'get-merkle-witnesses';
+    | 'get-merkle-witnesses'
+    | 'thor-address'
+    | 'thor-sign-deposit';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -3728,6 +3736,30 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           network: 'zcash',
           walletId,
           payload: address,
+        });
+        return;
+      }
+
+      // lp.html's rune account, only after the person opted in there (workers/thor-sign.ts)
+      case 'thor-address': {
+        const { vault, index } = payload as { vault?: SealedVault; index: number };
+        workerSelf.postMessage({
+          type: 'address',
+          id,
+          network: 'zcash',
+          payload: thorAddressFromPhrase(await unsealVault(vault), index),
+        });
+        return;
+      }
+
+      case 'thor-sign-deposit': {
+        const { vault, ...req } = payload as ThorDepositRequest & { vault?: SealedVault };
+        checkThorRequest(req);
+        workerSelf.postMessage({
+          type: 'tx-result',
+          id,
+          network: 'zcash',
+          payload: signThorDeposit(await unsealVault(vault), req),
         });
         return;
       }

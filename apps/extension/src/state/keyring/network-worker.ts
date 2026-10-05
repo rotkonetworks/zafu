@@ -27,6 +27,7 @@
 
 import { errText } from '@penumbra-zone/query/error-text';
 import type { NetworkType, VaultUnlock } from './types';
+import type { ThorDepositRequest } from '../../workers/thor-sign';
 import { isValidInternalSender } from '../../senders/internal';
 import {
   sealCallTo,
@@ -127,7 +128,9 @@ export interface NetworkWorkerMessage {
     | 'build-vote-shares-from-recovery'
     | 'pir-fetch-imt-proofs'
     | 'get-consensus-branch-id'
-    | 'get-merkle-witnesses';
+    | 'get-merkle-witnesses'
+    | 'thor-address'
+    | 'thor-sign-deposit';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -1303,6 +1306,20 @@ export const planTransparentDepositInWorker = (
   serverUrl: string,
   req: DepositRequest,
 ): Promise<DepositPlan> => callWorker('zcash', 'transparent-deposit-plan', { serverUrl, ...req });
+
+/**
+ * lp.html's rune account for a pocket that opted in to adding with rune: its
+ * thor1 address at `index` (m/44'/931'/0'/0/index), derived in the worker.
+ */
+export const thorAddressInWorker = async (vault: VaultUnlock, index: number): Promise<string> =>
+  callWorker('zcash', 'thor-address', { vault: await sealFor('zcash', vault), index });
+
+/** one rune MsgDeposit, signed in the worker: the signed TxRaw, base64. Nothing is broadcast here */
+export const signThorDepositInWorker = async (
+  vault: VaultUnlock,
+  req: ThorDepositRequest,
+): Promise<string> =>
+  callWorker('zcash', 'thor-sign-deposit', { ...req, vault: await sealFor('zcash', vault) });
 
 /** build, sign (the worker opens the vault) and broadcast the reviewed deposit */
 export const sendTransparentDepositInWorker = async (

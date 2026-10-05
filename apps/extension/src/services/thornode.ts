@@ -51,3 +51,37 @@ export const thornodeGet = async <T>(
   }
   throw last instanceof Error ? last : new Error('the node did not answer');
 };
+
+/** one POST (the cosmos tx endpoints) with the same failover and refusal rules as the GET */
+export const thornodePost = async <T>(
+  path: string,
+  body: unknown,
+  urls = THORNODE_URLS,
+  signal?: AbortSignal,
+): Promise<T> => {
+  let last: unknown;
+  for (const base of urls) {
+    try {
+      const resp = await fetch(`${base}${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal,
+      });
+      const out = (await resp.json().catch(() => ({}))) as T & { message?: string };
+      if (resp.ok) {
+        return out;
+      }
+      if (resp.status < 500) {
+        throw new ThornodeRefusal(out.message ?? `thornode ${resp.status}`, resp.status);
+      }
+      last = new Error(out.message ?? `thornode ${resp.status}`);
+    } catch (e) {
+      if (e instanceof ThornodeRefusal || signal?.aborted) {
+        throw e;
+      }
+      last = e;
+    }
+  }
+  throw last instanceof Error ? last : new Error('the node did not answer');
+};

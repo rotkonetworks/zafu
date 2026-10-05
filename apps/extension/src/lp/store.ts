@@ -11,6 +11,7 @@
  */
 
 import { localExtStorage, type LocalStorageState } from '@repo/storage-chrome/local';
+import { nextHdIndex, raiseHdIndex } from '@repo/storage-chrome/cosmos-chain-counters';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import {
   readEncrypted,
@@ -31,13 +32,37 @@ export interface LpCache {
   readAt: number;
 }
 
+/**
+ * The pocket's rune account for adding with rune too: present only once the
+ * person chose it on lp.html. `on: false` is "stop using rune here": nothing
+ * is read or shown, and the index stays so a later opt-in brings back the same
+ * thor1 (it is seed-derived, m/44'/931'/0'/0/index; no key is ever stored).
+ */
+export interface LpRune {
+  index: number;
+  on: boolean;
+  /** the derived thor1, kept while on; derived again in the worker when missing */
+  address?: string;
+}
+
 export interface LpPocket {
   /** t-branch index of the pocket's lp address */
   index: number;
   address?: string;
   cache?: LpCache;
   flight?: Flight;
+  rune?: LpRune;
 }
+
+/** the HD counter the rune accounts are handed out from; written only on an opt-in */
+export const RUNE_COUNTER = 'thorchain-lp';
+
+const isRune = (v: unknown): v is LpRune =>
+  !!v &&
+  typeof v === 'object' &&
+  Number.isSafeInteger((v as LpRune).index) &&
+  (v as LpRune).index > 0 &&
+  typeof (v as LpRune).on === 'boolean';
 
 export type LpBook = Record<string, LpPocket>;
 
@@ -63,6 +88,17 @@ const clean = (v: unknown): LpBook => {
             ? p.cache
             : undefined,
         flight: isFlight(p.flight) ? p.flight : undefined,
+        ...(isRune(p.rune)
+          ? {
+              rune: {
+                index: p.rune.index,
+                on: p.rune.on,
+                ...(p.rune.on && typeof p.rune.address === 'string'
+                  ? { address: p.rune.address }
+                  : {}),
+              },
+            }
+          : {}),
       };
     }
   }
@@ -225,6 +261,95 @@ export const restoreLp = async (
     const next = { ...book };
     for (const [id, p] of Object.entries(add)) {
       next[id] ??= p;
+    }
+    return next;
+  });
+};
+
+/**
+ * The person chose "add with rune too" for this pocket: its rune index, the
+ * one it had before when it was turned off, else the next from the counter.
+ * The address is derived by the caller (in the worker) and patched in.
+ */
+export const optInRune = async (storeId: string): Promise<LpRune | undefined> => {
+  const had = (await readLpPocket(storeId))?.rune;
+  const index = had?.index ?? (await nextHdIndex(RUNE_COUNTER));
+  let out: LpRune | undefined;
+  await changeLp(book => {
+    const p = book[storeId];
+    if (!p) {
+      return book;
+    }
+    out = {
+      index: p.rune?.index ?? index,
+      on: true,
+      address: p.rune?.on ? p.rune.address : undefined,
+    };
+    return { ...book, [storeId]: { ...p, rune: out } };
+  });
+  return out;
+};
+
+/** "stop using rune here": the opt-in is forgotten, the index kept for a later one */
+export const optOutRune = (storeId: string): Promise<boolean> =>
+  changeLp(book => {
+    const p = book[storeId];
+    return p?.rune
+      ? { ...book, [storeId]: { ...p, rune: { index: p.rune.index, on: false } } }
+      : book;
+  });
+
+/** the backup's rune part: owner -> account -> { index, on }; undefined when no pocket ever opted in */
+export type LpRuneBackup = Record<string, Record<string, { index: number; on: boolean }>>;
+
+export const exportLpRune = async (
+  ownerOf: (walletId: string) => string | undefined,
+): Promise<LpRuneBackup | undefined> => {
+  const out: LpRuneBackup = {};
+  for (const [storeId, p] of Object.entries(await readLp())) {
+    const owner = p.rune && ownerOf(parsePocketStoreId(storeId).walletId);
+    if (p.rune && owner) {
+      (out[owner] ??= {})[String(parsePocketStoreId(storeId).account)] = {
+        index: p.rune.index,
+        on: p.rune.on,
+      };
+    }
+  }
+  return Object.keys(out).length ? out : undefined;
+};
+
+/** put the rune opt-ins back on pockets that have an lp record, and raise the counter past them */
+export const restoreLpRune = async (
+  backup: unknown,
+  walletOf: (owner: string) => string | undefined,
+) => {
+  if (!backup || typeof backup !== 'object') {
+    return;
+  }
+  const add: Record<string, LpRune> = {};
+  for (const [owner, pockets] of Object.entries(backup as Record<string, unknown>)) {
+    const walletId = walletOf(owner);
+    if (!walletId || !pockets || typeof pockets !== 'object') {
+      continue;
+    }
+    for (const [acct, r] of Object.entries(pockets as Record<string, unknown>)) {
+      const account = Number(acct);
+      if (isRune(r) && Number.isInteger(account)) {
+        add[pocketStoreId(walletId, account)] = { index: r.index, on: r.on };
+        await raiseHdIndex(RUNE_COUNTER, r.index);
+      }
+    }
+  }
+  if (!Object.keys(add).length) {
+    return;
+  }
+  await changeLp(book => {
+    const next = { ...book };
+    for (const [id, r] of Object.entries(add)) {
+      const p = next[id];
+      if (p && !p.rune) {
+        next[id] = { ...p, rune: r };
+      }
     }
     return next;
   });

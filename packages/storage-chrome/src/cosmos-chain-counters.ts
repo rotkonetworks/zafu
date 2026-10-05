@@ -61,6 +61,18 @@ export const nextHdIndex = async (chainId: string): Promise<number> =>
   });
 
 /**
+ * Raise a chain's counter to at least `index` (a restore: an index handed out
+ * on the old install must never be handed out again). Never lowers it.
+ */
+export const raiseHdIndex = async (chainId: string, index: number): Promise<void> =>
+  navigator.locks.request(LOCK_NAME(), { mode: 'exclusive' }, async () => {
+    const current = (await localExtStorage.get('cosmosChainCounters')) ?? {};
+    if (Number.isSafeInteger(index) && index > (current[chainId] ?? 0)) {
+      await localExtStorage.set('cosmosChainCounters', { ...current, [chainId]: index });
+    }
+  });
+
+/**
  * Reset the counter for a chain. Not exposed to dapps - only invoked by an
  * explicit user action (e.g. "recover receive addresses" in settings).
  */
