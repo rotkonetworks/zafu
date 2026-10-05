@@ -9,6 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { cn } from '@repo/ui/lib/utils';
 import { useNow } from '../../components/scroll-page';
 import { Sensitive } from '../../components/sensitive';
+import { isDone } from '../../lp/flight';
 import { pairedWithdraw, runeText, zecText } from '../../lp/math';
 import { openSheet, positionOf, show, worthOf } from './store';
 import { short, useAddQuote, useLp } from './screens';
@@ -152,7 +153,9 @@ export const Panel = ({ screen }: { screen: string }) => {
   const inFlight =
     s.flight &&
     (s.flight.kind === 'add' || s.flight.kind === 'add2') &&
-    !['credited', 'refunded', 'shielded', 'received'].includes(s.flight.stage);
+    !isDone(s.flight) &&
+    !s.flight.lost &&
+    s.flight.stage !== 'refunded';
   const rr = s.runeRead;
   const paired = rr?.paired;
   const pairedOut =
