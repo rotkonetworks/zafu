@@ -7,10 +7,10 @@
 
 import { useEffect, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
-import { Sheet } from '@repo/ui/components/ui/sheet';
 import { DEFAULT_PEOPLE_RELAY, relayHost } from '../config/people-relay';
 import { useMyInvites } from './client';
-import { allowRelay, knownRelay, useAnswerInvite } from './use-invites';
+import { knownRelay, useAnswerInvite } from './use-invites';
+import { useRelayAsk } from './relay-ask';
 import type { StoredInvite } from './vault';
 
 const lineOf = (inv: StoredInvite, relay: string): string => {
@@ -82,42 +82,16 @@ const InviteRow = ({
 
 export const InviteRows = () => {
   const invites = useMyInvites();
-  const [asking, setAsking] = useState<{ relay: string; resolve: (ok: boolean) => void }>();
-  const onAllow = (relay: string) => new Promise<boolean>(resolve => setAsking({ relay, resolve }));
-  const answer = (ok: boolean) => {
-    const a = asking;
-    setAsking(undefined);
-    if (!a) {
-      return;
-    }
-    void (ok ? allowRelay(a.relay) : Promise.resolve(false)).then(a.resolve, () =>
-      a.resolve(false),
-    );
-  };
+  const { ask, sheet } = useRelayAsk();
   if (!invites.length) {
     return null;
   }
   return (
     <>
       {invites.map(inv => (
-        <InviteRow key={inv.id} inv={inv} onAllow={onAllow} />
+        <InviteRow key={inv.id} inv={inv} onAllow={ask} />
       ))}
-      <Sheet open={!!asking} onOpenChange={o => !o && answer(false)} title='use this relay?'>
-        <div className='flex flex-col gap-4 px-1 text-sm text-fg-muted'>
-          <p>
-            <span className='font-mono text-fg-high'>{asking && relayHost(asking.relay)}</span> is a
-            relay zafu does not know. it would see when you check in, never what you say.
-          </p>
-          <div className='flex gap-2'>
-            <Button variant='secondary' className='flex-1' onClick={() => answer(false)}>
-              not now
-            </Button>
-            <Button className='flex-1' onClick={() => answer(true)}>
-              allow
-            </Button>
-          </div>
-        </div>
-      </Sheet>
+      {sheet}
     </>
   );
 };

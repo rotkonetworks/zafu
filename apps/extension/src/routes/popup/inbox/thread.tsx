@@ -65,14 +65,10 @@ import { DealSheet } from './deal-sheet';
 import { PaymentCard, ProposeSheet } from './payments';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { RequestSheet } from '../send/send-fields';
+import { dayOf } from '../../../utils/when';
 import { cardOf, counterparty, shortAddress, threadIdOf, whenOf } from './threads';
 
 const ZCASH_LINK = /zcash:[^\s]+/i;
-
-const dayOf = (ts: number) => {
-  const w = whenOf(ts);
-  return /^\d/.test(w) ? 'today' : w;
-};
 
 /** what a payment's own line says while it travels (spec 4.3) */
 const STATUS: Record<MessageStatus, string> = {
@@ -688,6 +684,7 @@ export function ThreadPage() {
                 name={name}
                 contactId={contact?.id}
                 sealChecked={!!contact?.sealChecked}
+                pending={room?.pair?.v2?.pending}
               />
             ) : (
               <RelayLine item={r.it} onRetry={() => say(r.it.body, r.it.local)} />

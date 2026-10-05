@@ -12,6 +12,7 @@ import { cardLinkPayload, contactCardMemoHex, myAddressForContact } from '../sta
 import type { Contact } from '../state/contacts';
 import { relationshipOf } from '../hooks/relationship';
 import { useContactAddressSource } from '../hooks/use-contact-address-source';
+import { cardRelayOk } from '@repo/wallet/networks/zcash/card-v2';
 import { requestEgressOptIn } from '../net/egress-opt-in';
 import {
   DEFAULT_PEOPLE_RELAY,
@@ -39,10 +40,14 @@ export const knownRelay = async (relay: string): Promise<boolean> =>
     relay ? (relayBase(relay) ?? relay) : DEFAULT_PEOPLE_RELAY,
   );
 
-/** the person said yes to this relay, by its host: add it, then turn people-relay on */
+/**
+ * The person said yes to this relay, shown by its host (people/relay-ask, or
+ * a relay they typed): add it, then turn people-relay on. Plain http is only
+ * for a relay on this computer.
+ */
 export const allowRelay = async (relay: string): Promise<boolean> => {
   const base = relayBase(relay);
-  if (!base) {
+  if (!base || !cardRelayOk(base)) {
     return false;
   }
   const s = (await readRelaySetting()) ?? {};

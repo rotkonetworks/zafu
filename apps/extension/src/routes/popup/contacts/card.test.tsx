@@ -19,6 +19,7 @@ let contacts: { id: string; name: string; zid?: string }[] = [];
 let rooms: { id: string; card?: { mine: boolean } }[] = [];
 let peek: { closed?: boolean } = {};
 let relayDown = false;
+let relayKnown = true;
 // set below, once the card helpers are imported
 let answerCard: () => { b64: string; card: unknown } = () => ({ b64: '', card: {} });
 const store = {
@@ -63,9 +64,10 @@ vi.mock('../../../people/my-card', () => ({
   addressesOf: () => [],
   givenOf: () => ({}),
 }));
+const allowRelay = vi.fn(async () => true);
 vi.mock('../../../people/use-invites', () => ({
-  allowRelay: vi.fn(),
-  knownRelay: vi.fn(async () => true),
+  allowRelay: (r: string) => allowRelay(r),
+  knownRelay: vi.fn(async () => relayKnown),
 }));
 vi.mock('../../../utils/navigate', () => ({ useBackNav: () => vi.fn() }));
 vi.mock('react-router-dom', () => ({
@@ -150,7 +152,7 @@ describe('a v2 card', () => {
     const bytes = signCardV2(kenCard, seed);
     bytes[10]! ^= 1;
     await render(cardB64(bytes));
-    expect(text()).toContain('its signature does not hold');
+    expect(text()).toContain('something in it changed after it was signed');
     expect(text()).toContain('saved nothing');
   });
 
@@ -191,6 +193,42 @@ describe('saving a v2 card', () => {
     expect(text()).toContain('answer by memo');
     expect(text()).not.toContain('already in your people');
     relayDown = false;
+  });
+});
+
+describe('a card on a relay zafu does not know', () => {
+  const typeName = async () => {
+    const input = container.querySelector('input')!;
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      set.call(input, 'ken');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+  const button = (name: string) =>
+    [...document.body.querySelectorAll('button')].find(b => b.textContent === name)!;
+
+  it('names the host, and asks before anything is allowed or saved, even with people on', async () => {
+    relayKnown = false;
+    await render(v2Link({ ...kenCard, relay: 'https://tracker.example' }));
+    expect(text()).toContain('tracker.example · new to zafu');
+    await typeName();
+    await act(async () => button('save').click());
+    expect(document.body.textContent).toContain('use this relay?');
+    expect(document.body.textContent).toContain('tracker.example is a relay zafu does not know');
+    await act(async () => button('not now').click());
+    expect(allowRelay).not.toHaveBeenCalled();
+    expect(addContact).not.toHaveBeenCalled();
+    // a yes allows that host, then saves
+    await act(async () => button('save').click());
+    await act(async () => button('allow').click());
+    expect(allowRelay).toHaveBeenCalledWith('https://tracker.example');
+    expect(addContact).toHaveBeenCalled();
+    relayKnown = true;
+  });
+
+  it('a card naming plain http off this computer does not read', async () => {
+    expect(() => v2Link({ ...kenCard, relay: 'http://tracker.example' })).toThrow();
   });
 });
 

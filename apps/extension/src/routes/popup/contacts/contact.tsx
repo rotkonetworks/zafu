@@ -31,6 +31,7 @@ import {
   type AddressChain,
 } from '../../../addresses/kind';
 import { ChainRow, useAddressDraft } from './chain-row';
+import { uncheckedLine } from './seal';
 
 type Open =
   | { kind: 'address'; address: ContactAddress }
@@ -182,6 +183,15 @@ const ContactView = ({ contact }: { contact: Contact }) => {
             pay
           </Button>
         </div>
+      )}
+      {usable && uncheckedLine(contact) && (
+        <button
+          type='button'
+          onClick={() => navigate(sealPath(contact.id))}
+          className='-mt-2 flex items-center gap-1.5 self-start text-[11px] text-warn hover:underline'
+        >
+          {uncheckedLine(contact)} · check it before paying
+        </button>
       )}
 
       <RowGroup>
