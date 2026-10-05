@@ -3,11 +3,18 @@
  * pool: the only source of spend witnesses. A spend reads each path at a
  * retained checkpoint and never fetches a block.
  *
- * A tree that cannot be trusted is reseeded from the server's tree state, and
- * the notes it no longer holds are recovered by the sync loop (`recover`, the
- * one remaining replay) - never by a send. Every root a spend uses is checked
- * against the server's at the anchor, so a wrong tree costs a delay, never a
- * bad spend.
+ * A tree that cannot be trusted is reseeded from the server's tree state. The
+ * marks of shards the new tree confirms are carried over, and the notes it
+ * still does not hold are recovered by the sync loop one shard (2^16 leaves) at
+ * a time (`recover`) - never by a send. Every root a spend uses is checked
+ * against the server's at the anchor. The server is trusted for chain data, so
+ * that check makes the tree agree with the server, nothing more: a wrong tree
+ * costs a delay, never a bad spend.
+ *
+ * The server can ask for a reseed (a root that differs), so one is taken only
+ * after two consistent answers, at most once an hour per pool, and a failed
+ * shard recovery backs off: a server cannot make the wallet wipe or replay at
+ * will.
  *
  * Rows live in the worker's `meta` store under `st:<pool>:...`, so deleting a
  * wallet deletes them and no schema bump is needed. They are written in the
@@ -35,6 +42,14 @@ export interface NoteTree {
   truncate(height: number): boolean;
   checkpoint_at_or_below(height: number): number | undefined;
   recover(frontierHex: string, blocks: Uint8Array, positions: Uint32Array, height: number): number;
+  recover_shard(
+    index: number,
+    firstPosition: number,
+    blocks: Uint8Array,
+    positions: Uint32Array,
+  ): number;
+  carry_marks(old: NoteTree): number;
+  oldest_checkpoint(): number | undefined;
   witness(position: number, height: number): string;
   take_changes(): TreeChanges;
   free(): void;
@@ -64,7 +79,7 @@ export interface TreeWrite {
   rewriteShards?: boolean;
   /** delete every row of the pool (the tree was dropped) */
   clear?: boolean;
-  puts: { key: string; value: Uint8Array | number }[];
+  puts: { key: string; value: Uint8Array | number | string }[];
 }
 
 export const changesToWrite = (pool: TreePool, c: TreeChanges): TreeWrite => {
@@ -265,8 +280,15 @@ export interface TreeBlock {
 export interface TreeChain {
   /** the pool's zcashd frontier at `height`; '' = the empty tree; undefined = the server has none */
   frontierAt(pool: TreePool, height: number): Promise<string | undefined>;
-  subtreeRoots(pool: TreePool, start: number): Promise<{ rootHash: Uint8Array }[]>;
+  /** the pool's tree size after block `height`; undefined = the server has no tree state */
+  sizeAt(pool: TreePool, height: number): Promise<number | undefined>;
+  subtreeRoots(
+    pool: TreePool,
+    start: number,
+  ): Promise<{ rootHash: Uint8Array; completingBlockHeight: number }[]>;
   blocks(pool: TreePool, from: number, to: number, signal?: AbortSignal): Promise<TreeBlock[]>;
+  /** the first height that can hold a leaf of the pool (its activation) */
+  poolStart(pool: TreePool): number;
 }
 
 /** an unspent note of the pool, as far as the tree is concerned */
@@ -293,6 +315,49 @@ export interface PoolStart {
 /** a replay from a rounded height below the notes (so the request does not point at one) */
 export const RECOVERY_ROUNDING = 5_000;
 
+/** leaves per shard: the unit of recovery */
+export const SHARD_LEAVES = 2 ** 16;
+/** a reseed the server asks for is taken at most this often per pool */
+export const RESEED_INTERVAL_MS = 60 * 60_000;
+/** how long one `recover` call may run before it hands the loop back */
+export const RECOVERY_BUDGET_MS = 20_000;
+/** wait before a failed shard is tried again: 1 min, doubling, up to 6 h */
+export const recoveryBackoffMs = (fails: number) =>
+  Math.min(60_000 * 2 ** Math.max(0, fails - 1), 6 * 3_600_000);
+
+/** a server's tree state at one height, as `check` compares it */
+export interface ServerTree {
+  frontier: string;
+  root: string;
+}
+
+/** where a pool's recovery stands, for the progress line */
+export interface RecoveryProgress {
+  /** notes the tree does not hold yet */
+  left: number;
+  /** of those, notes whose shard failed and waits for its retry */
+  waiting: number;
+  /** notes marked by this call */
+  recovered: number;
+  /** shards still to replay (including waiting ones) */
+  shards: number;
+}
+
+/** per-shard failure record, persisted so a restart keeps the backoff */
+type RecoveryState = Record<string, { fails: number; retryAt: number }>;
+
+const parseRecovery = (v: unknown): RecoveryState => {
+  if (typeof v !== 'string') {
+    return {};
+  }
+  try {
+    const o = JSON.parse(v) as unknown;
+    return o && typeof o === 'object' ? (o as RecoveryState) : {};
+  } catch {
+    return {};
+  }
+};
+
 export interface Trees {
   get(pool: TreePool): NoteTree | undefined;
   /** the pool's tree size, where the next batch starts; undefined without a tree */
@@ -307,23 +372,39 @@ export interface Trees {
   ): void;
   /**
    * Compare the tree with the server's tree state at the tree's newest
-   * checkpoint `height`. A tree that differs, or a dropped one, is reseeded
-   * from the server's frontier. True when the pool was reseeded (its notes then
-   * need `recover`).
+   * checkpoint `height`. A dropped tree is reseeded from the server's frontier.
+   * A tree that differs is reseeded only when `again` (a second answer, from
+   * another operator where one is allowed) gives the same root, and no
+   * server-asked reseed of the pool happened in the last RESEED_INTERVAL_MS.
+   * True when the pool was reseeded (its notes then need `recover`).
    */
   check(
     pool: TreePool,
     height: number,
-    server: { frontier: string; root: string } | undefined,
-  ): boolean;
+    server: ServerTree | undefined,
+    again?: () => Promise<ServerTree | undefined>,
+  ): Promise<boolean>;
   /**
    * Roll every tree back to the newest checkpoint at or below `target` they all
-   * retain (not below `floor`), or reseed them from the server at `target`.
+   * retain (not below `floor`), or reseed them from the server at `target`
+   * (rate-limited as `check`; refused with an error inside the interval).
    * Returns the height the trees now end at.
    */
   rewind(target: number, floor: number): Promise<number>;
-  /** replay the blocks a pool's unmarked notes need, up to its newest checkpoint */
-  recover(pool: TreePool, notes: readonly TreeNote[], signal?: AbortSignal): Promise<void>;
+  /**
+   * Mark the pool's notes the tree does not hold, one shard at a time (the
+   * shard's blocks only, checked against its subtree root), for at most
+   * `budgetMs`. Each shard's rows are written as it finishes, so a stop or a
+   * restart resumes where it was. A shard that fails waits (recoveryBackoffMs);
+   * the others go on. Without subtree roots it falls back to one replay from a
+   * rounded height below the notes.
+   */
+  recover(
+    pool: TreePool,
+    notes: readonly TreeNote[],
+    signal?: AbortSignal,
+    budgetMs?: number,
+  ): Promise<RecoveryProgress>;
   takeWrites(): TreeWrite[];
   free(): void;
 }
@@ -331,6 +412,12 @@ export interface Trees {
 const log = (msg: string) => console.log(`[zcash-worker] ${msg}`);
 const warn = (msg: string) => console.warn(`[zcash-worker] ${msg}`);
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** a pool's rows that live outside the tree and survive a reseed */
+const reseedKey = (pool: TreePool) => `st:${pool}:reseedAt`;
+const recoveryKey = (pool: TreePool) => `st:${pool}:rec`;
+
+const POOLS = ['orchard', 'ironwood'] as const;
 
 /**
  * Load each pool's stored tree, or seed it from the server at the sync height
@@ -342,30 +429,60 @@ export const openTrees = async (
   chain: TreeChain,
   rows: readonly { key: string; value: unknown }[],
   starts: readonly PoolStart[],
+  now: () => number = Date.now,
 ): Promise<Trees> => {
   const trees: Partial<Record<TreePool, NoteTree>> = {};
+  /** a tree dropped after a refused batch, kept until the reseed takes its marks */
+  const orphans: Partial<Record<TreePool, NoteTree>> = {};
   let writes: TreeWrite[] = [];
+  const rootsFrom: Record<TreePool, number> = {
+    orchard: rootsIndexOf(rows, 'orchard'),
+    ironwood: rootsIndexOf(rows, 'ironwood'),
+  };
+  const rowOf = (key: string) => rows.find(r => r.key === key)?.value;
+  const reseedAt: Partial<Record<TreePool, number>> = {};
+  const recovery: Record<TreePool, RecoveryState> = { orchard: {}, ironwood: {} };
+  for (const pool of POOLS) {
+    const at = rowOf(reseedKey(pool));
+    if (typeof at === 'number' && Number.isFinite(at)) {
+      reseedAt[pool] = at;
+    }
+    recovery[pool] = parseRecovery(rowOf(recoveryKey(pool)));
+  }
   const collect = (pool: TreePool) => {
     const t = trees[pool];
     if (t) {
       writes.push(changesToWrite(pool, t.take_changes()));
     }
   };
-  const forget = (pool: TreePool) => {
-    trees[pool]?.free();
-    delete trees[pool];
+  /** drop a pool's rows (the reseed time stays) */
+  const clearRows = (pool: TreePool) => {
     writes = writes.filter(w => w.pool !== pool);
-    writes.push({ pool, clear: true, puts: [] });
+    const at = reseedAt[pool];
+    writes.push({
+      pool,
+      clear: true,
+      puts: at === undefined ? [] : [{ key: reseedKey(pool), value: at }],
+    });
+    rootsFrom[pool] = 0;
+    recovery[pool] = {};
   };
-  const seed = (pool: TreePool, frontierHex: string | undefined, height: number) => {
-    forget(pool);
-    if (frontierHex === undefined) {
-      return;
+  const forget = (pool: TreePool) => {
+    const t = trees[pool];
+    if (t) {
+      orphans[pool]?.free();
+      orphans[pool] = t;
     }
-    const t = make();
-    t.insert_frontier(frontierHex, height);
-    trees[pool] = t;
-    collect(pool);
+    delete trees[pool];
+    clearRows(pool);
+  };
+  /** a reseed the server asked for: allowed once per RESEED_INTERVAL_MS */
+  const mayReseed = (pool: TreePool) => {
+    const at = reseedAt[pool];
+    return at === undefined || now() - at >= RESEED_INTERVAL_MS || now() < at;
+  };
+  const noteReseed = (pool: TreePool) => {
+    reseedAt[pool] = now();
   };
   const takeRoots = async (pool: TreePool, from: number) => {
     const t = trees[pool];
@@ -376,16 +493,53 @@ export const openTrees = async (
       const roots = await chain.subtreeRoots(pool, from);
       if (roots.length > 0) {
         const taken = t.insert_subtree_roots(from, concatRoots(roots.map(r => r.rootHash)));
+        rootsFrom[pool] = from + taken;
         writes.push({ pool, puts: [{ key: `st:${pool}:roots`, value: from + taken }] });
         collect(pool);
       }
     } catch (e) {
       // roots that disagree with our own hashes say the tree is wrong
       if (errText(e).includes('do not match')) {
-        warn(`${pool} note tree disagrees with the server's subtree roots: reseeding`);
+        warn(`${pool} note tree disagrees with the server's subtree roots`);
         throw e;
       }
       warn(`${pool} subtree roots unavailable: ${errText(e)}`);
+    }
+  };
+  /**
+   * Replace a pool's tree with one seeded from `frontierHex` at `height`, and
+   * keep the old tree's marks wherever the server's subtree roots confirm its
+   * shard. The old tree is freed.
+   */
+  const seed = async (pool: TreePool, frontierHex: string | undefined, height: number) => {
+    const old = trees[pool] ?? orphans[pool];
+    delete trees[pool];
+    delete orphans[pool];
+    clearRows(pool);
+    try {
+      if (frontierHex === undefined) {
+        return;
+      }
+      const t = make();
+      t.insert_frontier(frontierHex, height);
+      trees[pool] = t;
+      collect(pool);
+      try {
+        await takeRoots(pool, 0);
+      } catch {
+        // the server's own frontier and roots disagree: keep the tree, no roots
+      }
+      if (old) {
+        try {
+          const carried = t.carry_marks(old);
+          log(`${pool} note tree reseeded at ${height}: ${carried} marks kept`);
+        } catch (e) {
+          warn(`${pool} marks not carried over: ${errText(e)}`);
+        }
+        collect(pool);
+      }
+    } finally {
+      old?.free();
     }
   };
 
@@ -396,13 +550,15 @@ export const openTrees = async (
         `${p.pool} note tree ends at ${t.next_position()}@${t.latest_checkpoint()}, ` +
           `the wallet at ${p.size}@${p.height}: reseeding`,
       );
-      t.free();
+      // its confirmed shards' marks are carried into the reseeded tree
+      orphans[p.pool]?.free();
+      orphans[p.pool] = t;
       t = undefined;
     }
     if (t) {
       trees[p.pool] = t;
     } else {
-      seed(p.pool, await chain.frontierAt(p.pool, p.height), p.height);
+      await seed(p.pool, await chain.frontierAt(p.pool, p.height), p.height);
       const fresh = trees[p.pool];
       if (fresh && p.legacy.length > 0) {
         const size = fresh.next_position();
@@ -413,13 +569,73 @@ export const openTrees = async (
         log(`${p.pool} note tree seeded at ${p.height}: ${r.seeded} stored witnesses taken`);
         collect(p.pool);
       }
+      continue;
     }
     try {
-      await takeRoots(p.pool, rootsIndexOf(rows, p.pool));
+      await takeRoots(p.pool, rootsFrom[p.pool]);
     } catch {
-      seed(p.pool, await chain.frontierAt(p.pool, p.height), p.height);
+      // two answers, then the rate limit, before a stored tree is replaced
+      let again = false;
+      try {
+        await takeRoots(p.pool, rootsFrom[p.pool]);
+      } catch {
+        again = true;
+      }
+      if (again && mayReseed(p.pool)) {
+        noteReseed(p.pool);
+        await seed(p.pool, await chain.frontierAt(p.pool, p.height), p.height);
+      } else if (again) {
+        warn(`${p.pool} reseed refused: one was taken within the hour`);
+      }
     }
   }
+
+  /** the roots with completing heights, fetched once per pool per run */
+  const rootsCache: Partial<Record<TreePool, { completingBlockHeight: number }[]>> = {};
+
+  /** one replay from a rounded height (no subtree roots to check shards against) */
+  const recoverByReplay = async (
+    pool: TreePool,
+    t: NoteTree,
+    height: number,
+    lost: readonly TreeNote[],
+    signal?: AbortSignal,
+  ) => {
+    const lowest = Math.min(...lost.map(n => n.height));
+    const from = Math.max(1, Math.floor((lowest - 1) / RECOVERY_ROUNDING) * RECOVERY_ROUNDING);
+    const frontier = await chain.frontierAt(pool, from);
+    if (frontier === undefined) {
+      throw new Error(`no ${pool} tree state at ${from}`);
+    }
+    const blocks = await chain.blocks(pool, from + 1, height, signal);
+    signal?.throwIfAborted();
+    if (trees[pool] !== t || t.latest_checkpoint() !== height) {
+      return 0;
+    }
+    return t.recover(
+      frontier,
+      encodeBlocks(blocks),
+      Uint32Array.from(lost.map(n => n.position)),
+      height,
+    );
+  };
+
+  const saveRecovery = (pool: TreePool) => {
+    writes.push({
+      pool,
+      puts: [{ key: recoveryKey(pool), value: JSON.stringify(recovery[pool]) }],
+    });
+  };
+  const failShard = (pool: TreePool, key: string, e: unknown) => {
+    const fails = (recovery[pool][key]?.fails ?? 0) + 1;
+    const wait = recoveryBackoffMs(fails);
+    recovery[pool][key] = { fails, retryAt: now() + wait };
+    saveRecovery(pool);
+    warn(
+      `${pool} recovery of shard ${key} failed (${fails}x), next try in ` +
+        `${Math.round(wait / 1000)}s: ${errText(e)}`,
+    );
+  };
 
   return {
     get: pool => trees[pool],
@@ -437,7 +653,7 @@ export const openTrees = async (
         forget(pool);
       }
     },
-    check(pool, height, server) {
+    async check(pool, height, server, again) {
       const t = trees[pool];
       if (!server) {
         return false;
@@ -446,9 +662,24 @@ export const openTrees = async (
         if (t.latest_checkpoint() !== height || t.root_at(height) === server.root) {
           return false;
         }
-        warn(`${pool} note tree root at ${height} differs from the server's: reseeding`);
+        const second = await again?.().catch(() => undefined);
+        if (!second || second.root !== server.root) {
+          warn(`${pool} note tree root at ${height} differs from one answer only: kept`);
+          return false;
+        }
+        if (trees[pool] !== t || t.latest_checkpoint() !== height) {
+          return false;
+        }
+        if (!mayReseed(pool)) {
+          warn(
+            `${pool} note tree root at ${height} differs, reseed refused: one was taken within the hour`,
+          );
+          return false;
+        }
+        warn(`${pool} note tree root at ${height} differs from the server's (twice): reseeding`);
+        noteReseed(pool);
       }
-      seed(pool, server.frontier, height);
+      await seed(pool, server.frontier, height);
       return true;
     },
     async rewind(target, floor) {
@@ -463,52 +694,157 @@ export const openTrees = async (
           if (t.root_at(landing) !== undefined && t.truncate(landing)) {
             collect(pool);
           } else {
-            seed(pool, await chain.frontierAt(pool, landing), landing);
+            await seed(pool, await chain.frontierAt(pool, landing), landing);
           }
         }
         return landing;
       }
-      for (const pool of ['orchard', 'ironwood'] as const) {
-        if (trees[pool] || starts.some(s => s.pool === pool)) {
-          seed(pool, await chain.frontierAt(pool, target), target);
+      const reseeding = POOLS.filter(pool => trees[pool] || starts.some(s => s.pool === pool));
+      const limited = reseeding.filter(pool => trees[pool] && !mayReseed(pool));
+      if (limited.length > 0) {
+        throw new Error(
+          `rewind to ${target} would reseed the ${limited.join(' and ')} note tree, ` +
+            'and one was reseeded within the hour',
+        );
+      }
+      for (const pool of reseeding) {
+        if (trees[pool]) {
+          noteReseed(pool);
         }
+        await seed(pool, await chain.frontierAt(pool, target), target);
       }
       return target;
     },
-    async recover(pool, notes, signal) {
+    async recover(pool, notes, signal, budgetMs = RECOVERY_BUDGET_MS) {
+      const done: RecoveryProgress = { left: 0, waiting: 0, recovered: 0, shards: 0 };
       const t = trees[pool];
       const height = t?.latest_checkpoint();
-      if (!t || height === undefined) {
-        return;
+      const next = t?.next_position();
+      if (!t || height === undefined || next === undefined) {
+        return done;
       }
       const lost = notes.filter(n => !t.is_marked(n.position));
       if (lost.length === 0) {
-        return;
+        if (Object.keys(recovery[pool]).length > 0) {
+          recovery[pool] = {};
+          saveRecovery(pool);
+        }
+        return done;
       }
-      const t0 = performance.now();
-      const lowest = Math.min(...lost.map(n => n.height));
-      const from = Math.max(1, Math.floor((lowest - 1) / RECOVERY_ROUNDING) * RECOVERY_ROUNDING);
-      const frontier = await chain.frontierAt(pool, from);
-      if (frontier === undefined) {
-        throw new Error(`no ${pool} tree state at ${from}`);
+      const t0 = now();
+      const byShard = new Map<number, TreeNote[]>();
+      for (const n of lost) {
+        const k = Math.floor(n.position / SHARD_LEAVES);
+        byShard.set(k, [...(byShard.get(k) ?? []), n]);
       }
-      const blocks = await chain.blocks(pool, from + 1, height, signal);
-      signal?.throwIfAborted();
-      // the loop has not moved the tree while the blocks were fetched
-      if (trees[pool] !== t || t.latest_checkpoint() !== height) {
-        return;
+      const shards = [...byShard.keys()].sort((a, b) => a - b);
+      const waits = (k: string) => {
+        const r = recovery[pool][k];
+        return r !== undefined && r.retryAt > now();
+      };
+      const progress = (): RecoveryProgress => {
+        const left = lost.filter(n => !t.is_marked(n.position));
+        const waiting = left.filter(n =>
+          waits(String(Math.floor(n.position / SHARD_LEAVES))),
+        ).length;
+        return {
+          left: left.length,
+          waiting,
+          recovered: lost.length - left.length,
+          shards: new Set(left.map(n => Math.floor(n.position / SHARD_LEAVES))).size,
+        };
+      };
+
+      // every shard still waiting out a failure: nothing to ask anyone yet
+      if (waits('roots') || waits('replay') || shards.every(k => waits(String(k)))) {
+        return progress();
       }
-      t.recover(
-        frontier,
-        encodeBlocks(blocks),
-        Uint32Array.from(lost.map(n => n.position)),
-        height,
-      );
-      collect(pool);
-      log(
-        `${pool} note tree recovered ${lost.length} notes from ${from} to ${height} ` +
-          `(${blocks.length} blocks, ${Math.round(performance.now() - t0)}ms)`,
-      );
+      // every complete shard's root, checked against what the tree hashed
+      try {
+        await takeRoots(pool, rootsFrom[pool]);
+      } catch (e) {
+        failShard(pool, 'roots', e);
+        return progress();
+      }
+      let roots = rootsCache[pool];
+      const lastNeeded = shards[shards.length - 1]!;
+      if (!roots || roots.length < Math.min(lastNeeded, rootsFrom[pool])) {
+        roots = await chain.subtreeRoots(pool, 0).catch(() => []);
+        rootsCache[pool] = roots;
+      }
+
+      if (roots.length === 0) {
+        // a server without GetSubtreeRoots: the old replay, with the same backoff
+        const r = recovery[pool]['replay'];
+        if (r && r.retryAt > now()) {
+          return progress();
+        }
+        try {
+          const n = await recoverByReplay(pool, t, height, lost, signal);
+          collect(pool);
+          delete recovery[pool]['replay'];
+          saveRecovery(pool);
+          log(`${pool} note tree recovered ${n} notes by replay (${Math.round(now() - t0)}ms)`);
+        } catch (e) {
+          signal?.throwIfAborted();
+          failShard(pool, 'replay', e);
+        }
+        return progress();
+      }
+
+      let ran = 0;
+      for (const k of shards) {
+        signal?.throwIfAborted();
+        if (ran > 0 && now() - t0 >= budgetMs) {
+          break;
+        }
+        const key = String(k);
+        const r = recovery[pool][key];
+        if (r && r.retryAt > now()) {
+          continue;
+        }
+        const ns = byShard.get(k)!;
+        const s0 = now();
+        try {
+          const startHeight = k === 0 ? chain.poolStart(pool) : roots[k - 1]?.completingBlockHeight;
+          if (startHeight === undefined) {
+            throw new Error(`no subtree root for shard ${k - 1}`);
+          }
+          const completing = roots[k]?.completingBlockHeight;
+          const complete = completing !== undefined && (k + 1) * SHARD_LEAVES <= next;
+          const endHeight = complete ? Math.min(completing, height) : height;
+          const first = startHeight <= 1 ? 0 : await chain.sizeAt(pool, startHeight - 1);
+          if (first === undefined) {
+            throw new Error(`no ${pool} tree state at ${startHeight - 1}`);
+          }
+          const blocks = await chain.blocks(pool, startHeight, endHeight, signal);
+          signal?.throwIfAborted();
+          // the loop has not moved the tree while the blocks were fetched
+          if (trees[pool] !== t || t.latest_checkpoint() !== height) {
+            break;
+          }
+          t.recover_shard(
+            k,
+            first,
+            encodeBlocks(blocks),
+            Uint32Array.from(ns.map(n => n.position)),
+          );
+          collect(pool);
+          if (recovery[pool][key]) {
+            delete recovery[pool][key];
+            saveRecovery(pool);
+          }
+          log(
+            `${pool} note tree recovered ${ns.length} notes in shard ${k} ` +
+              `(${startHeight}..${endHeight}, ${blocks.length} blocks, ${Math.round(now() - s0)}ms)`,
+          );
+        } catch (e) {
+          signal?.throwIfAborted();
+          failShard(pool, key, e);
+        }
+        ran++;
+      }
+      return progress();
     },
     takeWrites() {
       const out = writes;
@@ -516,7 +852,7 @@ export const openTrees = async (
       return out;
     },
     free() {
-      for (const t of Object.values(trees)) {
+      for (const t of [...Object.values(trees), ...Object.values(orphans)]) {
         t.free();
       }
     },
@@ -578,3 +914,16 @@ export const LEGACY_META_KEYS = [
   'ironwoodTreeFrontierHeight',
   'frontierSnapshots',
 ] as const;
+
+/**
+ * What of the per-note era a run may delete: only what a pool that now has a
+ * tree replaced. A pool the server had no tree state for keeps its witnesses
+ * for a later run (on a node that serves it) to migrate.
+ */
+export const retiredLegacy = (seeded: Readonly<Record<TreePool, boolean>>) => ({
+  orchardWitnessFields: seeded.orchard,
+  ironwoodRows: seeded.ironwood,
+  metaKeys: LEGACY_META_KEYS.filter(k =>
+    k.startsWith('ironwood') ? seeded.ironwood : seeded.orchard,
+  ),
+});

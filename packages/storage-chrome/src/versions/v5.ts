@@ -110,7 +110,13 @@ type LOCAL = {
     'tip' | { since: number } | { creation: number; frontier?: number }
   >;
   /** what the running penumbra sync publishes for the home: one wallet at a time */
-  penumbraSync?: { walletId: string; height?: number; from?: number };
+  penumbraSync?: {
+    walletId: string;
+    height?: number;
+    from?: number;
+    /** sync stopped because local data could not be read or written (reload to retry) */
+    stopped?: 'storage';
+  };
   grpcEndpoint?: string;
   params?: string;
   passwordKeyPrint?: { hash: string; salt: string };

@@ -207,7 +207,7 @@ export const AssetRow = ({
 export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: ReactNode }) => {
   const queryClient = useQueryClient();
   const transparent = useTransparent();
-  const { tip, height, from, error: syncError } = useSyncProgress();
+  const { tip, height, from, error: syncError, storageStopped } = useSyncProgress();
   // the shared RAW balances cache (preload, send, swap read it too); this
   // screen's view of it is the fungible rows
   const { data, isLoading, error, refetch } = useQuery({
@@ -260,8 +260,14 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
       strip={
         <SyncStrip
           network='penumbra'
-          synced={caughtUp}
-          failure={syncError ? classifySyncFailure(syncError) : null}
+          synced={caughtUp && !storageStopped}
+          failure={
+            storageStopped
+              ? classifySyncFailure('local data could not be read or written', 'storage-fatal')
+              : syncError
+                ? classifySyncFailure(syncError)
+                : null
+          }
           percent={runPercent(synced, from, tip)}
           connecting={!tip || height === undefined}
           currentHeight={synced}

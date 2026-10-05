@@ -46,6 +46,27 @@ export const resolveStart = (s: PenumbraStart, tip: number, now: number): Resolv
       : { creation: penumbraHeightAt(s.since, tip, now) };
 
 /**
+ * The start a "sync again from the start" leaves a wallet with. A known
+ * birthday is kept, so the re-read still skips trial decryption below it: a
+ * dated start, or a resolved one that never snapshotted. A start that came
+ * from "sync from now" (unresolved 'tip', or resolved with a `frontier`) is
+ * the one the resync exists to undo, so it reads everything; so does
+ * `everything`.
+ */
+export const resyncStart = (
+  stored: PenumbraStart | undefined,
+  everything = false,
+): PenumbraStart => {
+  if (everything || stored === undefined || stored === 'tip') {
+    return { since: 0 };
+  }
+  if (isResolved(stored)) {
+    return stored.frontier === undefined ? { creation: stored.creation } : { since: 0 };
+  }
+  return stored;
+};
+
+/**
  * The legacy global birthday, given to the one wallet it can only have been
  * written for. Onboarding wrote it once, for the wallet it was creating; with
  * more than one wallet there is no telling which, so it belongs to none.

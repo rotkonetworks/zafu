@@ -20,6 +20,7 @@ export const SyncStrip = ({
   failure,
   onRetry,
   notice,
+  preparing,
   ...sync
 }: SyncStatusProps & {
   network: 'zcash' | 'penumbra';
@@ -27,6 +28,8 @@ export const SyncStrip = ({
   synced: boolean;
   failure: SyncFailure | null;
   onRetry: () => void;
+  /** notes not yet in the note tree */
+  preparing?: number;
 }) => {
   const navigate = useNavigate();
   const online = useOnline();
@@ -36,6 +39,7 @@ export const SyncStrip = ({
     online,
     catchingUp: rebuilds && sending && catchUp ? { left: catchUpLeft(catchUp) } : undefined,
     failure,
+    preparing,
   });
   if (synced && !spec && !notice) {
     return null;

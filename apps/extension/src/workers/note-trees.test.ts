@@ -13,7 +13,10 @@ import {
   loadTree,
   MAX_CHECKPOINTS,
   openTrees,
+  RESEED_INTERVAL_MS,
+  retiredLegacy,
   rootsIndexOf,
+  SHARD_LEAVES,
   treePaths,
   withoutWitness,
   type NoteTree,
@@ -112,12 +115,14 @@ describe('note trees on the real wasm', () => {
     const served = { blocks: 0 };
     const c: TreeChain = {
       frontierAt: (_pool, height) => Promise.resolve(height <= 0 ? '' : frontier(chain, height)),
+      sizeAt: (_pool, height) => Promise.resolve(sizeAt(chain, height)),
       subtreeRoots: () => Promise.resolve([]),
       blocks: (_pool, from, to) => {
         const out = chain.filter(b => b.height >= from && b.height <= to);
         served.blocks += out.length;
         return Promise.resolve(out);
       },
+      poolStart: () => 2_000,
     };
     return { chain: c, served };
   };
@@ -342,22 +347,36 @@ describe('note trees on the real wasm', () => {
       [{ pool: 'orchard', height: 2_100, size: sizeAt(chain, 2_100), legacy: [] }],
     );
     const f = frontier(chain, 2_100);
-    expect(trees.check('orchard', 2_100, { frontier: f, root: wasm.tree_root_hex(f) })).toBe(false);
+    const same = { frontier: f, root: wasm.tree_root_hex(f) };
+    expect(await trees.check('orchard', 2_100, same)).toBe(false);
     const other = frontier(chain, 2_101);
-    expect(
-      trees.check('orchard', 2_100, { frontier: other, root: wasm.tree_root_hex(other) }),
-    ).toBe(true);
+    const differs = { frontier: other, root: wasm.tree_root_hex(other) };
+    // one answer, or two that disagree with each other, never replace the tree
+    expect(await trees.check('orchard', 2_100, differs)).toBe(false);
+    expect(await trees.check('orchard', 2_100, differs, () => Promise.resolve(same))).toBe(false);
+    expect(await trees.check('orchard', 2_100, differs, () => Promise.resolve(differs))).toBe(true);
     // a dropped tree (a batch it refused) is reseeded by the next check
     trees.append('orchard', trees.size('orchard')!, [], [], 0);
     expect(trees.get('orchard')).toBeDefined();
     trees.append('orchard', 5, chain.slice(200, 201), [], 0);
     expect(trees.get('orchard')).toBeUndefined();
-    expect(trees.check('orchard', 2_150, { frontier: f, root: 'x' })).toBe(true);
+    expect(await trees.check('orchard', 2_150, { frontier: f, root: 'x' })).toBe(true);
     expect(trees.get('orchard')).toBeDefined();
     // the dropped tree's rows are cleared before the reseed's are written
     const writes = trees.takeWrites();
     expect(writes.some(w => w.clear)).toBe(true);
     trees.free();
+  });
+
+  test('legacy witnesses are retired only for a pool that has a tree', () => {
+    expect(retiredLegacy({ orchard: true, ironwood: false })).toEqual({
+      orchardWitnessFields: true,
+      ironwoodRows: false,
+      metaKeys: ['orchardTreeFrontier', 'orchardTreeFrontierHeight', 'frontierSnapshots'],
+    });
+    const none = retiredLegacy({ orchard: false, ironwood: false });
+    expect(none.orchardWitnessFields || none.ironwoodRows).toBe(false);
+    expect(none.metaKeys).toEqual([]);
   });
 
   test('rows: a dropped tree clears them, a truncation rewrites the shards, bad rows load nothing', () => {
@@ -419,5 +438,179 @@ describe('wire helpers', () => {
     expect(roots[0]).toEqual({ rootHash: root, completingBlockHeight: 1000 });
     const bad = new TextEncoder().encode('grpc-status:12\r\ngrpc-message:nope\r\n');
     expect(() => parseSubtreeRootStream(frame(0x80, bad))).toThrow(/nope/);
+  });
+});
+
+describe('shard recovery on the real wasm', () => {
+  let wasm: Wasm;
+  const make = () => new wasm.NoteTree(MAX_CHECKPOINTS);
+  const write = (meta: FakeMeta, writes: TreeWrite[]) =>
+    applyTreeWrites(meta as unknown as IDBObjectStore, 'w', writes);
+
+  // one complete shard and part of the next, in blocks of 0..40 leaves
+  const N = SHARD_LEAVES + 3_000;
+  let chain: TreeBlock[];
+  let end: number;
+  /** the block that brings the tree to SHARD_LEAVES */
+  let completing: number;
+  let root0: Uint8Array;
+  /** the frontier at the tip (one slow replay, shared by the tests) */
+  let tip: string;
+  /** a tree that saw every block, with every note marked: the oracle */
+  let full: NoteTree;
+  let notes: { position: number; height: number }[];
+
+  /** a server over the chain that records the ranges it serves */
+  const server = (opts: { failBlocks?: (from: number) => boolean } = {}) => {
+    const ranges: [number, number][] = [];
+    const c: TreeChain = {
+      frontierAt: (_pool, height) => {
+        if (height !== end) {
+          throw new Error(`no frontier at ${height} in this test`);
+        }
+        return Promise.resolve(tip);
+      },
+      sizeAt: (_pool, height) => Promise.resolve(sizeAt(chain, height)),
+      subtreeRoots: (_pool, start) =>
+        Promise.resolve([{ rootHash: root0, completingBlockHeight: completing }].slice(start)),
+      blocks: (_pool, from, to) => {
+        if (opts.failBlocks?.(from)) {
+          return Promise.reject(new Error('node gap'));
+        }
+        ranges.push([from, to]);
+        return Promise.resolve(chain.filter(b => b.height >= from && b.height <= to));
+      },
+      poolStart: () => 2_000,
+    };
+    return { chain: c, ranges };
+  };
+  const open = (c: TreeChain, rows: { key: string; value: unknown }[] = [], now?: () => number) =>
+    openTrees(make, c, rows, [{ pool: 'orchard', height: end, size: N, legacy: [] }], now);
+
+  beforeAll(async () => {
+    (globalThis as { IDBKeyRange?: unknown }).IDBKeyRange ??= {
+      bound: (lower: unknown, upper: unknown) => ({ lower, upper }),
+    };
+    wasm = (await import('@repo/zcash-wasm')) as unknown as Wasm;
+    wasm.initSync({
+      module: readFileSync(resolve(process.cwd(), '../../packages/zcash-wasm/zafu_wasm_bg.wasm')),
+    });
+    let x = 0x2545f491;
+    const next = () => {
+      x ^= x << 13;
+      x ^= x >>> 17;
+      x ^= x << 5;
+      return x >>> 0;
+    };
+    chain = [];
+    let made = 0;
+    for (let height = 2_000; made < N; height++) {
+      const k = Math.min(next() % 41, N - made);
+      chain.push({
+        height,
+        cmxs: Array.from({ length: k }, () => {
+          const b = new Uint8Array(32);
+          for (let i = 0; i < 32; i++) {
+            b[i] = next() & 0xff;
+          }
+          b[31]! &= 0x3f;
+          return b;
+        }),
+      });
+      made += k;
+    }
+    end = chain[chain.length - 1]!.height;
+    let size = 0;
+    completing = chain.find(b => (size += b.cmxs.length) >= SHARD_LEAVES)!.height;
+    notes = [leafNear(chain, 2_100), leafNear(chain, completing + 3)];
+    full = make();
+    full.insert_frontier('', 1_999);
+    full.append_blocks(0, encodeBlocks(chain), Uint32Array.from(notes.map(n => n.position)), end);
+    // a shard-1 note's level-16 sibling is shard 0's root
+    root0 = new Uint8Array(
+      Buffer.from(
+        (JSON.parse(full.witness(notes[1]!.position, end)) as { path: { hash: string }[] })
+          .path[16]!.hash,
+        'hex',
+      ),
+    );
+    tip = (
+      JSON.parse(wasm.build_witnesses_and_paths('', asJson(chain), '[]')) as {
+        end_frontier_hex: string;
+      }
+    ).end_frontier_hex;
+  }, 120_000);
+
+  const expectOracle = (tree: NoteTree) => {
+    const positions = notes.map(n => n.position);
+    const want = treePaths(full, positions);
+    expect(typeof want).not.toBe('string');
+    expect(treePaths(tree, positions)).toEqual(want);
+  };
+
+  test('each shard is replayed from its own blocks only, checked by its root', async () => {
+    const { chain: c, ranges } = server();
+    const trees = await open(c);
+    // the complete shard: from the pool's start to the block that completed it
+    expect(await trees.recover('orchard', [notes[0]!])).toMatchObject({ left: 0, recovered: 1 });
+    expect(ranges).toEqual([[2_000, completing]]);
+    // the tip's shard: from that block to the tree's checkpoint
+    expect(await trees.recover('orchard', notes)).toMatchObject({ left: 0, recovered: 1 });
+    expect(ranges[1]).toEqual([completing, end]);
+    expectOracle(trees.get('orchard')!);
+    trees.free();
+  });
+
+  test('a budget hands the loop back between shards; a failed shard backs off, the rest go on', async () => {
+    let clock = 1_000_000;
+    const { chain: c, ranges } = server({ failBlocks: from => from === 2_000 });
+    const meta = new FakeMeta();
+    const trees = await open(c, [], () => clock);
+    // a zero budget runs one shard per call: shard 0 fails and waits
+    expect(await trees.recover('orchard', notes, undefined, 0)).toMatchObject({
+      left: 2,
+      waiting: 1,
+    });
+    // the next call skips it and goes on to shard 1
+    expect(await trees.recover('orchard', notes, undefined, 0)).toMatchObject({
+      left: 1,
+      waiting: 1,
+    });
+    // still waiting: nothing is fetched
+    expect(await trees.recover('orchard', notes)).toMatchObject({ left: 1, waiting: 1 });
+    expect(ranges).toEqual([[completing, end]]);
+    write(meta, trees.takeWrites());
+    // the backoff and the recovered mark are in the rows, so a restart keeps both
+    expect(String(meta.rows.get('st:orchard:rec'))).toContain('"fails":1');
+    trees.free();
+    const again = server();
+    clock += 2 * 60_000;
+    const reopened = await open(again.chain, meta.list(), () => clock);
+    expect(reopened.get('orchard')!.is_marked(notes[1]!.position)).toBe(true);
+    expect(await reopened.recover('orchard', notes)).toMatchObject({ left: 0 });
+    expect(again.ranges).toEqual([[2_000, completing]]);
+    expectOracle(reopened.get('orchard')!);
+    reopened.free();
+  });
+
+  test('a reseed keeps the marks its subtree roots confirm, and is taken at most once an hour', async () => {
+    let clock = 5_000_000;
+    const { chain: c } = server();
+    const trees = await open(c, [], () => clock);
+    await trees.recover('orchard', notes);
+    const wrong = { frontier: tip, root: 'not-our-root' };
+    expect(await trees.check('orchard', end, wrong, () => Promise.resolve(wrong))).toBe(true);
+    const tree = trees.get('orchard')!;
+    // shard 0 is confirmed by its root: kept. shard 1 holds the tip: recovered again
+    expect(notes.map(n => tree.is_marked(n.position))).toEqual([true, false]);
+    expect(await trees.recover('orchard', notes)).toMatchObject({ left: 0, recovered: 1 });
+    expectOracle(tree);
+    // a second server-asked reseed within the hour is refused, the tree kept
+    expect(await trees.check('orchard', end, wrong, () => Promise.resolve(wrong))).toBe(false);
+    expect(trees.get('orchard')).toBe(tree);
+    await expect(trees.rewind(2_100, 0)).rejects.toThrow(/within the hour/);
+    clock += RESEED_INTERVAL_MS;
+    expect(await trees.check('orchard', end, wrong, () => Promise.resolve(wrong))).toBe(true);
+    trees.free();
   });
 });

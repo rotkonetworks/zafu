@@ -12,6 +12,7 @@ import { ripemd160 } from '@noble/hashes/ripemd160';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { SpendKeysCtor } from './hot-sign';
+import { ironwoodBranchIds, ironwoodBranchRefusal } from './branch-ids';
 import {
   planDeposit,
   sendDeposit,
@@ -147,4 +148,28 @@ describe('mainnet consensus on the real wasm', () => {
       expect(wasm.shielding_pool_for_height(h, true)).toBe('ironwood');
     }
   });
+
+  test('the worker refuses NU7 on mainnet before any proof, and takes it on testnet', () => {
+    const hex = (id: number) => id.toString(16).padStart(8, '0');
+    expect([...ironwoodBranchIds(true)]).toEqual([hex(NU63)]);
+    expect(ironwoodBranchRefusal(hex(NU63), true, 'ironwood send')).toBeUndefined();
+    expect(ironwoodBranchRefusal(hex(NU7), true, 'ironwood send')).toMatch(
+      /0x77190ad9 has no ironwood pool on mainnet .*refusing to build ironwood send/,
+    );
+    for (const id of [hex(NU63), hex(NU7)]) {
+      expect(ironwoodBranchRefusal(id, false, 'turnstile migration')).toBeUndefined();
+    }
+    // an older upgrade (NU6.1) and the placeholder never carry ironwood
+    for (const mainnet of [true, false]) {
+      expect(ironwoodBranchRefusal('4dec4df0', mainnet, 'x')).toBeDefined();
+      expect(ironwoodBranchRefusal('ffffffff', mainnet, 'x')).toBeDefined();
+    }
+  });
+
+  test('every mainnet ironwood builder the worker gates also refuses NU7 itself', () => {
+    // the guard above and the blob agree: what the guard lets through on
+    // mainnet the blob builds, what it refuses the blob refuses too
+    expect(() => ironwoodSend(NU63_ACTIVATION, NU63)).not.toThrow();
+    expect(() => ironwoodSend(NU63_ACTIVATION, NU7)).toThrow(/branch/i);
+  }, 300_000);
 });

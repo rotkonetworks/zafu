@@ -118,6 +118,20 @@ export class NoteTree {
         }
     }
     /**
+     * keeps `old`'s marks in shards whose root this tree confirms; returns
+     * how many were carried
+     * @param {NoteTree} old
+     * @returns {number}
+     */
+    carry_marks(old) {
+        _assertClass(old, NoteTree);
+        const ret = wasm.notetree_carry_marks(this.__wbg_ptr, old.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0] >>> 0;
+    }
+    /**
      * @param {number} height
      * @returns {number | undefined}
      */
@@ -254,6 +268,26 @@ export class NoteTree {
         const ptr2 = passArray32ToWasm0(positions, wasm.__wbindgen_malloc);
         const len2 = WASM_VECTOR_LEN;
         const ret = wasm.notetree_recover(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, height);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0] >>> 0;
+    }
+    /**
+     * marks `positions` by replaying shard `index` alone (see
+     * `NoteTreeCore::recover_shard`); returns how many were marked
+     * @param {number} index
+     * @param {number} first_position
+     * @param {Uint8Array} blocks
+     * @param {Uint32Array} positions
+     * @returns {number}
+     */
+    recover_shard(index, first_position, blocks, positions) {
+        const ptr0 = passArray8ToWasm0(blocks, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray32ToWasm0(positions, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.notetree_recover_shard(this.__wbg_ptr, index, first_position, ptr0, len0, ptr1, len1);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -1057,8 +1091,11 @@ export function apply_signature_contributions(pczt_hex, contributions_json) {
  *   `generate_voting_hotkey`); the governance output target.
  * * `notes_json` — `[NoteInfoDto]` (the delegated notes).
  * * `round_params_json` — `RoundParamsDto`.
- * * `consensus_branch_id` — branch id at the snapshot height (host resolves via
- *   lightwalletd).
+ * * `consensus_branch_id` — branch id the host's node reports (lightwalletd).
+ *   It must have the Ironwood pool (NU6.3 or later, NU7 included), and so
+ *   must the snapshot height. It only selects the note protocol: the PCZT is
+ *   always built under TX1 v1's V6 / NU6.3 profile, the one the vote chain
+ *   rebuilds the signed digest under.
  * * `round_name` — display memo text.
  * * `network` — "mainnet" | "testnet" | "regtest".
  * * `bundle_index` — delegation bundle index (echoed into `delegation_state`).
@@ -1558,47 +1595,37 @@ export function build_vote_commitment_wire(hotkey_secret_hex, round_params_json,
 }
 
 /**
- * Build the helper-server share payloads (`[VoteShareWire]`) for one HOT vote.
+ * Build the helper-share payloads (`[VoteShareWire]`, `POST {helper}/shielded-vote/v1/shares`)
+ * for a vote that is already on chain.
  *
- * `submit_at` is the unix-seconds submission time stamped into each share.
- * Runs the ZKP #2 proof.
- * @param {string} hotkey_secret_hex
- * @param {string} round_params_json
- * @param {string} delegation_state_json
- * @param {string} van_witness_json
- * @param {string} vote_json
- * @param {string} network
+ * `commitment_bundle_json` is the recovery bundle `cast_vote_hot_wire`
+ * returned for this vote; `vc_tree_position` is the vote commitment's leaf
+ * index in the round's commitment tree, known once the cast-vote transaction
+ * is included. No proof runs here, so the shares match the submitted
+ * commitment.
+ * @param {string} commitment_bundle_json
+ * @param {bigint} vc_tree_position
  * @param {bigint} submit_at
  * @returns {string}
  */
-export function build_vote_shares_wire(hotkey_secret_hex, round_params_json, delegation_state_json, van_witness_json, vote_json, network, submit_at) {
-    let deferred8_0;
-    let deferred8_1;
+export function build_vote_shares_from_recovery(commitment_bundle_json, vc_tree_position, submit_at) {
+    let deferred3_0;
+    let deferred3_1;
     try {
-        const ptr0 = passStringToWasm0(hotkey_secret_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr0 = passStringToWasm0(commitment_bundle_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(round_params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(delegation_state_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(van_witness_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len3 = WASM_VECTOR_LEN;
-        const ptr4 = passStringToWasm0(vote_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len4 = WASM_VECTOR_LEN;
-        const ptr5 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len5 = WASM_VECTOR_LEN;
-        const ret = wasm.build_vote_shares_wire(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5, submit_at);
-        var ptr7 = ret[0];
-        var len7 = ret[1];
+        const ret = wasm.build_vote_shares_from_recovery(ptr0, len0, vc_tree_position, submit_at);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
         if (ret[3]) {
-            ptr7 = 0; len7 = 0;
+            ptr2 = 0; len2 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
-        deferred8_0 = ptr7;
-        deferred8_1 = len7;
-        return getStringFromWasm0(ptr7, len7);
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
     } finally {
-        wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
 
@@ -1629,22 +1656,35 @@ export function build_witnesses_and_paths(tree_state_hex, compact_blocks_json, n
 }
 
 /**
- * Build BOTH the commitment wire and share wires from a SINGLE proof run.
+ * Build the `POST /cast-vote` body plus what the host keeps for after it lands.
  *
- * Prefer this over calling the two builders separately: ZKP #2 is expensive and
- * each of `build_vote_commitment_wire` / `build_vote_shares_wire` runs it once.
- * Returns `SignedVoteCommitmentView`-shaped JSON
- * `{ proposal_id, wire, shares, commitment_bundle_json }`.
+ * Runs ZKP #2 once. Returns
+ * `{ proposal_id, wire, commitment_bundle_json, next_delegation_state_json }`.
+ *
+ * No helper shares come back from here: a share commits to the vote's leaf
+ * index in the round's commitment tree (`vc_tree_position`), which only
+ * exists once the cast-vote transaction is included. Shares built before
+ * that carry a guessed position, and the helper's reveal for them never
+ * matches the tree, so the vote silently drops out of the tally. Build them
+ * with [`build_vote_shares_from_recovery`] from `commitment_bundle_json` and
+ * the included position.
+ *
+ * `commitment_bundle_json` holds the share secrets (it can rebuild shares,
+ * which carry `vote_decision`): store it encrypted.
+ *
+ * `next_delegation_state_json` is this bundle's state for its next cast
+ * (this proposal's authority bit cleared). Store it only after the cast is
+ * on chain: if the cast never lands, the old state is still the valid one,
+ * and a cleared bit would lock the proposal out of a retry.
  * @param {string} hotkey_secret_hex
  * @param {string} round_params_json
  * @param {string} delegation_state_json
  * @param {string} van_witness_json
  * @param {string} vote_json
  * @param {string} network
- * @param {bigint} submit_at
  * @returns {string}
  */
-export function cast_vote_hot_wire(hotkey_secret_hex, round_params_json, delegation_state_json, van_witness_json, vote_json, network, submit_at) {
+export function cast_vote_hot_wire(hotkey_secret_hex, round_params_json, delegation_state_json, van_witness_json, vote_json, network) {
     let deferred8_0;
     let deferred8_1;
     try {
@@ -1660,7 +1700,7 @@ export function cast_vote_hot_wire(hotkey_secret_hex, round_params_json, delegat
         const len4 = WASM_VECTOR_LEN;
         const ptr5 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len5 = WASM_VECTOR_LEN;
-        const ret = wasm.cast_vote_hot_wire(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5, submit_at);
+        const ret = wasm.cast_vote_hot_wire(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
         var ptr7 = ret[0];
         var len7 = ret[1];
         if (ret[3]) {
@@ -4121,17 +4161,17 @@ function __wbg_get_imports(memory) {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 319, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 321, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue______true_);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4760, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4788, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4762, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4790, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_);
             return ret;
         },
@@ -4228,6 +4268,12 @@ function addToExternrefTable0(obj) {
     const idx = wasm.__externref_table_alloc();
     wasm.__wbindgen_externrefs.set(idx, obj);
     return idx;
+}
+
+function _assertClass(instance, klass) {
+    if (!(instance instanceof klass)) {
+        throw new Error(`expected instance of ${klass.name}`);
+    }
 }
 
 const CLOSURE_DTORS = (typeof FinalizationRegistry === 'undefined')

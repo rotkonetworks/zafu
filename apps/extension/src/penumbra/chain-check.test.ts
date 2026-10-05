@@ -34,6 +34,19 @@ describe('chain-id check', () => {
     expect(asked).toHaveLength(1);
   });
 
+  it('only an answer with the same id confirms the chain; no answer only releases', async () => {
+    const { check } = setup([undefined, 'penumbra-1']);
+    const release = vi.fn();
+    const confirmed = vi.fn();
+    check.arm('penumbra-1', release, confirmed);
+    check.run();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(release).toHaveBeenCalledOnce();
+    expect(confirmed).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(confirmed).toHaveBeenCalledOnce();
+  });
+
   it('a changed id rebuilds and keeps the old processor held', async () => {
     const { check, rebuilt } = setup(['penumbra-2']);
     const release = vi.fn();

@@ -1,4 +1,4 @@
-import { Client } from '@connectrpc/connect';
+import { Client, type CallOptions } from '@connectrpc/connect';
 import { createClient } from './utils';
 import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
 import { Transaction } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
@@ -12,8 +12,8 @@ export class AppQuerier implements AppQuerierInterface {
     this.client = createClient(grpcEndpoint, AppService);
   }
 
-  async appParams(): Promise<AppParameters> {
-    const { appParameters } = await this.client.appParameters({});
+  async appParams(opts?: CallOptions): Promise<AppParameters> {
+    const { appParameters } = await this.client.appParameters({}, opts);
     if (!appParameters) {
       throw new Error('no app parameters in response');
     }

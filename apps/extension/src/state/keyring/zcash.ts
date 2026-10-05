@@ -2,7 +2,8 @@
  * zcash network integration
  *
  * uses zafu-wasm for key derivation and note scanning
- * connects to zidecar for trustless sync via grpc-web
+ * syncs over grpc-web from the chosen node (zidecar or lightwalletd), which
+ * is trusted for chain data
  */
 
 import { createZafuWasmMemory } from '../../config/zafu-wasm-memory';

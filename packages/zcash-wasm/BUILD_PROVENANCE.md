@@ -5,17 +5,14 @@
 A rebuild that updates only some copies ships a wallet whose worker and
 prover disagree. This has bitten twice:
 
-| path                                                     | loaded by                 | symptom when stale                                                                       |
-| -------------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------- |
-| `packages/zcash-wasm/` (`zafu_*` + duplicated `zcash_*`) | build-time package import | type/API drift; missing exports (e.g. shielding)                                         |
-| `apps/extension/public/zafu-wasm/`                       | the main compute worker   | `X.compute_txid is not a function`; silently rebuilds txs with an old consensus constant |
+| path                               | loaded by                 | symptom when stale                                                                       |
+| ---------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------- |
+| `packages/zcash-wasm/` (`zafu_*`)  | build-time package import | type/API drift; missing exports (e.g. shielding)                                         |
+| `apps/extension/public/zafu-wasm/` | the main compute worker   | `X.compute_txid is not a function`; silently rebuilds txs with an old consensus constant |
 
-⚠ 2026-08-07: the `zcash_*` duplicate in `packages/zcash-wasm/` was found STALE — its
-wasm-bindgen symbol hashes differed from the binary while `zafu_wasm.js` matched, which
-breaks `import('@repo/zcash-wasm')` with `Import #0 "./zafu_wasm_bg.js": module is not an
-object or function`. The package `main`/`exports` now point at `zafu_wasm.js` and the
-`zcash_*` duplicates were re-copied from `zafu_*` so all glues/binaries are byte-identical
-again. Keep them identical on every refresh — a differing `zcash_*` glue is a landmine.
+⚠ 2026-08-07: a stale `zcash_*` duplicate in `packages/zcash-wasm/` once broke
+`import('@repo/zcash-wasm')`. The duplicates are gone; the package `main`/`exports`
+point at `zafu_wasm.js`, and both copies above must stay byte-identical.
 
 Both `public/` copies are the PARALLEL build (rayon `snippets/`, shared
 memory). After copying either one, re-apply the Chrome worker patch and
@@ -27,50 +24,25 @@ Finally: `pnpm build` (NOT `pnpm bundle:prod`) so `dist/` and `beta-dist/`
 both pick the new blobs up, then grep a known-new symbol in each.
 
 These vendored .wasm blobs are build artifacts. Do NOT hand-edit.
-Reproduce by checking out the zcli rev below and running the commands.
 
-- source repo: zcli (master)
-- source rev: 122451e — adds the enc_ciphertext->memo collapse to
-  redact_pczt_compact, the largest request-leg win (2.53x vs 1.08x without).
-- previous rev: 70722f7 — "Merge feat/compact-signer-redaction: wallet-side compact
-  PCZT surface". Adds the compact-signing exports the wallet needs:
-  `redact_pczt_compact`, `apply_signature_contributions`,
-  `estimate_compact_savings`. Ironwood is UNGATED upstream now (pczt 0.9.x /
-  zcash_primitives 0.30 / orchard 0.15.5) — build with NO
-  `--cfg zcash_unstable` and no vendored fork.
-- previous rev: 65c6ad6 — includes 59934d2 fix(consensus): real V6_VERSION_GROUP_ID
-  0xD884B698 per ZIP-229 (the 0xFFFFFFFF placeholder made every v6 tx —
-  ironwood migration + sends — fail zebrad broadcast with
-  'expected TX_V6_VERSION_GROUP_ID'). Clean committed tree, no dirty state.
-- source state: working tree has the above lib.rs changes staged/dirty; pkg/ + pkg-parallel/
-  are build outputs. Commit lib.rs before treating these shas as reproducible.
-- includes the final ironwood producer fixes: real branch id, spend-fvk redaction,
-  output-recipient (wallet's own address) redaction on turnstile dummy outputs,
-  and the build_signed_ironwood_send (hot) + build_ironwood_send_pczt (cold) producers.
-- built (UTC): see git commit (Date is disabled in this environment)
-- toolchain: wasm-bindgen 0.2.114, wasm-opt (binaryen) version 130
-  (was 123; -Oz output differs byte-wise between binaryen versions, so the
-  hashes below will not reproduce under 123)
+**Which build is shipped: see the newest dated entry below** (zafu-wasm:
+the first `## <date> rebuild` section; voting-wasm: the first `###` entry
+under its own section). Each entry names the zcli repo, branch and rev, the
+toolchain, and the sha256 of every shipped file. Verify by checking out that
+rev, running the recipe, and comparing sha256sums; a mismatch means the
+vendored blob is stale. Nothing above the dated entries names a rev or a hash.
 
-## single-thread (packages/zcash-wasm/zafu_wasm_bg.wasm; duplicated as zcash_wasm_bg.wasm)
+Only the PARALLEL zafu-wasm build ships, copied to both
+`packages/zcash-wasm/` and `apps/extension/public/zafu-wasm/` (glue, `.d.ts`,
+`_bg.wasm`, `_bg.wasm.d.ts`). There is no single-thread blob and no
+`zafu-wasm-parallel/` directory any more.
 
-    cd crates/zcash-wasm
-    unset RUSTFLAGS
-    RUSTUP_TOOLCHAIN=nightly cargo wasm-single
-    wasm-bindgen ../../target/wasm32-unknown-unknown/release/zafu_wasm.wasm \
-      --out-dir pkg --target web
-    wasm-opt -Oz \
-      --enable-simd --enable-bulk-memory --enable-mutable-globals \
-      --enable-nontrapping-float-to-int \
-      pkg/zafu_wasm_bg.wasm -o pkg/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = 9c8ac43637d7d5a8442e131e6728dc33a4c02ac3ea05f5bd47e47bde124f8368
+## recipe: zafu-wasm, parallel / rayon
 
-## parallel / rayon (apps/extension/public/zafu-wasm-parallel/zafu_wasm_bg.wasm)
-
-    # DO NOT set RUSTFLAGS — env var overrides crates/zcash-wasm/.cargo/config.toml
-    # rustflags wholesale, which drops the link-args (--shared-memory,
-    # --import-memory, --max-memory, --export=__wasm_init_tls…). Without
-    # those link-args the output has a private non-shared memory, rayon
+    # DO NOT set RUSTFLAGS - the env var overrides the workspace
+    # .cargo/config.toml rustflags wholesale, which drops the link-args
+    # (--shared-memory, --import-memory, --max-memory, --export=__wasm_init_tls...).
+    # Without them the output has a private non-shared memory, rayon
     # postMessage to sub-workers throws DataCloneError, and halo2 proving
     # is dead on the mnemonic-send path.
     cd crates/zcash-wasm
@@ -81,18 +53,20 @@ Reproduce by checking out the zcli rev below and running the commands.
     wasm-opt -Oz --enable-threads --enable-bulk-memory --enable-simd \
       --enable-mutable-globals --enable-nontrapping-float-to-int \
       pkg-parallel/zafu_wasm_bg.wasm -o pkg-parallel/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = 67860fab0bdead4be5fe96631663cf18a1779d270511ef9588705e5598a909c8
 
-    Verify the rebuilt blob has shared imported memory before shipping:
-      `(import "./zafu_wasm_bg.js" "memory" (memory ... shared))` post-bindgen.
+Toolchain: nightly rustc, wasm-bindgen CLI and binaryen as the entry says
+(binaryen 130 at
+`/nix/store/azhmf1il8da9pps80bk2f4l6ql6bgfg7-binaryen-130`; `-Oz` output
+differs byte-wise between binaryen versions).
 
-    After copying pkg-parallel/* into apps/extension/public/zafu-wasm-parallel/,
-    re-apply the LOCAL PATCH to snippets/wasm-bindgen-rayon-*/src/workerHelpers.js
-    (stock `await import('../../..')` is a directory import that Chrome
-    extensions reject; replace with the concrete `zafu_wasm.js` URL).
+Verify the rebuilt blob has shared imported memory before shipping:
+`(import "./zafu_wasm_bg.js" "memory" (memory ... shared))` post-bindgen.
 
-Verify: rebuild from the rev, sha256sum the outputs,
-diff against the values above. A mismatch means the vendored blob is stale.
+After copying, keep the LOCAL PATCH in
+`snippets/wasm-bindgen-rayon-*/src/workerHelpers.js` (stock
+`await import('../../..')` is a directory import that Chrome extensions
+reject; it is replaced with the concrete `zafu_wasm.js` URL). While the
+snippet hash is unchanged the patched file is kept as is.
 
 ## voting-wasm (apps/extension/public/voting-wasm/) - separate blob
 
@@ -103,8 +77,11 @@ refreshing zafu-wasm leaves it untouched, and vice versa.
 
 ### 2026-10-05 (2) - post-merge review fixes
 
-- source repo: zcli, branch `fix/voting-review`, rev `2359748` (on master
-  `e3b3522`; 2e50b9c plus the review nits: `cast_vote_hot` no longer builds
+- source repo: zcli, branch `master`, rev `82d67b5` (the merge of
+  `fix/voting-review` 2359748, PR #20; its tree is identical to 2359748's).
+  Rebuilt from `82d67b5` on 2026-10-05 with the recipe below: all three
+  shas match byte for byte, so the shipped blob is a master build.
+  (2359748 is 2e50b9c plus the review nits: `cast_vote_hot` no longer builds
   share payloads at all): crate `crates/voting-wasm`, `--features parallel`, built with
   `crates/voting-wasm/build-wasm.sh` (which now runs the `wasm-opt` step
   below and both local patches itself).
@@ -199,6 +176,43 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
   chain's own TX1 fixture and PCZT sighash == TX1 digest); the ignored
   `voting-wasm` `local_chain_e2e` ran these bindings against a local svoted
   v1.6.1-rc.5 (37 proposals, votes on 37 and 17, tally finalized).
+
+## 2026-10-05 rebuild (4) - NoteTree.recover_shard, NoteTree.carry_marks
+
+- source repo: zcli master, merge commit `872094d` (zcli PR #22), built from its
+  branch head `0347f3f`. The merge commit's `crates/zcash-wasm`, `Cargo.toml` and
+  `Cargo.lock` are byte-identical to `0347f3f` (`git diff 0347f3f 872094d` over those
+  paths is empty), so the sha below holds for the merge commit.
+- new (public data only, nothing takes a key):
+  `NoteTree.recover_shard(index, first_position, blocks, positions)` marks
+  lost notes by replaying their own 2^16-leaf shard; the replayed shard
+  root must equal the root the tree already holds for that range (a
+  subtree root, or the frontier and leaves it hashed), so it can only add
+  marks. `NoteTree.carry_marks(old)` keeps an old tree's marks in every
+  shard whose root the replacing tree confirms.
+- also in the blob, from master since 2e2a02a: the zafu-wasm copies of the
+  voting functions follow voting 0.12 (`cast_vote_hot_wire` takes no
+  `submit_at`; `build_vote_shares_from_recovery` replaces
+  `build_vote_shares_wire`). zafu calls these only through voting-wasm, so
+  nothing in the extension changes with them.
+- `.d.ts` diff against the previous blob: the two NoteTree methods and the
+  voting changes above; nothing else removed.
+- `cargo test -p zafu-wasm --release --test note_tree`: 9 passed (new:
+  `recover_shard_replays_one_shard_only`, `carry_marks_keeps_confirmed_shards`;
+  every path compared with a full replay from the empty tree).
+- toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
+  wasm-bindgen CLI 0.2.126, binaryen 130; recipe above.
+- rayon snippet hash unchanged (`wasm-bindgen-rayon-38edf6e439f6d70d`), the
+  patched `workerHelpers.js` kept.
+- size: pre `wasm-opt` 21,461,578 bytes; post `-Oz` 13,284,862 bytes.
+- sha256(parallel zafu_wasm_bg.wasm) =
+  f21a9e2d305ea49554ba6df1bae9af3a2b1e06c35bf5441d62d4e93224380663
+- sha256(zafu_wasm.js) =
+  d34a87837f0ff320cfdd1877b7a75ffdf2bf2043fc643daf837611d57a727e5b
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 58 32768 shared)`.
+- reproduced: a second build from a clean checkout of `0347f3f` with its
+  own target directory gave both shas above byte for byte.
 
 ## 2026-10-05 rebuild (3) - Zakura Common 2.0, NU7 testnet; built from zcli master
 

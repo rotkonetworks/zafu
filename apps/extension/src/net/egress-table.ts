@@ -52,6 +52,8 @@ export interface EgressRule {
    * is on, and each feature gates itself on its own destination.
    */
   shared?: boolean;
+  /** a chain node the person chose (or a preset one): a redirect within its host is followed */
+  node?: boolean;
 }
 
 export interface EgressTable {
@@ -144,4 +146,28 @@ export const decideEgress = (
     return { allow: true, host, destination };
   }
   return { allow: false, host, destination, reason: rule?.reason ?? 'unknown' };
+};
+
+/**
+ * Where a followed redirect landed, decided. The landing passes on its own
+ * merit, or when it stays on the host of an allowed chain node (a node that
+ * moved its path, or http -> https): the person chose that host, and the hop
+ * reaches no one new. A redirect to another host is decided as that host, so
+ * a node can never bounce zafu's requests to a third party.
+ */
+export const decideRedirect = (
+  from: string,
+  to: string,
+  realm: EgressRealm,
+  table: EgressTable | undefined,
+): EgressDecision => {
+  const landed = decideEgress(to, realm, table);
+  if (landed.allow || landed.reason === 'blocked' || !table) {
+    return landed;
+  }
+  const host = hostOf(from);
+  if (!host || host !== hostOf(to) || !matchRule(table, from)?.node) {
+    return landed;
+  }
+  return decideEgress(from, realm, table).allow ? { allow: true, host } : landed;
 };

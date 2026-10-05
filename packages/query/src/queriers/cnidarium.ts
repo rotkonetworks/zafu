@@ -1,4 +1,4 @@
-import { Client } from '@connectrpc/connect';
+import { Client, type CallOptions } from '@connectrpc/connect';
 import { createClient } from './utils';
 import { CnidariumService } from '@penumbra-zone/protobuf';
 import { KeyValueRequest } from '@penumbra-zone/protobuf/penumbra/cnidarium/v1/cnidarium_pb';
@@ -12,11 +12,11 @@ export class CnidariumQuerier implements CnidariumQuerierInterface {
     this.client = createClient(grpcEndpoint, CnidariumService);
   }
 
-  async fetchRemoteRoot(blockHeight: bigint): Promise<MerkleRoot> {
+  async fetchRemoteRoot(blockHeight: bigint, opts?: CallOptions): Promise<MerkleRoot> {
     const keyValueRequest = new KeyValueRequest({
       key: `sct/tree/anchor_by_height/${blockHeight}`,
     });
-    const keyValue = await this.client.keyValue(keyValueRequest);
+    const keyValue = await this.client.keyValue(keyValueRequest, opts);
     if (!keyValue.value) {
       throw new Error('no value in KeyValueResponse');
     }
