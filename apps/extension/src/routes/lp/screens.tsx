@@ -173,7 +173,8 @@ export const EgressScreen = () => {
       mark: '$',
       name: 'prices',
       does: 'the market price, for cost vs market',
-      host: prices ? 'already allowed' : '1click.chaindefuser.com',
+      // the same destination near intents swaps ask: allowing it here allows those prices too
+      host: `${prices ? 'already allowed' : '1click.chaindefuser.com'}\nnear intents · also used for swap prices`,
       c: prices ? 'text-fg-muted' : 'text-zigner-gold',
     },
   ];
