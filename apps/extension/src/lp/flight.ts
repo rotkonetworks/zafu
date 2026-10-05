@@ -342,7 +342,7 @@ export const stepLines = (
       f.outZat
         ? `${z(f.outZat)} zec`
         : f.expectZat
-          ? `≈ ${z(f.expectZat)} zec, after its fee`
+          ? `≈ ${z(f.expectZat)} zec, after the pool's fee`
           : undefined,
     ),
     line(4, 'arrive', 'arrived at your lp address'),

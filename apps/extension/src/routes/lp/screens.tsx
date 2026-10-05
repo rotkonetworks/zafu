@@ -16,6 +16,7 @@ import { depositFeeZat } from '../../workers/transparent-deposit';
 import { stepLines } from '../../lp/flight';
 import {
   ADD_MEMO,
+  afterFee,
   costTone,
   fairAmount,
   impermanentLoss,
@@ -41,6 +42,7 @@ import {
   setPart,
   shieldItBack,
   show,
+  tick,
   worthOf,
   type LpState,
 } from './store';
@@ -185,23 +187,23 @@ export const EgressScreen = () => {
   );
 };
 
-/** what an add costs and earns right now; undefined until the pool is read */
-export const useAddQuote = () =>
-  useLp(
-    useShallow(s => {
-      const a = parseZec(s.amt);
-      const pool = s.thor?.pool;
-      const px = s.zecUsd && s.thor ? { zec: s.zecUsd, rune: s.thor.runeUsd } : undefined;
-      const q = pool && a ? quoteAdd(pool, a, px) : undefined;
-      return {
-        a,
-        q,
-        small: !!a && a < MIN_ADD_ZAT,
-        fair: pool && px ? fairAmount(pool, px) : undefined,
-        paused: s.thor?.addPaused,
-      };
-    }),
+/** what an add costs and earns right now, derived from the last read; undefined until the pool is read */
+export const useAddQuote = () => {
+  const { amt, thor, zecUsd } = useLp(
+    useShallow(s => ({ amt: s.amt, thor: s.thor, zecUsd: s.zecUsd })),
   );
+  const a = parseZec(amt);
+  const px = zecUsd && thor ? { zec: zecUsd, rune: thor.runeUsd } : undefined;
+  const fair = thor && px ? fairAmount(thor.pool, px) : undefined;
+  return {
+    a,
+    q: thor && a ? quoteAdd(thor.pool, a, px) : undefined,
+    small: !!a && a < MIN_ADD_ZAT,
+    fair,
+    fairQ: thor && fair ? quoteAdd(thor.pool, fair, px) : undefined,
+    paused: thor?.addPaused,
+  };
+};
 
 const CHIPS = ['0.005', '0.01', '0.02'];
 
@@ -218,16 +220,11 @@ export const AddScreen = ({ onAdd }: { onAdd: () => void }) => {
       flight: !!s.flight,
     })),
   );
-  const { a, q, small, fair, paused } = useAddQuote();
+  const { a, q, small, fair, fairQ, paused } = useAddQuote();
   const now = useNow();
   const tone = costTone(q?.costPct);
   const large = !small && tone === 'strong';
   const age = at ? Math.max(0, Math.round((now - at) / 1000)) : 0;
-  const fairQ = useLp(s =>
-    fair && s.thor && s.zecUsd
-      ? quoteAdd(s.thor.pool, fair, { zec: s.zecUsd, rune: s.thor.runeUsd })
-      : undefined,
-  );
   const fees = SHIELD_OUT_FEE + depositFeeZat(ADD_MEMO.length);
   const can = read && !!a && !!q && !small && !paused && !flight;
   const costText = small || !q ? 'n/a' : q.costPct === undefined ? 'no price' : pct(q.costPct);
@@ -371,8 +368,8 @@ export const AddScreen = ({ onAdd }: { onAdd: () => void }) => {
       <Button
         variant={large || !can ? 'secondary' : 'primary'}
         className='h-14'
-        disabled={!can}
-        onClick={onAdd}
+        disabled={!can && !paused}
+        onClick={paused ? () => void tick() : onAdd}
       >
         {paused
           ? 'adds are paused · check again'
@@ -512,7 +509,8 @@ export const WithdrawScreen = ({ onOut }: { onOut: () => void }) => {
   const move = zecMoveSinceAdd(t.pool, p.depositAsset, p.depositRune);
   const moved = move !== undefined && Math.abs(move) >= 0.05;
   const added = p.depositAsset * 2n;
-  const all = withdrawZec(t.pool, p.units, 10_000, t.minSlipBps);
+  // all of it, after the pool's fee: what the position screen calls worth now
+  const all = afterFee(withdrawZec(t.pool, p.units, 10_000, t.minSlipBps), t.inbound.outboundFee);
   const age = Math.max(0, Math.round((now - t.at) / 1000));
   const usdOf = (zat: bigint) => (s.zecUsd ? ` · ${usd((Number(zat) / 1e8) * s.zecUsd)}` : '');
   const back = (Number(all) / Number(added) - 1) * 100;
@@ -586,7 +584,19 @@ export const WithdrawScreen = ({ onOut }: { onOut: () => void }) => {
           >
             {zecText(all)} zec{usdOf(all)}
           </Row>
-          <Row k='had you kept the zec' w='w-[150px]' h='h-11'>
+          <Row
+            k='had you kept the zec'
+            w='w-[150px]'
+            h='h-11'
+            side={
+              s.zecUsd && (
+                <span className={all < added ? 'text-warn' : 'text-green'}>
+                  {all < added ? '−' : '+'}
+                  {usd((Math.abs(Number(all - added)) / 1e8) * s.zecUsd)}
+                </span>
+              )
+            }
+          >
             {zecText(added)} zec{usdOf(added)}
           </Row>
           <Row
@@ -650,17 +660,20 @@ export const TrackScreen = () => {
             ? 'back in your wallet'
             : 'taking it out';
   return (
-    <Column title={title}>
-      <div className='-mt-3 flex items-baseline justify-end gap-3'>
-        <span className='font-display text-[34px] tabular-nums text-fg-high'>
-          {refunded && f.outZat ? zecText(BigInt(f.outZat)) : clock(now - f.started)}
-        </span>
-        <span className='text-[11px] text-fg-muted'>
-          {refunded
-            ? 'zec at your lp address'
-            : f.kind === 'add'
-              ? 'usually about 4 minutes'
-              : 'usually 3 to 6 minutes'}
+    <div className='flex flex-col gap-5'>
+      <div className='flex items-end justify-between gap-4'>
+        <h1 className='font-display text-[38px] leading-[1.15] text-fg-high'>{title}</h1>
+        <span className='flex shrink-0 flex-col items-end gap-1.5'>
+          <span className='font-display text-[34px] tabular-nums text-fg-high'>
+            {refunded && f.outZat ? zecText(BigInt(f.outZat)) : clock(now - f.started)}
+          </span>
+          <span className='text-[11px] text-fg-muted'>
+            {refunded
+              ? 'zec at your lp address'
+              : f.kind === 'add'
+                ? 'usually about 4 minutes'
+                : 'usually 3 to 6 minutes'}
+          </span>
         </span>
       </div>
       <div className='relative h-0.5 overflow-hidden bg-border-soft'>
@@ -712,7 +725,7 @@ export const TrackScreen = () => {
           </Button>
         )}
       </Buttons>
-    </Column>
+    </div>
   );
 };
 

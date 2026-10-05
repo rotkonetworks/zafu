@@ -201,13 +201,14 @@ const Sheets = () => {
       <Sheet
         open={sheet === 'history'}
         onOpenChange={o => !o && close()}
-        title={short(address)}
+        title='history of this address'
         className='mx-auto max-w-[560px]'
       >
-        <span className='-mt-2 text-xs text-fg-muted'>
+        <span className='text-xs text-fg-muted'>
+          <span className='font-mono normal-case'>{short(address)}</span>
           {mid
-            ? `midgard · ${Math.max(0, Math.round((now - mid.at) / 1000))} s ago`
-            : 'midgard is off'}
+            ? ` · midgard · ${Math.max(0, Math.round((now - mid.at) / 1000))} s ago`
+            : ' · midgard is off'}
         </span>
         <div className='flex flex-col divide-y divide-border-soft border border-border-soft'>
           {rows.length === 0 && (

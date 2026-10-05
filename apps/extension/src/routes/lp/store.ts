@@ -404,7 +404,11 @@ export const startWithdraw = async () => {
   const bps = part * 100;
   const f = startFlight('withdraw', thor.inbound.dust, withdrawMemo(bps), {
     bps,
-    expectZat: withdrawZec(thor.pool, p.units, bps, thor.minSlipBps).toString(),
+    // what lands at the lp address: the payout after the pool's own fee
+    expectZat: afterFee(
+      withdrawZec(thor.pool, p.units, bps, thor.minSlipBps),
+      thor.inbound.outboundFee,
+    ).toString(),
   });
   set({ flight: f, view: null });
   await patchLpPocket(storeId, { flight: f });

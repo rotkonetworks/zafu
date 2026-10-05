@@ -51,7 +51,7 @@ export const LpCard = ({ storeId }: { storeId?: string }) => {
           }
           label='zec liquidity'
           tag={
-            <span className='flex items-center gap-1.5 text-[11px] text-fg-muted'>
+            <span className='flex items-center gap-1.5 whitespace-nowrap text-[11px] text-fg-muted'>
               thorchain ·{' '}
               {moving
                 ? moving.kind === 'add'
