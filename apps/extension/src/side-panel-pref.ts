@@ -35,12 +35,28 @@ export const getApprovalSurface = async (): Promise<ApprovalSurface> =>
  */
 let cached: ApprovalSurface = 'hybrid';
 
+/**
+ * The toolbar icon follows the same preference: the side panel for `hybrid`
+ * and `sidebar`, the popup for `popup`. Done at runtime because a manifest
+ * `default_popup` always wins over `openPanelOnActionClick`.
+ */
+export const applyActionSurface = (surface: ApprovalSurface): void => {
+  const popup = surface === 'popup';
+  void chrome.action?.setPopup({ popup: popup ? 'popup.html' : '' }).catch(() => undefined);
+  void chrome.sidePanel
+    ?.setPanelBehavior({ openPanelOnActionClick: !popup })
+    .catch(() => {
+      // side panel not supported in this browser version
+    });
+};
+
 const refresh = (): void => {
   void getApprovalSurface()
     .then(value => {
       cached = value;
+      applyActionSurface(value);
     })
-    .catch(() => undefined);
+    .catch(() => applyActionSurface(cached));
 };
 
 /** Call once at service-worker startup. Seeds the cache and keeps it current. */
