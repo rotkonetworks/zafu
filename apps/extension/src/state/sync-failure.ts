@@ -16,12 +16,11 @@
  *     local store is IndexedDB in an extension, not SQLite on a phone; the
  *     failure shapes ("blocked", "QuotaExceededError") are different even
  *     though the user-facing meaning is identical.
- *   - `parseFatal` → `consensus`. vizor talks to lightwalletd and can only
- *     fail to *parse* what it is handed. zafu additionally VERIFIES what the
- *     endpoint serves (the Ligerito header proof), so its equivalent
- *     terminal, node-attributable
- *     failure is "this endpoint served data the wallet could not verify".
- *     That is a stronger claim than a parse error and deserves its own kind.
+ *   - `parseFatal` → `consensus`: "this endpoint served data the wallet
+ *     cannot use" (a refused batch, a branch id with no pool), terminal and
+ *     node-attributable. zafu does not verify the chain against a proof; the
+ *     node is trusted for chain data, and this kind only names data that is
+ *     inconsistent on its face.
  *   - vizor defaults an unclassified error to *retry*; zafu defaults it to
  *     *visible* (`autoRetries: false`). This is a money path: a
  *     classification bug must never turn a real failure into a silent
@@ -34,6 +33,7 @@ export type SyncFailureKind =
   | 'network'
   | 'endpoint'
   | 'consensus'
+  | 'wrongNetwork'
   | 'chainRecovery'
   | 'storageBusy'
   | 'storageFatal'
@@ -69,6 +69,7 @@ export const SYNC_ERROR_CODES = [
   'network',
   'endpoint',
   'consensus',
+  'wrong-network',
   'chain-recovery',
   'storage-busy',
   'storage-fatal',
@@ -84,6 +85,7 @@ const KIND_BY_CODE: Record<SyncErrorCode, SyncFailureKind> = {
   network: 'network',
   endpoint: 'endpoint',
   consensus: 'consensus',
+  'wrong-network': 'wrongNetwork',
   'chain-recovery': 'chainRecovery',
   'storage-busy': 'storageBusy',
   'storage-fatal': 'storageFatal',
@@ -99,6 +101,7 @@ const MESSAGES: Record<SyncFailureKind, string> = {
   network: "the node isn't answering · zafu keeps trying",
   endpoint: "the node isn't answering · please choose another",
   consensus: 'this node sent data zafu could not verify · please choose another',
+  wrongNetwork: 'this node serves another zcash network · please choose another',
   chainRecovery: 'the chain moved while syncing · zafu keeps trying',
   storageBusy: 'wallet data is busy · zafu keeps trying',
   storageFatal: 'wallet data could not be read · please reload zafu',
@@ -116,6 +119,7 @@ const ACTIONS: Partial<Record<SyncFailureKind, SyncFailureAction>> = {
   network: CHOOSE,
   endpoint: CHOOSE,
   consensus: CHOOSE,
+  wrongNetwork: CHOOSE,
   // A local problem must never make the wallet blame the node (vizor's rule).
   storageFatal: { label: 'reload', kind: 'reload' },
   unknown: TRY_AGAIN,
@@ -125,6 +129,7 @@ const AUTO_RETRIES: Record<SyncFailureKind, boolean> = {
   network: true,
   endpoint: false,
   consensus: false,
+  wrongNetwork: false,
   // Surfaced only once the in-run rewind budget is spent; the next sync run
   // starts with a fresh budget, so recovery really does continue.
   chainRecovery: true,

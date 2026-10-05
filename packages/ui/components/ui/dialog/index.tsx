@@ -56,6 +56,9 @@ const DialogPortal = DialogPrimitive.Portal;
 
 const DialogClose = DialogPrimitive.Close;
 
+/** the unstyled content layer, for a modal that draws its own box */
+const DialogLayer = DialogPrimitive.Content;
+
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
@@ -185,6 +188,7 @@ DialogDescription.displayName = DialogPrimitive.Description.displayName;
 
 export {
   Dialog,
+  DialogLayer,
   DialogPortal,
   DialogOverlay,
   DialogClose,

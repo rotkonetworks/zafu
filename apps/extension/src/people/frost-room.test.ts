@@ -24,7 +24,9 @@ import {
   ceremonyOf,
   COURT,
   frostOps,
+  keepMine,
   majority,
+  mismatched,
   packFrost,
   startBody,
   foldFrost,
@@ -34,6 +36,9 @@ import {
   type Ceremony,
   type FrostCalls,
   type FrostIo,
+  propId,
+  readBody,
+  type FrostBody,
   type FrostStatus,
   type Seat,
 } from './frost-room';
@@ -82,6 +87,10 @@ beforeAll(async () => {
       encodeOrchardUnifiedAddress(hexToBytes(W.frost_derive_address_from_sk(pkp, sk, 0)), true),
   };
 });
+
+type PropBody = Extract<FrostBody, { t: 'prop' }>;
+/** a payment body under its own id */
+const propOf = (p: Omit<PropBody, 't' | 'id'>): PropBody => ({ t: 'prop', id: propId(p), ...p });
 
 const relayBoard = () => {
   const board = new Map<string, Map<string, Uint8Array>>();
@@ -223,6 +232,20 @@ const start = async (
 const current = (w: ReturnType<typeof wallet>, G: string) =>
   ceremonyOf(w.room(G).frost?.msgs, allowedIn(w.room(G), w.me(G).pubkey))!;
 
+/** every member but the starter taps "agree and make keys" for the ceremony it now sees */
+const agreeAll = async (ws: ReturnType<typeof wallet>[], G: string) => {
+  for (const w of ws) {
+    await w.service.check();
+    const c = current(w, G);
+    if (c && c.by !== w.me(G).pubkey && c.members.includes(w.me(G).pubkey)) {
+      await frostOps['frost-keep'](
+        { roomId: groupId(G), id: c.id, patch: { ok: true } },
+        w.service,
+      );
+    }
+  }
+};
+
 describe('a shared wallet made in its group room', () => {
   test.each([
     [3, 2],
@@ -236,6 +259,10 @@ describe('a shared wallet made in its group room', () => {
       ws.map(w => w.me(G).pubkey),
       k,
     );
+    // nobody's device joins until its person agrees
+    expect(await run(ws, G, 2)).toEqual(ws.map(() => 'waiting'));
+    expect(ws.slice(1).every(w => !current(w, G).r1.has(w.me(G).pubkey))).toBe(true);
+    await agreeAll(ws, G);
     expect(await run(ws, G)).toEqual(ws.map(() => 'done'));
 
     const seats = ws.map(w => w.seats);
@@ -268,12 +295,14 @@ describe('a shared wallet made in its group room', () => {
       ws.map(w => w.me(G).pubkey),
       2,
     );
+    await agreeAll([a!, b!], G);
     // the third member never opens zafu: the other two wait, nothing is lost
     expect(await run([a!, b!], G, 3)).toEqual(['waiting', 'waiting']);
     const c = ceremonyOf(a!.room(G).frost?.msgs, () => true)!;
     expect(c.members.filter(m => !c.r1.has(m))).toEqual([gone!.me(G).pubkey]);
 
     await start(a!, G, [a!.me(G).pubkey, b!.me(G).pubkey], 2, c.id);
+    await agreeAll([a!, b!], G);
     expect(await run([a!, b!], G)).toEqual(['done', 'done']);
     expect(a!.seats[0]!.address).toBe(b!.seats[0]!.address);
     expect(a!.seats[0]).toMatchObject({ threshold: 2, maxSigners: 2 });
@@ -291,6 +320,7 @@ describe('a shared wallet made in its group room', () => {
       ws.map(w => w.me(G).pubkey),
       2,
     );
+    await agreeAll(ws, G);
     // the starter answers its own start, then never comes back: no viewing key is sent
     expect(await a!.turn(G)).toBe('waiting');
     expect(await run([b!, c!], G, 2)).toEqual(['waiting', 'waiting']);
@@ -308,6 +338,7 @@ describe('a shared wallet made in its group room', () => {
       G,
       await packFrost(startBody(next.members, next.k, 'studio', { replaces: cer.id })),
     );
+    await agreeAll([b!, c!], G);
     expect(await run([b!, c!], G)).toEqual(['done', 'done']);
     expect(b!.seats[0]!.address).toBe(c!.seats[0]!.address);
     expect(await a!.turn(G)).toBe('idle');
@@ -328,9 +359,13 @@ describe('a shared wallet made in its group room', () => {
     const { ws, G } = await group(3);
     const members = ws.map(w => w.me(G).pubkey);
     await start(ws[0]!, G, members, 2);
+    await agreeAll(ws, G);
     // one member already answered the first start
     expect(await ws[1]!.turn(G)).toBe('waiting');
     await start(ws[0]!, G, members, 3, current(ws[1]!, G).id);
+    // another threshold is another thing to agree to
+    expect(await run(ws, G, 2)).toEqual(['waiting', 'waiting', 'waiting']);
+    await agreeAll(ws, G);
     expect(await run(ws, G)).toEqual(['done', 'done', 'done']);
     for (const w of ws) {
       expect(w.seats).toHaveLength(1);
@@ -372,6 +407,7 @@ describe('a shared wallet made in its group room', () => {
 
     // the court is a seat that waits for its service: nobody finishes without it
     await start(a!, G, [a!.me(G).pubkey, b!.me(G).pubkey, COURT], 2);
+    await agreeAll(ws, G);
     expect(await run(ws, G, 3)).toEqual(['waiting', 'waiting']);
   });
 
@@ -384,6 +420,7 @@ describe('a shared wallet made in its group room', () => {
       ws.map(w => w.me(G).pubkey),
       2,
     );
+    await agreeAll(ws, G);
     expect(await run(ws, G)).toEqual(['done', 'done', 'done']);
     const seat = a!.seats[0]!;
     const wallet = { ceremony: seat.ceremony, members: seat.members, threshold: 2 };
@@ -411,10 +448,9 @@ describe('a shared wallet made in its group room', () => {
     });
     // two spends: two alphas, one share each per signer
     const alphas = ['01'.padEnd(64, '0'), '02'.padEnd(64, '0')];
-    const prop = {
-      t: 'prop' as const,
-      id: 'f'.repeat(32),
+    const prop = propOf({
       w: seat.ceremony,
+      by: a!.me(G).pubkey,
       to: 'u1someone',
       amt: '125000000',
       fee: '10000',
@@ -422,7 +458,7 @@ describe('a shared wallet made in its group room', () => {
       alphas,
       si: [0, 1],
       pczt: 'aa',
-    };
+    });
     await a!.post(G, await packFrost(prop));
     await seal(prop, callsOf(seat), a!.io(G));
     const view = async (w: ReturnType<typeof wallet>) => {
@@ -459,5 +495,252 @@ describe('a shared wallet made in its group room', () => {
     expect(bMine).toMatchObject({ released: true });
     expect(bMine).not.toHaveProperty('n');
     expect((await view(c!)).mine).toMatchObject({ no: true });
+  });
+
+  test('a member who says two round-one broadcasts stops the ceremony, and nothing is saved', async () => {
+    const { ws, G } = await group(3);
+    const [a, b, m] = ws;
+    await start(
+      a!,
+      G,
+      ws.map(w => w.me(G).pubkey),
+      2,
+    );
+    await agreeAll(ws, G);
+    for (const w of ws) {
+      expect(await w.turn(G)).toBe('waiting');
+    }
+    // m says round one again, with another polynomial, for the slower ones to use
+    const c = current(m!, G);
+    const other = await frost.part1(3, 2);
+    await m!.post(
+      G,
+      await packFrost({ t: 'r1', id: c.id, b: other.broadcast, x: m!.me(G).xwingPublicKey }),
+    );
+    const last = await run(ws, G);
+    expect(last).toEqual(['mismatch', 'mismatch', 'mismatch']);
+    for (const w of ws) {
+      expect(w.seats).toEqual([]);
+      const seen = current(w, G);
+      expect([...seen.split]).toEqual([m!.me(G).pubkey]);
+      expect(mismatched(seen)).toBe(true);
+      // the first broadcast is the one read; the second never replaces it
+      expect(seen.r1.get(m!.me(G).pubkey)!.b).not.toBe(other.broadcast);
+    }
+    void b;
+  });
+
+  test('a member who shows two devices two round-one broadcasts: they never make keys from it', async () => {
+    // the relay (or the member) hands A one broadcast from M and B another;
+    // neither of them ever sees both, so only the round-one hash can tell
+    const [A, B, M] = PHRASES.slice(0, 3).map(ph => deriveRoomKeys(ph, 0, 'aa'.repeat(16)));
+    const members = [A!.pubkey, B!.pubkey, M!.pubkey];
+    const id = 'c'.repeat(32);
+    const [pa, pb, x, y] = [
+      await frost.part1(3, 2),
+      await frost.part1(3, 2),
+      await frost.part1(3, 2),
+      await frost.part1(3, 2),
+    ];
+    const r1 = (mb: string) =>
+      new Map([
+        [A!.pubkey, { b: pa!.broadcast, x: A!.xwingPublicKey }],
+        [B!.pubkey, { b: pb!.broadcast, x: B!.xwingPublicKey }],
+        [M!.pubkey, { b: mb, x: M!.xwingPublicKey }],
+      ]);
+    const ceremony = (mb: string): Ceremony => ({
+      id,
+      by: A!.pubkey,
+      k: 2,
+      members,
+      label: 'studio',
+      at: 1,
+      last: 1,
+      r1: r1(mb),
+      r2: new Map(),
+      fvk: new Map(),
+      split: new Set(),
+    });
+    const kept: Record<string, Record<string, unknown>> = { a: {}, b: {} };
+    const saved: Seat[] = [];
+    const part3 = vi.fn(frost.part3);
+    const calls = { ...frost, part3 };
+    const ioOf = (who: 'a' | 'b'): FrostIo => ({
+      post: async () => undefined,
+      keep: async (_id, patch) => (kept[who] = keepMine(kept[who], patch) as never),
+      save: async seat => void saved.push(seat),
+    });
+    kept['a'] = { s1: pa!.secret, b1: pa!.broadcast };
+    kept['b'] = { s1: pb!.secret, b1: pb!.broadcast, ok: true };
+    const ca = ceremony(x!.broadcast);
+    const cb = ceremony(y!.broadcast);
+    // the starter seals the viewing-key secret and makes its round two from X
+    expect(await advance(ca, kept['a'], A!, calls, ioOf('a'))).toBe('waiting');
+    // B makes its round two from Y
+    expect(await advance(cb, kept['b'], B!, calls, ioOf('b'))).toBe('waiting');
+    const ha = kept['a']!['h1'] as string;
+    const hb = kept['b']!['h1'] as string;
+    expect(ha).toMatch(/^[0-9a-f]{64}$/);
+    expect(hb).not.toBe(ha);
+    // each sees the other's round two, and M's, which M tailored to each
+    const r2 = (who: 'a' | 'b') => ({
+      p: kept[who]!['p2'] as string[],
+      h1: kept[who]!['h1'] as string,
+    });
+    ca.r2.set(B!.pubkey, r2('b')).set(M!.pubkey, { p: ['00'], h1: ha });
+    cb.r2.set(A!.pubkey, r2('a')).set(M!.pubkey, { p: ['00'], h1: hb });
+    ca.sk = {};
+    expect(await advance(ca, kept['a'], A!, calls, ioOf('a'))).toBe('mismatch');
+    expect(mismatched(ca)).toBe(true);
+    // B is not given the viewing-key secret here; with it, B stops the same way
+    cb.sk = { [B!.pubkey]: 'AA==' };
+    expect(await advance(cb, kept['b'], B!, calls, ioOf('b'))).toBe('mismatch');
+    expect(part3).not.toHaveBeenCalled();
+    expect(saved).toEqual([]);
+  });
+
+  test('another start under the same id does not take over its consent: it stops it', async () => {
+    const { ws, G } = await group(3);
+    const [a, b, m] = ws;
+    const members = ws.map(w => w.me(G).pubkey);
+    const honest = startBody(members, 2, 'studio') as Extract<FrostBody, { t: 'start' }>;
+    await a!.post(G, await packFrost(honest));
+    await agreeAll(ws, G);
+    // m says a start of its own under that id, with another threshold
+    await m!.post(G, await packFrost({ ...honest, k: 3, label: 'studio' }));
+    // whichever of the two starts a device reads as the ceremony (their ids
+    // tie, their message ids are random), every member stops, the starter too,
+    // and nobody is asked to agree to it again
+    expect(await run(ws, G)).toEqual(['mismatch', 'mismatch', 'mismatch']);
+    for (const w of ws) {
+      expect(await w.turn(G)).toBe('mismatch');
+    }
+    for (const w of ws) {
+      expect(w.seats).toEqual([]);
+      expect(current(w, G).split).toEqual(new Set([a!.me(G).pubkey, m!.me(G).pubkey]));
+    }
+    void b;
+  });
+
+  test('the wallet is compared as a commitment: the viewing key is never said in the room', async () => {
+    const { ws, G } = await group(2);
+    await start(
+      ws[0]!,
+      G,
+      ws.map(w => w.me(G).pubkey),
+      2,
+    );
+    await agreeAll(ws, G);
+    expect(await run(ws, G)).toEqual(['done', 'done']);
+    const ufvk = ws[0]!.seats[0]!.orchardFvk;
+    expect(ufvk).toMatch(/^uview/);
+    for (const w of ws) {
+      const msgs = w.room(G).frost?.msgs ?? [];
+      expect(JSON.stringify(msgs)).not.toContain(ufvk);
+      const fvks = msgs.filter(m => m.body.t === 'fvk');
+      expect(fvks).toHaveLength(2);
+      expect(new Set(fvks.map(m => (m.body as { h: string }).h)).size).toBe(1);
+    }
+  });
+
+  test('the viewing-key secret opens only for its member, in its ceremony', async () => {
+    const { ws, G } = await group(2);
+    const [a, b] = ws;
+    await start(a!, G, [a!.me(G).pubkey, b!.me(G).pubkey], 2);
+    await agreeAll(ws, G);
+    await a!.turn(G);
+    await b!.turn(G);
+    await a!.turn(G);
+    await b!.service.check();
+    const c = current(b!, G);
+    expect(c.sk?.[b!.me(G).pubkey]).toBeDefined();
+    // the same box under another ceremony's id does not open: B stops instead of using it
+    const moved = { ...c, id: 'd'.repeat(32) };
+    const mine = { ...b!.room(G).frost!.mine![c.id]!, s2: 'x', h1: 'e'.repeat(64) };
+    expect(await advance(moved, mine, b!.me(G), frost, b!.io(G))).toBe('mismatch');
+  });
+});
+
+describe('room records a peer can write', () => {
+  const id = 'a'.repeat(32);
+  const key = 'b'.repeat(64);
+  const start = { t: 'start', id, k: 2, m: [key, 'c'.repeat(64)], label: 'studio' };
+
+  test.each([
+    ['a label that is not text', { ...start, label: {} }],
+    ['a label too long', { ...start, label: 'x'.repeat(49) }],
+    [
+      'a deal amount that is not whole zatoshi',
+      { ...start, deal: { amount: '1.5', what: 'x', payer: 'other' } },
+    ],
+    [
+      'a deal amount that is a number',
+      { ...start, deal: { amount: 15, what: 'x', payer: 'other' } },
+    ],
+    ['a deal without what', { ...start, deal: { amount: '15', payer: 'other' } }],
+    [
+      'a deal whose what is not text',
+      { ...start, deal: { amount: '15', what: { a: 1 }, payer: 'other' } },
+    ],
+    ['a deal with another payer', { ...start, deal: { amount: '15', what: 'x', payer: 'court' } }],
+    ['a deal that is a string', { ...start, deal: 'all of it' }],
+    ['a replaced id that is not one', { ...start, r: 7 }],
+    ['a member twice', { ...start, m: [key, key] }],
+    ['a threshold above the members', { ...start, k: 3 }],
+    ['an r1 without an X-Wing key', { t: 'r1', id, b: 'aa', x: 'bb' }],
+    ['an sk box that is not base64', { t: 'sk', id, s: { [key]: '<script>' } }],
+    ['an sk box for someone who is not a key', { t: 'sk', id, s: { bob: 'AA==' } }],
+    ['an r2 without its round-one hash', { t: 'r2', id, p: ['aa'] }],
+    ['an fvk with the viewing key in it', { t: 'fvk', id, u: 'uview1...', a: 'u1...' }],
+    ['a set naming someone twice', { t: 'set', id, m: [key, key] }],
+    ['a sent that is not a txid', { t: 'sent', id, tx: 'nope' }],
+    ['no id', { t: 'no' }],
+    ['null', null],
+    ['an array', [start]],
+  ])('%s is not read', (_name, body) => {
+    expect(readBody(body)).toBeUndefined();
+  });
+
+  test('what is read is built again from the checked fields only', () => {
+    const deal = { amount: '15', what: 'logo', payer: 'other', extra: { evil: 1 } };
+    const read = readBody({ ...start, deal, more: '<b>' });
+    expect(read).toEqual({ ...start, deal: { amount: '15', what: 'logo', payer: 'other' } });
+  });
+
+  test('a payment said under an id that is not its own is not read', () => {
+    const p = propOf({
+      w: id,
+      by: key,
+      to: 'u1someone',
+      amt: '100',
+      fee: '10',
+      sighash: '0'.repeat(64),
+      alphas: ['1'.repeat(64)],
+      si: [0],
+      pczt: 'aa',
+    });
+    expect(readBody(p)).toEqual(p);
+    expect(readBody({ ...p, to: 'u1mallory' })).toBeUndefined();
+    expect(readBody({ ...p, by: 'c'.repeat(64) })).toBeUndefined();
+    expect(readBody({ ...p, pczt: 'bb' })).toBeUndefined();
+  });
+
+  test('malformed records are dropped as they arrive, and ones already kept are never shown', async () => {
+    const room = { id: 'g:x', kind: 'group' } as PeopleRoom;
+    const records = (
+      await Promise.all([
+        packFrost({ ...start, label: {} } as never),
+        packFrost({ ...start, deal: { amount: '1.5', what: 'x', payer: 'other' } } as never),
+      ])
+    ).flat();
+    const fold = await foldFrost(
+      room,
+      records.map((body, i) => ({ author: key, ts: 1, body, hash: String(i) }) as never),
+    );
+    expect(fold!(room).frost!.msgs).toEqual([]);
+    // a start an older build kept, label and all: the ceremony reads as none
+    const kept = [{ from: key, at: 1, mid: '1', body: { ...start, label: {} } as never }];
+    expect(ceremonyOf(kept, () => true)).toBeUndefined();
+    expect(ceremonyOf([{ ...kept[0]!, body: start as never }], () => true)?.label).toBe('studio');
   });
 });

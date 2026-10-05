@@ -503,6 +503,7 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
           allow: on,
           reason: on ? undefined : REASON[why],
           ...(spec.gate.kind === 'optional' ? { shared: true } : {}),
+          ...(spec.purpose === 'chain-rpc' ? { node: true } : {}),
         });
       }
     }

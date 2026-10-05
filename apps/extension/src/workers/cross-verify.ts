@@ -3,13 +3,11 @@ import { ZCASH_MAINNET_ENDPOINTS, type ZcashEndpointPreset } from '../config/zca
 /**
  * Cross-endpoint consistency check.
  *
- * The trust model has a hole its own design acknowledges: the Ligerito header
- * proof carries no constraint system, so the roots it "proves" are values the
- * prover chose and absorbed into its own transcript. Nothing binds them to
- * consensus, and block/action omission is undetectable from a single server.
- * Cross-verification against an INDEPENDENT operator is the stated mitigation.
- * It had zero call sites - the one thing standing between a lying server and
- * the user was never wired up.
+ * The zcash node is trusted for chain data: nothing the wallet receives is
+ * proven to it (the old header proof bound only values the server chose, and
+ * it is gone), and block or action omission is undetectable from a single
+ * server. Cross-verification against an INDEPENDENT operator is the one
+ * mitigation, and it is opt-in.
  *
  * This is deliberately modest, and it is worth being precise about what it
  * does and does not buy:
@@ -18,7 +16,7 @@ import { ZCASH_MAINNET_ENDPOINTS, type ZcashEndpointPreset } from '../config/zca
  *   with - a forged tip, a stalled tip presented as current, or a commitment
  *   tree that diverges from the network's.
  *
- *   It does NOT make the wallet trustless. Two endpoints run by the same
+ *   It does NOT remove the trust in the node. Two endpoints run by the same
  *   operator, or colluding, agree with each other. It cannot detect omission
  *   that both servers perform. And it is a liveness/consistency check, not a
  *   proof - a real fix is a constraint system, which is a design project.

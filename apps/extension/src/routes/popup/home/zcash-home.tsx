@@ -95,6 +95,7 @@ export const ZcashContent = ({
     workerSyncHeight,
     error: syncError,
     failure: syncFailure,
+    notesPreparing,
   } = useZcashSyncStatus();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -275,6 +276,7 @@ export const ZcashContent = ({
           rebuilds
           synced={allSynced}
           failure={syncError ? syncFailure : null}
+          preparing={notesPreparing}
           percent={overallPct}
           connecting={chainHeight <= 0}
           currentHeight={workerSyncHeight}

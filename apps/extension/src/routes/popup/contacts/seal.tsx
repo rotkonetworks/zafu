@@ -1,20 +1,21 @@
 /**
- * check the seal (Cv2Seal, Cv2SealMatch, Cv2SealNoMatch): side by side, both
- * screens show the seal of the two relationship keys. The same on both means
- * the card you hold is theirs and theirs is yours; only then is the person
- * marked "seal checked". Until then they show where their card came from.
+ * check the seal (Cv2Seal, Cv2SealMatch, Cv2SealNoMatch): side by side, or
+ * read aloud, both screens show the seal of the two relationship keys as six
+ * words and a picture. The same on both means the card you hold is theirs
+ * and theirs is yours; only then is the person marked "seal checked". Until
+ * then they show where their card came from.
  */
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
-import { ZidSeal } from '@repo/ui/components/ui/zid-seal';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { deriveRelationshipKeys } from '../../../state/identity';
 import { pairSeal } from '../../../people/cards';
 import { ScreenHeader } from '../../../components/screen-header';
 import { PopupPath, contactPath } from '../paths';
+import { SealCompare } from './seal-compare';
 
 /** where a person's card came from, until the seal is checked */
 export const sourceLine = (c: {
@@ -33,6 +34,10 @@ export const sourceLine = (c: {
 
 const day = (ms: number) =>
   new Date(ms).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' }).toLowerCase();
+
+/** where a card came from, before the seal: the cue a pay screen shows */
+export const uncheckedLine = (c: { sealChecked?: number; source?: 'link' | 'scan' | 'memo' }) =>
+  !c.sealChecked && c.source ? `${sourceLine(c)} · seal not checked` : undefined;
 
 /** the seal, as a picture and as the hex both screens can read aloud */
 const useSeal = (contactId: string) => {
@@ -73,19 +78,7 @@ export function SealPage() {
       <ScreenHeader title='check the seal' backPath={PopupPath.CONTACTS} />
       <main className='flex grow flex-col items-center gap-4 px-4 py-6'>
         <span className='text-xs text-fg-muted'>you and {name}</span>
-        {seal ? (
-          <>
-            <ZidSeal hex={seal} size={150} tone={said === 'match' ? 'hanko' : 'muted'} />
-            <span className='font-mono text-sm tracking-wider text-fg-high'>
-              {seal.slice(0, 16).match(/..../g)?.join(' ')}
-            </span>
-          </>
-        ) : (
-          <span
-            className='size-[150px] border border-dashed border-border-hard'
-            aria-hidden='true'
-          />
-        )}
+        <SealCompare seal={seal} done={said === 'match'} />
         {said === 'match' ? (
           <div className='flex w-full flex-col border border-border-soft bg-elev-1 text-xs'>
             <span className='border-b border-border-soft px-3.5 py-2.5 text-fg-high'>
@@ -105,7 +98,7 @@ export function SealPage() {
           </div>
         ) : (
           <span className='text-xs text-fg-muted'>
-            {name} sees this same seal · compare side by side
+            {name} sees the same six words · read them together
           </span>
         )}
       </main>

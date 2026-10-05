@@ -19,6 +19,33 @@ import type { RecentAddress } from './recent-addresses';
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
 
+/**
+ * Stored knownSites as the store keeps them, from either shape (OriginRecord,
+ * or the newer OriginPermissions). Another build's entry with no `denied`, a
+ * null entry or a non-array is tolerated, never thrown on: both the hydrate
+ * and the change listener read through here. null when it is not a list.
+ */
+export const toOriginRecords = (raw: unknown): OriginRecord[] | null =>
+  Array.isArray(raw)
+    ? (raw as unknown[]).filter(isRecord).map(r => {
+        if (Array.isArray(r['granted'])) {
+          const granted = storedList<string>(r['granted']);
+          const denied = storedList<string>(r['denied']);
+          const choice = granted.includes('connect')
+            ? UserChoice.Approved
+            : denied.includes('connect')
+              ? UserChoice.Denied
+              : UserChoice.Ignored;
+          return {
+            origin: r['origin'] as string,
+            choice,
+            date: r['grantedAt'] as number,
+          } as OriginRecord;
+        }
+        return r as unknown as OriginRecord;
+      })
+    : null;
+
 export type Middleware = <
   T,
   Mps extends [StoreMutatorIdentifier, unknown][] = [],
@@ -111,29 +138,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
           readEncrypted<unknown[]>(localExtStorage, sessionExtStorage, 'messages' as LK),
           localExtStorage.get('knownSites'), // plaintext - not encrypted
         ]);
-      const knownSites = Array.isArray(rawKnownSites)
-        ? (rawKnownSites as unknown[]).filter(isRecord).map(r => {
-            // handle new OriginPermissions shape
-            if ('granted' in r && Array.isArray(r['granted'])) {
-              const granted = r['granted'] as string[];
-              const denied = storedList<string>(r['denied']);
-              let choice: UserChoice;
-              if (granted.includes('connect')) {
-                choice = UserChoice.Approved;
-              } else if (denied.includes('connect')) {
-                choice = UserChoice.Denied;
-              } else {
-                choice = UserChoice.Ignored;
-              }
-              return {
-                origin: r['origin'] as string,
-                choice,
-                date: r['grantedAt'] as number,
-              } as OriginRecord;
-            }
-            return r as unknown as OriginRecord;
-          })
-        : null;
+      const knownSites = toOriginRecords(rawKnownSites);
       const decryptedAny = !!(wallets || zcashWallets || contacts || recentAddresses || messages);
 
       // forward reconciliation: a frost-multisig vault with no zcashWallets
@@ -243,28 +248,8 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
       }
       // knownSites is plaintext - hydrate directly (convert OriginPermissions if needed)
       if (changes.knownSites) {
-        const raw = changes.knownSites.newValue;
-        if (Array.isArray(raw)) {
-          const sites = (raw as Record<string, unknown>[]).map(r => {
-            if ('granted' in r && Array.isArray(r['granted'])) {
-              const granted = r['granted'] as string[];
-              const denied = r['denied'] as string[];
-              let choice: UserChoice;
-              if (granted.includes('connect')) {
-                choice = UserChoice.Approved;
-              } else if (denied.includes('connect')) {
-                choice = UserChoice.Denied;
-              } else {
-                choice = UserChoice.Ignored;
-              }
-              return {
-                origin: r['origin'] as string,
-                choice,
-                date: r['grantedAt'] as number,
-              } as OriginRecord;
-            }
-            return r as unknown as OriginRecord;
-          });
+        const sites = toOriginRecords(changes.knownSites.newValue);
+        if (sites) {
           set(
             produce((state: AllSlices) => {
               state.connectedSites.knownSites = sites;

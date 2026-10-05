@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { hexToBytes } from '@noble/hashes/utils';
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { useStore } from '../state';
 import { deriveRelationshipKeys, deriveRoomKeys, type XidKeys } from '../state/identity';
@@ -30,6 +30,7 @@ import {
   allowedIn,
   ceremonyOf,
   packFrost,
+  propId,
   startBody,
   type Ceremony,
   type Deal,
@@ -300,14 +301,12 @@ export const proposePayment = async (
   if (!u.alphas.length) {
     throw new Error('the shared wallet has nothing to spend yet');
   }
-  const id = bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
   const io = ioFor(room);
   // the room reads lowercase hex and a whole-zatoshi fee: say it that way, or fail here
   const hex = (h: string) => h.toLowerCase();
-  const prop = {
-    t: 'prop' as const,
-    id,
+  const said = {
     w: w.ceremony,
+    by: (await roomKeysOf(room)).pubkey,
     to,
     amt: amountZat,
     fee: BigInt(u.fee).toString(),
@@ -316,6 +315,9 @@ export const proposePayment = async (
     si: u.spendIndices,
     pczt: hex(u.pcztHex),
   };
+  // its id is a hash of what it says: nobody can say another payment under it
+  const id = propId(said);
+  const prop = { t: 'prop' as const, id, ...said };
   await io.post(await packFrost(prop), `prop:${id}`);
   if (u.coldSendId) {
     await io.keep(id, { cold: u.coldSendId });

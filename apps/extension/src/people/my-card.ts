@@ -67,7 +67,8 @@ export const givenOf = (c: CardV2): GivenCard => ({
   ...(c.zcash ? { zcash: c.zcash } : {}),
   ...(c.penumbra ? { penumbra: c.penumbra } : {}),
   relay: c.relay,
-  caps: c.caps,
+  // what a card says about its own room, not about reaching you: never makes it stale
+  caps: c.caps & ~Cap.sealed,
 });
 
 /** what your card for one person says right now, before it is signed */
@@ -110,6 +111,7 @@ export const contactFromAnswer = (
     addresses: addressesOf(answer),
     cardV2: room.card.answer,
     source: room.card.via === 'memo' ? 'memo' : 'link',
+    ...(room.card.checked ? { sealChecked: room.card.checked } : {}),
     given: givenOf(mine),
   };
 };
@@ -203,7 +205,8 @@ export const useMyCards = () => {
       ...(at.testnet ? { testnet: true } : {}),
       ...(at.penumbraOn ? { penumbra: await penumbra(mnemonic, o.given?.penumbra) } : {}),
       relay: at.relay,
-      caps: at.caps,
+      // only a card you show is answered in its room: it says it reads sealed answers
+      caps: at.caps | (kind === 'card' ? Cap.sealed : 0),
       created: minutes(),
     };
     const b64 = cardB64(signCardV2(card, keys.seed));
@@ -215,6 +218,8 @@ export const useMyCards = () => {
 
   return {
     ready: keyInfo?.type === 'mnemonic',
+    /** this wallet keeps no recovery phrase here (zigner, ledger, a shared wallet): no cards */
+    cannot: !!keyInfo && keyInfo.type !== 'mnemonic',
     walletId: keyInfo?.id,
     /** a card for the next person: a fresh relationship and an id their contact will have */
     fresh: async () => {
@@ -240,6 +245,8 @@ export const useMyCards = () => {
 const sending = new Set<string>();
 /** contacts whose card was checked against these inputs in this window */
 const checked = new Set<string>();
+/** wallets whose old unanswered cards were let go, and closes retried, in this window */
+const swept = new Set<string>();
 
 /**
  * Keep contacts in step with the rooms (mounted on the people screens):
@@ -275,8 +282,17 @@ export const useCardSync = (): void => {
       }
     };
     const byId = new Map(contacts.map(c => [c.id, c]));
+    if (!swept.has(walletId)) {
+      swept.add(walletId);
+      void peopleCall('card-expire', {}).catch(() => swept.delete(walletId));
+    }
     for (const r of rooms) {
       const c = r.card;
+      // a close that did not leave last time goes now
+      if (r.kind === 'card' && c?.mine && c.state === 'cancelling' && !swept.has(r.id)) {
+        swept.add(r.id);
+        once(`cancel:${r.id}`, () => peopleCall('card-cancel', { roomId: r.id }));
+      }
       if (r.kind === 'card' && c?.mine && c.state === 'answered' && !byId.has(c.contactId)) {
         const data = contactFromAnswer(r, walletId);
         if (data) {

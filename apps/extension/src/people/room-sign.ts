@@ -13,15 +13,29 @@
  *         names it (it already agreed to exactly this PCZT); the nonces go
  *   sent  the proposer: aggregated, completed and broadcast, as this txid
  *
+ * What a member seals is what it signs, and nothing else:
+ *   - a payment's id is a hash of all it says and of its proposer (see
+ *     frost-room propId), so no other payment and no other member can be said
+ *     under it; the first copy is the one read;
+ *   - "review and seal" keeps a hash of exactly what was reviewed, and a
+ *     device signs only while the payment still hashes to it;
+ *   - only the proposer names the signers, once: a second, different list
+ *     stops the payment instead of replacing the first;
+ *   - a signer posts the shares it kept, never ones it made again.
+ *
  * A proposal is one PCZT, so it lives as long as the transaction's expiry
  * (about two hours): sealing an intent ahead of the build is what is left to
  * do for members who come by later.
  */
 
-import { packFrost, type FrostIo, type FrostMine, type FrostMsg } from './frost-room';
+import { bytesToHex } from '@noble/hashes/utils';
+import { sha256 } from '@noble/hashes/sha256';
+import { packFrost, readMsgs, type FrostIo, type FrostMine, type FrostMsg } from './frost-room';
 
 export interface Proposal {
   id: string;
+  /** the shared wallet it spends from (its ceremony) */
+  w: string;
   by: string;
   /** seconds */
   at: number;
@@ -37,7 +51,37 @@ export interface Proposal {
   set?: string[];
   shares: Map<string, string[]>;
   sent?: string;
+  /** the proposer named two different signer lists: nobody signs it */
+  split?: boolean;
 }
+
+/** what a member reviews in a payment */
+export type Reviewed = Pick<
+  Proposal,
+  'id' | 'w' | 'by' | 'to' | 'amt' | 'fee' | 'sighash' | 'alphas' | 'si' | 'pczt'
+>;
+
+/** the hash "review and seal" keeps: a device signs only a payment that still hashes to it */
+export const reviewOf = (p: Reviewed): string =>
+  bytesToHex(
+    sha256(
+      new TextEncoder().encode(
+        JSON.stringify([
+          'zafu-frost-review-v1',
+          p.id,
+          p.w,
+          p.by,
+          p.to,
+          p.amt,
+          p.fee,
+          p.sighash,
+          p.alphas,
+          p.si,
+          p.pczt,
+        ]),
+      ),
+    ),
+  );
 
 /** the shared wallet a room's payments spend from, as its seat records it */
 export interface RoomWallet {
@@ -46,13 +90,26 @@ export interface RoomWallet {
   threshold: number;
 }
 
-/** the payments proposed from this wallet, oldest first, read from its members only */
+/**
+ * The payments proposed from this wallet, oldest first, read from its members
+ * only. A payment is said by its own proposer (its id binds them); the first
+ * of each record per member counts, and a member's second, different
+ * commitments or shares are not counted at all.
+ */
 export const proposalsOf = (msgs: FrostMsg[] | undefined, w: RoomWallet): Proposal[] => {
+  const all = readMsgs(msgs);
   const props = new Map<string, Proposal>();
-  for (const { from, at, body } of msgs ?? []) {
-    if (body.t === 'prop' && body.w === w.ceremony && w.members.includes(from)) {
+  for (const { from, at, body } of all) {
+    if (
+      body.t === 'prop' &&
+      body.w === w.ceremony &&
+      body.by === from &&
+      w.members.includes(from) &&
+      !props.has(body.id)
+    ) {
       props.set(body.id, {
         id: body.id,
+        w: body.w,
         by: from,
         at,
         to: body.to,
@@ -68,11 +125,23 @@ export const proposalsOf = (msgs: FrostMsg[] | undefined, w: RoomWallet): Propos
       });
     }
   }
-  for (const { from, body } of msgs ?? []) {
+  const twice = new Set<string>();
+  const said = new Map<string, string>();
+  for (const { from, body } of all) {
     const p = props.get(body.id);
-    if (!p || !w.members.includes(from)) {
+    if (!p || !w.members.includes(from) || body.t === 'prop') {
       continue;
     }
+    const key = `${p.id}:${from}:${body.t}`;
+    const now = JSON.stringify(body);
+    const before = said.get(key);
+    if (before !== undefined) {
+      if (before !== now) {
+        twice.add(key);
+      }
+      continue;
+    }
+    said.set(key, now);
     const n = p.alphas.length;
     if (body.t === 'c' && body.c.length === n) {
       p.commits.set(from, body.c);
@@ -80,10 +149,26 @@ export const proposalsOf = (msgs: FrostMsg[] | undefined, w: RoomWallet): Propos
       p.shares.set(from, body.s);
     } else if (body.t === 'no') {
       p.no.add(from);
-    } else if (body.t === 'set' && from === p.by && body.m.length === w.threshold) {
+    } else if (
+      body.t === 'set' &&
+      from === p.by &&
+      body.m.length === w.threshold &&
+      body.m.every(m => w.members.includes(m))
+    ) {
       p.set = body.m;
     } else if (body.t === 'sent' && from === p.by) {
       p.sent = body.tx;
+    }
+  }
+  for (const key of twice) {
+    const [id, from, t] = key.split(':') as [string, string, string];
+    const p = props.get(id)!;
+    if (t === 'c') {
+      p.commits.delete(from);
+    } else if (t === 's') {
+      p.shares.delete(from);
+    } else if (t === 'set' && from === p.by) {
+      p.split = true;
     }
   }
   return [...props.values()];
@@ -101,13 +186,23 @@ export interface SignCalls {
 const say = async (io: FrostIo, body: Parameters<typeof packFrost>[0]) =>
   io.post(await packFrost(body), `${body.t}:${body.id}`);
 
-/** "review and seal": one round-one commitment per spend, the nonces kept here */
-export const seal = async (p: Pick<Proposal, 'id' | 'alphas'>, calls: SignCalls, io: FrostIo) => {
+/**
+ * "review and seal": one round-one commitment per spend, the nonces kept
+ * here, with the hash of exactly the payment that was reviewed.
+ */
+export const seal = async (p: Reviewed, calls: SignCalls, io: FrostIo) => {
   const r: { nonces: string; commitments: string }[] = [];
   for (let i = 0; i < p.alphas.length; i++) {
     r.push(await calls.round1());
   }
-  const mine = await io.keep(p.id, { n: r.map(x => x.nonces), cm: r.map(x => x.commitments) });
+  const mine = await io.keep(p.id, {
+    n: r.map(x => x.nonces),
+    cm: r.map(x => x.commitments),
+    rv: reviewOf(p),
+  });
+  if (mine.rv !== reviewOf(p)) {
+    throw new Error('this payment was sealed as something else. it is not signed.');
+  }
   await say(io, { t: 'c', id: p.id, c: mine.cm! });
   return mine;
 };
@@ -118,7 +213,8 @@ export const decline = async (p: Pick<Proposal, 'id'>, io: FrostIo) => {
   await say(io, { t: 'no', id: p.id });
 };
 
-export type SignStatus = 'open' | 'signing' | 'sent' | 'idle';
+/** 'refused': it is not the payment this device sealed, or its signers were named twice */
+export type SignStatus = 'open' | 'signing' | 'sent' | 'idle' | 'refused';
 
 /**
  * What a device does by itself once it sealed: the proposer names the
@@ -140,17 +236,28 @@ export const advanceSign = async (
   if (!mine.cm) {
     return 'idle';
   }
+  // only exactly what this device reviewed, and only under one list of signers
+  if (mine.rv !== reviewOf(p) || p.split) {
+    return 'refused';
+  }
   if (!p.commits.has(me)) {
     await say(io, { t: 'c', id: p.id, c: mine.cm });
   }
   const commits = new Map(p.commits).set(me, mine.cm);
   let set = p.set;
+  if (p.by === me && mine.set && set && mine.set.join() !== set.join()) {
+    return 'refused';
+  }
   if (!set && p.by === me) {
-    const sealed = [me, ...[...commits.keys()].filter(m => m !== me)];
-    if (sealed.length < w.threshold) {
-      return 'open';
+    if (!mine.set) {
+      const sealed = [me, ...[...commits.keys()].filter(m => m !== me)];
+      if (sealed.length < w.threshold) {
+        return 'open';
+      }
+      // kept before it is said: two windows of the proposer name one list
+      mine = await io.keep(p.id, { set: sealed.slice(0, w.threshold) });
     }
-    set = sealed.slice(0, w.threshold);
+    set = mine.set!;
     await say(io, { t: 'set', id: p.id, m: set });
   }
   if (!set?.includes(me)) {
@@ -165,8 +272,9 @@ export const advanceSign = async (
     for (let i = 0; i < p.alphas.length; i++) {
       s.push(await calls.sign(mine.n[i]!, p.sighash, p.alphas[i]!, per(i)));
     }
+    // the shares kept are the ones said: a second window's are never posted
     mine = await io.keep(p.id, { released: true, sh: s });
-    await say(io, { t: 's', id: p.id, s });
+    await say(io, { t: 's', id: p.id, s: mine.sh! });
   } else if (mine.sh && !p.shares.has(me)) {
     await say(io, { t: 's', id: p.id, s: mine.sh });
   }

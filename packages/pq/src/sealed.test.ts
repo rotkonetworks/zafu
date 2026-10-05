@@ -63,4 +63,14 @@ describe('hybrid PQ sealed box (X-Wing + AES-256-GCM)', () => {
     wire[0] = 0x02;
     expect(() => openXWing(s, wire)).toThrow(/unknown suite/);
   });
+
+  it('a box sealed to one context opens only in that context', () => {
+    const s = seed(6);
+    const { publicKey } = xwingKeypairFromSeed(s);
+    const wire = sealXWing(publicKey, utf8('secret'), utf8('ceremony-1:alice'));
+    expect(str(openXWing(s, wire, utf8('ceremony-1:alice')))).toBe('secret');
+    expect(() => openXWing(s, wire, utf8('ceremony-2:alice'))).toThrow();
+    expect(() => openXWing(s, wire)).toThrow();
+    expect(() => openXWing(s, sealXWing(publicKey, utf8('x')), utf8('ceremony-1:alice'))).toThrow();
+  });
 });

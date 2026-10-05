@@ -4,20 +4,13 @@
  * talk to, the honest step lines of a wait, and the clock those waits show.
  */
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
 
-/** the clock the waits show: re-renders the caller once a second */
-export const useNow = (ms = 1000): number => {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), ms);
-    return () => clearInterval(id);
-  }, [ms]);
-  return now;
-};
+/** the clock the waits show (one shared hook) */
+export { useNow } from '../hooks/use-now';
 
 export const Column = ({
   title,

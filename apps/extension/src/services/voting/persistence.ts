@@ -23,48 +23,182 @@ export interface VotingRoundRecord {
   createdAt: number;
 }
 
-interface StoredVotingRecord {
-  roundId: string;
+/**
+ * One round's hotkey record at rest: the whole record (which wallet, which
+ * round, when, the pubkey, the secret and the delegation state) in ONE
+ * identity-bound sealed box, under a hashed key, as the casts are. Storage
+ * shows neither which rounds a wallet joined nor when.
+ */
+interface HotkeyBox {
+  v: 2;
   walletId: string;
-  hotkeySecretBox: string; // JSON-stringified BoxJson
-  hotkeyPubkeyHex: string; // stored plaintext (not sensitive)
-  delegationStateBox: string | null; // JSON-stringified BoxJson, null if not yet set
+  roundId: string;
+  secret: string;
+  pubkey: string;
+  state: string | null;
   createdAt: number;
 }
 
-/**
- * Get the voting hotkeys storage namespace: a map of [walletId:roundId] -> StoredVotingRecord
- */
+/** the record as older builds stored it: wallet, round and time in the clear */
+interface LegacyVotingRecord {
+  roundId: string;
+  walletId: string;
+  hotkeySecretBox: string;
+  hotkeyPubkeyHex: string;
+  delegationStateBox: string | null;
+  createdAt: number;
+}
+
+const HOTKEYS = 'votingHotkeys';
+const HOTKEYS_LOCK = 'zafu-voting-hotkeys';
+
+/** Every read-modify-write of votingHotkeys runs under this one Web Lock. */
+const hotkeysLocked = <T>(fn: () => Promise<T>): Promise<T> =>
+  navigator.locks.request(HOTKEYS_LOCK, { mode: 'exclusive' }, fn) as Promise<T>;
+
+const hotkeyBoxKey = async (walletId: string, roundId: string): Promise<string> => {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(`zafu-voting-hotkeys:v2:${walletId}:${roundId}`),
+  );
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+};
+
+type HotkeyStorage = Record<string, string | LegacyVotingRecord>;
+
 const getVotingStorage = async (
   local: ExtensionStorage<LocalStorageState>,
-): Promise<Record<string, StoredVotingRecord>> => {
-  // votingHotkeys is stored in an extension that's not in the schema, so we cast to any
-  const stored = await (local as any).get('votingHotkeys');
-  return (stored as Record<string, StoredVotingRecord>) ?? {};
-};
+): Promise<HotkeyStorage> =>
+  // votingHotkeys is not in the schema (like votingCasts)
+  ((await (local as any).get(HOTKEYS)) as HotkeyStorage | undefined) ?? {};
 
-/**
- * Persist voting hotkeys storage back to local
- */
 const setVotingStorage = async (
   local: ExtensionStorage<LocalStorageState>,
-  storage: Record<string, StoredVotingRecord>,
+  storage: HotkeyStorage,
 ): Promise<void> => {
-  // votingHotkeys is stored in an extension that's not in the schema, so we cast to any
-  await (local as any).set('votingHotkeys', storage);
+  await (local as any).set(HOTKEYS, storage);
 };
 
 /**
- * Generate storage key from walletId and roundId
+ * Open an identity-bound sealed value and check it names `walletId`/`roundId`.
+ * Fail-closed: any decrypt, parse or identity failure throws.
  */
-const storageKey = (walletId: string, roundId: string): string => {
-  return `${walletId}:${roundId}`;
+const unsealBound = async <T extends { walletId: string; roundId: string }>(
+  key: Key,
+  boxJson: string,
+  walletId: string,
+  roundId: string,
+  label: string,
+): Promise<T> => {
+  const decrypted = await key.unseal(Box.fromJson(JSON.parse(boxJson)));
+  if (!decrypted) {
+    throw new Error(`failed to decrypt voting ${label} (tamper or wrong key)`);
+  }
+  const parsed = JSON.parse(decrypted) as T;
+  if (parsed.walletId !== walletId || parsed.roundId !== roundId) {
+    throw new Error(`voting ${label} identity mismatch - blob relocated across keys`);
+  }
+  return parsed;
+};
+
+/** a legacy record, opened (its boxes were identity-bound too) */
+const openLegacy = async (
+  key: Key,
+  r: LegacyVotingRecord,
+  walletId: string,
+  roundId: string,
+): Promise<HotkeyBox> => {
+  if (!r.hotkeySecretBox) {
+    throw new Error('voting round record has no hotkey - corrupt or partial record');
+  }
+  const secret = (
+    await unsealBound<{ walletId: string; roundId: string; secret?: string }>(
+      key,
+      r.hotkeySecretBox,
+      walletId,
+      roundId,
+      'hotkey',
+    )
+  ).secret;
+  const state = r.delegationStateBox
+    ? (
+        await unsealBound<{ walletId: string; roundId: string; state?: string }>(
+          key,
+          r.delegationStateBox,
+          walletId,
+          roundId,
+          'delegation state',
+        )
+      ).state
+    : null;
+  if (typeof secret !== 'string' || (state !== null && typeof state !== 'string')) {
+    throw new Error('voting round record malformed');
+  }
+  return {
+    v: 2,
+    walletId,
+    roundId,
+    secret,
+    pubkey: r.hotkeyPubkeyHex,
+    state: state ?? null,
+    createdAt: r.createdAt,
+  };
+};
+
+/** the round's record, from its sealed box or a legacy entry; undefined when there is none */
+const readHotkeyBox = async (
+  key: Key,
+  storage: HotkeyStorage,
+  walletId: string,
+  roundId: string,
+): Promise<HotkeyBox | undefined> => {
+  const sealed = storage[await hotkeyBoxKey(walletId, roundId)];
+  if (typeof sealed === 'string') {
+    const box = await unsealBound<HotkeyBox>(key, sealed, walletId, roundId, 'round record');
+    if (box.v !== 2 || typeof box.secret !== 'string' || !box.secret) {
+      throw new Error('voting round record has no hotkey - corrupt or partial record');
+    }
+    return box;
+  }
+  const legacy = storage[`${walletId}:${roundId}`];
+  return legacy && typeof legacy === 'object'
+    ? openLegacy(key, legacy, walletId, roundId)
+    : undefined;
+};
+
+/** Read-modify-write one round's record under the lock; a legacy entry is resealed and dropped. */
+const updateHotkeyBox = async (
+  local: ExtensionStorage<LocalStorageState>,
+  key: Key,
+  walletId: string,
+  roundId: string,
+  change: (box: HotkeyBox | undefined) => HotkeyBox,
+): Promise<void> =>
+  hotkeysLocked(async () => {
+    const storage = await getVotingStorage(local);
+    const next = change(await readHotkeyBox(key, storage, walletId, roundId));
+    storage[await hotkeyBoxKey(walletId, roundId)] = JSON.stringify(
+      (await key.seal(JSON.stringify(next))).toJson(),
+    );
+    delete storage[`${walletId}:${roundId}`];
+    await setVotingStorage(local, storage);
+  });
+
+const passwordKey = async (
+  session: ExtensionStorage<SessionStorageState>,
+  what: string,
+): Promise<Key> => {
+  const sessionKeyJson = await session.get('passwordKey');
+  if (!sessionKeyJson) {
+    throw new Error(`keyring locked - cannot ${what}`);
+  }
+  return Key.fromJson(sessionKeyJson);
 };
 
 /**
  * Save (or update) the voting hotkey for a round.
- * Encrypts the hotkey secret with the session key, stores plaintext pubkey.
- * The hotkey secret is NEVER stored unencrypted.
+ * The hotkey secret is NEVER stored unencrypted, and neither is the fact that
+ * this wallet joined this round.
  */
 const saveVotingHotkeyUnlocked = async (
   local: ExtensionStorage<LocalStorageState>,
@@ -74,40 +208,21 @@ const saveVotingHotkeyUnlocked = async (
   hotkeySecretHex: string,
   hotkeyPubkeyHex: string,
 ): Promise<void> => {
-  const sessionKeyJson = await session.get('passwordKey');
-  if (!sessionKeyJson) {
-    throw new Error('keyring locked - cannot save voting hotkey');
-  }
-
-  const key = await Key.fromJson(sessionKeyJson);
-  // P1: bind the record's identity INTO the sealed plaintext so a ciphertext
-  // cannot be relocated to another [walletId:roundId] key (all records share the
-  // session key, so without this an attacker with storage access could swap
-  // hotkeys/delegation-state across rounds or wallets). Verified on load.
-  const hotkeySecretBox = JSON.stringify(
-    (await key.seal(JSON.stringify({ v: 1, walletId, roundId, secret: hotkeySecretHex }))).toJson(),
-  );
-
-  const storage = await getVotingStorage(local);
-  const key_str = storageKey(walletId, roundId);
-  const existing = storage[key_str];
-
-  storage[key_str] = {
-    roundId,
+  const key = await passwordKey(session, 'save voting hotkey');
+  await updateHotkeyBox(local, key, walletId, roundId, existing => ({
+    v: 2,
     walletId,
-    hotkeySecretBox,
-    hotkeyPubkeyHex,
-    delegationStateBox: existing?.delegationStateBox ?? null,
+    roundId,
+    secret: hotkeySecretHex,
+    pubkey: hotkeyPubkeyHex,
+    state: existing?.state ?? null,
     createdAt: existing?.createdAt ?? Date.now(),
-  };
-
-  await setVotingStorage(local, storage);
+  }));
 };
 
 /**
- * Update (or create) the delegation state blob for a round.
- * The blob is treated as opaque JSON produced by wasm - stored verbatim.
- * If the hotkey hasn't been saved yet, this will be deferred when hotkey is saved.
+ * Update the delegation state blob for a round (opaque JSON from wasm, stored
+ * verbatim). The hotkey must be saved first.
  */
 const saveDelegationStateUnlocked = async (
   local: ExtensionStorage<LocalStorageState>,
@@ -116,39 +231,17 @@ const saveDelegationStateUnlocked = async (
   roundId: string,
   delegationStateJson: string,
 ): Promise<void> => {
-  const sessionKeyJson = await session.get('passwordKey');
-  if (!sessionKeyJson) {
-    throw new Error('keyring locked - cannot save delegation state');
-  }
-
-  const storage = await getVotingStorage(local);
-  const key_str = storageKey(walletId, roundId);
-  const existing = storage[key_str];
-
-  // P2 (fail-closed): delegation state must NEVER precede the hotkey - the hotkey
-  // is generated before delegation, and a record with delegation state but an
-  // empty hotkey is a footgun (casting would run with an empty seed). Reject
-  // instead of manufacturing a partial record.
-  if (!existing || !existing.hotkeySecretBox) {
-    throw new Error(
-      'cannot save delegation state before the voting hotkey for this round is persisted',
-    );
-  }
-
-  const key = await Key.fromJson(sessionKeyJson);
-  // P1: bind identity into the sealed plaintext (see saveVotingHotkey).
-  const delegationStateBox = JSON.stringify(
-    (
-      await key.seal(JSON.stringify({ v: 1, walletId, roundId, state: delegationStateJson }))
-    ).toJson(),
-  );
-
-  storage[key_str] = {
-    ...existing,
-    delegationStateBox,
-  };
-
-  await setVotingStorage(local, storage);
+  const key = await passwordKey(session, 'save delegation state');
+  await updateHotkeyBox(local, key, walletId, roundId, existing => {
+    // fail-closed: delegation state must NEVER precede the hotkey - a record
+    // with delegation state but an empty hotkey would cast with an empty seed
+    if (!existing?.secret) {
+      throw new Error(
+        'cannot save delegation state before the voting hotkey for this round is persisted',
+      );
+    }
+    return { ...existing, state: delegationStateJson };
+  });
 };
 
 /**
@@ -161,86 +254,23 @@ const loadVotingRoundRecordUnlocked = async (
   walletId: string,
   roundId: string,
 ): Promise<VotingRoundRecord | null> => {
-  const sessionKeyJson = await session.get('passwordKey');
-  if (!sessionKeyJson) {
-    throw new Error('keyring locked - cannot load voting round');
-  }
-
-  const key = await Key.fromJson(sessionKeyJson);
-  const storage = await getVotingStorage(local);
-  const key_str = storageKey(walletId, roundId);
-  const stored = storage[key_str];
-
-  if (!stored) {
-    return null;
-  }
-
-  // Unseal an identity-bound field (P1): decrypt, parse, and verify the embedded
-  // walletId/roundId match the key we loaded under - reject a relocated blob.
-  // Fail-closed (P3): any decrypt/parse/identity failure throws; we never return
-  // a partial or empty secret silently.
-  const unsealBound = async (
-    boxJson: string,
-    field: 'secret' | 'state',
-    label: string,
-  ): Promise<string> => {
-    const box = Box.fromJson(JSON.parse(boxJson));
-    const decrypted = await key.unseal(box);
-    if (!decrypted) {
-      throw new Error(`failed to decrypt voting ${label} (tamper or wrong key)`);
-    }
-    const parsed = JSON.parse(decrypted) as {
-      v: number;
-      walletId: string;
-      roundId: string;
-      secret?: string;
-      state?: string;
-    };
-    if (parsed.walletId !== walletId || parsed.roundId !== roundId) {
-      throw new Error(`voting ${label} identity mismatch - blob relocated across keys`);
-    }
-    const value = parsed[field];
-    if (typeof value !== 'string') {
-      throw new Error(`voting ${label} malformed`);
-    }
-    return value;
-  };
-
-  // P2: a stored record must always carry a hotkey (delegation-before-hotkey is
-  // rejected at write time); an empty box here is corruption, not "no secret".
-  if (!stored.hotkeySecretBox) {
-    throw new Error('voting round record has no hotkey - corrupt or partial record');
-  }
-
-  let hotkeySecretHex: string;
+  const key = await passwordKey(session, 'load voting round');
+  let box: HotkeyBox | undefined;
   try {
-    hotkeySecretHex = await unsealBound(stored.hotkeySecretBox, 'secret', 'hotkey');
+    box = await readHotkeyBox(key, await getVotingStorage(local), walletId, roundId);
   } catch (e) {
     throw new Error(`failed to load voting hotkey: ${e instanceof Error ? e.message : String(e)}`);
   }
-
-  let delegationStateJson: string | null = null;
-  if (stored.delegationStateBox) {
-    try {
-      delegationStateJson = await unsealBound(
-        stored.delegationStateBox,
-        'state',
-        'delegation state',
-      );
-    } catch (e) {
-      throw new Error(
-        `failed to load delegation state: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
+  if (!box) {
+    return null;
   }
-
   return {
-    roundId: stored.roundId,
-    walletId: stored.walletId,
-    hotkeySecretHex,
-    hotkeyPubkeyHex: stored.hotkeyPubkeyHex,
-    delegationStateJson,
-    createdAt: stored.createdAt,
+    roundId,
+    walletId,
+    hotkeySecretHex: box.secret,
+    hotkeyPubkeyHex: box.pubkey,
+    delegationStateJson: box.state,
+    createdAt: box.createdAt,
   };
 };
 
@@ -416,10 +446,13 @@ export const purgeVotingRound = async (
   walletId: string,
   roundId: string,
 ): Promise<void> => {
-  const storage = await getVotingStorage(local);
-  const key_str = storageKey(walletId, roundId);
-  delete storage[key_str];
-  await setVotingStorage(local, storage);
+  const boxKey = await hotkeyBoxKey(walletId, roundId);
+  await hotkeysLocked(async () => {
+    const storage = await getVotingStorage(local);
+    delete storage[boxKey];
+    delete storage[`${walletId}:${roundId}`];
+    await setVotingStorage(local, storage);
+  });
   const k = await castBoxKey(walletId, roundId);
   await castsLocked(async () => {
     const casts = await getCastStorage(local);

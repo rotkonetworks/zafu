@@ -17,11 +17,14 @@
  * entry in settings and the lightwalletd backend code path both stay.
  *
  * Two backend flavors (see state/keyring/zcash-backend.ts):
- *   - zidecar - rotko-hosted; adds a Ligerito header proof and the
- *     actions commitment check. Mempool watch works on this backend.
- *   - lightwalletd - public ECC lightwalletd / Zaino. Trusted (the
- *     wallet accepts what the server returns). Mempool watch is
+ *   - zidecar - rotko-hosted; mempool watch and the tip cross-check.
+ *   - lightwalletd - public ECC lightwalletd / Zaino. Mempool watch is
  *     unavailable on this backend.
+ *
+ * Either way the node is trusted for chain data: the wallet scans what it is
+ * served, so a node can hide or delay a payment, or show a spent note as
+ * unspent (that spend then fails). It never sees a key and cannot move
+ * funds. Nothing on either backend proves the chain to the wallet.
  *
  * The user is never asked which one a node is: the node says, through the
  * standard GetLightdInfo `vendor` (detectZcashBackend). A preset's
@@ -47,7 +50,7 @@ export interface ZcashEndpointPreset {
   readonly url: string;
   /** geographic / trust classification for the regional grouping UI */
   readonly region: RpcEndpointRegion;
-  /** trustless (zidecar) vs trusted (lightwalletd), until the node itself says */
+  /** zidecar or lightwalletd, until the node itself says (both are trusted for chain data) */
   readonly backend: ZcashBackend;
   /** the shipped default for a fresh wallet */
   readonly isDefault?: boolean;
@@ -56,10 +59,10 @@ export interface ZcashEndpointPreset {
 /**
  * Mainnet preset list. Order = visual order in the picker.
  *
- * Defaults to rotko's zidecar (trustless) because that's the only
- * surface where the wallet's privacy/verification properties hold
- * end-to-end. Anyone who can't reach it has the public lightwalletd
- * fallbacks one tap away.
+ * Defaults to rotko's zidecar: the only preset that answers grpc-web with
+ * CORS, and the one with mempool watch and the tip cross-check. It is
+ * trusted for chain data like any other node. Anyone who can't reach it has
+ * the public lightwalletd fallbacks one tap away.
  */
 export const ZCASH_MAINNET_ENDPOINTS: readonly ZcashEndpointPreset[] = [
   {
