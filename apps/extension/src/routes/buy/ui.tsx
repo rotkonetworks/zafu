@@ -1,35 +1,8 @@
-/** the buy page's small shared pieces: its store hook, its clock, its column */
+/** the buy page's store hook; its column and clock are the scroll pages' own */
 
-import { useEffect, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { buyStore, type BuyState } from './store';
 
+export { Column, useNow } from '../../components/scroll-page';
+
 export const useBuy = <T,>(sel: (s: BuyState) => T): T => useStore(buyStore, sel);
-
-/** the clock the waits show: re-renders the caller once a second */
-export const useNow = (ms = 1000): number => {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), ms);
-    return () => clearInterval(id);
-  }, [ms]);
-  return now;
-};
-
-export const Column = ({
-  title,
-  sub,
-  children,
-}: {
-  title: ReactNode;
-  sub?: ReactNode;
-  children?: ReactNode;
-}) => (
-  <div className='flex flex-col gap-5'>
-    <div className='flex flex-col gap-2'>
-      <h1 className='font-display text-[38px] leading-[1.15] text-fg-high'>{title}</h1>
-      {sub && <p className='text-[13px] leading-relaxed text-fg-muted'>{sub}</p>}
-    </div>
-    {children}
-  </div>
-);

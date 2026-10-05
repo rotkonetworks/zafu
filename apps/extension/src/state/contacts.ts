@@ -34,6 +34,7 @@ import {
   type SettingsBackup,
 } from './settings-backup';
 import type { PrivacySettings } from './privacy';
+import { exportLp, restoreLp } from '../lp/store';
 
 /**
  * Encrypted backup of ALL local, chain-irreplaceable personal data: contacts +
@@ -45,7 +46,7 @@ import type { PrivacySettings } from './privacy';
 export interface PersonalDataBackup {
   version: 4;
   exportedAt: number;
-  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames, passwordLogins, yourAddresses, relNext } JSON */
+  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames, passwordLogins, yourAddresses, relNext, people, lp } JSON */
   data: BoxJson;
   keyPrint: KeyPrintJson;
 }
@@ -714,7 +715,13 @@ export const createContactsSlice =
         }
         // rooms you are in and their relay history, capped per thread
         const people = await readPeopleBackup();
+        // each pocket's lp address index: a liquidity position is credited to it
+        const lp = await exportLp(id => {
+          const k = get().keyRing.keyInfos.find(x => x.id === id);
+          return k && pocketOwner(k);
+        });
         const plaintext = JSON.stringify({
+          lp,
           relNext,
           people,
           passwordLogins,
@@ -772,6 +779,8 @@ export const createContactsSlice =
           people?: unknown;
           /** relationship counters by owner key (absent in older backups) */
           relNext?: Record<string, BackupRelNext>;
+          /** each pocket's lp address index by owner key (absent in older backups) */
+          lp?: unknown;
         };
 
         // the vault id a backup's relationships name may be one this restore
@@ -842,6 +851,7 @@ export const createContactsSlice =
           await raiseRelationshipCounters(k.id, floor);
         }
         await importEgressChoices(parsed.egress);
+        await restoreLp(parsed.lp, owner => get().keyRing.keyInfos.find(k => pocketOwner(k) === owner)?.id);
         if (parsed.passwordLogins !== undefined) {
           await restorePasswordLogins(parsed.passwordLogins, mode);
         }

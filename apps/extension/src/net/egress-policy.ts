@@ -24,6 +24,7 @@ import {
 import { LIVE_REGISTRY_DIR, REGISTRY_EGRESS } from '../transparent/registry-endpoint';
 import { ZCASHME_BASE_URL } from '../services/zcashme/api';
 import { THORNODE_URLS } from '../services/thornode';
+import { MIDGARD_URL } from '../services/midgard';
 import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../config/contact-discovery-relay';
 import {
   PEOPLE_RELAY,
@@ -335,12 +336,21 @@ export const DESTINATIONS: DestinationSpec[] = [
     gate: { kind: 'optional' },
     urls: () => ['https://1click.chaindefuser.com'],
   },
+  // thornode: swaps over thorchain and the zec liquidity page both read it
   {
     id: 'thorchain',
-    label: 'thorchain swap',
+    label: 'thornode',
     purpose: 'swap',
     gate: { kind: 'optional' },
     urls: () => THORNODE_URLS,
+  },
+  // thorchain's indexer: the liquidity page's activity and an address's history
+  {
+    id: 'midgard',
+    label: 'midgard',
+    purpose: 'swap',
+    gate: { kind: 'optional' },
+    urls: () => [MIDGARD_URL],
   },
   {
     id: 'mayachain',

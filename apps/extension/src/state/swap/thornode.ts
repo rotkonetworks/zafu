@@ -161,7 +161,7 @@ export const nodeStatus = (s: NodeTxStatus, name: string): SwapStatusView => {
   return lines[stage];
 };
 
-const memoBytes = (memo: string) => new TextEncoder().encode(memo).length;
+export const memoBytes = (memo: string) => new TextEncoder().encode(memo).length;
 
 const open = (a: InboundAddress | undefined) =>
   !!a && !a.halted && !a.global_trading_paused && !a.chain_trading_paused;

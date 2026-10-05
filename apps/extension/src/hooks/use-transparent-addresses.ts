@@ -194,6 +194,17 @@ export const claimSwapTAddress = async (
   return { index, address };
 };
 
+/** the active pocket's transparent address at `index`: an lp address, derived again after a restore */
+export const tAddressAt = async (
+  s: AllSlices,
+  index: number,
+  isMainnet: boolean,
+): Promise<string | undefined> => (await deriveAt(tAddrSource(s), [index], isMainnet))[0];
+
+/** claim a fresh index for the active pocket, as a swap does: the pocket's one lp address */
+export const claimTAddress = (s: AllSlices, isMainnet: boolean): Promise<SwapTAddress> =>
+  claimSwapTAddress(tAddrSource(s), isMainnet);
+
 /** the transparent-address query for the active pocket, built from the store as it is now */
 export const activeTransparentAddressesQuery = (s: AllSlices, isMainnet: boolean) =>
   transparentAddressesQuery(tAddrSource(s), isMainnet);

@@ -7,7 +7,8 @@
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
 import { useStore } from '../../../state';
-import { selectActiveNetwork } from '../../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo } from '../../../state/keyring';
+import { LP_PRELOAD, openLpPage } from '../../../lp/open';
 import { isIdentityEnabled } from '../../../state/privacy';
 import { hasFeature } from '../../../config/networks';
 import { IRONWOOD_MIGRATION } from '../../../config/feature-flags';
@@ -19,12 +20,16 @@ interface Tile {
   label: string;
   desc: string;
   path: string;
+  /** opens its own tab: a gold tile with the out-arrow */
+  page?: () => void;
 }
 
 export const ToolsPage = () => {
   const navigate = useNavigate();
   const activeNetwork = useStore(selectActiveNetwork);
   const identityEnabled = useStore(isIdentityEnabled);
+  // only a hot wallet signs a t->t with a memo
+  const hot = useStore(selectEffectiveKeyInfo)?.type === 'mnemonic';
 
   const go = (path: string) =>
     path.startsWith('https://')
@@ -50,6 +55,14 @@ export const ToolsPage = () => {
       desc: `${activeNetwork} · other chains`,
       path: PopupPath.SWAP,
     },
+    hasFeature(activeNetwork, 'zcash') &&
+      hot && {
+        icon: 'i-lucide-waves',
+        label: 'zec liquidity',
+        desc: 'thorchain pool · earn fees',
+        path: LP_PRELOAD,
+        page: openLpPage,
+      },
     hasFeature(activeNetwork, 'stake') && {
       icon: 'i-ph-coins',
       label: 'stake',
@@ -102,13 +115,20 @@ export const ToolsPage = () => {
               <button
                 key={t.path}
                 data-preload={t.path}
-                onClick={() => go(t.path)}
+                onClick={() => (t.page ? t.page() : go(t.path))}
                 className={cn(
-                  'flex h-[104px] flex-col justify-between border border-surface-border-soft',
-                  'bg-surface-elev-1 p-3.5 text-left transition-colors hover:bg-surface-elev-2',
+                  'flex h-[104px] flex-col justify-between border p-3.5 text-left transition-colors',
+                  t.page
+                    ? 'border-zigner-gold/40 bg-zigner-gold/10 hover:bg-zigner-gold/15'
+                    : 'border-surface-border-soft bg-surface-elev-1 hover:bg-surface-elev-2',
                 )}
               >
-                <span className={cn(t.icon, 'size-6 text-zigner-gold')} aria-hidden='true' />
+                <span className='flex items-start justify-between'>
+                  <span className={cn(t.icon, 'size-6 text-zigner-gold')} aria-hidden='true' />
+                  {t.page && (
+                    <span className='i-lucide-arrow-up-right size-3 text-fg-muted' aria-hidden='true' />
+                  )}
+                </span>
                 <span className='flex flex-col gap-0.5'>
                   <span className='text-data text-fg-high lowercase'>{t.label}</span>
                   {t.desc && <span className='text-label text-fg-muted lowercase'>{t.desc}</span>}

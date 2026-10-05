@@ -279,6 +279,7 @@ export default ({
       'page-root': path.join(entryDir, 'page-root.tsx'),
       'popup-root': path.join(entryDir, 'popup-root.tsx'),
       'buy-root': path.join(entryDir, 'buy-root.tsx'),
+      'lp-root': path.join(entryDir, 'lp-root.tsx'),
       // network workers (isolated sync per network)
       'workers/zcash-worker': path.join(workersDir, 'zcash-worker.ts'),
       // UR fountain decode worker — off-threads ur_decode_frames from the popup
@@ -423,6 +424,12 @@ export default ({
         template: 'react-root.html',
         filename: 'buy.html',
         chunks: ['buy-root'],
+      }),
+      new HtmlWebpackPlugin({
+        title: 'zec liquidity · zafu',
+        template: 'react-root.html',
+        filename: 'lp.html',
+        chunks: ['lp-root'],
       }),
       new HtmlWebpackPlugin({
         title: 'Zafu Offscreen',

@@ -52,6 +52,8 @@ import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { BuyInFlight } from '../../../components/buy-in-flight';
 import { SwapInFlight } from '../../../components/swap-in-flight';
 import { BUY_PRELOAD, openBuyPage } from '../../../buy/open';
+import { LP_PRELOAD, openLpPage } from '../../../lp/open';
+import { LpCard, LpWave } from '../../../components/lp-card';
 import { PAY_APPS } from '../../../buy/apps';
 
 const zec = (zat: bigint) => fmtZecHero(Number(zat) / 1e8);
@@ -375,6 +377,8 @@ export const ZcashContent = ({
         </BalanceGroup>
       )}
 
+      {hasMnemonic && <LpCard storeId={storeId} />}
+
       <SharedWallets />
 
       <HistoryContent network='zcash' penumbraAccount={0} limit={3} />
@@ -400,6 +404,21 @@ export const ZcashContent = ({
             description='to or from another coin'
             onPress={() => navigate(PopupPath.SWAP)}
           />
+          {hasMnemonic && (
+            <Row
+              type='screen'
+              className='bg-zigner-gold/10'
+              media={
+                <span className='grid size-[30px] shrink-0 place-items-center border border-zigner-gold'>
+                  <LpWave />
+                </span>
+              }
+              label='provide liquidity'
+              preload={LP_PRELOAD}
+              description="thorchain's zec pool · earns swap fees"
+              onPress={openLpPage}
+            />
+          )}
           {totalZat > 0n && (
             <Row type='screen' label='send' onPress={() => navigate(PopupPath.SEND)} />
           )}

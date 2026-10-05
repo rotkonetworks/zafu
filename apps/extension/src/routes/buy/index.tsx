@@ -5,12 +5,11 @@
  * tab is visible; nothing runs anywhere while it is closed.
  */
 
-import { useEffect, useState, type ReactNode } from 'react';
-import { Button } from '@repo/ui/components/ui/button';
-import { Input } from '@repo/ui/components/ui/input';
+import { useEffect, type ReactNode } from 'react';
 import { ScrollShell, type ScrollArt } from '../../components/scroll-shell';
 import { allowEgress, check, init, unlock, type BuyState } from './store';
 import { Column, useBuy } from './ui';
+import { AskOnce, UnlockColumn, type Host } from '../../components/scroll-page';
 import { AmountScreen, Sheets, Ticket } from './amount';
 import { AskScreen, ChooseScreen, FailedScreen, GasScreen, LapsedScreen, PayScreen } from './pay';
 import { DoneScreen, ProgressScreen, TrackScreen } from './progress';
@@ -80,7 +79,7 @@ const artOf = (s: Screen): ScrollArt =>
 
 const SCREENS: Record<Screen, () => ReactNode> = {
   loading: () => null,
-  locked: () => <Unlock />,
+  locked: () => <UnlockColumn sub='your buy waits where you left it.' unlock={unlock} onUnlocked={init} />,
   cannot: () => (
     <Column title='buy zec'>
       <p className='text-sm text-fg-muted'>
@@ -88,7 +87,14 @@ const SCREENS: Record<Screen, () => ReactNode> = {
       </p>
     </Column>
   ),
-  egress: () => <AskOnce />,
+  egress: () => (
+    <AskOnce
+      sub='buying talks to these, and only while you buy.'
+      hosts={HOSTS}
+      onNotNow={() => window.close()}
+      onAllow={() => void allowEgress()}
+    />
+  ),
   amount: () => <AmountScreen />,
   gas: () => <GasScreen />,
   reserve: () => <ProgressScreen title='holding the seller' usually='usually a few seconds' />,
@@ -135,7 +141,7 @@ export const BuyPage = () => {
 };
 
 /** Buy 0: the four services, asked once, together */
-const HOSTS = [
+const HOSTS: Host[] = [
   {
     mark: 'p',
     name: 'peer',
@@ -165,78 +171,3 @@ const HOSTS = [
     c: 'text-hanko',
   },
 ];
-
-const AskOnce = () => (
-  <Column title='before we begin' sub='buying talks to these, and only while you buy.'>
-    <div className='flex flex-col border border-border-soft bg-elev-1'>
-      {HOSTS.map(h => (
-        <div
-          key={h.name}
-          className='flex h-[68px] items-center gap-3.5 border-t border-border-soft px-[18px] first:border-t-0'
-        >
-          <span
-            className={`grid size-[30px] shrink-0 place-items-center border border-border-hard text-[13px] ${h.c}`}
-          >
-            {h.mark}
-          </span>
-          <span className='flex flex-1 flex-col gap-1'>
-            <span className='text-sm text-fg-high'>{h.name}</span>
-            <span className='text-xs text-fg-muted'>{h.does}</span>
-          </span>
-          <span className='whitespace-pre-line text-right text-[11px] leading-normal text-fg-dim'>
-            {h.host}
-          </span>
-        </div>
-      ))}
-    </div>
-    <div className='flex gap-2.5'>
-      <Button variant='secondary' className='h-14 w-[140px]' onClick={() => window.close()}>
-        not now
-      </Button>
-      <Button className='h-14 flex-1' onClick={() => void allowEgress()}>
-        allow and continue
-      </Button>
-    </div>
-    <span className='text-xs text-fg-dim'>
-      each one can be blocked later in everything zafu talks to
-    </span>
-  </Column>
-);
-
-/** a locked wallet: the password, here, then the buy picks up */
-const Unlock = () => {
-  const [pw, setPw] = useState('');
-  const [wrong, setWrong] = useState(false);
-  const [busy, setBusy] = useState(false);
-  return (
-    <Column title='unlock zafu' sub='your buy waits where you left it.'>
-      <form
-        className='flex flex-col gap-3'
-        onSubmit={e => {
-          e.preventDefault();
-          setBusy(true);
-          void (async () => {
-            if (await unlock(pw)) {
-              await init();
-            } else {
-              setWrong(true);
-            }
-            setBusy(false);
-          })();
-        }}
-      >
-        <Input
-          type='password'
-          autoFocus
-          value={pw}
-          placeholder='password'
-          onChange={e => setPw(e.target.value)}
-        />
-        {wrong && <span className='text-xs text-warn'>that doesn't match - please try again</span>}
-        <Button type='submit' className='h-14' loading={busy}>
-          unlock
-        </Button>
-      </form>
-    </Column>
-  );
-};
