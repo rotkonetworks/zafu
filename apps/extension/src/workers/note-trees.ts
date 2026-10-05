@@ -550,7 +550,9 @@ export const openTrees = async (
         `${p.pool} note tree ends at ${t.next_position()}@${t.latest_checkpoint()}, ` +
           `the wallet at ${p.size}@${p.height}: reseeding`,
       );
-      t.free();
+      // its confirmed shards' marks are carried into the reseeded tree
+      orphans[p.pool]?.free();
+      orphans[p.pool] = t;
       t = undefined;
     }
     if (t) {
@@ -736,12 +738,15 @@ export const openTrees = async (
         byShard.set(k, [...(byShard.get(k) ?? []), n]);
       }
       const shards = [...byShard.keys()].sort((a, b) => a - b);
+      const waits = (k: string) => {
+        const r = recovery[pool][k];
+        return r !== undefined && r.retryAt > now();
+      };
       const progress = (): RecoveryProgress => {
         const left = lost.filter(n => !t.is_marked(n.position));
-        const waiting = left.filter(n => {
-          const r = recovery[pool][String(Math.floor(n.position / SHARD_LEAVES))];
-          return r !== undefined && r.retryAt > now();
-        }).length;
+        const waiting = left.filter(n =>
+          waits(String(Math.floor(n.position / SHARD_LEAVES))),
+        ).length;
         return {
           left: left.length,
           waiting,
@@ -750,6 +755,10 @@ export const openTrees = async (
         };
       };
 
+      // every shard still waiting out a failure: nothing to ask anyone yet
+      if (waits('roots') || waits('replay') || shards.every(k => waits(String(k)))) {
+        return progress();
+      }
       // every complete shard's root, checked against what the tree hashed
       try {
         await takeRoots(pool, rootsFrom[pool]);
