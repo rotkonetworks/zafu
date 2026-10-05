@@ -10,11 +10,11 @@ export const BackupNudge = ({
 }) => (
   <StatusSlot tone='warn' icon='i-ph-warning' action={{ label: 'back up', onClick: onBackUp }}>
     <span className='flex items-center gap-2'>
-      recovery phrase not backed up
+      your recovery phrase isn't backed up yet
       <button
         type='button'
         onClick={onDismiss}
-        title='I already backed it up'
+        title='i already backed it up'
         className='text-fg-dim transition-colors hover:text-fg-high'
       >
         <span className='i-ph-x size-3' />

@@ -300,7 +300,7 @@ export const ShieldTransparent = ({
   const handleZignerSigScanned = useCallback(
     async (data: string) => {
       if (!isZcashSignatureQR(data)) {
-        setZignerError('invalid signature QR code');
+        setZignerError("that code isn't zigner's answer · please scan again");
         setZignerStep('error');
         return;
       }

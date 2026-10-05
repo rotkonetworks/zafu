@@ -6,6 +6,22 @@ export const PEOPLE_WATCH_PORT = 'zafu-people-watch:';
 export const PEOPLE_STATUS_KEY = 'peopleStatus';
 
 /**
+ * The worker's "the relay is gated" errors cross the message boundary as
+ * text, so the words live here, once: the throw and every screen that tells
+ * them apart read the same constants. Change the copy here and only here.
+ */
+export const RELAY_NOT_ON = 'the relay is not on yet';
+export const RELAY_OFF = 'the relay is off';
+
+/** the relay was never turned on: ask, then try again */
+export const isRelayNotOn = (e: unknown): boolean =>
+  e instanceof Error && e.message.includes(RELAY_NOT_ON);
+
+/** the relay is not on, either never asked or turned off by the person */
+export const isRelayGated = (e: unknown): boolean =>
+  e instanceof Error && (e.message.includes(RELAY_NOT_ON) || e.message.includes(RELAY_OFF));
+
+/**
  * `673-chaos-mail-kite`: three digits and three words, as the link router
  * reads it. The last word names the founder's key (see people/door.ts).
  */

@@ -30,6 +30,7 @@ import { useCardSync, useMyCards } from '../../../people/my-card';
 import { pairSeal, readB64Card } from '../../../people/cards';
 import type { CardAnswer, PeopleRoom } from '../../../people/vault';
 import { requestEgressOptIn } from '../../../net/egress-opt-in';
+import { refreshEgress } from '../../../net/egress';
 import { setDestinationOptIn } from '../../../net/ledger';
 import { PEOPLE_RELAY } from '../../../config/people-relay';
 import { useNow } from '../../../hooks/use-now';
@@ -69,7 +70,7 @@ const Cue = ({
 /** what the relay is doing for this card, honestly */
 const RelayCue = ({ onAllow }: { onAllow: () => void }) => {
   const slot = usePeopleSlot();
-  const turnOn = () => void setDestinationOptIn(PEOPLE_RELAY, 'allowed');
+  const turnOn = () => void setDestinationOptIn(PEOPLE_RELAY, 'allowed').then(refreshEgress);
   return slot === 'needs-opt-in' ? (
     <Cue
       tone='warn'

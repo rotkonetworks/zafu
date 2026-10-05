@@ -173,7 +173,7 @@ const GuardedDeleteModal = (props: {
       await props.onConfirm();
       props.onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'delete failed');
+      setError(e instanceof Error ? e.message : "it wasn't deleted · please try again");
       setWorking(false);
     }
   };
@@ -186,9 +186,9 @@ const GuardedDeleteModal = (props: {
     >
       <div className='border border-red-500/40 bg-red-500/5 p-2 text-label text-red-300'>
         <span className='i-ph-warning mr-1 inline-block size-3 align-text-bottom' />
-        You will permanently lose access to any funds in this table - it is NOT recoverable from
-        your seed. If other co-signers rely on your share to reach the signing threshold, they may
-        be unable to move funds either.
+        this share would be gone for good. your recovery phrase can&apos;t bring it back, so any
+        funds in this table would be out of your reach. if other co-signers rely on your share to
+        reach the signing threshold, they may not be able to move the funds either.
       </div>
       <Button
         variant='secondary'
@@ -197,11 +197,11 @@ const GuardedDeleteModal = (props: {
         onClick={props.onBackup}
       >
         <span className='i-ph-download-simple h-3.5 w-3.5' />
-        Export backup first
+        export a backup first
       </Button>
       <label className='block text-xs text-fg-muted'>
         type <span className='font-mono text-fg'>{label}</span> (or{' '}
-        <span className='font-mono text-fg'>DELETE</span>) to confirm
+        <span className='font-mono text-fg'>delete</span>) to confirm
         <input
           type='text'
           autoFocus
@@ -271,7 +271,7 @@ const AppManagedRow = (props: {
           title='make this a normal, selectable multisig you can co-sign'
         >
           <span className='i-ph-arrow-up-right h-3.5 w-3.5' />
-          Recover
+          recover
         </button>
         <button
           onClick={props.onBackup}
@@ -279,7 +279,7 @@ const AppManagedRow = (props: {
           title='export this share as an encrypted backup file'
         >
           <span className='i-ph-download-simple h-3.5 w-3.5' />
-          Back up
+          back up
         </button>
         <button
           onClick={props.onDelete}
@@ -287,7 +287,7 @@ const AppManagedRow = (props: {
           title='delete this table'
         >
           <span className='i-ph-trash h-3.5 w-3.5' />
-          Delete
+          delete
         </button>
       </div>
     </div>
@@ -343,7 +343,7 @@ const AppManagedTablesSection = () => {
       >
         <span className='flex items-center gap-2'>
           <span className='i-ph-squares-four h-4 w-4 text-fg-muted' />
-          <span className='text-sm'>App-managed tables</span>
+          <span className='text-sm'>tables from apps</span>
           <span className='bg-elev-2 px-1.5 py-0.5 text-label font-mono text-fg-muted'>
             {tables.length}
           </span>
@@ -358,8 +358,8 @@ const AppManagedTablesSection = () => {
       {expanded && (
         <div className='flex flex-col gap-3 border-t border-border-soft p-3'>
           <p className='text-label text-fg-dim'>
-            Tables created by apps (e.g. poker). Hidden from your main wallet. Recover to co-sign by
-            hand; delete only once you're sure it's settled.
+            tables made by apps such as poker, kept apart from your wallet. recover one to co-sign
+            by hand; delete it only once it has settled.
           </p>
           <input
             type='text'
@@ -399,7 +399,7 @@ const AppManagedTablesSection = () => {
               ))}
             </div>
           ) : (
-            <p className='py-3 text-center text-xs text-fg-muted'>No tables match this filter.</p>
+            <p className='py-3 text-center text-xs text-fg-muted'>no tables match this filter</p>
           )}
         </div>
       )}
@@ -504,7 +504,7 @@ export const MultisigPage = () => {
             className='flex items-center justify-center gap-2 bg-primary/15 px-4 py-4 text-base text-zigner-gold transition-colors hover:bg-primary/25'
           >
             <span className='i-ph-pen-nib h-5 w-5' />
-            Co-sign transaction
+            co-sign a transaction
           </button>
 
           {/* active vault card */}
@@ -533,7 +533,7 @@ export const MultisigPage = () => {
               className='flex items-center gap-1.5 text-xs text-fg-muted transition-colors hover:text-zigner-gold'
             >
               <span className='i-ph-plus h-3.5 w-3.5' />
-              New vault
+              new vault
             </button>
             <span className='h-3 w-px bg-border-soft' />
             <button
@@ -541,7 +541,7 @@ export const MultisigPage = () => {
               className='flex items-center gap-1.5 text-xs text-fg-muted transition-colors hover:text-zigner-gold'
             >
               <span className='i-ph-user-plus h-3.5 w-3.5' />
-              Join existing
+              join one
             </button>
           </div>
         </>
@@ -584,14 +584,14 @@ export const MultisigPage = () => {
                 className='flex flex-1 items-center justify-center gap-1.5 bg-primary/10 px-3 py-2.5 text-sm text-zigner-gold transition-colors hover:bg-primary/20'
               >
                 <span className='i-ph-plus h-4 w-4' />
-                Create
+                create
               </button>
               <button
                 onClick={() => navigate(joinPath)}
                 className='flex flex-1 items-center justify-center gap-1.5 bg-primary/10 px-3 py-2.5 text-sm text-zigner-gold transition-colors hover:bg-primary/20'
               >
                 <span className='i-ph-user-plus h-4 w-4' />
-                Join
+                join
               </button>
             </div>
             {walletsWithIndex.length > 0 && (
@@ -601,7 +601,7 @@ export const MultisigPage = () => {
                 className='flex items-center justify-center gap-1.5 border border-border-soft px-3 py-2.5 text-sm text-fg transition-colors hover:bg-elev-1'
               >
                 <span className='i-ph-pen-nib h-4 w-4' />
-                Co-sign transaction
+                co-sign a transaction
               </button>
             )}
             <button
@@ -610,7 +610,7 @@ export const MultisigPage = () => {
               className='flex items-center justify-center gap-1.5 border border-border-soft px-3 py-2 text-xs text-fg-muted transition-colors hover:bg-elev-1'
             >
               <span className='i-ph-upload-simple h-3.5 w-3.5' />
-              Restore backup / Import from zigner
+              restore a backup or import from zigner
             </button>
           </div>
         </>

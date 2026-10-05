@@ -190,7 +190,7 @@ export const ImportZigner = () => {
   // skip password - use default encryption
   const handleSkip = async () => {
     if (!walletImport && !zcashWalletImport && !parsedCosmosExport) {
-      setError('please scan a valid QR code first');
+      setError("please scan your signer's code first");
       return;
     }
     try {
@@ -255,7 +255,7 @@ export const ImportZigner = () => {
       navigate(firstWallet ? PagePath.PERSONALIZE : PagePath.ONBOARDING_SUCCESS);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      setError(`failed to import: ${message}`);
+      setError(`this wallet wasn't added · ${message}`);
     } finally {
       setImporting(false);
     }
@@ -263,7 +263,7 @@ export const ImportZigner = () => {
 
   const handleSetPassword = () => {
     if (!walletImport && !zcashWalletImport && !parsedCosmosExport) {
-      setError('please scan a valid QR code first');
+      setError("please scan your signer's code first");
       return;
     }
     navigate(PagePath.ZIGNER_PASSWORD);
@@ -283,7 +283,9 @@ export const ImportZigner = () => {
         <AnimatedQrScanner
           onComplete={(bytes, urType) => {
             if (urType !== 'zcash-accounts') {
-              setError(`expected ur:zcash-accounts, got ur:${urType}`);
+              setError(
+                `this code isn't an account code (ur:${urType}) · please show the connect code on your signer`,
+              );
               return;
             }
             processZcashAccountsBytes(bytes);

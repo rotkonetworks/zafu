@@ -41,9 +41,11 @@ export const EgressBlockedStatus = ({
     <StatusSlot
       tone='warn'
       icon='i-ph-plug'
-      action={destination ? { label: allowing ? 'allowing' : 'allow', onClick: allow } : undefined}
+      action={
+        destination ? { label: allowing ? 'turning on' : 'turn on', onClick: allow } : undefined
+      }
     >
-      zafu did not contact {host} - allow it?
+      {host} is off for now
     </StatusSlot>
   );
 };

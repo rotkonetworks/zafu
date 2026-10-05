@@ -62,7 +62,7 @@ describe('TxTrackerWatcher', () => {
 
   afterEach(() => roots.forEach(({ root }) => act(() => root.unmount())));
 
-  const toasts = () => roots.filter(({ el }) => el.textContent?.includes('send 1 UM - sent'));
+  const toasts = () => roots.filter(({ el }) => el.textContent?.includes('send 1 UM · sent'));
   const send = (opId: string) =>
     writeTxOp(opId, {
       status: 'done',

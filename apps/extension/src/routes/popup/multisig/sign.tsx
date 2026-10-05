@@ -179,8 +179,8 @@ export const MultisigSign = () => {
                 setVerdict({
                   kind: 'refuse',
                   reasons: [
-                    'the host published a SECOND, different transaction after you began reviewing this one',
-                    'this session is void - reject and re-join if you still intend to sign',
+                    'the host published a second, different transaction after you began reviewing this one',
+                    'this session has ended · please join again if you still want to sign',
                   ],
                 });
               }
@@ -272,7 +272,7 @@ export const MultisigSign = () => {
     try {
       const secrets = await useStore.getState().keyRing.getMultisigSecrets(activeWallet.vaultId);
       if (!secrets) {
-        throw new Error('failed to decrypt multisig keys');
+        throw new Error("the multisig share didn't open · please unlock zafu and try again");
       }
 
       // sign the snapshot, never the live ref.
@@ -492,7 +492,7 @@ export const MultisigSign = () => {
             <div className='border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
               <div className='flex items-center gap-2 text-body text-red-400'>
                 <span className='i-ph-shield-warning size-4' />
-                cannot verify - signing refused
+                zafu couldn&apos;t check this · it won&apos;t sign
               </div>
               <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
                 {verdict.reasons.map((r, i) => (
@@ -505,7 +505,7 @@ export const MultisigSign = () => {
             <div className='border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
               <div className='flex items-center gap-2 text-body text-red-400'>
                 <span className='i-ph-shield-warning size-4' />
-                mismatch - host claim disagrees with tx bytes
+                the host&apos;s summary differs from the transaction itself
               </div>
               <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
                 {verdict.reasons.map((r, i) => (
@@ -533,7 +533,7 @@ export const MultisigSign = () => {
                   onChange={e => setAcknowledged(e.target.checked)}
                   className='mt-0.5'
                 />
-                <span>I see the mismatch. Override and sign at my own risk.</span>
+                <span>i see the difference and sign anyway, at my own risk.</span>
               </label>
             </div>
           )}
@@ -547,7 +547,7 @@ export const MultisigSign = () => {
               onClick={handleReject}
               className='border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
             >
-              reject
+              don&apos;t sign
             </button>
             <button
               onClick={() => void handleApprove()}

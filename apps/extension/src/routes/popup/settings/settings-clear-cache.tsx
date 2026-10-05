@@ -110,7 +110,7 @@ export const SettingsClearCache = () => {
               <span>{getClearCacheStepLabel(clearingState.step)}</span>
               <span>{progressPercent}%</span>
             </div>
-            <p className='text-label text-fg-muted'>do not close the extension.</p>
+            <p className='text-label text-fg-muted'>please keep zafu open</p>
           </div>
         ) : (
           <>

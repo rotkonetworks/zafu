@@ -123,7 +123,7 @@ export const Login = () => {
             )}
           />
           <span className='h-[18px] text-label text-warning' aria-live='polite'>
-            {enteredIncorrect ? "that doesn't match · please try again, slowly" : ''}
+            {enteredIncorrect ? "that doesn't match · please try again" : ''}
           </span>
           <Button type='submit' loading={unlocking} className='h-[52px] text-[15px]'>
             unlock

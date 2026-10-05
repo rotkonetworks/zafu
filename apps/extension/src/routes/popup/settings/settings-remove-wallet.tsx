@@ -156,7 +156,7 @@ export const SettingsRemoveWallet = () => {
               validations={[
                 {
                   type: 'error',
-                  issue: "that doesn't match · please try again, slowly",
+                  issue: "that doesn't match · please try again",
                   checkFn: (txt: string) => Boolean(txt) && wrong,
                 },
               ]}

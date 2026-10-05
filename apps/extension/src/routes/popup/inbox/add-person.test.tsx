@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { RELAY_NOT_ON } from '../../../people/protocol';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -14,7 +15,7 @@ let relayOn = true;
 const fresh = vi.fn();
 const peopleAsk = vi.fn(async (op: string) => {
   if (op === 'card-open' && !relayOn) {
-    throw new Error('the relay is not allowed yet');
+    throw new Error(RELAY_NOT_ON);
   }
   return { id: 'c:room' };
 });

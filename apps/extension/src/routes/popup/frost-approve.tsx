@@ -198,9 +198,9 @@ export const FrostApprove = () => {
   const assertApprovedGroup = (relayThreshold: number, relayMaxSigners: number) => {
     if (relayThreshold !== threshold || relayMaxSigners !== maxSigners) {
       throw new Error(
-        `refusing to run DKG: you approved a ${threshold}-of-${maxSigners} group but the ` +
-          `coordinator asked for ${relayThreshold}-of-${relayMaxSigners}. ` +
-          `A lowered threshold would let the coordinator spend without you.`,
+        `zafu stopped here · you agreed to ${threshold}-of-${maxSigners}, the coordinator ` +
+          `asked for ${relayThreshold}-of-${relayMaxSigners}. ` +
+          `a lower threshold would let the coordinator spend without you.`,
       );
     }
   };
@@ -485,7 +485,7 @@ export const FrostApprove = () => {
     for (const peerFvk of peerFvks) {
       if (peerFvk !== orchardFvk) {
         throw new Error(
-          `FVK mismatch: peer saw a different viewing key - ours ends …${orchardFvk.slice(-8)}, theirs ends …${peerFvk.slice(-8)}`,
+          `the co-signers' viewing keys differ (ours …${orchardFvk.slice(-8)}, theirs …${peerFvk.slice(-8)}) · nothing was saved`,
         );
       }
     }
@@ -534,7 +534,7 @@ export const FrostApprove = () => {
     const relay = await relayClient();
     const secrets = await getMultisigSecrets(multisigVault.id);
     if (!secrets) {
-      throw new Error('failed to decrypt multisig secrets');
+      throw new Error("the multisig share didn't open · please unlock zafu and try again");
     }
 
     setStatus('joining signing session...');
@@ -639,7 +639,7 @@ export const FrostApprove = () => {
     const relay = await relayClient();
     const secrets = await getMultisigSecrets(vault.id);
     if (!secrets) {
-      throw new Error('failed to decrypt multisig secrets');
+      throw new Error("the multisig share didn't open · please unlock zafu and try again");
     }
 
     setStatus(`joining signing room ${roomCode}...`);
@@ -711,11 +711,15 @@ export const FrostApprove = () => {
     // are about to sign to the one recomputed from the PCZT, then show the user
     // its OVK-decoded outputs. The dapp's URL `plan` is never trusted here.
     if (!approved.pcztHex) {
-      throw new Error('escrow did not publish a PCZT - refusing to sign blind');
+      throw new Error(
+        "the escrow didn't publish its transaction · zafu won't sign what it can't see",
+      );
     }
     const zw = zcashWallets.find(w => w.vaultId === vault.id);
     if (!zw?.orchardFvk) {
-      throw new Error('multisig wallet has no viewing key on file - cannot verify request');
+      throw new Error(
+        "this multisig has no viewing key here · zafu can't check the request, so it won't sign",
+      );
     }
     setStatus('verifying request against escrow PCZT...');
     const parsed = await frostInspectPcztOutputsInWorker(approved.pcztHex, zw.orchardFvk);
@@ -788,15 +792,15 @@ export const FrostApprove = () => {
 
   const actionLabel =
     action === 'frost-create'
-      ? 'Create Multisig'
+      ? 'create a multisig'
       : action === 'frost-join'
-        ? 'Join Multisig'
+        ? 'join a multisig'
         : action === 'dkg-join'
-          ? 'Join Multisig'
+          ? 'join a multisig'
           : action === 'frost-sign'
-            ? 'Sign Transaction'
+            ? 'sign a transaction'
             : action === 'poker-sign'
-              ? 'Approve Signing'
+              ? 'co-sign'
               : action;
 
   return (
@@ -813,22 +817,22 @@ export const FrostApprove = () => {
             {action === 'frost-create' && (
               <>
                 <p>
-                  Create a{' '}
+                  create a{' '}
                   <span className='tabular text-zigner-gold'>
                     {threshold}-of-{maxSigners}
                   </span>{' '}
-                  FROST multisig wallet.
+                  multisig wallet.
                 </p>
                 <p className='text-fg-muted'>
-                  This generates a shared key via distributed key generation. All participants must
-                  be online.
+                  everyone makes one shared key together, so every co-signer needs to be online.
                 </p>
               </>
             )}
             {action === 'frost-join' && (
               <>
                 <p>
-                  Join FROST DKG room: <span className='tabular text-zigner-gold'>{roomCode}</span>
+                  join the multisig room:{' '}
+                  <span className='tabular text-zigner-gold'>{roomCode}</span>
                 </p>
                 {/* the group shape must be *shown* here, because it is what the
                     ceremony is bound to - see assertApprovedGroup(). */}
@@ -840,27 +844,27 @@ export const FrostApprove = () => {
                   group
                 </p>
                 <p className='text-fg-muted'>
-                  You will participate in key generation to create a shared multisig wallet. The
-                  ceremony is aborted if the coordinator asks for a different group size.
+                  you help make the shared key. zafu stops if the coordinator asks for a different
+                  group size.
                 </p>
               </>
             )}
             {action === 'dkg-join' && (
               <>
                 <p>
-                  Join{' '}
+                  join{' '}
                   <span className='tabular text-zigner-gold'>
                     {threshold}-of-{maxSigners}
                   </span>{' '}
-                  multisig DKG
+                  multisig
                 </p>
                 <p className='text-fg-muted tabular'>label: {labelPrefix}-…</p>
-                <p className='text-fg-muted'>Your share stays on this device.</p>
+                <p className='text-fg-muted'>your share stays on this device.</p>
               </>
             )}
             {action === 'frost-sign' && (
               <>
-                <p>Co-sign a transaction with your FROST key share.</p>
+                <p>co-sign a transaction with your share.</p>
                 <p className='text-fg-muted tabular break-all'>
                   sighash: {sighashHex.slice(0, 16)}...{sighashHex.slice(-16)}
                 </p>
@@ -868,7 +872,7 @@ export const FrostApprove = () => {
             )}
             {action === 'poker-sign' && (
               <>
-                <p>Co-sign a transaction requested by an escrow.</p>
+                <p>co-sign a transaction an escrow asks for.</p>
                 <div className='mt-1 space-y-1'>
                   {plan.map((o, i) => (
                     <p key={i} className='text-fg-muted tabular break-all'>
@@ -884,8 +888,8 @@ export const FrostApprove = () => {
                   </p>
                 </div>
                 <p className='text-fg-muted'>
-                  Requested amounts shown above. You will re-confirm the exact outputs decoded from
-                  the escrow&apos;s signed tx before your share is released.
+                  these are the amounts asked for. you confirm the exact outputs from the
+                  escrow&apos;s signed transaction before your share is used.
                 </p>
               </>
             )}
@@ -894,7 +898,7 @@ export const FrostApprove = () => {
 
           <div className='flex shrink-0 gap-2 mt-auto'>
             <Button variant='secondary' className='flex-1' onClick={deny}>
-              deny
+              not now
             </Button>
             <Button className='flex-1' onClick={approve}>
               approve

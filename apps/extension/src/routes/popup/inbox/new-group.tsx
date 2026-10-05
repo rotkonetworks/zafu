@@ -10,6 +10,7 @@ import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { ScreenHeader } from '../../../components/screen-header';
 import { peopleAsk } from '../../../people/client';
+import { isRelayGated } from '../../../people/protocol';
 import { PopupPath, groupInvitePath } from '../paths';
 
 export function NewGroupPage() {
@@ -28,7 +29,7 @@ export function NewGroupPage() {
       navigate(groupInvitePath(id.slice(2)), { replace: true });
     } catch (e) {
       setFail(
-        e instanceof Error && /not allowed yet|blocked/.test(e.message)
+        isRelayGated(e)
           ? 'a group needs the relay · nothing was made'
           : 'sorry, zafu could not make the group. please try again.',
       );

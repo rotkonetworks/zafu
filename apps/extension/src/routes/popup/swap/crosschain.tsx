@@ -1023,7 +1023,9 @@ export const CrosschainSwap = ({
         await remember('deposit');
         const result = await buildDeposit({ ...deposit, vault: await getVaultUnlock(walletId) });
         if (!('txid' in result)) {
-          throw new Error('failed to broadcast deposit transaction');
+          throw new Error(
+            "the deposit didn't reach the network · please look at home before trying again",
+          );
         }
         track({ stage: 'sent', depositTxid: result.txid });
         setStep('polling');
@@ -1032,7 +1034,7 @@ export const CrosschainSwap = ({
 
       // zigner flow
       if (!ufvk) {
-        throw new Error('UFVK required for zigner wallet send');
+        throw new Error('this zigner wallet has no viewing key here · please re-import it');
       }
       buildStartRef.current = Date.now();
       setStep('sending');
@@ -1056,7 +1058,9 @@ export const CrosschainSwap = ({
       // nothing was broadcast: there is no swap to come back to
       forget();
       setErrorCause(err);
-      setError(err instanceof Error ? err.message : 'failed to send deposit');
+      setError(
+        err instanceof Error ? err.message : "the deposit didn't go through · nothing was sent",
+      );
       setStep('error');
     }
   };
@@ -1064,7 +1068,7 @@ export const CrosschainSwap = ({
   const signatureScanned = async (data: string) => {
     try {
       if (!isZcashSignatureQR(data)) {
-        setError('invalid signature qr code');
+        setError("that code isn't zigner's answer · please scan again");
         setStep('error');
         return;
       }
@@ -1094,14 +1098,18 @@ export const CrosschainSwap = ({
       );
       unsignedTxRef.current = null;
       if (!('txid' in result)) {
-        throw new Error('failed to broadcast');
+        throw new Error(
+          "the deposit didn't reach the network · please look at home before trying again",
+        );
       }
       track({ stage: 'sent', depositTxid: result.txid });
       setStep('polling');
     } catch (err) {
       console.error(err);
       forget();
-      setError(err instanceof Error ? err.message : 'failed to complete zigner tx');
+      setError(
+        err instanceof Error ? err.message : "the zigner send didn't finish · nothing was sent",
+      );
       setStep('error');
     }
   };
@@ -1201,7 +1209,7 @@ export const CrosschainSwap = ({
           pinned ? (
             `via ${ROUTES[pinned].label}`
           ) : expiredLive ? (
-            <span className='text-hanko-light'>quote expired</span>
+            <span className='text-hanko-light'>this price has ended · please ask again</span>
           ) : (
             <>
               {asking}
@@ -1577,7 +1585,7 @@ export const CrosschainSwap = ({
           <QrScanner
             onScan={data => void signatureScanned(data)}
             onError={err => {
-              setError(typeof err === 'string' ? err : 'failed to scan signature');
+              setError(typeof err === 'string' ? err : "that code didn't scan · please try again");
               setStep('error');
             }}
             onClose={() => setStep('sign')}
@@ -1601,7 +1609,7 @@ export const CrosschainSwap = ({
                 {deal.memo && (
                   <div className='flex flex-col gap-2 border border-zigner-gold bg-zigner-gold/10 p-3'>
                     <span className='flex items-center justify-between'>
-                      <span className='text-xs text-fg-high'>memo · required</span>
+                      <span className='text-xs text-fg-high'>memo · please include it</span>
                       <CopyButton text={deal.memo} label='copy memo' />
                     </span>
                     <span className='break-all font-mono text-sm text-fg-high'>{deal.memo}</span>

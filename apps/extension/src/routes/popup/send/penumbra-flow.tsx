@@ -71,7 +71,7 @@ export function PenumbraFlow({
       tx.onSent?.(txId);
       setStep({ at: 'done', shown, txId });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'transaction failed';
+      const message = err instanceof Error ? err.message : "didn't go through · nothing was sent";
       setStep({ at: 'error', shown, error: tx.explainError?.(message) ?? message });
     }
   };

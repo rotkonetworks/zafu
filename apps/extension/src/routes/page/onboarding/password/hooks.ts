@@ -239,7 +239,7 @@ export const useFinalizeOnboarding = () => {
       console.error('[onboarding] finalize failed', e);
       setError(
         e instanceof PasswordMismatchError
-          ? "that isn't the password zafu already uses here · please try again, slowly"
+          ? "that isn't the password zafu already uses here · please try again"
           : 'something broke on our side, not yours · nothing was saved, please try again',
       );
       // back to exactly the pre-import state, the keyprint with the vaults it

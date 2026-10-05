@@ -586,7 +586,7 @@ void (async () => {
       patch[key] = {
         ...value,
         status: 'unknown',
-        error: 'interrupted - the extension restarted; check activity',
+        error: 'zafu restarted while this ran · please look in activity',
         updatedAt: Date.now(),
       };
     }
@@ -843,10 +843,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-// default to side panel when clicking the extension icon
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {
-  // side panel not supported in this browser version
-});
+// the toolbar icon's surface (side panel or popup) is set by initSidePanelPref
 
 // sweep scheduled multisig deletions on service-worker wake. app-driven multisigs
 // (e.g. poker tables) schedule themselves for deletion 24h after settlement; this

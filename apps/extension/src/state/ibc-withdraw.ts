@@ -120,7 +120,7 @@ export const createIbcWithdrawSlice: SliceCreator<IbcWithdrawSlice> = (set, get)
     }
     // No silent fallback: guessing 6 here is what sent 1e-12 INJ.
     if (exponent === undefined) {
-      throw new Error('no asset metadata for selected denom - cannot determine decimals');
+      throw new Error("zafu doesn't know this asset's decimals · please pick it again");
     }
 
     set(state => {
@@ -149,7 +149,7 @@ export const createIbcWithdrawSlice: SliceCreator<IbcWithdrawSlice> = (set, get)
       // get ephemeral return address for IBC refunds
       const ephemeralResponse = await viewClient.ephemeralAddress({ addressIndex });
       if (!ephemeralResponse.address) {
-        throw new Error('failed to get return address');
+        throw new Error("zafu couldn't make a return address · please try again");
       }
 
       const planRequest = new TransactionPlannerRequest({
@@ -174,7 +174,7 @@ export const createIbcWithdrawSlice: SliceCreator<IbcWithdrawSlice> = (set, get)
       });
       return planRequest;
     } catch (err) {
-      const error = err instanceof Error ? err.message : 'unknown error';
+      const error = err instanceof Error ? err.message : 'something broke on our side, not yours';
       set(state => {
         state.ibcWithdraw.loading = false;
         state.ibcWithdraw.error = error;

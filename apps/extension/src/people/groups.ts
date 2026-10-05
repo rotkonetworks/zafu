@@ -283,7 +283,7 @@ export const createGroups = (deps: GroupDeps) => {
   const peek = async (svc: PeopleService, raw: string): Promise<DoorCard | null> => {
     const code = normalizeCode(raw);
     if (!CODE_RE.test(code)) {
-      throw new Error('this code cannot be read');
+      throw new Error("zafu couldn't read this code");
     }
     const relay = await deps.relay();
     await ensureGate(deps, relay);

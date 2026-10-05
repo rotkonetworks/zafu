@@ -83,7 +83,7 @@ const useTrackedTransfer = (id: string | undefined): IbcTransfer | undefined => 
 const timeoutCopy = (t: IbcTransfer): string =>
   t.direction === 'unshield'
     ? 'still relaying - up to 2 days'
-    : 'not seen yet - if it timed out, funds return to your Noble address';
+    : 'not seen yet · if it times out, the funds return to your noble address';
 
 export function IbcTransferStatusLine({ transferId }: { transferId: string | undefined }) {
   const transfer = useTrackedTransfer(transferId);

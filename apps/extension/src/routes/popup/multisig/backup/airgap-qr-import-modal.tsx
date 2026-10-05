@@ -60,21 +60,21 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
       const text = new TextDecoder().decode(data);
       const parsed = JSON.parse(text) as Payload;
       if (parsed.frost !== 'airgap-import' || parsed.version !== 1) {
-        throw new Error('not a zigner airgap-import QR');
+        throw new Error("this isn't zigner's import code");
       }
       const wallets = parsed.wallets;
       if (!Array.isArray(wallets) || wallets.length === 0) {
-        throw new Error('no wallets in QR payload');
+        throw new Error('this code holds no wallets');
       }
       // basic shape check on every entry - fail fast on partial payloads
       for (const w of wallets) {
         if (!w.publicKeyPackage || !w.orchardFvk || !w.address || !w.relayUrl) {
-          throw new Error('payload missing required metadata fields');
+          throw new Error('this code is missing some details');
         }
       }
       setPayload(wallets);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'failed to parse QR payload');
+      setError(e instanceof Error ? e.message : "that code didn't read · please scan again");
     }
   };
 
@@ -110,7 +110,7 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
       onImported({ imported, skipped, total: payload.length });
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'import failed');
+      setError(e instanceof Error ? e.message : "it wasn't added · please try again");
     } finally {
       setWorking(false);
     }
@@ -124,7 +124,7 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
         {!payload ? (
           <>
             <p className='mt-1 text-label text-fg-muted'>
-              Scan the animated QR your zigner shows. Public metadata only - no secrets cross over.
+              scan the moving code your zigner shows. only public data crosses over.
             </p>
             <div className='mt-3'>
               <AnimatedQrScanner

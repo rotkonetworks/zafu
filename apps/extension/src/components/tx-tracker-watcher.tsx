@@ -104,7 +104,7 @@ export const TxTrackerWatcher = () => {
                   : {
                       status: 'failed',
                       step: undefined,
-                      error: r.rawLog || `failed (code ${r.code})`,
+                      error: r.rawLog || `the chain didn't accept it (code ${r.code})`,
                     },
               );
             } catch {
@@ -147,10 +147,10 @@ export const TxTrackerWatcher = () => {
   const ok = toast.status === 'done';
   const headline =
     toast.status === 'done'
-      ? `${toast.label} - sent`
+      ? `${toast.label} · sent`
       : toast.status === 'failed'
-        ? `${toast.label} - failed`
-        : `${toast.label} - no answer, check activity`;
+        ? `${toast.label} · didn't go through`
+        : `${toast.label} · no answer yet, please look in activity`;
   return (
     // above the bottom tab bar, never over it
     <div className='pointer-events-none fixed inset-x-0 bottom-[4.5rem] z-[100] flex justify-center px-4'>
