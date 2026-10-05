@@ -43,11 +43,9 @@ let cached: ApprovalSurface = 'hybrid';
 export const applyActionSurface = (surface: ApprovalSurface): void => {
   const popup = surface === 'popup';
   void chrome.action?.setPopup({ popup: popup ? 'popup.html' : '' }).catch(() => undefined);
-  void chrome.sidePanel
-    ?.setPanelBehavior({ openPanelOnActionClick: !popup })
-    .catch(() => {
-      // side panel not supported in this browser version
-    });
+  void chrome.sidePanel?.setPanelBehavior({ openPanelOnActionClick: !popup }).catch(() => {
+    // side panel not supported in this browser version
+  });
 };
 
 const refresh = (): void => {
