@@ -4,6 +4,7 @@ import { cn } from '@repo/ui/lib/utils';
 import { screenTransition } from '../utils/navigate';
 import { PopupPath } from '../routes/popup/paths';
 import { useStore, type AllSlices } from '../state';
+import { useAskingCount } from '../people/asking';
 
 /** something someone sent you that you have not opened yet */
 const selectUnread = (s: AllSlices): boolean =>
@@ -22,13 +23,26 @@ const TABS = [
   { path: PopupPath.SETTINGS, icon: 'i-zafu-shoji', label: 'settings' },
 ] as const;
 
-const UnreadDot = () =>
-  useStore(selectUnread) ? (
+const UnreadDot = () => {
+  const unread = useStore(selectUnread);
+  const asking = useAskingCount();
+  return asking > 0 ? (
+    <>
+      <span
+        className='absolute left-[58%] top-1.5 flex h-[15px] min-w-[15px] items-center justify-center bg-zigner-gold px-1 text-[10px] leading-none text-zigner-gold-foreground'
+        aria-hidden='true'
+      >
+        {asking}
+      </span>
+      <span className='sr-only'>, {asking} asking to join</span>
+    </>
+  ) : unread ? (
     <>
       <span className='absolute left-[58%] top-2 size-[7px] bg-hanko' aria-hidden='true' />
       <span className='sr-only'>, unread</span>
     </>
   ) : null;
+};
 
 const TabButton = memo(
   ({

@@ -23,7 +23,8 @@ import {
   type RoomMessage,
 } from '@zafu/zirc/room';
 import { bytesToHex } from '@noble/hashes/utils';
-import { shortXid, xidOf, type XidKeys } from '../state/identity';
+import type { XidKeys } from '../state/identity';
+import { cleanName, memberName, wordName } from './word-name';
 import {
   CODE_RE,
   codeNames,
@@ -78,7 +79,7 @@ export const rosterOf = (
   const { voice } = channelStateAt(log.genesis.founder, log.records, log.records.length);
   return [...voice]
     .sort((a, b) => (a === log.genesis.founder ? -1 : b === log.genesis.founder ? 1 : 0))
-    .map(key => ({ key, name: names[key] ?? shortXid(xidOf(key)), at }));
+    .map(key => ({ key, name: memberName(key, names[key]), at }));
 };
 
 const ensureGate = async (deps: GroupDeps, relay: string) => {
@@ -109,7 +110,8 @@ export const createGroups = (deps: GroupDeps) => {
 
   // -- the founder ---------------------------------------------------------
 
-  const create = async (svc: PeopleService, name: string) => {
+  /** `nick`: what they call you in this group; empty, and your word name is used */
+  const create = async (svc: PeopleService, name: string, nick = '') => {
     const walletId = await deps.walletId();
     const group = name.trim().slice(0, 48);
     if (!walletId || !group) {
@@ -130,7 +132,8 @@ export const createGroups = (deps: GroupDeps) => {
         body: { kind: 'mode', mode: '+v', subject: me.pubkey },
       }),
     ];
-    const names = { [me.pubkey]: me.name! };
+    const mine = cleanName(nick);
+    const names = { [me.pubkey]: mine || me.name! };
     const code = makeCode(me.pubkey);
     const at = now();
     const base = {
@@ -145,6 +148,7 @@ export const createGroups = (deps: GroupDeps) => {
       id: groupId(G),
       kind: 'group',
       name: group,
+      ...(mine ? { nick: mine } : {}),
       appScope: ZAFU_GROUP_APP_SCOPE,
       secret: randomHex(32),
       joined: true,
@@ -190,7 +194,7 @@ export const createGroups = (deps: GroupDeps) => {
         G: g.G,
         founder: g.founder,
         group: room.name,
-        from: g.names?.[g.founder] ?? shortXid(xidOf(g.founder)),
+        from: memberName(g.founder, g.names?.[g.founder]),
         count: g.members.length,
       }),
       'action',
@@ -243,9 +247,14 @@ export const createGroups = (deps: GroupDeps) => {
       }),
       'action',
     );
+    // remembered on the door: a pass that read the ask before this allow must not bring it back
     await svc.api.updateRoom(doorId(G), r => ({
       ...r,
-      group: { ...r.group!, requests: r.group!.requests?.filter(q => q.key !== key) },
+      group: {
+        ...r.group!,
+        requests: r.group!.requests?.filter(q => q.key !== key),
+        allowed: [...(r.group!.allowed ?? []), key],
+      },
     }));
     if (room) {
       await postRoster(svc.api, room);
@@ -321,8 +330,11 @@ export const createGroups = (deps: GroupDeps) => {
     return found;
   };
 
-  /** ask to join: your room key for this group, your name, your X-Wing key */
-  const ask = async (svc: PeopleService, raw: string) => {
+  /**
+   * ask to join: your room key for this group, your name, your X-Wing key.
+   * The name is the one you chose for this group, or your word name for it.
+   */
+  const ask = async (svc: PeopleService, raw: string, nick = '') => {
     const code = normalizeCode(raw);
     const card = peeks.get(code) ?? (await peek(svc, code));
     const walletId = await deps.walletId();
@@ -333,11 +345,13 @@ export const createGroups = (deps: GroupDeps) => {
     const gen = await deps.generation(walletId);
     const keys = await deps.keys(walletId, gen, card.G);
     const at = now();
+    const mine = cleanName(nick);
     const door: PeopleRoom = {
       id: doorId(card.G),
       walletId,
       kind: 'door',
       name: card.group,
+      ...(mine ? { nick: mine } : {}),
       appScope: DOOR_SCOPE,
       secret: bytesToHex(await doorSecret(code)),
       size: GROUP_ROOM_PLAINTEXT_BYTES,
@@ -351,7 +365,7 @@ export const createGroups = (deps: GroupDeps) => {
         founder: card.founder,
         mine: false,
         members: [],
-        names: { [card.founder]: card.from },
+        names: { [card.founder]: cleanName(card.from) },
       },
     };
     await svc.api.addRoom(door);
@@ -360,7 +374,7 @@ export const createGroups = (deps: GroupDeps) => {
       encodeWire({
         kind: 'ask',
         key: keys.pubkey,
-        name: shortXid(keys.xid),
+        name: mine || wordName(keys.pubkey),
         seal: keys.xwingPublicKey,
       }),
       'action',
@@ -380,7 +394,7 @@ export const createGroups = (deps: GroupDeps) => {
       const asks = wires.flatMap(({ m, w }) =>
         // an ask is signed by the key it names: nobody can ask in another's name
         w?.kind === 'ask' && w.key === m.author
-          ? [{ key: w.key, name: w.name, sealKey: w.seal, at: m.ts * 1000 }]
+          ? [{ key: w.key, name: memberName(w.key, w.name), sealKey: w.seal, at: m.ts * 1000 }]
           : [],
       );
       const members = new Set(
@@ -390,7 +404,11 @@ export const createGroups = (deps: GroupDeps) => {
       return fresh.length
         ? r => {
             const q = r.group?.requests ?? [];
-            const seen = new Set([...q.map(x => x.key), ...(r.group?.declined ?? [])]);
+            const seen = new Set([
+              ...q.map(x => x.key),
+              ...(r.group?.declined ?? []),
+              ...(r.group?.allowed ?? []),
+            ]);
             const add = fresh.filter(a => !seen.has(a.key));
             return add.length ? { ...r, group: { ...r.group!, requests: [...q, ...add] } } : r;
           }
@@ -413,6 +431,7 @@ export const createGroups = (deps: GroupDeps) => {
       walletId: room.walletId,
       kind: 'group',
       name: body.group || room.name,
+      ...(room.nick ? { nick: room.nick } : {}),
       appScope: ZAFU_GROUP_APP_SCOPE,
       secret: body.secret,
       size: GROUP_ROOM_PLAINTEXT_BYTES,
@@ -460,7 +479,7 @@ export const createGroups = (deps: GroupDeps) => {
           body: { kind: 'mode', mode: '+v', subject: a.key },
         }),
       ];
-      names[a.key] = a.name;
+      names[a.key] = memberName(a.key, a.name);
       roster.add(a.key);
     }
     const next = await api.updateRoom(room.id, r => ({
@@ -486,7 +505,6 @@ export const createGroups = (deps: GroupDeps) => {
       return undefined;
     }
     let log = g.log;
-    let names = g.names;
     const wires = records
       .map(m => ({ m, w: decodeWire(m.body) }))
       .filter((x): x is { m: RoomMessage; w: NonNullable<typeof x.w> } => !!x.w)
@@ -511,29 +529,42 @@ export const createGroups = (deps: GroupDeps) => {
         }
       }
     }
+    let heard: Record<string, string> | undefined;
     for (const { m, w } of wires) {
       if (w.kind === 'names' && m.author === g.founder) {
-        names = { ...names, ...w.names };
+        heard = {
+          ...heard,
+          ...Object.fromEntries(Object.entries(w.names).map(([k, v]) => [k, cleanName(String(v))])),
+        };
       }
     }
-    if (log === g.log && names === g.names) {
+    if (log === g.log && !heard) {
       return undefined;
     }
-    return r => ({
-      ...r,
-      group: {
-        ...r.group!,
-        log,
-        names,
-        members: log ? rosterOf(log, names, room.createdAt) : r.group!.members,
-      },
-    });
+    // applied to the room as it is NOW: an allow may have landed while this
+    // pass read the relay, and a stale roster must never undo it. The log only
+    // grows, so the longer verified one is the newer; the founder's own names
+    // are theirs, a member takes the founder's latest word.
+    return r => {
+      const cur = r.group!;
+      const next = (cur.log?.records.length ?? -1) >= (log?.records.length ?? -1) ? cur.log : log;
+      const all = g.mine ? { ...heard, ...cur.names } : { ...cur.names, ...heard };
+      return {
+        ...r,
+        group: {
+          ...cur,
+          log: next,
+          names: all,
+          members: next ? rosterOf(next, all, room.createdAt) : cur.members,
+        },
+      };
+    };
   };
 
   return {
     ops: {
       'group-create': (r: Record<string, unknown>, s: PeopleService) =>
-        create(s, String(r['name'] ?? '')),
+        create(s, String(r['name'] ?? ''), String(r['nick'] ?? '')),
       'group-allow': (r: Record<string, unknown>, s: PeopleService) =>
         allow(s, String(r['G']), String(r['key'])),
       'group-decline': (r: Record<string, unknown>, s: PeopleService) =>
@@ -541,7 +572,8 @@ export const createGroups = (deps: GroupDeps) => {
       'group-renew': (r: Record<string, unknown>, s: PeopleService) => renew(s, String(r['G'])),
       'door-peek': (r: Record<string, unknown>, s: PeopleService) =>
         peek(s, String(r['code'] ?? '')),
-      'door-ask': (r: Record<string, unknown>, s: PeopleService) => ask(s, String(r['code'] ?? '')),
+      'door-ask': (r: Record<string, unknown>, s: PeopleService) =>
+        ask(s, String(r['code'] ?? ''), String(r['nick'] ?? '')),
     },
     handlers: { door: onDoor, group: onGroup },
   };

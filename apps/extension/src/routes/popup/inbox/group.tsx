@@ -23,6 +23,8 @@ import { KeyCard, MakeSharedSheet } from './shared-wallet';
 import { PaymentCard, ProposeSheet } from './payments';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { whenOf } from './threads';
+import { JoinAsks, asksOf } from './join-asks';
+import { useMemberName } from './use-member-name';
 
 const dayOf = (s: number) => {
   const w = whenOf(s * 1000);
@@ -74,22 +76,26 @@ export function GroupPage() {
   const goBack = useBackNav(PopupPath.INBOX);
   const G = useParams()['groupId'] ?? '';
   const roomId = `g:${G}`;
-  const room = useMyRooms().find(r => r.id === roomId);
+  const rooms = useMyRooms();
+  const room = rooms.find(r => r.id === roomId);
+  // the founder's open door: who is asking shows here too, pinned
+  const { door } = asksOf(rooms, G);
+  const nameFor = useMemberName(room);
   const thread = useThread(room);
   const [draft, setDraft] = useState('');
   const [making, setMaking] = useState(false);
   const [sending, setSending] = useState(false);
   const { requestAuth, PasswordModal } = usePasswordGate();
   useWatchRoom(room ? roomId : undefined);
+  useWatchRoom(door?.id);
   const shared = useFrostRoom(room);
   const held = useSharedBalance(shared.seat);
   const ms = shared.seat?.multisig;
 
   const items = thread?.items ?? [];
-  const names = room?.group?.names ?? {};
-  const nameOf = (i: ThreadItem) => (i.mine ? 'you' : (names[i.author] ?? i.name));
+  const nameOf = (i: ThreadItem) => (i.mine ? 'you' : nameFor(i.author, i.name));
   const last = items[items.length - 1];
-  const memberName = (k: string) => names[k] ?? k.slice(0, 8);
+  const memberName = (k: string) => nameFor(k);
   // the key card and each payment sit in the thread where they started
   const c = shared.ceremony;
   const { seat, me } = shared;
@@ -166,6 +172,7 @@ export function GroupPage() {
         onInvite={room.group?.mine ? () => navigate(groupInvitePath(G)) : undefined}
       />
       <RelaySlot />
+      <JoinAsks room={room} door={door} />
       <div
         ref={scroll.ref}
         onScroll={scroll.onScroll}
@@ -242,7 +249,7 @@ export function GroupPage() {
           deal={room.group?.deal}
           members={(room.group?.members ?? []).map(m => ({
             key: m.key,
-            name: m.key === shared.me ? 'you' : m.name,
+            name: m.key === shared.me ? 'you' : nameFor(m.key),
           }))}
         />
       )}

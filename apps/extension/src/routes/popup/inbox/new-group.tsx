@@ -12,10 +12,12 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { peopleAsk } from '../../../people/client';
 import { isRelayGated } from '../../../people/protocol';
 import { PopupPath, groupInvitePath } from '../paths';
+import { NickField } from './nick-field';
 
 export function NewGroupPage() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
+  const [nick, setNick] = useState('');
   const [busy, setBusy] = useState(false);
   const [fail, setFail] = useState<string>();
 
@@ -25,6 +27,7 @@ export function NewGroupPage() {
     try {
       const { id } = await peopleAsk<{ id: string; code: string }>('group-create', {
         name: name.trim(),
+        nick: nick.trim(),
       });
       navigate(groupInvitePath(id.slice(2)), { replace: true });
     } catch (e) {
@@ -61,13 +64,14 @@ export function NewGroupPage() {
             autoFocus
           />
         </label>
+        <NickField value={nick} onChange={setNick} />
         <section className='flex flex-col gap-1.5'>
           <h2 className='text-xs tracking-[0.04em] text-fg-muted'>members</h2>
           <div className='flex h-12 items-center gap-3 px-1'>
             <span className='flex size-8 items-center justify-center bg-elev-2 text-sm text-fg-high'>
               y
             </span>
-            <span className='grow text-sm text-fg-high'>you</span>
+            <span className='grow text-sm text-fg-high'>{nick.trim() || 'you'}</span>
           </div>
           <span className='text-[11px] text-fg-muted'>
             or share code · the next step makes one, and you allow each person
@@ -78,14 +82,6 @@ export function NewGroupPage() {
           <Button type='submit' disabled={!name.trim() || busy} loading={busy}>
             invite and create
           </Button>
-          <button
-            type='button'
-            data-preload={PopupPath.INBOX_JOIN}
-            onClick={() => navigate(PopupPath.INBOX_JOIN)}
-            className='self-center text-xs text-zigner-gold hover:underline'
-          >
-            have a code? join a group
-          </button>
         </div>
       </form>
     </div>
