@@ -79,7 +79,9 @@ const artOf = (s: Screen): ScrollArt =>
 
 const SCREENS: Record<Screen, () => ReactNode> = {
   loading: () => null,
-  locked: () => <UnlockColumn sub='your buy waits where you left it.' unlock={unlock} onUnlocked={init} />,
+  locked: () => (
+    <UnlockColumn sub='your buy waits where you left it.' unlock={unlock} onUnlocked={init} />
+  ),
   cannot: () => (
     <Column title='buy zec'>
       <p className='text-sm text-fg-muted'>

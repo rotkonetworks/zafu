@@ -171,7 +171,8 @@ export const resumed = (f: Flight): Flight =>
     ? {
         ...f,
         sending: undefined,
-        error: 'this step may already have gone out · please look at the history before trying again',
+        error:
+          'this step may already have gone out · please look at the history before trying again',
       }
     : f;
 
@@ -285,7 +286,12 @@ export const stepLines = (
   });
   if (f.kind === 'add') {
     const head = [
-      line(0, 'fund', 'shield out to your lp address', f.fundZat ? `${z(f.fundZat)} zec` : undefined),
+      line(
+        0,
+        'fund',
+        'shield out to your lp address',
+        f.fundZat ? `${z(f.fundZat)} zec` : undefined,
+      ),
       line(1, 'settle', 'one block to settle', 'zcash confirmation'),
       line(2, 'send', 'sent to the pool', `memo ${f.memo} · ${z(f.amountZat)} zec`),
     ];
@@ -333,7 +339,11 @@ export const stepLines = (
       3,
       'payout',
       'the pool pays out',
-      f.outZat ? `${z(f.outZat)} zec` : f.expectZat ? `≈ ${z(f.expectZat)} zec, after its fee` : undefined,
+      f.outZat
+        ? `${z(f.outZat)} zec`
+        : f.expectZat
+          ? `≈ ${z(f.expectZat)} zec, after its fee`
+          : undefined,
     ),
     line(4, 'arrive', 'arrived at your lp address'),
     line(5, 'shield', `shielded back to ${t.pocket}`),
@@ -342,7 +352,7 @@ export const stepLines = (
   lines[0] = { ...lines[0]!, state: f.stage === 'settle' ? 'now' : lines[0]!.state };
   if (f.stage === 'refused') {
     return [
-      lines[0]!,
+      lines[0],
       { ...lines[1]!, state: 'done' },
       {
         t: 'thorchain did not take it out',

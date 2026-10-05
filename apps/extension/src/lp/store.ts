@@ -42,7 +42,10 @@ export interface LpPocket {
 export type LpBook = Record<string, LpPocket>;
 
 const isPocket = (v: unknown): v is LpPocket =>
-  !!v && typeof v === 'object' && Number.isInteger((v as LpPocket).index) && (v as LpPocket).index > 0;
+  !!v &&
+  typeof v === 'object' &&
+  Number.isInteger((v as LpPocket).index) &&
+  (v as LpPocket).index > 0;
 
 /** keep only what has this build's shape; a damaged flight is dropped, never the index */
 const clean = (v: unknown): LpBook => {
@@ -130,19 +133,26 @@ export const exportLp = async (ownerOf: (walletId: string) => string | undefined
 /** the highest t-index handed out for a pocket, raised so the scan and the next swap see `index` */
 const raiseTIndex = async (account: number, index: number) => {
   const key = zcashTransparentIndexKey(account);
-  await navigator.locks.request(`${chrome.runtime.id}.zcash-t-index`, { mode: 'exclusive' }, async () => {
-    const v: unknown = (await chrome.storage.local.get(key))[key];
-    if (!Number.isInteger(v) || (v as number) < index) {
-      await chrome.storage.local.set({ [key]: index });
-    }
-  });
+  await navigator.locks.request(
+    `${chrome.runtime.id}.zcash-t-index`,
+    { mode: 'exclusive' },
+    async () => {
+      const v: unknown = (await chrome.storage.local.get(key))[key];
+      if (!Number.isInteger(v) || (v as number) < index) {
+        await chrome.storage.local.set({ [key]: index });
+      }
+    },
+  );
 };
 
 /**
  * Restore the indices for the wallets here. A pocket that already has an lp
  * address keeps it; the address itself is derived again on lp.html.
  */
-export const restoreLp = async (backup: unknown, walletOf: (owner: string) => string | undefined) => {
+export const restoreLp = async (
+  backup: unknown,
+  walletOf: (owner: string) => string | undefined,
+) => {
   if (!backup || typeof backup !== 'object') {
     return;
   }

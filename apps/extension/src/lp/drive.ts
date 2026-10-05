@@ -9,15 +9,7 @@
  */
 
 import { checkVault, type DepositPlan, type DepositRequest } from '../workers/transparent-deposit';
-import {
-  advance,
-  needs,
-  sending,
-  sent,
-  stopped,
-  type Facts,
-  type Flight,
-} from './flight';
+import { advance, needs, sending, sent, stopped, type Facts, type Flight } from './flight';
 import { memoFits } from './math';
 import type { TxSeen, ZecInbound } from './thor';
 

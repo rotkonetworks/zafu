@@ -25,14 +25,7 @@ import { setDestinationOptIn } from '../../net/ledger';
 import { readEgressView } from '../../net/egress-opt-in';
 import { claimTAddress, tAddressAt } from '../../hooks/use-transparent-addresses';
 import { drive, type DriveDeps } from '../../lp/drive';
-import {
-  isDone,
-  needs,
-  resumed,
-  shieldRefund,
-  startFlight,
-  type Flight,
-} from '../../lp/flight';
+import { isDone, needs, resumed, shieldRefund, startFlight, type Flight } from '../../lp/flight';
 import {
   ADD_MEMO,
   afterFee,
@@ -41,12 +34,7 @@ import {
   withdrawMemo,
   withdrawZec,
 } from '../../lp/math';
-import {
-  changeLp,
-  patchLpPocket,
-  readLpPocket,
-  type LpCache,
-} from '../../lp/store';
+import { changeLp, patchLpPocket, readLpPocket, type LpCache } from '../../lp/store';
 import {
   lpEgress,
   MIDGARD_DEST,

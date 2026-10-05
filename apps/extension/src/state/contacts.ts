@@ -851,7 +851,10 @@ export const createContactsSlice =
           await raiseRelationshipCounters(k.id, floor);
         }
         await importEgressChoices(parsed.egress);
-        await restoreLp(parsed.lp, owner => get().keyRing.keyInfos.find(k => pocketOwner(k) === owner)?.id);
+        await restoreLp(
+          parsed.lp,
+          owner => get().keyRing.keyInfos.find(k => pocketOwner(k) === owner)?.id,
+        );
         if (parsed.passwordLogins !== undefined) {
           await restorePasswordLogins(parsed.passwordLogins, mode);
         }

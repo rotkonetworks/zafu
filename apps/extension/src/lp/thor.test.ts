@@ -3,9 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const view = vi.hoisted(() => ({ on: new Set<string>() }));
 vi.mock('../net/egress-opt-in', () => ({
   readEgressView: () =>
-    Promise.resolve(
-      ['thorchain', 'midgard', 'near-swap'].map(id => ({ id, on: view.on.has(id) })),
-    ),
+    Promise.resolve(['thorchain', 'midgard', 'near-swap'].map(id => ({ id, on: view.on.has(id) }))),
 }));
 vi.mock('../state/swap/near', () => ({
   nearPrices: () => Promise.resolve(new Map([['ZEC@zec', 1318.33]])),
@@ -89,9 +87,9 @@ describe('egress: nothing leaves before the person allowed it', () => {
   it('thornode allowed: thornode only, liquify first', async () => {
     view.on.add('thorchain');
     const r = await readThor(LP);
-    expect(fetched.every(u => u.startsWith('https://gateway.liquify.com/chain/thorchain_api/'))).toBe(
-      true,
-    );
+    expect(
+      fetched.every(u => u.startsWith('https://gateway.liquify.com/chain/thorchain_api/')),
+    ).toBe(true);
     await expect(readMidgard()).rejects.toBeInstanceOf(NotAllowed);
     expect(fetched.some(u => u.includes('midgard'))).toBe(false);
     expect(r.pool.asset).toBe(1_884_160_158n);
@@ -107,7 +105,7 @@ describe('egress: nothing leaves before the person allowed it', () => {
     expect(r.position?.depositAsset).toBe(5_750_000n);
   });
 
-  it('prices only from the swap\'s own list, once near-swap is allowed', async () => {
+  it("prices only from the swap's own list, once near-swap is allowed", async () => {
     view.on.add('near-swap');
     expect(await readMarketZec()).toBe(1318.33);
   });
@@ -164,12 +162,14 @@ describe('tx status', () => {
     });
   });
 
-  it('waits for the payout\'s own txid: the zero id is not one', () => {
+  it("waits for the payout's own txid: the zero id is not one", () => {
     const s = txSeenOf(
       {
         stages: { inbound_observed: { completed: true } },
         planned_out_txs: [{ to_address: LP, coin: { asset: 'ZEC.ZEC', amount: '919000' } }],
-        out_txs: [{ id: '0'.repeat(64), to_address: LP, coins: [{ asset: 'ZEC.ZEC', amount: '1' }] }],
+        out_txs: [
+          { id: '0'.repeat(64), to_address: LP, coins: [{ asset: 'ZEC.ZEC', amount: '1' }] },
+        ],
       },
       LP,
     );
@@ -206,7 +206,14 @@ describe('history', () => {
       LP,
     );
     expect(rows).toEqual([
-      { kind: 'add', at: 1791100080251, zat: 11_500_000n, memo: '+:ZEC.ZEC', txid: 'ab', reason: undefined },
+      {
+        kind: 'add',
+        at: 1791100080251,
+        zat: 11_500_000n,
+        memo: '+:ZEC.ZEC',
+        txid: 'ab',
+        reason: undefined,
+      },
       {
         kind: 'refund',
         at: 1791103290278,

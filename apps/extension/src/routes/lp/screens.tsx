@@ -231,17 +231,20 @@ export const AddScreen = ({ onAdd }: { onAdd: () => void }) => {
   const fees = SHIELD_OUT_FEE + depositFeeZat(ADD_MEMO.length);
   const can = read && !!a && !!q && !small && !paused && !flight;
   const costText = small || !q ? 'n/a' : q.costPct === undefined ? 'no price' : pct(q.costPct);
-  const costC = small || !q || q.costPct === undefined
-    ? 'text-fg-dim'
-    : tone === 'strong'
-      ? 'text-hanko'
-      : tone === 'warn'
-        ? 'text-warn'
-        : 'text-fg-high';
+  const costC =
+    small || !q || q.costPct === undefined
+      ? 'text-fg-dim'
+      : tone === 'strong'
+        ? 'text-hanko'
+        : tone === 'warn'
+          ? 'text-warn'
+          : 'text-fg-high';
   return (
     <div className='flex flex-col gap-4'>
       <h1 className='font-display text-[38px] text-fg-high'>add zec</h1>
-      <div className={cn('border bg-elev-1', large && !paused ? 'border-hanko' : 'border-border-soft')}>
+      <div
+        className={cn('border bg-elev-1', large && !paused ? 'border-hanko' : 'border-border-soft')}
+      >
         <div className='flex h-24 items-center gap-3.5 px-5'>
           <label htmlFor='lpamt' className='sr-only'>
             amount in zec
@@ -285,7 +288,11 @@ export const AddScreen = ({ onAdd }: { onAdd: () => void }) => {
         {[
           ['you add', a ? `${zecText(a)} zec` : '0 zec', 'text-fg-high'],
           ['cost vs market', costText, costC],
-          ['your share', small || !q ? 'n/a' : pct(q.sharePct, 2), small || !q ? 'text-fg-dim' : 'text-fg-high'],
+          [
+            'your share',
+            small || !q ? 'n/a' : pct(q.sharePct, 2),
+            small || !q ? 'text-fg-dim' : 'text-fg-high',
+          ],
         ].map(([k, v, c], i) => (
           <div
             key={k}
@@ -388,7 +395,9 @@ export const AddScreen = ({ onAdd }: { onAdd: () => void }) => {
 
 /** LpPosition: worth now, since adding, fees, share */
 export const PositionScreen = () => {
-  const s = useLp(useShallow(s => ({ thor: s.thor, zecUsd: s.zecUsd, mid: s.mid, flight: s.flight })));
+  const s = useLp(
+    useShallow(s => ({ thor: s.thor, zecUsd: s.zecUsd, mid: s.mid, flight: s.flight })),
+  );
   const p = positionOf(s);
   const worth = worthOf(s);
   const now = useNow(60_000);
@@ -564,18 +573,28 @@ export const WithdrawScreen = ({ onOut }: { onOut: () => void }) => {
             </span>
             <span className='text-[11px] text-fg-dim'>thornode · {age} s</span>
           </div>
-          <Row k='back now' w='w-[150px]' h='h-11' side={
-            <span className={back < 0 ? 'text-warn' : 'text-green'}>
-              {back > 0 ? '+' : ''}
-              {pct(back)} zec
-            </span>
-          }>
+          <Row
+            k='back now'
+            w='w-[150px]'
+            h='h-11'
+            side={
+              <span className={back < 0 ? 'text-warn' : 'text-green'}>
+                {back > 0 ? '+' : ''}
+                {pct(back)} zec
+              </span>
+            }
+          >
             {zecText(all)} zec{usdOf(all)}
           </Row>
           <Row k='had you kept the zec' w='w-[150px]' h='h-11'>
             {zecText(added)} zec{usdOf(added)}
           </Row>
-          <Row k='lost to the price move' w='w-[150px]' h='h-11' side={pct(impermanentLoss(move) * 100)}>
+          <Row
+            k='lost to the price move'
+            w='w-[150px]'
+            h='h-11'
+            side={pct(impermanentLoss(move) * 100)}
+          >
             vs half zec, half rune
           </Row>
         </div>
@@ -647,7 +666,9 @@ export const TrackScreen = () => {
       <div className='relative h-0.5 overflow-hidden bg-border-soft'>
         <span
           className={cn('absolute inset-y-0 left-0', refunded ? 'bg-warn' : 'bg-zigner-gold')}
-          style={{ width: `${finished || refunded ? 100 : Math.round((done / lines.length) * 100)}%` }}
+          style={{
+            width: `${finished || refunded ? 100 : Math.round((done / lines.length) * 100)}%`,
+          }}
         />
       </div>
       <StepLines steps={lines} />
@@ -730,7 +751,9 @@ export const BlockedScreen = () => {
           allow thornode
         </Button>
       </Buttons>
-      <span className='text-xs text-fg-dim'>only while this page is open · blockable again any time</span>
+      <span className='text-xs text-fg-dim'>
+        only while this page is open · blockable again any time
+      </span>
     </Column>
   );
 };
@@ -739,10 +762,15 @@ export const BlockedScreen = () => {
 export const TwoSidedScreen = () => {
   const { a, q } = useAddQuote();
   const rune = useLp(s =>
-    s.thor && a ? (Number(a) * Number(s.thor.pool.rune)) / Number(s.thor.pool.asset) / 1e8 : undefined,
+    s.thor && a
+      ? (Number(a) * Number(s.thor.pool.rune)) / Number(s.thor.pool.asset) / 1e8
+      : undefined,
   );
   return (
-    <Column title='add with rune too' sub='both sides go in together, so nothing goes to arbitrage.'>
+    <Column
+      title='add with rune too'
+      sub='both sides go in together, so nothing goes to arbitrage.'
+    >
       <div className='flex flex-col border border-border-soft'>
         <div className='flex h-[66px] items-center gap-3.5 bg-elev-1 px-[18px]'>
           <span className='flex flex-1 flex-col gap-1'>

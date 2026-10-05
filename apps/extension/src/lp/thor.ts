@@ -221,7 +221,7 @@ export const txSeenOf = (body: Raw, to: string): TxSeen => {
         ? undefined
         : {
             zat,
-            refund: !!planned?.['refund'] || /^REFUND:/.test(String(sent?.['memo'] ?? '')),
+            refund: !!planned?.['refund'] || String(sent?.['memo'] ?? '').startsWith('REFUND:'),
             txid: sent ? String(sent['id']).toLowerCase() : undefined,
           },
   };

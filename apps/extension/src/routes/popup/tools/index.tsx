@@ -126,7 +126,10 @@ export const ToolsPage = () => {
                 <span className='flex items-start justify-between'>
                   <span className={cn(t.icon, 'size-6 text-zigner-gold')} aria-hidden='true' />
                   {t.page && (
-                    <span className='i-lucide-arrow-up-right size-3 text-fg-muted' aria-hidden='true' />
+                    <span
+                      className='i-lucide-arrow-up-right size-3 text-fg-muted'
+                      aria-hidden='true'
+                    />
                   )}
                 </span>
                 <span className='flex flex-col gap-0.5'>

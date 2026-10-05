@@ -39,7 +39,9 @@ describe('an add in flight', () => {
     f = advance(f, { seen: { observed: true, finalised: false } });
     expect(f.stage).toBe('credit');
     // finalised, but the units haven't moved yet: wait
-    expect(advance(f, { seen: { observed: true, finalised: true }, units: 0n }).stage).toBe('credit');
+    expect(advance(f, { seen: { observed: true, finalised: true }, units: 0n }).stage).toBe(
+      'credit',
+    );
     f = advance(f, { seen: { observed: true, finalised: true }, units: 836_120_000n });
     expect(f.stage).toBe('credited');
     expect(isDone(f)).toBe(true);
@@ -73,7 +75,13 @@ describe('an add in flight', () => {
 
 describe('a take-out in flight', () => {
   const start = () =>
-    startFlight('withdraw', 15_000n, withdrawMemo(10_000), { bps: 10_000, expectZat: '964000' }, 1000);
+    startFlight(
+      'withdraw',
+      15_000n,
+      withdrawMemo(10_000),
+      { bps: 10_000, expectZat: '964000' },
+      1000,
+    );
 
   it('walks fund, ask, payout, arrive, shield', () => {
     let f = sent(sending(start()), 'f1');
@@ -83,8 +91,9 @@ describe('a take-out in flight', () => {
     expect(f.stage).toBe('payout');
     // planned but not yet sent: wait for the outbound's own txid
     expect(
-      advance(f, { seen: { observed: true, finalised: true, out: { zat: 919_000n, refund: false } } })
-        .stage,
+      advance(f, {
+        seen: { observed: true, finalised: true, out: { zat: 919_000n, refund: false } },
+      }).stage,
     ).toBe('payout');
     f = advance(f, {
       seen: { observed: true, finalised: true, out: { zat: 919_000n, refund: false, txid: 'o1' } },
@@ -99,7 +108,7 @@ describe('a take-out in flight', () => {
     expect(stepLines(f, T).every(l => l.state === 'done')).toBe(true);
   });
 
-  it('stops as refused with thorchain\'s reason, nothing more to send', () => {
+  it("stops as refused with thorchain's reason, nothing more to send", () => {
     const f = advance(sent(sending(advance(sent(sending(start()), 'f'), { short: 0n })), 'a'), {
       refundReason: 'withdraw locked up',
     });
@@ -111,14 +120,18 @@ describe('a take-out in flight', () => {
 
 describe('persist and resume', () => {
   it('survives json, and a resumed record carries on from its stage', () => {
-    const f = roundTrip(advance(sent(sending(startFlight('add', 1n, ADD_MEMO)), 'x'), { short: 0n }));
+    const f = roundTrip(
+      advance(sent(sending(startFlight('add', 1n, ADD_MEMO)), 'x'), { short: 0n }),
+    );
     expect(isFlight(f)).toBe(true);
     expect(resumed(f)).toBe(f);
     expect(needs(resumed(f))).toBe('send');
   });
 
   it('never sends twice: a send marked out with no txid stops and asks', () => {
-    const f = roundTrip(sending(advance(sent(sending(startFlight('add', 1n, ADD_MEMO)), 'x'), { short: 0n })));
+    const f = roundTrip(
+      sending(advance(sent(sending(startFlight('add', 1n, ADD_MEMO)), 'x'), { short: 0n })),
+    );
     // the tab closed mid-send: the record says a send was out
     expect(needs(f)).toBeUndefined();
     const r = resumed(f);

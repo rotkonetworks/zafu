@@ -81,7 +81,10 @@ describe('an lp deposit on the real wasm', () => {
       reviewedFee: plan.fee,
     });
     const [pay, memo, change, ...rest] = transparentOutputs(sent.txHex);
-    expect(pay).toEqual({ value: MIN_ADD_ZAT, script: await transparentAddressToScriptHex(VAULT, true) });
+    expect(pay).toEqual({
+      value: MIN_ADD_ZAT,
+      script: await transparentAddressToScriptHex(VAULT, true),
+    });
     expect(memo).toEqual({ value: 0n, script: opReturnScript(memoHex(ADD_MEMO)) });
     expect(change).toEqual({ value: 300_000n - MIN_ADD_ZAT - BigInt(plan.fee), script: own });
     expect(rest).toEqual([]);

@@ -103,9 +103,7 @@ export const withdrawZec = (
   const claim = share(BigInt(bps), 10_000n, lpUnits);
   const outRune = share(claim, pool.units, pool.rune);
   const outAsset = share(claim, pool.units, pool.asset);
-  return (
-    swapOut(pool.rune - outRune, outRune, pool.asset - outAsset, minSlipBps) + outAsset
-  );
+  return swapOut(pool.rune - outRune, outRune, pool.asset - outAsset, minSlipBps) + outAsset;
 };
 
 /** what comes back after the pool's outbound fee: never below zero */
@@ -179,11 +177,7 @@ export const fairAmount = (pool: PoolDepth, px: Prices, pct = FAIR_COST_PCT): bi
 
 /** cost tones: orange from 5%, strong from 10% */
 export const costTone = (pct?: number): 'calm' | 'warn' | 'strong' =>
-  pct === undefined || pct < WARN_COST_PCT
-    ? 'calm'
-    : pct < STRONG_COST_PCT
-      ? 'warn'
-      : 'strong';
+  pct === undefined || pct < WARN_COST_PCT ? 'calm' : pct < STRONG_COST_PCT ? 'warn' : 'strong';
 
 /**
  * How far zec has moved against rune since the add, from THORNode's deposit

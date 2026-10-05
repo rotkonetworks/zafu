@@ -15,7 +15,17 @@ import { Column, UnlockColumn, useNow } from '../../components/scroll-page';
 import { usePasswordGate } from '../../hooks/password-gate';
 import { isDone } from '../../lp/flight';
 import { zecText } from '../../lp/math';
-import { init, openSheet, positionOf, show, startAdd, startWithdraw, tick, unlock, type LpState } from './store';
+import {
+  init,
+  openSheet,
+  positionOf,
+  show,
+  startAdd,
+  startWithdraw,
+  tick,
+  unlock,
+  type LpState,
+} from './store';
 import {
   AddScreen,
   BlockedScreen,
@@ -117,7 +127,13 @@ export const LpPage = () => {
 
   const column: Record<Screen, () => ReactNode> = {
     loading: () => null,
-    locked: () => <UnlockColumn sub='your liquidity waits where you left it.' unlock={unlock} onUnlocked={init} />,
+    locked: () => (
+      <UnlockColumn
+        sub='your liquidity waits where you left it.'
+        unlock={unlock}
+        onUnlocked={init}
+      />
+    ),
     cannot: () => (
       <Column title='zec liquidity'>
         <p className='text-sm text-fg-muted'>
@@ -137,7 +153,13 @@ export const LpPage = () => {
   };
 
   return (
-    <ScrollShell art={artOf(screen)} label='zec liquidity' aside='w-[360px]' back={back} step={step}>
+    <ScrollShell
+      art={artOf(screen)}
+      label='zec liquidity'
+      aside='w-[360px]'
+      back={back}
+      step={step}
+    >
       {PasswordModal}
       <div className='flex flex-1 items-stretch gap-12 pt-3'>
         <div className='flex w-[480px] max-w-full shrink-0 flex-col justify-center'>
@@ -183,14 +205,19 @@ const Sheets = () => {
         className='mx-auto max-w-[560px]'
       >
         <span className='-mt-2 text-xs text-fg-muted'>
-          {mid ? `midgard · ${Math.max(0, Math.round((now - mid.at) / 1000))} s ago` : 'midgard is off'}
+          {mid
+            ? `midgard · ${Math.max(0, Math.round((now - mid.at) / 1000))} s ago`
+            : 'midgard is off'}
         </span>
         <div className='flex flex-col divide-y divide-border-soft border border-border-soft'>
           {rows.length === 0 && (
             <span className='px-4 py-4 text-sm text-fg-muted'>nothing on this address yet</span>
           )}
           {rows.map(h => (
-            <div key={`${h.txid}-${h.kind}`} className='flex h-[58px] items-center gap-3.5 bg-elev-1 px-4'>
+            <div
+              key={`${h.txid}-${h.kind}`}
+              className='flex h-[58px] items-center gap-3.5 bg-elev-1 px-4'
+            >
               <span
                 className={
                   h.kind === 'add'
@@ -225,7 +252,11 @@ const Sheets = () => {
                   {h.reason && ` · ${h.reason}`}
                 </span>
               </span>
-              <span className={h.kind === 'refund' ? 'text-[13px] text-warn' : 'text-[13px] text-fg-high'}>
+              <span
+                className={
+                  h.kind === 'refund' ? 'text-[13px] text-warn' : 'text-[13px] text-fg-high'
+                }
+              >
                 {h.kind === 'add' ? '+' : ''}
                 {zecText(h.zat)}
               </span>

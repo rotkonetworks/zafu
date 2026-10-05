@@ -70,7 +70,9 @@ export const LpCard = ({ storeId }: { storeId?: string }) => {
             )
           }
           onPress={openLpPage}
-          action={<span className='i-lucide-arrow-up-right size-3.5 text-fg-muted' aria-hidden='true' />}
+          action={
+            <span className='i-lucide-arrow-up-right size-3.5 text-fg-muted' aria-hidden='true' />
+          }
         />
       </div>
     </BalanceGroup>

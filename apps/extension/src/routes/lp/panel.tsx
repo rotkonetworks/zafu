@@ -91,7 +91,10 @@ const Group = ({
     {bar && (
       <div className='flex flex-col gap-1.5 pb-1 pt-1.5'>
         <div className='relative h-1.5 bg-border-hard'>
-          <span className={cn('absolute inset-y-0 left-0', bar[1])} style={{ width: `${bar[0]}%` }} />
+          <span
+            className={cn('absolute inset-y-0 left-0', bar[1])}
+            style={{ width: `${bar[0]}%` }}
+          />
         </div>
         <span className='text-[11px] text-fg-dim'>{bar[2]}</span>
       </div>
@@ -121,12 +124,16 @@ export const Panel = ({ screen }: { screen: string }) => {
   const now = useNow();
   const t = s.thor;
   const off = !t || screen === 'first' || screen === 'egress' || screen === 'blocked';
-  const offSrc = s.blocked ? 'blocked by you' : t ? '' : s.readErr ?? 'after you allow';
+  const offSrc = s.blocked ? 'blocked by you' : t ? '' : (s.readErr ?? 'after you allow');
   const nr = (k: string): R => ({ k, v: s.blocked ? 'blocked' : 'not read', tag: true });
   const p = positionOf(s);
   const worth = worthOf(s);
   const tSrc = t ? `thornode · ${ago(now, t.at)}` : '';
-  const mSrc = s.mid ? `midgard · ${ago(now, s.mid.at)}` : s.egress.midgard ? 'midgard' : 'midgard off';
+  const mSrc = s.mid
+    ? `midgard · ${ago(now, s.mid.at)}`
+    : s.egress.midgard
+      ? 'midgard'
+      : 'midgard off';
   const pxSrc = s.zecUsd ? `prices · ${ago(now, s.pxAt)}` : 'prices off';
   const adding = screen === 'add' && a && q && !small;
   const share = adding && t ? Math.min(100, (Number(a) / Number(t.pool.asset)) * 100) : 0;
@@ -139,10 +146,15 @@ export const Panel = ({ screen }: { screen: string }) => {
       : t.pool.status.toLowerCase();
   const gap = t && s.zecUsd ? (t.pool.zecUsd / s.zecUsd - 1) * 100 : undefined;
   const days = s.mid?.since ? Math.max(0, Math.floor((now - s.mid.since) / 86_400_000)) : undefined;
-  const inFlight = s.flight && s.flight.kind === 'add' && !['credited', 'refunded'].includes(s.flight.stage);
+  const inFlight =
+    s.flight && s.flight.kind === 'add' && !['credited', 'refunded'].includes(s.flight.stage);
   const yours: R[] = inFlight
     ? [
-        { k: 'on the way', v: `${zecText(BigInt(s.flight!.amountZat))} zec`, c: 'text-zigner-gold' },
+        {
+          k: 'on the way',
+          v: `${zecText(BigInt(s.flight!.amountZat))} zec`,
+          c: 'text-zigner-gold',
+        },
         { k: 'lp address', v: short(s.address) },
       ]
     : p && worth !== undefined && t
@@ -187,7 +199,11 @@ export const Panel = ({ screen }: { screen: string }) => {
               nr('gap'),
             ]}
           />
-          <Group t='activity' src={offSrc} rows={[nr('volume 24h'), nr('fees to the pool 7d'), nr('apr')]} />
+          <Group
+            t='activity'
+            src={offSrc}
+            rows={[nr('volume 24h'), nr('fees to the pool 7d'), nr('apr')]}
+          />
           <Group t='waiting' src={offSrc} rows={[nr('waiting for zec')]} />
           <Group
             t='yours'
@@ -195,10 +211,20 @@ export const Panel = ({ screen }: { screen: string }) => {
             rows={
               s.blocked && s.cache
                 ? [
-                    { k: 'in the pool', v: `${zecText(BigInt(s.cache.zat))} zec`, c: 'text-fg-muted' },
+                    {
+                      k: 'in the pool',
+                      v: `${zecText(BigInt(s.cache.zat))} zec`,
+                      c: 'text-fg-muted',
+                    },
                     { k: 'lp address', v: short(s.address), c: 'text-fg-muted' },
                   ]
-                : [{ k: 'lp address', v: short(s.address) || 'made on first add', c: 'text-fg-muted' }]
+                : [
+                    {
+                      k: 'lp address',
+                      v: short(s.address) || 'made on first add',
+                      c: 'text-fg-muted',
+                    },
+                  ]
             }
           />
         </>

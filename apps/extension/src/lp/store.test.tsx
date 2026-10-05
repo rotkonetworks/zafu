@@ -8,14 +8,7 @@ import { AllSlices, initializeStore } from '../state';
 import { LpCard } from '../components/lp-card';
 import { advance, needs, resumed, sending, sent, startFlight } from './flight';
 import { ADD_MEMO } from './math';
-import {
-  changeLp,
-  exportLp,
-  patchLpPocket,
-  readLp,
-  readLpPocket,
-  restoreLp,
-} from './store';
+import { changeLp, exportLp, patchLpPocket, readLp, readLpPocket, restoreLp } from './store';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, unknown> }).mock;
@@ -97,7 +90,7 @@ describe('a flight survives the tab closing', () => {
 });
 
 describe('the backup', () => {
-  test('carries each pocket\'s lp index by owner key, and a restore raises the scan counter', async () => {
+  test("carries each pocket's lp index by owner key, and a restore raises the scan counter", async () => {
     await changeLp(() => ({
       'vault-a': { index: 21, address: LP },
       'vault-a#2': { index: 4, address: 't1other' },
@@ -138,7 +131,7 @@ describe('the home card', () => {
         cache: { zat: '964000', sharePct: 1.37, readAt: Date.now() - 2 * 3_600_000 },
       },
     }));
-    const text = await mount(<LpCard storeId="v" />);
+    const text = await mount(<LpCard storeId='v' />);
     expect(text).toContain('zec liquidity');
     expect(text).toMatch(/read 2 h ago/);
     expect(text).toContain('1.37% of the pool');

@@ -29,7 +29,11 @@ const CREDITED = 8_504_694_842n;
 const POOL_AFTER_UNITS = 68_506_596_361n;
 
 /** the same position against the pool of 2026-10-05, with THORNode's own redeem values */
-const NOW: PoolDepth = { asset: 1_884_160_158n, rune: 3_199_743_901_909n, units: 3_168_071_014_120n };
+const NOW: PoolDepth = {
+  asset: 1_884_160_158n,
+  rune: 3_199_743_901_909n,
+  units: 3_168_071_014_120n,
+};
 const ASSET_REDEEM = 5_058_032n;
 const RUNE_REDEEM = 8_589_720_791n;
 const OUTBOUND_FEE = 44_929n;
@@ -104,7 +108,7 @@ describe('cost against the market', () => {
   const THIN: PoolDepth = { asset: 34_881_265n, rune: 60_484_697_408n, units: 60_001_901_519n };
   const px = { zec: 1298, rune: 1270.86 / (604.84697408 / 0.34881265) };
 
-  it('grows with the size of the add and keeps the boards\' thresholds', () => {
+  it("grows with the size of the add and keeps the boards' thresholds", () => {
     const small = quoteAdd(THIN, 1_000_000n, px)!;
     const big = quoteAdd(THIN, 10_000_000n, px)!;
     expect(big.costPct!).toBeGreaterThan(small.costPct!);
@@ -115,7 +119,11 @@ describe('cost against the market', () => {
   });
 
   it('is small in a deep pool at a fair price', () => {
-    const deep: PoolDepth = { asset: 1_884_160_158n, rune: 3_199_743_901_909n, units: 3_168_071_014_120n };
+    const deep: PoolDepth = {
+      asset: 1_884_160_158n,
+      rune: 3_199_743_901_909n,
+      units: 3_168_071_014_120n,
+    };
     const p = { zec: 1325, rune: 0.78017178 };
     expect(quoteAdd(deep, 1_000_000n, p)!.costPct!).toBeLessThan(1);
   });
