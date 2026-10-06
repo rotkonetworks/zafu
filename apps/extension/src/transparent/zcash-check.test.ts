@@ -3,7 +3,19 @@ import type { Utxo } from '../state/keyring/zidecar-client';
 import { DEFAULT_PRIVACY_SETTINGS } from '../state/privacy';
 import { planDeposit, type DepositChain, type DepositWasm } from '../workers/transparent-deposit';
 import { ledgerTransparentSendFlowBtc } from '../ledger/hw-btc-flow';
-import { fromStored, newTip, runCheck, toStored, type TransparentCheck } from './zcash-check';
+import { Key } from '@repo/encryption/key';
+import { storage } from '@repo/mock-chrome';
+import { markHydrated } from '../state/encrypted-storage';
+import {
+  checkKey,
+  fromStored,
+  newTip,
+  readCheck,
+  runCheck,
+  saveCheck,
+  toStored,
+  type TransparentCheck,
+} from './zcash-check';
 
 const utxo = (address: string, valueZat: bigint): Utxo => ({
   address,
@@ -75,6 +87,27 @@ describe('zcash transparent check', () => {
     expect(fromStored(undefined)).toBeNull();
     expect(fromStored({ encrypted: 'abc' })).toBeNull();
     expect(fromStored({ at: 1, height: 2, zat: '-1', funded: 0 })).toBeNull();
+  });
+});
+
+describe('the last check at rest', () => {
+  it('is sealed, never plaintext, and reads as never checked once locked', async () => {
+    await storage.local.clear();
+    await storage.session.clear();
+    const key = (await Key.create('test-password')).key;
+    await storage.session.set({ passwordKey: await key.toJson() });
+    markHydrated();
+    const c: TransparentCheck = { at: 5, height: 6, zat: 987654321n, funded: 3 };
+    expect(await saveCheck('w1', c)).toBe(true);
+    const raw = (await storage.local.get(checkKey('w1')))[checkKey('w1')];
+    expect(raw).toHaveProperty('encrypted');
+    expect(JSON.stringify(raw)).not.toContain('987654321');
+    expect(await readCheck('w1')).toEqual(c);
+    await storage.session.clear();
+    expect(await readCheck('w1')).toBeNull();
+    // locked: nothing written
+    expect(await saveCheck('w2', c)).toBe(false);
+    expect(await storage.local.get(checkKey('w2'))).toEqual({});
   });
 });
 

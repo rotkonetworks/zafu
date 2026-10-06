@@ -10,13 +10,7 @@ import { useStore } from '../state';
 import { selectZcashBackend } from '../state/networks';
 import { activeZcashStoreId } from '../state/pockets';
 import { zcashClient } from '../state/keyring/zcash-backend';
-import {
-  checkKey,
-  fromStored,
-  runCheck,
-  toStored,
-  type TransparentCheck,
-} from '../transparent/zcash-check';
+import { readCheck, runCheck, saveCheck, type TransparentCheck } from '../transparent/zcash-check';
 
 export const useTransparentBalance = (tAddresses: string[]) => {
   const storeId = useStore(activeZcashStoreId);
@@ -27,10 +21,7 @@ export const useTransparentBalance = (tAddresses: string[]) => {
 
   const last = useQuery({
     queryKey: key,
-    queryFn: async () => {
-      const k = checkKey(storeId!);
-      return fromStored((await chrome.storage.local.get(k))[k]);
-    },
+    queryFn: () => readCheck(storeId!),
     enabled: !!storeId,
     staleTime: Infinity,
     structuralSharing: false, // bigint
@@ -41,7 +32,7 @@ export const useTransparentBalance = (tAddresses: string[]) => {
     mutationFn: (tip: number) => runCheck(zcashClient(url, backend), tAddresses, tip),
     onSuccess: (c: TransparentCheck) => {
       queryClient.setQueryData(key, c);
-      void chrome.storage.local.set({ [checkKey(storeId!)]: toStored(c) });
+      void saveCheck(storeId!, c);
     },
   });
   const checking = useIsMutating({ mutationKey: key }) > 0;

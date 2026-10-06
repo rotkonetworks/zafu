@@ -1,12 +1,16 @@
 /**
  * A zcash pocket's transparent balance, asked only when someone wants it.
  * Nothing here runs on a timer. Each address is asked on its own (see
- * each-address.ts); the last result is kept on this computer per pocket, so a
- * reopened zafu shows it with its age instead of asking the node again.
+ * each-address.ts); the last result is kept on this computer per pocket,
+ * sealed under the session key, so a reopened zafu shows it with its age
+ * instead of asking the node again. Locked or unreadable reads as never checked.
  */
 
+import { localExtStorage, type LocalStorageState } from '@repo/storage-chrome/local';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
 import type { Utxo } from '../state/keyring/zidecar-client';
 import { utxosEach, type ZcashClient } from '../state/keyring/zcash-backend';
+import { readEncrypted, writeEncrypted } from '../state/encrypted-storage';
 
 export interface TransparentCheck {
   /** epoch ms the check finished */
@@ -20,7 +24,8 @@ export interface TransparentCheck {
   utxos?: Utxo[];
 }
 
-export const checkKey = (storeId: string) => `zcashTransparentCheck:${storeId}`;
+export const checkKey = (storeId: string) =>
+  `zcashTransparentCheck:${storeId}` as keyof LocalStorageState;
 
 export const toStored = ({ at, height, zat, funded }: TransparentCheck) => ({
   at,
@@ -41,6 +46,17 @@ export const fromStored = (raw: unknown): TransparentCheck | null => {
     ? { at: r.at, height: r.height, zat: BigInt(r.zat), funded: r.funded }
     : null;
 };
+
+export const readCheck = async (storeId: string): Promise<TransparentCheck | null> =>
+  fromStored(
+    await readEncrypted<unknown>(localExtStorage, sessionExtStorage, checkKey(storeId)).catch(
+      () => null,
+    ),
+  );
+
+/** false when locked: nothing is written, never in the clear */
+export const saveCheck = (storeId: string, c: TransparentCheck): Promise<boolean> =>
+  writeEncrypted(localExtStorage, sessionExtStorage, checkKey(storeId), toStored(c));
 
 export const runCheck = async (
   client: Pick<ZcashClient, 'getAddressUtxos'>,

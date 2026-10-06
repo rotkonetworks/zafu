@@ -1,5 +1,5 @@
 /**
- * A pocket's transparent addresses, cached per pocket store. Index 0 is the
+ * A pocket's transparent addresses, cached per pocket store (sealed at rest). Index 0 is the
  * one address the pocket shows. Every swap that leaves or lands on a
  * t-address (THORChain) takes a fresh index of its own above the highest
  * ever handed out, so two swaps never share an address on chain. The scan
@@ -10,6 +10,9 @@
 
 import { queryOptions, useQuery, type QueryClient } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
+import { localExtStorage, type LocalStorageState } from '@repo/storage-chrome/local';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
+import { readEncrypted, writeEncrypted } from '../state/encrypted-storage';
 import { useStore, type AllSlices } from '../state';
 import { selectEffectiveKeyInfo, keyRingSelector, selectActiveNetwork } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
@@ -103,15 +106,25 @@ export const transparentAddressesQuery = (source: TSource, isMainnet: boolean) =
       try {
         const indices = pocketTransparentIndices(await highestIndex(indexKeyOf(source)));
 
-        const cacheKey = `zcashTAddrs:${storeId ?? keyInfo.id}`;
-        const cached = (await chrome.storage.local.get(cacheKey))[cacheKey] as string[] | undefined;
-        if (cached && cached.length >= indices.length) {
+        // sealed at rest; an older plaintext cache reads as absent and is sealed over
+        const cacheKey = `zcashTAddrs:${storeId ?? keyInfo.id}` as keyof LocalStorageState;
+        const cached = await readEncrypted<unknown>(
+          localExtStorage,
+          sessionExtStorage,
+          cacheKey,
+        ).catch(() => null);
+        if (
+          Array.isArray(cached) &&
+          cached.length >= indices.length &&
+          cached.every(a => typeof a === 'string')
+        ) {
           return { tAddresses: cached.slice(0, indices.length) };
         }
 
         const addrs = await deriveAt(source, indices, isMainnet);
         if (addrs.length > 0) {
-          await chrome.storage.local.set({ [cacheKey]: addrs });
+          // not awaited: a sealed write waits for this realm's hydration
+          void writeEncrypted(localExtStorage, sessionExtStorage, cacheKey, addrs);
         }
         return { tAddresses: addrs };
       } catch (err) {
