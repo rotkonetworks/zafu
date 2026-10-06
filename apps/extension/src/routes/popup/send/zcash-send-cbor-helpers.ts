@@ -100,9 +100,7 @@ export function unwrapSignerEnvelope(cbor: Uint8Array): {
     // Canonical single-PCZT envelope: the byte string must consume the buffer
     // exactly. Trailing bytes mean a malformed or smuggled payload.
     if (pos !== cbor.length) {
-      throw new Error(
-        `CBOR PCZT envelope not canonical: ${cbor.length - pos} trailing bytes`,
-      );
+      throw new Error(`CBOR PCZT envelope not canonical: ${cbor.length - pos} trailing bytes`);
     }
     return { payload, kernel: null };
   }
@@ -112,12 +110,22 @@ export function unwrapSignerEnvelope(cbor: Uint8Array): {
     throw new Error('expected CBOR key 2 after the payload');
   }
   const readUint = (what: string): number => {
-    if (pos >= cbor.length) throw new Error(`CBOR ${what} truncated`);
+    if (pos >= cbor.length) {
+      throw new Error(`CBOR ${what} truncated`);
+    }
     const b = cbor[pos++]!;
-    if (b <= 0x17) return b;
-    if (b === 0x18) return readLen(1);
-    if (b === 0x19) return readLen(2);
-    if (b === 0x1a) return readLen(4);
+    if (b <= 0x17) {
+      return b;
+    }
+    if (b === 0x18) {
+      return readLen(1);
+    }
+    if (b === 0x19) {
+      return readLen(2);
+    }
+    if (b === 0x1a) {
+      return readLen(4);
+    }
     throw new Error(`expected CBOR unsigned int for ${what}, got 0x${b.toString(16)}`);
   };
   const head = cbor[pos++];
@@ -129,10 +137,14 @@ export function unwrapSignerEnvelope(cbor: Uint8Array): {
   for (let i = 0; i < head - 0xa0; i++) {
     const k = readUint('kernel info key');
     const v = readUint('kernel info value');
-    if (seen.has(k)) throw new Error(`duplicate kernel info key ${k}`);
+    if (seen.has(k)) {
+      throw new Error(`duplicate kernel info key ${k}`);
+    }
     seen.add(k);
     const field = KERNEL_INFO_KEYS[k];
-    if (field) kernel[field] = v;
+    if (field) {
+      kernel[field] = v;
+    }
   }
   if (pos !== cbor.length) {
     throw new Error(`CBOR signer envelope not canonical: ${cbor.length - pos} trailing bytes`);

@@ -82,9 +82,7 @@ function unwrapSignerEnvelope(cbor) {
     // Canonical single-PCZT envelope: the byte string must consume the buffer
     // exactly. Trailing bytes mean a malformed or smuggled payload.
     if (pos !== cbor.length) {
-      throw new Error(
-        `CBOR PCZT envelope not canonical: ${cbor.length - pos} trailing bytes`,
-      );
+      throw new Error(`CBOR PCZT envelope not canonical: ${cbor.length - pos} trailing bytes`);
     }
     return { payload, kernel: null };
   }
@@ -336,7 +334,6 @@ test('prelude response: rejects trailing bytes after signed PCZT', () => {
   assert.throws(() => parsePreludeSinglePcztResponse(withTrailer), /canonical/i);
 });
 
-
 // ── kernel info (key 2): newer Zigner kernels report module/ABI versions ──
 
 function wrapWithKernel(payload, kernelMapBytes) {
@@ -360,13 +357,22 @@ test('signer envelope: map(2) carries kernel info', () => {
   const k = new Uint8Array([0xa3, 0x01, 0x03, 0x02, 0x19, 0x01, 0x00, 0x03, 0x01]);
   const r = unwrapSignerEnvelope(wrapWithKernel(new Uint8Array([9, 9]), k));
   assert.deepEqual(Array.from(r.payload), [9, 9]);
-  assert.deepEqual(r.kernel, { bakedModuleVersion: 3, activeModuleVersion: 256, hostAbiVersion: 1 });
-  assert.deepEqual(Array.from(unwrapCborSinglePczt(wrapWithKernel(new Uint8Array([9, 9]), k))), [9, 9]);
+  assert.deepEqual(r.kernel, {
+    bakedModuleVersion: 3,
+    activeModuleVersion: 256,
+    hostAbiVersion: 1,
+  });
+  assert.deepEqual(
+    Array.from(unwrapCborSinglePczt(wrapWithKernel(new Uint8Array([9, 9]), k))),
+    [9, 9],
+  );
 });
 
 test('signer envelope: unknown kernel keys are skipped, not fatal', () => {
   const k = new Uint8Array([0xa2, 0x01, 0x04, 0x07, 0x05]);
-  assert.deepEqual(unwrapSignerEnvelope(wrapWithKernel(new Uint8Array([1]), k)).kernel, { bakedModuleVersion: 4 });
+  assert.deepEqual(unwrapSignerEnvelope(wrapWithKernel(new Uint8Array([1]), k)).kernel, {
+    bakedModuleVersion: 4,
+  });
 });
 
 test('signer envelope: rejects duplicate kernel key', () => {
@@ -381,12 +387,18 @@ test('signer envelope: rejects non-uint kernel value', () => {
 
 test('signer envelope: rejects trailing bytes after kernel info', () => {
   const k = new Uint8Array([0xa1, 0x01, 0x03, 0xff]);
-  assert.throws(() => unwrapSignerEnvelope(wrapWithKernel(new Uint8Array([1]), k)), /not canonical/);
+  assert.throws(
+    () => unwrapSignerEnvelope(wrapWithKernel(new Uint8Array([1]), k)),
+    /not canonical/,
+  );
 });
 
 test('signer envelope: map(2) without key 2 is rejected', () => {
   const w = wrap(new Uint8Array([1]));
   const bad = new Uint8Array(w.length + 2);
-  bad.set(w); bad[0] = 0xa2; bad[w.length] = 0x03; bad[w.length + 1] = 0xa0;
+  bad.set(w);
+  bad[0] = 0xa2;
+  bad[w.length] = 0x03;
+  bad[w.length + 1] = 0xa0;
   assert.throws(() => unwrapSignerEnvelope(bad), /key 2/);
 });
