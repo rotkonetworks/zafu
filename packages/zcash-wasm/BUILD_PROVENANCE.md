@@ -177,6 +177,47 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
   `voting-wasm` `local_chain_e2e` ran these bindings against a local svoted
   v1.6.1-rc.5 (37 proposals, votes on 37 and 17, tally finalized).
 
+## 2026-10-06 rebuild - ironwood memos, NU7 by node branch, THORChain on NU7
+
+- source repo: zcli, branch `master`, rev `8cef107` (merge of zcli PR #26).
+  Since `0347f3f` (the blob it replaces) master gained PR #23, #24, #25
+  (zidecar only) and #26.
+- #23: `decrypt_transaction_memos` (WalletKeys and WatchOnlyWallet) walks the
+  ironwood bundle as well as the orchard one, so V6 outputs and their memos
+  are no longer dropped. A memo result's `index` now runs over orchard
+  actions, then ironwood actions. zafu matches memos by `cmx`, never by
+  `index`, so no caller changes.
+- #24: the builders take consensus parameters from `NodeParams`: NU7 counts as
+  active at the target height exactly when the node reports the NU7 branch
+  (0x77190ad9), on any network; every other report leaves the base table
+  alone. Default expiry is target + 120 on NU7 (ZIP 218), + 40 before. The
+  blob therefore no longer refuses NU7 on mainnet by itself; zafu's worker
+  guard (`apps/extension/src/workers/branch-ids.ts`) is the mainnet NU7 gate.
+  `mainnet-consensus-wasm.test.ts` now pins that contract.
+- #26: the THORChain t->t deposit builds on the node-reported NU7 branch too.
+- `.d.ts` diff against the previous blob: one doc comment
+  (`build_ironwood_send_pczt` expiry default); no export added, removed or
+  changed. `zafu_wasm_bg.wasm.d.ts` byte-identical; the glue differs only in
+  the same doc comment.
+- `cargo test -p zafu-wasm --lib --tests --release` at `8cef107`: 157 passed,
+  12 ignored (lib 96; `nu7_testnet_v6` 5; `transparent_op_return` 9;
+  `note_tree` 9).
+- toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
+  wasm-bindgen CLI 0.2.126, binaryen 130; recipe above.
+- rayon snippet hash unchanged (`wasm-bindgen-rayon-38edf6e439f6d70d`), the
+  patched `workerHelpers.js` kept.
+- size: pre `wasm-opt` 28,546,487 bytes (post-bindgen); post `-Oz`
+  13,285,323 bytes (+461).
+- sha256(parallel zafu_wasm_bg.wasm) =
+  6a577386a3019e03436a426feb262a6e2299277ae509182ab8b7c1ec7f522e18
+- sha256(zafu_wasm.js) =
+  638529847d9915c46014b45f0daa927574e6eb8acede605afc284e28d82379b0
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 58 32768 shared)` (unchanged; `ZAFU_WASM_INITIAL_PAGES`
+  59 still covers it).
+- reproduced: a second build at `8cef107` with its own target directory gave
+  both shas above byte for byte.
+
 ## 2026-10-05 rebuild (4) - NoteTree.recover_shard, NoteTree.carry_marks
 
 - source repo: zcli master, merge commit `872094d` (zcli PR #22), built from its

@@ -1,7 +1,8 @@
-// Mainnet consensus on the real shipped blob, with no network. The blob knows
-// NU7 (Zakura Common 2.0) for testnet only; on mainnet every builder must still
-// bind NU6.3 (Ironwood, 0x37a5165b) from its activation at 3,428,143 on, at any
-// later height, and refuse a wallet that expects the NU7 branch. The note
+// Mainnet consensus on the real shipped blob, with no network. On mainnet every
+// builder binds NU6.3 (Ironwood, 0x37a5165b) from its activation at 3,428,143
+// on, at any later height. Since zcli 8cef107 the blob builds on the NU7 branch
+// whenever the node reports it (NodeParams), on any network, so on mainnet the
+// worker's own guard (branch-ids.ts) is what refuses NU7 before a proof. The note
 // fixture is the one in hot-send-wasm.test.ts: the orchard keys do not depend
 // on the network, so the same note is owned by the mainnet keys too.
 import { readFileSync } from 'node:fs';
@@ -99,12 +100,15 @@ describe('mainnet consensus on the real wasm', () => {
     300_000,
   );
 
-  test('an ironwood send expecting NU7, or before NU6.3, is refused on mainnet', () => {
-    expect(() => ironwoodSend(10_000_000, NU7)).toThrow(/branch/i);
+  test('an ironwood send before NU6.3 is refused; one expecting NU7 follows the node', () => {
     expect(() => ironwoodSend(NU63_ACTIVATION - 1, NU63)).toThrow(/branch/i);
+    // the blob trusts the node's NU7 report; the worker guard refuses it on mainnet
+    const txHex = ironwoodSend(10_000_000, NU7);
+    expect(txHex.slice(0, 8)).toBe(V6);
+    expect(branchLe(txHex)).toBe('d90a1977');
   }, 300_000);
 
-  test('a mainnet transparent send binds NU6.3 and refuses NU7', async () => {
+  test('a mainnet transparent send binds NU6.3, or NU7 when the node reports it', async () => {
     const keys = new wasm.SpendKeys(SEED, 0, true);
     try {
       const own = p2pkh(keys.transparent_pubkey(0));
@@ -136,7 +140,8 @@ describe('mainnet consensus on the real wasm', () => {
         expect(txHex.slice(0, 8)).toBe('05000080');
         expect(branchLe(txHex)).toBe('5b16a537');
       }
-      await expect(send(10_000_000, NU7)).rejects.toThrow(/branch id/);
+      // NU7 is bound only because the node says so (zcli #26)
+      expect(branchLe((await send(10_000_000, NU7)).txHex)).toBe('d90a1977');
       await expect(send(NU63_ACTIVATION - 2, NU63)).rejects.toThrow(/branch id/);
     } finally {
       keys.free();
@@ -166,10 +171,11 @@ describe('mainnet consensus on the real wasm', () => {
     }
   });
 
-  test('every mainnet ironwood builder the worker gates also refuses NU7 itself', () => {
-    // the guard above and the blob agree: what the guard lets through on
-    // mainnet the blob builds, what it refuses the blob refuses too
+  test('the worker guard is the only mainnet NU7 gate: the blob builds what the node reports', () => {
+    // what the guard lets through on mainnet the blob builds; the NU7 the
+    // guard refuses, the blob would bind as the node reported it
     expect(() => ironwoodSend(NU63_ACTIVATION, NU63)).not.toThrow();
-    expect(() => ironwoodSend(NU63_ACTIVATION, NU7)).toThrow(/branch/i);
+    expect(ironwoodBranchRefusal(NU7.toString(16), true, 'ironwood send')).toBeDefined();
+    expect(branchLe(ironwoodSend(NU63_ACTIVATION, NU7))).toBe('d90a1977');
   }, 300_000);
 });
