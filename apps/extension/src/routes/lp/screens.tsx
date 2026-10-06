@@ -902,18 +902,20 @@ export const TrackScreen = ({
   const lost = f.stage === 'lost';
   return (
     <div className='flex flex-col gap-5'>
-      <div className='flex items-end justify-between gap-4'>
-        <h1 className='font-display text-[38px] leading-[1.15] text-fg-high'>{title}</h1>
-        <span className='flex shrink-0 flex-col items-end gap-1.5'>
-          <span className='font-display text-[34px] tabular-nums text-fg-high'>
-            {refunded && f.outZat ? zec(BigInt(f.outZat)) : clock(now - f.started)}
-          </span>
+      <div className='flex flex-col gap-1'>
+        <h1 title={title} className='truncate font-display text-[32px] leading-[1.2] text-fg-high'>
+          {title}
+        </h1>
+        <span className='flex items-baseline justify-between gap-4'>
           <span className='text-[11px] text-fg-muted'>
             {refunded
               ? 'zec at your lp address'
               : f.kind === 'add' || f.kind === 'add2' || f.kind === 'swap'
                 ? 'usually about 4 minutes'
                 : 'usually 3 to 6 minutes'}
+          </span>
+          <span className='font-display text-[28px] tabular-nums text-fg-high'>
+            {refunded && f.outZat ? zec(BigInt(f.outZat)) : clock(now - f.started)}
           </span>
         </span>
       </div>
