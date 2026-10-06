@@ -16,6 +16,7 @@
  */
 
 import type { TransparentUtxoInfo } from '../state/keyring/network-worker';
+import { eachAddress } from '../state/keyring/each-address';
 import { buildOutputScriptHex } from './transparent';
 import {
   planLedgerTransparentSend,
@@ -29,9 +30,9 @@ import {
 } from './hw-btc-signer';
 
 export interface LedgerBtcSendFlowDeps {
-  /** fetch spendable UTXOs (with prev-tx bytes) for the given addresses. Wire
+  /** fetch spendable UTXOs (with prev-tx bytes) of one address. Wire
    *  `getTransparentUtxosInWorker`. */
-  readonly fetchUtxos: (serverUrl: string, addresses: string[]) => Promise<TransparentUtxoInfo[]>;
+  readonly fetchUtxos: (serverUrl: string, address: string) => Promise<TransparentUtxoInfo[]>;
   /** submit a fully-signed tx hex. Wire `broadcastRawTxInWorker`. */
   readonly broadcast: (serverUrl: string, txHex: string) => Promise<{ txid: string }>;
 }
@@ -59,7 +60,7 @@ export async function ledgerTransparentSendFlowBtc(
   req: LedgerBtcSendRequest,
   deps: LedgerBtcSendFlowDeps,
 ): Promise<LedgerBtcSendOutcome> {
-  const available = await deps.fetchUtxos(req.serverUrl, [...req.fromAddresses]);
+  const available = await eachAddress(req.fromAddresses, a => deps.fetchUtxos(req.serverUrl, a));
   if (available.length === 0) {
     throw new Error('ledger send: no spendable transparent utxos at the source address');
   }

@@ -703,41 +703,26 @@ export class ZidecarClient {
   }
 
   /** get transparent address UTXOs */
-  async getAddressUtxos(addresses: string[], startHeight = 0, maxEntries = 0): Promise<Utxo[]> {
-    // encode GetAddressUtxosArg proto
-    const parts: number[] = [];
-    const encoder = new TextEncoder();
-    for (const addr of addresses) {
-      const addrBytes = encoder.encode(addr);
-      // field 1: repeated string addresses
-      parts.push(0x0a, ...this.lengthDelimited(addrBytes));
-    }
+  async getAddressUtxos(address: string, startHeight = 0, maxEntries = 0): Promise<Utxo[]> {
+    // GetAddressUtxosArg { addresses=1 (one, never several), startHeight=2, maxEntries=3 }
+    const parts: number[] = [0x0a, ...this.lengthDelimited(new TextEncoder().encode(address))];
     if (startHeight > 0) {
-      // field 2: uint32 startHeight
       parts.push(0x10, ...this.varint(startHeight));
     }
     if (maxEntries > 0) {
-      // field 3: uint32 maxEntries
       parts.push(0x18, ...this.varint(maxEntries));
     }
-
     const resp = await this.grpcCall('GetAddressUtxos', new Uint8Array(parts));
     return this.parseUtxoList(resp);
   }
 
-  /** get transparent transaction IDs for addresses */
-  async getTaddressTxids(addresses: string[], startHeight = 0): Promise<Uint8Array[]> {
-    // encode TransparentAddressFilter proto (same as GetAddressUtxos)
-    const parts: number[] = [];
-    const encoder = new TextEncoder();
-    for (const addr of addresses) {
-      const addrBytes = encoder.encode(addr);
-      parts.push(0x0a, ...this.lengthDelimited(addrBytes));
-    }
+  /** transparent transaction ids for one address */
+  async getTaddressTxids(address: string, startHeight = 0): Promise<Uint8Array[]> {
+    // TransparentAddressFilter, the same shape as GetAddressUtxosArg
+    const parts: number[] = [0x0a, ...this.lengthDelimited(new TextEncoder().encode(address))];
     if (startHeight > 0) {
       parts.push(0x10, ...this.varint(startHeight));
     }
-
     const resp = await this.grpcCall('GetTaddressTxids', new Uint8Array(parts));
     return this.parseTxidList(resp);
   }

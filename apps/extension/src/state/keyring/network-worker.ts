@@ -100,7 +100,6 @@ export interface NetworkWorkerMessage {
     | 'get-notes'
     | 'note-sync-encode'
     | 'decrypt-memos'
-    | 'get-transparent-history'
     | 'get-history'
     | 'get-pending-sends'
     | 'sync-memos'
@@ -164,7 +163,6 @@ export interface NetworkWorkerResponse {
     | 'notes'
     | 'note-sync-encoded'
     | 'memos'
-    | 'transparent-history'
     | 'history'
     | 'pending-sends'
     | 'memos-result'
@@ -1147,24 +1145,6 @@ export const decryptMemosInWorker = async (
   return callWorker(network, 'decrypt-memos', { txBytes: Array.from(txBytes) }, walletId);
 };
 
-/** transparent transaction history entry */
-export interface TransparentHistoryEntry {
-  txid: string;
-  height: number;
-  received: string; // zatoshis received by our addresses
-}
-
-/**
- * get transparent transaction history for addresses
- */
-export const getTransparentHistoryInWorker = async (
-  network: NetworkType,
-  serverUrl: string,
-  tAddresses: string[],
-): Promise<TransparentHistoryEntry[]> => {
-  return callWorker(network, 'get-transparent-history', { serverUrl, tAddresses });
-};
-
 /**
  * computed history entry from worker
  *
@@ -2124,7 +2104,7 @@ export const broadcastRawTxInWorker = async (
   return callWorker<{ txid: string }>('zcash', 'broadcast-raw-tx', { serverUrl, txHex });
 };
 
-/** Spendable transparent UTXOs for the given addresses (e.g. a Ledger t-addr),
+/** Spendable transparent UTXOs of one address (e.g. a Ledger t-addr),
  *  each with the full previous-tx hex the Ledger legacy signer needs. */
 export interface TransparentUtxoInfo {
   txid: string;
@@ -2135,11 +2115,11 @@ export interface TransparentUtxoInfo {
 }
 export const getTransparentUtxosInWorker = async (
   serverUrl: string,
-  addresses: string[],
+  address: string,
 ): Promise<TransparentUtxoInfo[]> => {
   return callWorker<TransparentUtxoInfo[]>('zcash', 'get-transparent-utxos', {
     serverUrl,
-    addresses,
+    address,
   });
 };
 

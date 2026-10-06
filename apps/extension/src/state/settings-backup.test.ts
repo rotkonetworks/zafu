@@ -52,6 +52,18 @@ describe('settings backup', () => {
     expect(next.proxy).toEqual(DEFAULT_PRIVACY_SETTINGS.proxy);
   });
 
+  it('carries the zcash per-block transparent check and restores it', async () => {
+    const out = await exportSettings({
+      ...DEFAULT_PRIVACY_SETTINGS,
+      zcashTransparentEachBlock: true,
+    });
+    expect(out.privacy?.zcashTransparentEachBlock).toBe(true);
+    const back = restoredPrivacy(DEFAULT_PRIVACY_SETTINGS, JSON.parse(JSON.stringify(out.privacy)));
+    expect(back.zcashTransparentEachBlock).toBe(true);
+    // an older backup without the field leaves it off
+    expect(restoredPrivacy(DEFAULT_PRIVACY_SETTINGS, {}).zcashTransparentEachBlock).toBe(false);
+  });
+
   it("a backup from before v5 restores penumbra's keep-syncing from the old shared name", () => {
     const legacy = { enableBackgroundSync: true } as never;
     expect(restoredPrivacy(DEFAULT_PRIVACY_SETTINGS, legacy).keepPenumbraSyncing).toBe(true);

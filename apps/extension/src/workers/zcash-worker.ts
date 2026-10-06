@@ -26,11 +26,13 @@ import {
   createRedetector,
   detectZcashBackend,
   isZcashBackend,
+  utxosEach,
   zcashClient,
   zidecarExtras,
   type ZcashBackend,
   type ZcashClient,
 } from '../state/keyring/zcash-backend';
+import { eachAddress } from '../state/keyring/each-address';
 import { txidMemoFetcher } from '../services/memo-sync/txid-fetcher';
 import { COMPACT_SIGN_REQUEST } from '../config/feature-flags';
 import {
@@ -259,7 +261,6 @@ interface WorkerMessage {
     | 'get-notes'
     | 'note-sync-encode'
     | 'decrypt-memos'
-    | 'get-transparent-history'
     | 'get-history'
     | 'get-pending-sends'
     | 'sync-memos'
@@ -1835,7 +1836,7 @@ const pathsAtSnapshot = async (
 
 /** the zcash backend as the deposit service sees it */
 const depositChain = (client: ZcashClient, serverUrl: string): DepositChain => ({
-  utxos: address => client.getAddressUtxos([address]),
+  utxos: address => client.getAddressUtxos(address),
   tip: async () => (await client.getTip()).height,
   branchId: async () => parseInt(await fetchBranchIdHex(client), 16),
   broadcast: async txHex => {
@@ -4180,64 +4181,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         return;
       }
 
-      case 'get-transparent-history': {
-        const { serverUrl, tAddresses } = payload as { serverUrl: string; tAddresses: string[] };
-        if (!tAddresses?.length) {
-          workerSelf.postMessage({
-            type: 'transparent-history',
-            id,
-            network: 'zcash',
-            payload: [],
-          });
-          return;
-        }
-
-        const tClient = makeZcashClient(serverUrl);
-
-        // build script set for our addresses (p2pkh: OP_DUP OP_HASH160 <20> <hash> OP_EQUALVERIFY OP_CHECKSIG)
-        const ourScripts = new Set<string>();
-        for (const addr of tAddresses) {
-          const decoded = base58checkDecode(addr);
-          if (decoded) {
-            ourScripts.add('76a914' + hexEncode(decoded) + '88ac');
-          }
-        }
-
-        const txids = await tClient.getTaddressTxids(tAddresses);
-
-        // fetch raw txs in parallel (concurrency-limited to avoid overwhelming server)
-        const CONCURRENCY = 5;
-        const history: { txid: string; height: number; received: string }[] = [];
-
-        for (let i = 0; i < txids.length; i += CONCURRENCY) {
-          const batch = txids.slice(i, i + CONCURRENCY);
-          const results = await Promise.allSettled(
-            batch.map(async txidBytes => {
-              const rawTx = await tClient.getTransaction(txidBytes);
-              const parsed = parseTransparentTx(rawTx.data, ourScripts);
-              return {
-                txid: hexEncode(txidBytes),
-                height: rawTx.height,
-                received: parsed.toString(),
-              };
-            }),
-          );
-          for (const r of results) {
-            if (r.status === 'fulfilled') {
-              history.push(r.value);
-            }
-          }
-        }
-
-        workerSelf.postMessage({
-          type: 'transparent-history',
-          id,
-          network: 'zcash',
-          payload: history,
-        });
-        return;
-      }
-
       case 'get-history': {
         if (!walletId) {
           throw new Error('walletId required');
@@ -4268,7 +4211,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               }
             }
 
-            const txids = await tClient.getTaddressTxids(histTAddresses);
+            // one address per request; a tx touching two of them comes back twice
+            const txids = [
+              ...new Map(
+                (await eachAddress(histTAddresses, a => tClient.getTaddressTxids(a))).map(t => [
+                  hexEncode(t),
+                  t,
+                ]),
+              ).values(),
+            ];
             const CONCURRENCY = 5;
             for (let i = 0; i < txids.length; i += CONCURRENCY) {
               const batch = txids.slice(i, i + CONCURRENCY);
@@ -6673,7 +6624,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const client = makeZcashClient(serverUrl);
         progress('fetching chain tip');
         const tip = await build.race(client.getTip());
-        const allUtxos = await build.race(client.getAddressUtxos(only ?? tAddresses));
+        const allUtxos = await build.race(utxosEach(client, only ?? tAddresses));
         if (allUtxos.length === 0) {
           throw new Error('no transparent UTXOs to shield');
         }
@@ -6832,7 +6783,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
         const shieldUBranchIdHex = await build.race(fetchBranchIdHex(shieldUClient));
         const shieldUAll = await build.race(
-          shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses),
+          utxosEach(shieldUClient, shieldUnsignedPayload.tAddresses),
         );
         const shieldUUtxos =
           shieldUnsignedPayload.maxInputs === undefined
@@ -7400,7 +7351,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           tAddresses: eAddrs,
           maxInputs: eMax,
         } = payload as { serverUrl: string; tAddresses: string[]; maxInputs: number };
-        const eUtxos = await makeZcashClient(eUrl).getAddressUtxos(eAddrs);
+        const eUtxos = await utxosEach(makeZcashClient(eUrl), eAddrs);
         const eRound = shieldRoundUtxos(eUtxos, eAddrs, Math.max(1, eMax));
         const eRoundZat = eRound.reduce((sum, u) => sum + u.valueZat, 0n);
         workerSelf.postMessage({
@@ -7417,15 +7368,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         return;
       }
       case 'get-transparent-utxos': {
-        // spendable transparent UTXOs for the given addresses (e.g. a Ledger
-        // t-addr), each with the full prev-tx bytes the Ledger legacy signer
+        // spendable transparent UTXOs of one address (a Ledger t-addr, an lp
+        // address), each with the full prev-tx bytes the Ledger legacy signer
         // needs as its trusted input.
-        const { serverUrl: uUrl, addresses: uAddrs } = payload as {
+        const { serverUrl: uUrl, address: uAddr } = payload as {
           serverUrl: string;
-          addresses: string[];
+          address: string;
         };
         const uClient = makeZcashClient(uUrl);
-        const uUtxos = await uClient.getAddressUtxos(uAddrs);
+        const uUtxos = await uClient.getAddressUtxos(uAddr);
         const uOut = [];
         for (const u of uUtxos) {
           const uPrevTx = await uClient.getTransaction(u.txid);
