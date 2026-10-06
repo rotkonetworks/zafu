@@ -5,7 +5,7 @@ import { usePopupReady } from '../../hooks/popup-ready';
 import { useSidePanelDelivery } from '../../hooks/side-panel-delivery';
 import { useZcashAutoSync } from '../../hooks/zcash-auto-sync';
 import { usePenumbraSwapClaim } from '../../hooks/penumbra-swap-claim';
-import { BottomTabs, BOTTOM_TABS_HEIGHT } from '../../components/bottom-tabs';
+import { BottomTabs } from '../../components/bottom-tabs';
 import { AppHeader } from '../../components/app-header';
 import { TxTrackerWatcher } from '../../components/tx-tracker-watcher';
 import { clearStaleChunkGuard } from '../../components/error-boundary';
@@ -47,7 +47,6 @@ export const PopupLayout = () => {
       <div
         className='min-h-0 flex-1 overflow-y-auto transform-gpu'
         style={{
-          paddingBottom: showChrome ? BOTTOM_TABS_HEIGHT : 0,
           // the part that animates on navigation (styles/view-transitions.css)
           viewTransitionName: 'popup-screen',
         }}
