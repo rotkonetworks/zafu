@@ -22,8 +22,12 @@ import { DEFAULT_PRIVACY_SETTINGS } from './privacy';
 import { exportSettings, importPrefs, restoredPrivacy } from './settings-backup';
 
 describe('settings backup', () => {
-  it('carries privacy without the proxy, and the stored preferences', async () => {
-    const out = await exportSettings({ ...DEFAULT_PRIVACY_SETTINGS, hideBalances: true });
+  it('carries privacy without retired keys, and the stored preferences', async () => {
+    const out = await exportSettings({
+      ...DEFAULT_PRIVACY_SETTINGS,
+      hideBalances: true,
+      proxy: { enabled: true, host: 'x', port: 1 },
+    } as never);
     expect(out.privacy?.hideBalances).toBe(true);
     expect(out.privacy).not.toHaveProperty('proxy');
     expect(out.prefs).toEqual({
@@ -49,7 +53,7 @@ describe('settings backup', () => {
     expect(next.historyAsked).toBe(true);
     expect(next.txSigningSecurity).toBe('foilhat');
     expect(next.enableExplorerLinks).toBe(false);
-    expect(next.proxy).toEqual(DEFAULT_PRIVACY_SETTINGS.proxy);
+    expect(next).not.toHaveProperty('proxy');
   });
 
   it('carries the zcash per-block transparent check and restores it', async () => {
