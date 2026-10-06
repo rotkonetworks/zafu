@@ -342,10 +342,11 @@ export function build_delegation_pczt(fvk_hex: string, seed_fingerprint_hex: str
  * placeholder is refused. No value or recipient appears in any error.
  *
  * `expiry_delta` (optional, last argument): blocks after `target_height` at
- * which the transaction expires. Omitted means [`LEGACY_PCZT_EXPIRY_DELTA`]
- * (40), exactly what this builder produced before the argument existed.
- * Validated by [`resolve_pczt_expiry_height`]. The resolved height is returned
- * as `expiry_height`.
+ * which the transaction expires. Omitted means the branch default: 40 blocks
+ * ([`LEGACY_PCZT_EXPIRY_DELTA`], what this builder always produced) before
+ * NU7, 120 on NU7 (see [`node_params::default_expiry_delta`]). Validated by
+ * [`resolve_pczt_expiry_height`]. The resolved height is returned as
+ * `expiry_height`.
  */
 export function build_ironwood_send_pczt(ufvk_str: string, ironwood_notes_json: string, recipient: string, amount: bigint, fee: bigint, ironwood_anchor_hex: string, ironwood_merkle_paths_json: string, account_index: number, target_height: number, expected_branch_id: number, mainnet: boolean, memo_hex?: string | null, expiry_delta?: number | null): any;
 
