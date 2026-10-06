@@ -16,15 +16,7 @@ import { Sensitive } from '../../components/sensitive';
 import { useStore as useZafu } from '../../state';
 import { selectHideBalances } from '../../state/privacy';
 import { depositFeeZat } from '../../workers/transparent-deposit';
-import {
-  cancellable,
-  isDone,
-  LOST_LINE,
-  needs,
-  PAYOUT_BLOCKS,
-  stepLines,
-  type Flight,
-} from '../../lp/flight';
+import { cancellable, isDone, needs, PAYOUT_BLOCKS, stepLines, type Flight } from '../../lp/flight';
 import {
   afterFee,
   costTone,
@@ -978,20 +970,18 @@ export const TrackScreen = ({
             explorer, or stop watching and ask again from your position.
           </span>
         </div>
-      ) : (
+      ) : lost ? null : (
         <div className='flex h-11 items-center border border-border-soft bg-elev-1 px-3.5'>
           <span className='text-xs text-fg'>
-            {lost
-              ? LOST_LINE
-              : halfBack
-                ? 'the rune half still waits in the pool. you may take it back, and the zec is shielded after.'
-                : refunded
-                  ? 'nothing else was lost. it waits at your lp address until you choose.'
-                  : f.stage === 'half'
-                    ? 'the rune half is in. the zec half goes as soon as thorchain shows it waiting.'
-                    : f.kind === 'add' || f.kind === 'add2' || f.kind === 'swap'
-                      ? 'close this any time. anything not yet sent waits until this page is open.'
-                      : 'the pool pays out once thorchain has seen the ask.'}
+            {halfBack
+              ? 'the rune half still waits in the pool. you may take it back, and the zec is shielded after.'
+              : refunded
+                ? 'nothing else was lost. it waits at your lp address until you choose.'
+                : f.stage === 'half'
+                  ? 'the rune half is in. the zec half goes as soon as thorchain shows it waiting.'
+                  : f.kind === 'add' || f.kind === 'add2' || f.kind === 'swap'
+                    ? 'close this any time. anything not yet sent waits until this page is open.'
+                    : 'the pool pays out once thorchain has seen the ask.'}
           </span>
         </div>
       )}

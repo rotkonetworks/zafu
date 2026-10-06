@@ -292,9 +292,6 @@ export interface Facts {
  */
 export const HALF_BLOCKS = 100;
 
-export const LOST_LINE =
-  "the rune half didn't arrive · nothing was added · your rune is still in your rune address";
-
 /**
  * How long a take-out waits for THORChain to plan its payout before the page
  * says so: about 30 minutes of THORChain blocks. Past it the flight keeps
@@ -532,7 +529,8 @@ const pairedAddLines = (
     return [
       ...head.map(l => ({ ...l, state: 'done' as const })),
       {
-        t: "the rune half didn't arrive",
+        // the title already says it didn't arrive; the line says what that means
+        t: 'not seen by thorchain',
         d: 'nothing was added · your rune is still in your rune address',
         at: at('lost'),
         state: 'turned',

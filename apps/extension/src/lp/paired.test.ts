@@ -7,7 +7,6 @@ import {
   isDone,
   isFlight,
   HALF_BLOCKS,
-  LOST_LINE,
   needs,
   recoverHalf,
   resumed,
@@ -448,10 +447,12 @@ describe('a rune half that never shows as waiting', () => {
     expect(f.stage).toBe('lost');
     expect(isDone(f)).toBe(true);
     expect(d.deposit).not.toHaveBeenCalled();
-    expect(LOST_LINE).toBe(
-      "the rune half didn't arrive · nothing was added · your rune is still in your rune address",
-    );
-    expect(stepLines(f, T).map(l => l.t)).toContain("the rune half didn't arrive");
+    // said once by the title; the line says what it means
+    const turned = stepLines(f, T).find(l => l.state === 'turned');
+    expect(turned).toMatchObject({
+      t: 'not seen by thorchain',
+      d: 'nothing was added · your rune is still in your rune address',
+    });
     // stop: the zec at the lp address is shielded back
     f = shieldRefund(f);
     expect(f.stage).toBe('shield');
