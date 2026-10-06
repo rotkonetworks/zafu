@@ -12,6 +12,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { BrowserQRCodeReader } from '@zxing/browser';
 import { BarcodeFormat, DecodeHintType } from '@zxing/library';
 import { Button } from '@repo/ui/components/ui/button';
+import { cameraLine } from '../camera-error';
 
 interface AnimatedQrScannerProps {
   /** called when all parts have been received and reassembled */
@@ -396,15 +397,10 @@ export const AnimatedQrScanner = ({
         setIsScanning(true);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'failed to start camera';
-      if (/Permission|NotAllowed/.test(msg)) {
-        setError('camera access is off');
-      } else if (/NotFound|no camera/i.test(msg)) {
-        setError('no camera found');
-      } else {
-        setError(msg);
-      }
-      onErrorRef.current?.(msg);
+      // callers show what they are handed, so they get the calm line too
+      const line = cameraLine(err);
+      setError(line);
+      onErrorRef.current?.(line);
     }
   }, [stopScanning, urTypeFilter]);
 
