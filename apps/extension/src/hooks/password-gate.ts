@@ -24,12 +24,16 @@ export const usePasswordGate = () => {
   const callbacksRef = useRef<GateCallbacks | null>(null);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
 
-  // a password unlocks what zafu holds (a phrase, a multisig share); a device
-  // signs on its own, so the gate only confirms.
-  const walletType =
-    selectedKeyInfo && !CAPS[walletKind(selectedKeyInfo)].unlockToSign ? 'zigner' : 'mnemonic';
+  // a password unlocks what zafu holds (a phrase, a multisig share). a device
+  // signs on its own: its review and qr are the confirmation, so there is
+  // nothing to ask here
+  const deviceRef = useRef(false);
+  deviceRef.current = !!selectedKeyInfo && !CAPS[walletKind(selectedKeyInfo)].unlockToSign;
 
   const requestAuth = useCallback((): Promise<boolean> => {
+    if (deviceRef.current) {
+      return Promise.resolve(true);
+    }
     return new Promise<boolean>(resolve => {
       callbacksRef.current = { resolve };
       setOpen(true);
@@ -52,7 +56,6 @@ export const usePasswordGate = () => {
     open,
     onConfirm: handleConfirm,
     onCancel: handleCancel,
-    walletType,
   });
 
   return { requestAuth, PasswordModal };
