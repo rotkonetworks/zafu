@@ -136,11 +136,15 @@ describe('CAPS', () => {
     expect(offered).toEqual(['hot', 'zigner']);
   });
 
-  it('signs a thorchain deposit only where zafu holds the key and shows the memo', () => {
+  it('signs a thorchain deposit only where the signer shows the memo', () => {
     const signs = Object.entries(CAPS)
       .filter(([, c]) => c.opReturn)
       .map(([k]) => k);
-    expect(signs).toEqual(['hot']);
+    // zigner 0.12 reads the OP_RETURN in words; keystone and ledger cannot show it
+    expect(signs).toEqual(['hot', 'zigner']);
+    expect(CAPS.keystone.opReturn).toBeUndefined();
+    expect(CAPS['ledger-shielded'].opReturn).toBeUndefined();
+    expect(CAPS['ledger-transparent'].opReturn).toBeUndefined();
   });
 
   it('asks for a password only where zafu holds the secret', () => {

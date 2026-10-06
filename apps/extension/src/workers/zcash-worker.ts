@@ -34,8 +34,9 @@ import {
 import { txidMemoFetcher } from '../services/memo-sync/txid-fetcher';
 import { COMPACT_SIGN_REQUEST } from '../config/feature-flags';
 import {
-  preludeWrapSinglePczt,
-  ZIGNER_PCZT_SIGN_UR_TYPE,
+  cborWrapPczt,
+  orchardSignRequest,
+  zignerSignRequest,
 } from '../routes/popup/send/zcash-send-cbor-helpers';
 import { nu63ActivationHeight } from '../config/feature-flags';
 import {
@@ -84,11 +85,14 @@ import {
   type ThorKeySource,
 } from './thor-sign';
 import {
+  buildDeposit,
+  finishColdDeposit,
   planDeposit,
   sendDeposit,
   type DepositChain,
   type DepositRequest,
   type DepositWasm,
+  type FinalizeWasm,
 } from './transparent-deposit';
 import { assertProveRequest, type ProveRequest } from '../shared/prove-guard';
 import { issueWorkerKey, openCall, type SealedCall, type SealedVault } from '../shared/vault-seal';
@@ -247,6 +251,8 @@ interface WorkerMessage {
     | 'shield-unsigned'
     | 'shield-complete'
     | 'transparent-deposit-plan'
+    | 'transparent-deposit-unsigned'
+    | 'transparent-deposit-complete'
     | 'transparent-deposit'
     | 'list-wallets'
     | 'delete-wallet'
@@ -389,7 +395,7 @@ interface WalletState extends RunSlot {
   rewinds?: number;
 }
 
-interface WasmModule extends DepositWasm {
+interface WasmModule extends DepositWasm, FinalizeWasm {
   /** a pool's note commitment tree as shards; absent on older blobs */
   NoteTree?: new (maxCheckpoints: number) => NoteTree;
   WalletKeys: PocketKeysCtor<WalletKeys>;
@@ -607,19 +613,6 @@ interface WasmModule extends DepositWasm {
 }
 
 /**
- * Build the request envelope for an airgapped signing leg.
- *
- * With COMPACT_SIGN_REQUEST on we further-redact the PCZT (drop cv_net, the v6
- * anchors and output cmx; collapse each output ciphertext to its trimmed memo)
- * and mark the envelope tx_type 0x05, which the device answers with a
- * signatures-only response. If the redaction throws for any reason we fall
- * back to the legacy 0x03 envelope rather than failing the send - a bigger QR
- * beats a broken one.
- *
- * Returns the envelope and whether it actually went out compact, so the UI can
- * bind the response type to what was requested.
- */
-/**
  * Default UR fountain fragment size (bytes/frame) for the zigner sign QR. 200 is
  * the BC-UR spec default and keeps each frame at a low QR version that scans on
  * a phone camera; the frame COUNT is not the scan bottleneck, the physical QR
@@ -628,20 +621,18 @@ interface WasmModule extends DepositWasm {
  */
 const DEFAULT_ZIGNER_FRAG_SIZE = 200;
 
-function buildSignRequestEnvelope(
-  wasm: WasmModule,
-  pcztHex: string,
-): { envelope: Uint8Array; compact: boolean } {
-  if (COMPACT_SIGN_REQUEST) {
-    try {
-      const compactHex = wasm.redact_pczt_compact(pcztHex);
-      return { envelope: preludeWrapSinglePczt(hexDecode(compactHex), true), compact: true };
-    } catch (e) {
-      console.warn(`[zcash-worker] compact redaction failed, sending legacy 0x03: ${errText(e)}`);
-    }
-  }
-  return { envelope: preludeWrapSinglePczt(hexDecode(pcztHex), false), compact: false };
-}
+const fragOf = (fragmentSize?: number) =>
+  fragmentSize && fragmentSize > 0 ? fragmentSize : DEFAULT_ZIGNER_FRAG_SIZE;
+
+/**
+ * The zigner module request for a shielded PCZT: compact (tx_type 0x05,
+ * signatures-only answer) while COMPACT_SIGN_REQUEST is on, else full.
+ */
+const zignerShieldedRequest = (wasm: WasmModule, pcztHex: string, fragmentSize?: number) =>
+  zignerSignRequest(wasm, pcztHex, {
+    compact: COMPACT_SIGN_REQUEST,
+    fragmentSize: fragOf(fragmentSize),
+  });
 
 let wasmModule: WasmModule | null = null;
 const walletStates = new Map<string, WalletState>();
@@ -659,30 +650,6 @@ const hexDecode = (hex: string): Uint8Array => {
   for (let i = 0; i < out.length; i++) {
     out[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
   }
-  return out;
-};
-
-/**
- * Wrap raw PCZT bytes in the CBOR envelope `{1: bytes}` that the
- * `zcash-pczt` UR type expects (matches zashi/keystone-sdk format).
- * This is the inverse of `encode_pczt_to_cbor` in zigner's signer.
- */
-const cborWrapPczt = (pczt: Uint8Array): Uint8Array => {
-  const len = pczt.length;
-  // map(1) + key 1 + bytes(len) header
-  const header: number[] = [0xa1, 0x01];
-  if (len <= 23) {
-    header.push(0x40 | len);
-  } else if (len <= 0xff) {
-    header.push(0x58, len);
-  } else if (len <= 0xffff) {
-    header.push(0x59, (len >> 8) & 0xff, len & 0xff);
-  } else {
-    header.push(0x5a, (len >> 24) & 0xff, (len >> 16) & 0xff, (len >> 8) & 0xff, len & 0xff);
-  }
-  const out = new Uint8Array(header.length + len);
-  out.set(header, 0);
-  out.set(pczt, header.length);
   return out;
 };
 
@@ -5534,6 +5501,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           frost?: boolean;
           /** the page's key for stopping this build (see build-abort.ts) */
           cancelKey?: string;
+          /**
+           * Zigner signs this: an orchard PCZT rides the module envelope
+           * (`ur:zigner-module`) as ironwood does, because zigner's native
+           * `ur:zcash-pczt` path refuses a transparent output (a send to a
+           * t-address, a tex, a swap's own address). Absent (keystone and the
+           * FROST/ledger builders): the `ur:zcash-pczt` CBOR wrap, unchanged.
+           */
+          zigner?: boolean;
         };
         const build = builds.begin(sendPayload.cancelKey);
         if (!sendPayload.ufvk) {
@@ -5788,20 +5763,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // Ironwood-AWARE transport: zigner prelude envelope [0x53][0x04][0x03]
           // (single PCZT), NOT the ironwood-blind ur:zcash-pczt CBOR wrap. Built
           // from the REDACTED copy - the fvk never leaves the wallet.
-          const { envelope: iwEnvelope, compact: iwRequestCompact } = buildSignRequestEnvelope(
-            wasmModule,
-            iwParsed.pczt_hex,
-          );
-          const iwFragSize =
-            sendPayload.fragmentSize && sendPayload.fragmentSize > 0
-              ? sendPayload.fragmentSize
-              : DEFAULT_ZIGNER_FRAG_SIZE;
-          const iwFramesJson = wasmModule.ur_encode_frames(
-            iwEnvelope,
-            ZIGNER_PCZT_SIGN_UR_TYPE,
-            iwFragSize,
-          );
-          const iwUrFrames = JSON.parse(iwFramesJson) as string[];
+          const {
+            urFrames: iwUrFrames,
+            envelope: iwEnvelope,
+            compact: iwRequestCompact,
+          } = zignerShieldedRequest(wasmModule, iwParsed.pczt_hex, sendPayload.fragmentSize);
           const iwTotalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
           emitProgress(
             'ironwood PCZT QR ready',
@@ -5900,16 +5866,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const proveDuration = ((performance.now() - proveStart) / 1000).toFixed(1);
         emitProgress('PCZT ready', `${proveDuration}s prove`);
 
-        // CBOR-wrap PCZT bytes as `{1: bytes}` then UR-encode for animated QR.
-        // CBOR-wrap the PCZT for the standard zashi/keystone-sdk envelope.
-        const pcztBytes = hexDecode(parsed.pczt_hex);
-        const cbor = cborWrapPczt(pcztBytes);
-        const fragSize =
-          sendPayload.fragmentSize && sendPayload.fragmentSize > 0
-            ? sendPayload.fragmentSize
-            : DEFAULT_ZIGNER_FRAG_SIZE;
-        const framesJson = wasmModule.ur_encode_frames(cbor, 'zcash-pczt', fragSize);
-        const urFrames = JSON.parse(framesJson) as string[];
+        // zigner: the module envelope (see `zigner` above). keystone: the
+        // standard zashi/keystone-sdk `{1: bytes}` CBOR wrap under `ur:zcash-pczt`.
+        // Full (0x03), not compact: only the UR type changes for a zigner
+        // orchard send, so its answer is the whole signed PCZT exactly as
+        // before. Compact orchard with a transparent output has not been run
+        // on a device yet.
+        const request = orchardSignRequest(wasmModule, parsed.pczt_hex, {
+          zigner: sendPayload.zigner === true,
+          compact: false,
+          fragmentSize: fragOf(sendPayload.fragmentSize),
+        });
+        const { urFrames, envelope: cbor } = request;
 
         const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
         emitProgress('PCZT QR ready', `${urFrames.length} frames, total=${totalDuration}s`);
@@ -5941,6 +5909,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             /** raw envelope bytes so the UI can re-fountain at a chosen density */
             cborData: cbor,
             cborBytes: cbor.length,
+            /** true when the request went out compact (tx_type 0x05) */
+            compactRequest: request.compact,
             // FROST host needs these to drive the relay signing rounds (gh #17)
             sighash: parsed.sighash,
             alphas: parsed.alphas,
@@ -6308,20 +6278,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // amount. Wrap the redacted PCZT in the zigner prelude envelope
         // [0x53][0x04][0x03] (single PCZT) instead - that reaches the
         // pczt_signing module built with --cfg zcash_unstable="nu6.3".
-        const { envelope: migrateEnvelope, compact: migrateCompact } = buildSignRequestEnvelope(
-          wasmModule,
-          migrateParsed.pczt_hex,
-        );
-        const migrateFragSize =
-          migratePayload.fragmentSize && migratePayload.fragmentSize > 0
-            ? migratePayload.fragmentSize
-            : 200;
-        const migrateFramesJson = wasmModule.ur_encode_frames(
-          migrateEnvelope,
-          ZIGNER_PCZT_SIGN_UR_TYPE,
-          migrateFragSize,
-        );
-        const migrateUrFrames = JSON.parse(migrateFramesJson) as string[];
+        const {
+          urFrames: migrateUrFrames,
+          envelope: migrateEnvelope,
+          compact: migrateCompact,
+        } = zignerShieldedRequest(wasmModule, migrateParsed.pczt_hex, migratePayload.fragmentSize);
         emitProgress('turnstile PCZT QR ready', `${migrateUrFrames.length} frames`);
 
         // The migration spends EVERY orchard note, so a completion that does
@@ -7077,6 +7038,93 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           req.mainnet,
           keys => sendDeposit(wasm, chain, keys, req),
         );
+        await recordSentTx({
+          walletId,
+          txid: sent.txid,
+          amount: req.amountZat,
+          fee: sent.fee,
+          recipient: req.to,
+          pool: 'transparent',
+          kind: 'send',
+          memo: req.memo,
+          sentAt: Date.now(),
+          expiryHeight: parseExpiryHeight(sent.txHex),
+        });
+        workerSelf.postMessage({
+          type: 'tx-result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { txid: sent.txid, fee: sent.fee },
+        });
+        return;
+      }
+
+      // A cold (zigner) deposit is two messages around the QR round: build the
+      // reviewed PCZT from public data with the UFVK's key at the swap's own
+      // index and hand back the FULL module request (a compact answer cannot
+      // carry transparent signatures, and zigner refuses one); then finish
+      // zafu's PCZT with the device's signatures, check, and broadcast.
+      case 'transparent-deposit-unsigned': {
+        await initWasm();
+        const wasm = wasmModule;
+        if (!wasm) {
+          throw new Error('wasm not initialized');
+        }
+        const { serverUrl, ufvk, fragmentSize, ...req } = payload as DepositRequest & {
+          serverUrl: string;
+          ufvk: string;
+          reviewedFee: string;
+          fragmentSize?: number;
+        };
+        const chain = depositChain(await makeZcashClient(serverUrl), serverUrl);
+        // the external key at the swap's index: the one its address was derived from
+        const pubkey = wasm.transparent_pubkey_from_ufvk(ufvk, req.tIndex);
+        const built = await buildDeposit(wasm, chain, pubkey, req);
+        const request = zignerSignRequest(wasm, built.pcztHex, {
+          compact: false,
+          fragmentSize: fragOf(fragmentSize),
+        });
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: {
+            pcztHex: built.pcztHex,
+            urFrames: request.urFrames,
+            cborData: request.envelope,
+            cborBytes: request.envelope.length,
+            compactRequest: false,
+            fee: req.reviewedFee,
+          },
+        });
+        return;
+      }
+
+      case 'transparent-deposit-complete': {
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
+        await initWasm();
+        const wasm = wasmModule;
+        if (!wasm) {
+          throw new Error('wasm not initialized');
+        }
+        const { serverUrl, ufvk, unsignedPcztHex, signedPcztHex, ...req } =
+          payload as DepositRequest & {
+            serverUrl: string;
+            ufvk: string;
+            reviewedFee: string;
+            unsignedPcztHex: string;
+            signedPcztHex: string;
+          };
+        const chain = depositChain(await makeZcashClient(serverUrl), serverUrl);
+        const sent = await finishColdDeposit(wasm, chain, req, {
+          unsignedPcztHex,
+          signedPczt: hexDecode(signedPcztHex),
+          pubkeyHex: wasm.transparent_pubkey_from_ufvk(ufvk, req.tIndex),
+        });
         await recordSentTx({
           walletId,
           txid: sent.txid,

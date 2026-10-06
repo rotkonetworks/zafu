@@ -100,16 +100,11 @@ import {
 import { AmountField, AddressSheet, ToField } from './send-fields';
 import { STAGES, sendStage } from './send-stage';
 
-import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
 import { CatchUpNotice, LedgerGone, LedgerSteps, ZignerWrongCode } from './send-states';
 import { isLedgerGone } from '../../../ledger/disconnect';
 import { zignerCodeChain, type ZignerChain } from '../../../shared/zigner-code';
 import { useCatchUp } from '../../../state/witness-rebuild';
-import {
-  parseCompactResponse,
-  mergeContributions,
-  SUPPORTED_COMPACT_RESPONSE_VERSION,
-} from '../../../state/keyring/compact-signing';
+import { signedPcztOfAnswer } from '../../../signing/zigner-answer';
 
 const SEND_FLAGS = {
   hardwareWallet: HARDWARE_WALLET_ENABLED,
@@ -359,13 +354,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [pcztSignedUrType, setPcztSignedUrType] = useState<string>('zcash-pczt');
   const pcztUnsignedRef = useRef<SendTxPcztUnsignedResult | null>(null);
   // Binds the response format handlePcztSignatureScanned is allowed to accept
-  // to what was actually sent. Today the outgoing PCZT-sign request always
-  // rides the legacy `ur:zcash-pczt` CBOR wrap (see `cborWrapPczt` in
-  // zcash-worker.ts) - zafu does not yet build a compact (tx_type 0x05/0x06)
-  // request via `buildCompactRequest` anywhere in this flow. This stays
-  // `false` until that wiring lands; a device offering a compact response
-  // (0x07/0x08) while this is `false` is therefore always rejected rather
-  // than trusted opportunistically.
+  // to what was actually sent: a zigner request over the module envelope may
+  // go out compact (tx_type 0x05); keystone's `ur:zcash-pczt` never does. A
+  // compact answer to a full request (or the reverse) is refused.
   const pcztRequestWasCompactRef = useRef(false);
   // Bridge the suspended zigner signer (signing/zigner-signer.ts) to the camera
   // scan handler: handleSign parks on signAndBroadcast(zignerSigner); the scan
@@ -823,6 +814,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           frost,
           undefined,
           run.key,
+          // zigner reads every orchard send over its module envelope; keystone keeps ur:zcash-pczt
+          kind === 'zigner',
         );
         if (!run.live) {
           throw new BuildStopped();
@@ -1225,99 +1218,23 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           throw new Error('no wallet selected');
         }
 
-        // Reconstruct the fully-signed PCZT hex from the scanned response, then
-        // hand it to the parked zigner signer via deliver. The shared
-        // signAndBroadcast tail - awaited in handleSign - does the extract +
-        // broadcast + success UI on resume; this handler ONLY reconstructs.
-        //
-        // Unwrap CBOR `{1: bytes}`. Multiple response shapes ride the animated QR:
-        //   - legacy `ur:zcash-pczt`: the CBOR wrap directly encloses the raw
-        //     signed PCZT (encode_signed_pczt_ur).
-        //   - ironwood `ur:zigner-module`: the device CBOR-wraps its prelude
-        //     response ENVELOPE `[0x53][0x04][0x03] || digest:32 || len:u32(LE)
-        //     || signed_pczt` (rust/signer module_response_to_ur).
-        //   - compact `ur:zigner-module`: the device CBOR-wraps a prelude
-        //     compact response `[0x53][0x04][0x07|0x08]` with signatures only.
-        const unwrapped = unwrapCborSinglePczt(cborBytes);
-
-        let signedPcztHex: string;
-
-        // Compact response (tx_type 0x07/0x08). Anything else (0x03 prelude or
-        // raw) falls through to the legacy full-PCZT path below.
-        if (
-          unwrapped.length >= 3 &&
-          unwrapped[0] === 0x53 &&
-          unwrapped[1] === 0x04 &&
-          (unwrapped[2] === 0x07 || unwrapped[2] === 0x08)
-        ) {
-          // Bind accepted-format to requested-format: a compact response is
-          // only valid as the answer to a compact request. Since this leg
-          // never requested compact, this always fails closed today (see
-          // the comment on pcztRequestWasCompactRef) rather than trusting
-          // an unrequested response shape.
-          if (!pcztRequestWasCompactRef.current) {
-            throw new Error(
-              'received a compact (signatures-only) response but this request was not sent as compact',
-            );
-          }
-
-          // Compact response: parse signatures and merge into original PCZTs
-          if (!pcztUnsignedRef.current) {
-            throw new Error('no unsigned PCZT in context for compact merge');
-          }
-
-          const originalPcztHex = pcztUnsignedRef.current.pcztHex;
-          const { version, messages } = parseCompactResponse(unwrapped);
-          if (version !== SUPPORTED_COMPACT_RESPONSE_VERSION) {
-            throw new Error(
-              `zigner answered in a newer format (${version}, zafu reads ${SUPPORTED_COMPACT_RESPONSE_VERSION}) · please update zafu or zigner`,
-            );
-          }
-
-          // Merge the device's signatures into the PCZT we retained. The
-          // wasm runs in the worker (the popup has no wasm instance of its
-          // own), and verifies each contribution against its action's
-          // randomized verification key before applying it - a tampered or
-          // foreign signature is REFUSED there, not absorbed.
-          //
-          // Exactly one PCZT went out on this leg, so exactly one message
-          // must come back; mergeContributions enforces this (and that it
-          // isn't empty) and throws rather than passing an unsigned PCZT
-          // through as though it had been signed.
-          const mergeViaWorker = (pczt: string, contributionsJson: string): Promise<string> =>
+        // Read the signed PCZT out of the scanned answer (compact contributions
+        // merged into the PCZT zafu kept, verified in the worker), then hand it
+        // to the parked zigner signer via deliver. The shared signAndBroadcast
+        // tail - awaited in handleSign - does the extract + broadcast + success
+        // UI on resume; this handler ONLY reconstructs.
+        const walletId = selectedKeyInfo.id;
+        const signedPcztHex = await signedPcztOfAnswer(cborBytes, {
+          compact: pcztRequestWasCompactRef.current,
+          pcztHex: pcztUnsignedRef.current?.pcztHex ?? '',
+          merge: (pczt, contributionsJson) =>
             applySignatureContributionsInWorker(
               'zcash',
-              selectedKeyInfo.id,
+              walletId,
               pczt,
               JSON.parse(contributionsJson) as SignatureContribution[],
-            );
-          const updatedHexes = await mergeContributions(
-            [originalPcztHex],
-            messages,
-            mergeViaWorker,
-          );
-          signedPcztHex = updatedHexes[0]!;
-        } else {
-          // Legacy full-PCZT response path (0x03 or raw bytes). Symmetric to
-          // the compact check above: a legacy response is only valid as the
-          // answer to a legacy request.
-          if (pcztRequestWasCompactRef.current) {
-            throw new Error('zigner answered in an older format · please scan again');
-          }
-          const preluded =
-            unwrapped.length >= 3 &&
-            unwrapped[0] === 0x53 &&
-            unwrapped[1] === 0x04 &&
-            unwrapped[2] === 0x03;
-          const pcztBytes = preluded
-            ? parsePreludeSinglePcztResponse(unwrapped).signedPczt
-            : unwrapped;
-          let hex = '';
-          for (let i = 0; i < pcztBytes.length; i++) {
-            hex += pcztBytes[i]!.toString(16).padStart(2, '0');
-          }
-          signedPcztHex = hex;
-        }
+            ),
+        });
 
         // Resolve the parked signer. If no round is awaiting (shouldn't happen -
         // handleSign parks before the scanner is reachable), that is a caller

@@ -1,11 +1,11 @@
 /**
- * Pure-byte helpers for the `zcash-pczt` UR transport envelope.
+ * Pure-byte helpers for the PCZT sign-request envelopes: keystone's
+ * `ur:zcash-pczt` CBOR wrap and zigner's `ur:zigner-module` prelude, both
+ * ways (the worker builds requests with them, the send route reads answers).
  *
  * Kept in their own module so they can be imported by the send route AND
  * by unit tests without dragging in extension state, IndexedDB, or any other
- * environment-coupled code. The wasm-side encoder lives in
- * `apps/extension/src/workers/zcash-worker.ts` (`cborWrapPczt`); this file
- * is the inverse on the receive side.
+ * environment-coupled code.
  */
 
 /**
@@ -275,4 +275,93 @@ export function parsePreludeSinglePcztResponse(payload: Uint8Array): {
     );
   }
   return { signedPczt: payload.slice(pos, pos + len), digest };
+}
+
+/** the wasm the request side needs */
+export interface ZignerRequestWasm {
+  redact_pczt_compact(pczt_hex: string): string;
+  ur_encode_frames(data: Uint8Array, ur_type: string, fragment_size: number): string;
+}
+
+const hexBytes = (hex: string): Uint8Array =>
+  Uint8Array.from(hex.match(/../g) ?? [], b => parseInt(b, 16));
+
+/**
+ * The zigner module request for one PCZT, as animated UR frames under
+ * `ur:zigner-module`. With `compact` the PCZT is further redacted (tx_type
+ * 0x05) and the device answers with signatures only; if the redaction throws,
+ * the full 0x03 envelope goes out instead - a bigger QR beats a broken one.
+ * A PCZT with transparent INPUTS must ask full: a compact answer cannot carry
+ * transparent signatures, and zigner refuses it.
+ *
+ * Returns the frames, the envelope (so the UI can re-fountain at another
+ * density) and whether it actually went out compact (the UI binds the answer
+ * type to it).
+ */
+export function zignerSignRequest(
+  wasm: ZignerRequestWasm,
+  pcztHex: string,
+  { compact, fragmentSize }: { compact: boolean; fragmentSize: number },
+): { urFrames: string[]; envelope: Uint8Array; compact: boolean } {
+  let envelope: Uint8Array | undefined;
+  if (compact) {
+    try {
+      envelope = preludeWrapSinglePczt(hexBytes(wasm.redact_pczt_compact(pcztHex)), true);
+    } catch (e) {
+      console.warn(
+        `[zigner] compact redaction failed, sending the full 0x03 request: ${String(e)}`,
+      );
+    }
+  }
+  const sent = envelope ?? preludeWrapSinglePczt(hexBytes(pcztHex), false);
+  const urFrames = JSON.parse(
+    wasm.ur_encode_frames(sent, ZIGNER_PCZT_SIGN_UR_TYPE, fragmentSize),
+  ) as string[];
+  return { urFrames, envelope: sent, compact: !!envelope };
+}
+
+/**
+ * Wrap raw PCZT bytes in the CBOR envelope `{1: bytes}` that the
+ * `zcash-pczt` UR type expects (matches zashi/keystone-sdk format).
+ * This is the inverse of `encode_pczt_to_cbor` in zigner's signer.
+ */
+export const cborWrapPczt = (pczt: Uint8Array): Uint8Array => {
+  const len = pczt.length;
+  // map(1) + key 1 + bytes(len) header
+  const header: number[] = [0xa1, 0x01];
+  if (len <= 23) {
+    header.push(0x40 | len);
+  } else if (len <= 0xff) {
+    header.push(0x58, len);
+  } else if (len <= 0xffff) {
+    header.push(0x59, (len >> 8) & 0xff, len & 0xff);
+  } else {
+    header.push(0x5a, (len >> 24) & 0xff, (len >> 16) & 0xff, (len >> 8) & 0xff, len & 0xff);
+  }
+  const out = new Uint8Array(header.length + len);
+  out.set(header, 0);
+  out.set(pczt, header.length);
+  return out;
+};
+
+/**
+ * The request for an orchard PCZT. zigner reads it over the module envelope,
+ * as it does ironwood: since 0.12 its native `ur:zcash-pczt` path refuses a
+ * PCZT with any transparent output (a send to a t-address or a tex, a swap's
+ * own address), and the module path signs a plain orchard send unchanged.
+ * Keystone reads `ur:zcash-pczt` only, never compact.
+ */
+export function orchardSignRequest(
+  wasm: ZignerRequestWasm,
+  pcztHex: string,
+  { zigner, compact, fragmentSize }: { zigner: boolean; compact: boolean; fragmentSize: number },
+): { urFrames: string[]; envelope: Uint8Array; compact: boolean } {
+  if (zigner) {
+    return zignerSignRequest(wasm, pcztHex, { compact, fragmentSize });
+  }
+  const envelope = cborWrapPczt(hexBytes(pcztHex));
+  const urFrames = JSON.parse(
+    wasm.ur_encode_frames(envelope, 'zcash-pczt', fragmentSize),
+  ) as string[];
+  return { urFrames, envelope, compact: false };
 }

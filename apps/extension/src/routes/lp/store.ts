@@ -18,7 +18,11 @@ import { useStore } from '../../state';
 import { selectEffectiveKeyInfo } from '../../state/keyring';
 import { activeAccountIndex, activePockets, activeZcashStoreId } from '../../state/pockets';
 import {
+  applySignatureContributionsInWorker,
+  buildColdDepositInWorker,
   buildSendTxInWorker,
+  buildSendTxPcztInWorker,
+  completeColdDepositInWorker,
   getPoolBalancesInWorker,
   getTransparentUtxosInWorker,
   planTransparentDepositInWorker,
@@ -27,8 +31,12 @@ import {
   signThorDepositInWorker,
   spawnNetworkWorker,
   thorAddressInWorker,
+  type SignatureContribution,
   type ThorKeyIn,
 } from '../../state/keyring/network-worker';
+import { walletKind } from '../../signing/wallet-kind';
+import { signAndBroadcast } from '../../signing/cold-send';
+import { createZignerRound } from '../../signing/zigner-round';
 import { refreshEgress } from '../../net/egress';
 import { setDestinationOptIn } from '../../net/ledger';
 import { readEgressView } from '../../net/egress-opt-in';
@@ -211,6 +219,28 @@ const hotKey = () => {
   return k?.type === 'mnemonic' ? k : undefined;
 };
 
+/** the wallet this page can sign with: a phrase here, or a zigner (one qr round per send) */
+const signingKey = () => {
+  const s = useStore.getState();
+  const k = selectEffectiveKeyInfo(s);
+  const kind = k && walletKind(k, selectActiveZcashWallet(s));
+  return kind === 'hot' || kind === 'zigner' ? k : undefined;
+};
+
+/** the zigner round this page shows while a send waits on the device */
+export const lpRound = createZignerRound((pczt, json) =>
+  applySignatureContributionsInWorker(
+    'zcash',
+    get().storeId!,
+    pczt,
+    JSON.parse(json) as SignatureContribution[],
+  ),
+);
+
+/** zigner shields from zafu itself: this page has no shielding round for it yet */
+export const COLD_SHIELD_LINE =
+  'zigner shields this address from zafu itself · please open zafu and shield it there';
+
 const zidecar = () =>
   useStore.getState().networks.networks.zcash.endpoint || 'https://zcash.rotko.net';
 
@@ -344,7 +374,7 @@ const boot = async () => {
     set({ phase: 'locked' });
     return;
   }
-  const key = hotKey();
+  const key = signingKey();
   const s = useStore.getState();
   const storeId = activeZcashStoreId(s);
   if (!key || !storeId) {
@@ -561,6 +591,22 @@ const vaultOf = async () => {
   return useStore.getState().keyRing.getVaultUnlock(keyId);
 };
 
+/** a zigner wallet's viewing key: what its sends are built from, while zafu shows this page's pocket */
+const coldKey = (): string | undefined => {
+  if (!get().cold) {
+    return undefined;
+  }
+  const away = awayLine();
+  if (away) {
+    throw new Error(away);
+  }
+  const ufvk = viewingKey();
+  if (!ufvk) {
+    throw new Error('this zigner wallet has no viewing key here · please re-import it');
+  }
+  return ufvk;
+};
+
 /** the pocket this page is bound to signs, never the one the popup shows now */
 const boundAccount = () => {
   const { account } = get();
@@ -581,6 +627,33 @@ const depsOf = (storeId: string, lp: { index: number; address: string }): DriveD
   vault: readVault,
   plan: req => planTransparentDepositInWorker(zidecar(), req),
   shieldOut: async zat => {
+    const ufvk = coldKey();
+    if (ufvk) {
+      // an ordinary zigner send to the lp address, over the module envelope
+      const built = await buildSendTxPcztInWorker(
+        'zcash',
+        storeId,
+        zidecar(),
+        lp.address,
+        zat.toString(),
+        '',
+        0,
+        true,
+        ufvk,
+        false,
+        undefined,
+        undefined,
+        true,
+      );
+      const signer = lpRound.signer(built, 'move zec to your lp address');
+      return (
+        await signAndBroadcast(signer, built, {
+          walletId: storeId,
+          zidecarUrl: zidecar(),
+          mainnet: true,
+        })
+      ).txid;
+    }
     const r = await buildSendTxInWorker(
       'zcash',
       storeId,
@@ -599,16 +672,24 @@ const depsOf = (storeId: string, lp: { index: number; address: string }): DriveD
     }
     return r.txid;
   },
-  deposit: async (req, fee) =>
-    (
-      await sendTransparentDepositInWorker(
-        storeId,
-        zidecar(),
-        { ...req, reviewedFee: fee },
-        await vaultOf(),
-      )
-    ).txid,
+  deposit: async (req, fee) => {
+    const reviewed = { ...req, reviewedFee: fee };
+    const ufvk = coldKey();
+    if (ufvk) {
+      // the same reviewed bytes, signed on zigner, checked against the review before broadcast
+      const ask = await buildColdDepositInWorker(storeId, zidecar(), reviewed, ufvk);
+      const signed = await lpRound.sign(ask, 'the deposit to thorchain');
+      return (
+        await completeColdDepositInWorker(storeId, zidecar(), reviewed, ufvk, ask.pcztHex, signed)
+      ).txid;
+    }
+    return (await sendTransparentDepositInWorker(storeId, zidecar(), reviewed, await vaultOf()))
+      .txid;
+  },
   shieldBack: async () => {
+    if (coldKey()) {
+      throw new Error(COLD_SHIELD_LINE);
+    }
     // position in the list is the t-branch index that signs; only the lp address is read
     const list = Array.from({ length: lp.index + 1 }, (_, i) => (i === lp.index ? lp.address : ''));
     return (

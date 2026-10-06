@@ -7,6 +7,7 @@
  */
 
 import { useEffect, type ReactNode } from 'react';
+import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@repo/ui/components/ui/button';
 import { Sheet } from '@repo/ui/components/ui/sheet';
@@ -19,6 +20,7 @@ import {
   cancelAndShieldBack,
   continueFlight,
   init,
+  lpRound,
   startAdd2,
   startRecover,
   startRuneSwap,
@@ -47,6 +49,7 @@ import {
 import { RuneScreen, Withdraw2Screen } from './rune-screens';
 import { Panel } from './panel';
 import { pairedLive } from '../../lp/rune';
+import { ZignerRoundView } from '../../components/zigner-round-view';
 
 type Screen =
   | 'loading'
@@ -156,8 +159,8 @@ export const LpPage = () => {
     cannot: () => (
       <Column title='zec liquidity'>
         <p className='text-sm text-fg-muted'>
-          liquidity needs a wallet whose recovery phrase is on this computer. please choose one in
-          zafu.
+          liquidity needs a wallet whose recovery phrase is on this computer, or a zigner. please
+          choose one in zafu.
         </p>
       </Column>
     ),
@@ -204,7 +207,24 @@ export const LpPage = () => {
         )}
       </div>
       <Sheets />
+      <ZignerSheet />
     </ScrollShell>
+  );
+};
+
+/** a send waiting on zigner: its qr, then the camera for the answer; closing it steps back */
+const ZignerSheet = () => {
+  const shown = useStore(lpRound.store, s => s.shown);
+  return (
+    <Sheet
+      open={!!shown}
+      onOpenChange={o => !o && lpRound.cancel()}
+      title='sign on zigner'
+      className='mx-auto max-w-[560px]'
+    >
+      <span className='text-xs text-fg-muted'>{shown?.label}</span>
+      <ZignerRoundView round={lpRound} />
+    </Sheet>
   );
 };
 

@@ -170,6 +170,8 @@ export const CAPS: Record<WalletKind, Caps> = {
     signLabel: 'sign with zafu zigner',
     afterSend: 'sync-zigner',
     migrate: true,
+    // zigner 0.12 shows the OP_RETURN memo in words on its module path
+    opReturn: true,
     cosmos: 'zigner',
     zid: null,
   },
