@@ -1,8 +1,8 @@
 // Mainnet consensus on the real shipped blob, with no network. On mainnet every
 // builder binds NU6.3 (Ironwood, 0x37a5165b) from its activation at 3,428,143
 // on, at any later height. Since zcli 8cef107 the blob builds on the NU7 branch
-// whenever the node reports it (NodeParams), on any network, so on mainnet the
-// worker's own guard (branch-ids.ts) is what refuses NU7 before a proof. The note
+// whenever the node reports it (NodeParams), on any network, and the worker's
+// guard (branch-ids.ts) takes NU6.3 or NU7 everywhere, as Zigner 0.12 does. The note
 // fixture is the one in hot-send-wasm.test.ts: the orchard keys do not depend
 // on the network, so the same note is owned by the mainnet keys too.
 import { readFileSync } from 'node:fs';
@@ -102,7 +102,7 @@ describe('mainnet consensus on the real wasm', () => {
 
   test('an ironwood send before NU6.3 is refused; one expecting NU7 follows the node', () => {
     expect(() => ironwoodSend(NU63_ACTIVATION - 1, NU63)).toThrow(/branch/i);
-    // the blob trusts the node's NU7 report; the worker guard refuses it on mainnet
+    // the blob trusts the node's NU7 report, and so does the worker guard
     const txHex = ironwoodSend(10_000_000, NU7);
     expect(txHex.slice(0, 8)).toBe(V6);
     expect(branchLe(txHex)).toBe('d90a1977');
@@ -154,16 +154,17 @@ describe('mainnet consensus on the real wasm', () => {
     }
   });
 
-  test('the worker refuses NU7 on mainnet before any proof, and takes it on testnet', () => {
+  test('the worker takes NU6.3 or NU7 as the node reports it, on mainnet and testnet', () => {
     const hex = (id: number) => id.toString(16).padStart(8, '0');
-    expect([...ironwoodBranchIds(true)]).toEqual([hex(NU63)]);
-    expect(ironwoodBranchRefusal(hex(NU63), true, 'ironwood send')).toBeUndefined();
-    expect(ironwoodBranchRefusal(hex(NU7), true, 'ironwood send')).toMatch(
-      /0x77190ad9 has no ironwood pool on mainnet .*refusing to build ironwood send/,
-    );
-    for (const id of [hex(NU63), hex(NU7)]) {
-      expect(ironwoodBranchRefusal(id, false, 'turnstile migration')).toBeUndefined();
+    for (const mainnet of [true, false]) {
+      expect([...ironwoodBranchIds(mainnet)]).toEqual([hex(NU63), hex(NU7)]);
+      for (const id of [hex(NU63), hex(NU7)]) {
+        expect(ironwoodBranchRefusal(id, mainnet, 'turnstile migration')).toBeUndefined();
+      }
     }
+    expect(ironwoodBranchRefusal('4dec4df0', true, 'ironwood send')).toMatch(
+      /0x4dec4df0 has no ironwood pool on mainnet .*refusing to build ironwood send/,
+    );
     // an older upgrade (NU6.1) and the placeholder never carry ironwood
     for (const mainnet of [true, false]) {
       expect(ironwoodBranchRefusal('4dec4df0', mainnet, 'x')).toBeDefined();
@@ -171,11 +172,9 @@ describe('mainnet consensus on the real wasm', () => {
     }
   });
 
-  test('the worker guard is the only mainnet NU7 gate: the blob builds what the node reports', () => {
-    // what the guard lets through on mainnet the blob builds; the NU7 the
-    // guard refuses, the blob would bind as the node reported it
+  test('on mainnet NU7 day the guard and the blob agree: both follow the node', () => {
     expect(() => ironwoodSend(NU63_ACTIVATION, NU63)).not.toThrow();
-    expect(ironwoodBranchRefusal(NU7.toString(16), true, 'ironwood send')).toBeDefined();
+    expect(ironwoodBranchRefusal(NU7.toString(16), true, 'ironwood send')).toBeUndefined();
     expect(branchLe(ironwoodSend(NU63_ACTIVATION, NU7))).toBe('d90a1977');
   }, 300_000);
 });
