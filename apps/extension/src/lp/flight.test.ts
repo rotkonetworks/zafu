@@ -14,6 +14,7 @@ import {
   stepLines,
   stopped,
   type Flight,
+  memoText,
 } from './flight';
 import { ADD_MEMO, withdrawMemo, zecText } from './math';
 
@@ -168,6 +169,14 @@ describe('the tracker lines', () => {
     expect(lines.map(l => l.state)).toEqual(['done', 'now', 'later', 'later', 'later']);
     expect(lines[0]!.at).toBe(f.at.settle);
     expect(lines[2]!.d).toBe('memo +:ZEC.ZEC · 0.0100 zec');
+    expect(lines[2]!.copy).toBeUndefined();
+  });
+
+  // a paired add's memo carries the whole thor1: the line shows its ends, the copy keeps it all
+  it('cuts the addresses in a memo, never the rest', () => {
+    const memo = '+:ZEC.ZEC:thor1pcfs5vnlz8dppzshzc2jhca5ckfafflv4429pc';
+    expect(memoText(memo)).toBe('+:ZEC.ZEC:thor1…29pc');
+    expect(memoText('-:ZEC.ZEC:5000')).toBe('-:ZEC.ZEC:5000');
   });
 });
 
