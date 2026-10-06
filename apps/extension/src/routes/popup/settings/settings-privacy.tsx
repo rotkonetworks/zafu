@@ -100,6 +100,8 @@ const PRIVACY_ROWS: readonly {
   label: string;
   explainId: ExplainId;
   group: Group;
+  /** one honest line under the label */
+  note?: string;
   visible?: (network: NetworkType) => boolean;
 }[] = [
   {
@@ -127,6 +129,14 @@ const PRIVACY_ROWS: readonly {
     explainId: 'privacy.transparentBalances',
     group: 'network',
     visible: n => hasFeature(n, 'cosmos'),
+  },
+  {
+    key: 'zcashTransparentEachBlock',
+    label: 'zcash: transparent each block',
+    explainId: 'privacy.zcashTransparentEachBlock',
+    group: 'network',
+    note: 'the node sees these addresses checked together',
+    visible: n => hasFeature(n, 'zcash'),
   },
   {
     key: 'enableExplorerLinks',
@@ -325,6 +335,7 @@ export function SettingsPrivacy() {
           key={r.key}
           type='toggle'
           label={r.label}
+          description={r.note}
           checked={settings[r.key] as boolean}
           onChange={v => setSetting(r.key, v as never)}
           {...explainProps(r.explainId)}

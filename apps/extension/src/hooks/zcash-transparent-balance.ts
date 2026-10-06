@@ -1,61 +1,53 @@
 /**
- * zcash transparent balance hook
- *
- * queries zidecar for UTXOs at derived transparent addresses.
- * sums valueZat for display in the home page.
+ * A pocket's transparent balance: the last check, read from this computer,
+ * and `check(tip)`, the only thing here that asks the node. Callers ask on
+ * intent (check now, opening the transparent view or the shield step) or,
+ * when the user turned it on, on each new block.
  */
 
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import type { Utxo } from '../state/keyring/zidecar-client';
-import { zcashClient } from '../state/keyring/zcash-backend';
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../state';
 import { selectZcashBackend } from '../state/networks';
+import { activeZcashStoreId } from '../state/pockets';
+import { zcashClient } from '../state/keyring/zcash-backend';
+import { readCheck, runCheck, saveCheck, type TransparentCheck } from '../transparent/zcash-check';
 
-const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
-
-export interface TransparentBalance {
-  totalZat: bigint;
-  utxos: Utxo[];
-  isLoading: boolean;
-  error: Error | null;
-  /** still the previous addresses' figure (see `holdPrevious`) */
-  held: boolean;
-}
-
-/**
- * `holdPrevious`: while the addresses change (a pocket switch), keep the last
- * figure as a placeholder, flagged `held`, instead of dropping to zero.
- */
-export function useTransparentBalance(
-  addresses: string[],
-  holdPrevious = false,
-): TransparentBalance {
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
+export const useTransparentBalance = (tAddresses: string[]) => {
+  const storeId = useStore(activeZcashStoreId);
+  const url = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const backend = useStore(selectZcashBackend);
-  const { data, isLoading, error, isPlaceholderData } = useQuery({
-    queryKey: ['zcashTransparentUtxos', zidecarUrl, backend, ...addresses],
-    queryFn: async () => {
-      if (addresses.length === 0) {
-        return { totalZat: 0n, utxos: [] as Utxo[] };
-      }
-      const utxos = await zcashClient(zidecarUrl, backend).getAddressUtxos(addresses);
-      const totalZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
-      return { totalZat, utxos };
+  const queryClient = useQueryClient();
+  const key = ['zcashTransparentCheck', storeId];
+
+  const last = useQuery({
+    queryKey: key,
+    queryFn: () => readCheck(storeId!),
+    enabled: !!storeId,
+    staleTime: Infinity,
+    structuralSharing: false, // bigint
+  }).data;
+
+  const run = useMutation({
+    mutationKey: key,
+    mutationFn: (tip: number) => runCheck(zcashClient(url, backend), tAddresses, tip),
+    onSuccess: (c: TransparentCheck) => {
+      queryClient.setQueryData(key, c);
+      void saveCheck(storeId!, c);
     },
-    enabled: addresses.length > 0,
-    placeholderData: holdPrevious ? keepPreviousData : undefined,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-    retry: 2,
-    // BigInt is not JSON serializable - disable structural sharing
-    structuralSharing: false,
   });
+  const checking = useIsMutating({ mutationKey: key }) > 0;
 
   return {
-    totalZat: data?.totalZat ?? 0n,
-    utxos: data?.utxos ?? [],
-    isLoading,
-    error: error,
-    held: isPlaceholderData,
+    /** the last check, or null before the first */
+    last,
+    checking,
+    failed: run.isError,
+    /** one check of every address, each on its own; a second press while one runs does nothing */
+    check: (tip = 0) => {
+      if (storeId && tAddresses.length > 0 && !queryClient.isMutating({ mutationKey: key })) {
+        // a check asked without a tip keeps the one it knew
+        run.mutate(Math.max(tip, last?.height ?? 0));
+      }
+    },
   };
-}
+};

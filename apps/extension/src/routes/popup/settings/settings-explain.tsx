@@ -45,6 +45,11 @@ export const SETTINGS_EXPLAIN = {
     on: 'zafu asks the nodes you picked, from your ip, when you tap a transparent line',
     off: 'nothing is asked; zafu asks you first, the next time you tap one',
   },
+  'privacy.zcashTransparentEachBlock': {
+    blurb: 'keeps the transparent balance current while zafu is open.',
+    on: 'each new block, zafu asks your node about every transparent address, one at a time; the node sees them checked together, every block, from your ip',
+    off: 'zafu asks only when you tap check now or open the transparent view or the shield step',
+  },
   'privacy.explorerLinks': {
     blurb: 'adds a link from each transaction to a public block explorer.',
     on: 'handy for checking a transaction landed',

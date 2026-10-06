@@ -5,6 +5,7 @@ import { LightwalletdClient } from './lightwalletd-client';
 import type { ChainTip, CompactBlock, Utxo } from './zidecar-client';
 import type { SubtreePool, SubtreeRoot } from './subtree-roots';
 import { findPresetByUrl } from '../../config/zcash-endpoints';
+import { eachAddress } from './each-address';
 
 export type ZcashBackend = 'zidecar' | 'lightwalletd';
 
@@ -44,6 +45,11 @@ export const zidecarExtras = (url: string, backend: unknown): ZidecarClient | un
 export const zcashClient = (url: string, backend: ZcashBackend): ZcashClient =>
   ZCASH_BACKENDS[backend].client(url);
 
+export const utxosEach = (
+  client: Pick<ZcashClient, 'getAddressUtxos'>,
+  addresses: readonly string[],
+) => eachAddress(addresses, a => client.getAddressUtxos(a));
+
 /** The standard CompactTxStreamer surface both backends serve; ZidecarClient is a structural superset. */
 export interface ZcashClient {
   getTip(): Promise<ChainTip>;
@@ -61,8 +67,9 @@ export interface ZcashClient {
   getCompactBlocks(startHeight: number, endHeight: number): Promise<CompactBlock[]>;
   /** roots of the pool's complete 2^16-leaf subtrees, from `startIndex` (lightwalletd GetSubtreeRoots) */
   getSubtreeRoots(pool: SubtreePool, startIndex: number): Promise<SubtreeRoot[]>;
-  getAddressUtxos(addresses: string[], startHeight?: number, maxEntries?: number): Promise<Utxo[]>;
-  getTaddressTxids(addresses: string[], startHeight?: number): Promise<Uint8Array[]>;
+  /** one address per request: a request naming several tells the node they are one wallet */
+  getAddressUtxos(address: string, startHeight?: number, maxEntries?: number): Promise<Utxo[]>;
+  getTaddressTxids(address: string, startHeight?: number): Promise<Uint8Array[]>;
   getTransaction(txid: Uint8Array): Promise<{ data: Uint8Array; height: number }>;
   getBlockTime(height: number): Promise<number>;
   /**

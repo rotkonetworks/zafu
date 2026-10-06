@@ -106,6 +106,14 @@ export interface PrivacySettings {
   autoCheckTransparent: boolean;
 
   /**
+   * check every zcash transparent address of the pocket on each new block,
+   * while zafu is open. false (default): only on intent (check now, the
+   * transparent view, the shield step). The node sees the addresses checked
+   * together, one request each.
+   */
+  zcashTransparentEachBlock: boolean;
+
+  /**
    * enable price fetching (affects all networks)
    * when false (default): no fiat price queries
    * when true: fetches prices from external apis
@@ -220,6 +228,7 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   keepPenumbraSyncing: false,
   transparentBackgroundSync: false,
   autoCheckTransparent: false,
+  zcashTransparentEachBlock: false,
   enablePriceFetching: false,
   enableExplorerLinks: false,
   openZcashLinks: true,
@@ -305,7 +314,8 @@ export const createPrivacySlice =
       return (
         settings.enableTransparentBalances ||
         settings.enableTransactionHistory ||
-        settings.transparentBackgroundSync
+        settings.transparentBackgroundSync ||
+        settings.zcashTransparentEachBlock
       );
     },
   });

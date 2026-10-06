@@ -342,9 +342,9 @@ async function purgePockets(
   } catch {
     // worker may not be running
   }
-  // sync-height hints and t-address caches of the vault's stores, all accounts
+  // sync-height hints, t-address caches and transparent checks of the vault's stores, all accounts
   const isPocketKey = (key: string) =>
-    ['zcashSyncHeight_', 'zcashTAddrs:'].some(prefix => {
+    ['zcashSyncHeight_', 'zcashTAddrs:', 'zcashTransparentCheck:'].some(prefix => {
       if (!key.startsWith(prefix)) {
         return false;
       }

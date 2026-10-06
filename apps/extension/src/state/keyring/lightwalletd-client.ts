@@ -145,13 +145,9 @@ export class LightwalletdClient implements ZcashClient {
     return parseSubtreeRootStream(resp);
   }
 
-  async getAddressUtxos(addresses: string[], startHeight = 0, maxEntries = 0): Promise<Utxo[]> {
-    // GetAddressUtxos(GetAddressUtxosArg{ addresses=1, startHeight=2, maxEntries=3 })
-    const parts: number[] = [];
-    const encoder = new TextEncoder();
-    for (const addr of addresses) {
-      parts.push(0x0a, ...this.lengthDelimited(encoder.encode(addr)));
-    }
+  async getAddressUtxos(address: string, startHeight = 0, maxEntries = 0): Promise<Utxo[]> {
+    // GetAddressUtxos(GetAddressUtxosArg{ addresses=1 (one, never several), startHeight=2, maxEntries=3 })
+    const parts: number[] = [0x0a, ...this.lengthDelimited(new TextEncoder().encode(address))];
     if (startHeight > 0) {
       parts.push(0x10, ...this.varint(startHeight));
     }

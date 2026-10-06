@@ -701,7 +701,7 @@ const depsOf = (storeId: string, lp: { index: number; address: string }): DriveD
   seen: txid => readTxSeen(txid, lp.address),
   units: () => Promise.resolve(get().thor?.position?.units ?? 0n),
   utxoZat: async () =>
-    (await getTransparentUtxosInWorker(zidecar(), [lp.address])).map(u => BigInt(u.valueZat)),
+    (await getTransparentUtxosInWorker(zidecar(), lp.address)).map(u => BigInt(u.valueZat)),
   refundReason: get().egress.midgard ? txid => readRefundReason(txid, lp.address) : undefined,
   // only with the opt-in on: a pocket that never chose rune has no rune side at all
   ...(runeOn()

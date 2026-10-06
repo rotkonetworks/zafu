@@ -148,6 +148,20 @@ describe('intent preloading', () => {
     expect(askOptIn).not.toHaveBeenCalled();
   });
 
+  it('with history off, the activity press touches no t-address and asks nothing', async () => {
+    allowed.add('zcash.rotko.net');
+    state.privacy.settings.enableTransactionHistory = false;
+    try {
+      press(renderNav(`/activity${seq}`));
+      await settle();
+      expect(getHistory).not.toHaveBeenCalled();
+      expect(chrome.storage.local.get).not.toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      state.privacy.settings.enableTransactionHistory = true;
+    }
+  });
+
   it('hovering only counts on a hover-capable pointer (none in tests): nothing runs', async () => {
     allowed.add('zcash.rotko.net');
     hover(renderNav(`/activity${seq}`));

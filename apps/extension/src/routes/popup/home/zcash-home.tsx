@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -23,6 +23,8 @@ import { PopupPath } from '../paths';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { useTransparentBalance } from '../../../hooks/zcash-transparent-balance';
+import { newTip } from '../../../transparent/zcash-check';
+import { ago } from '../../../transparent/chain-check';
 import type { HistoryEntry } from '../../../state/keyring/network-worker';
 import {
   EMPTY_POOL_BALANCES,
@@ -45,7 +47,12 @@ import { HistoryContent, AskHistorySheet } from './history';
 import { HOME_LOOK } from './look';
 import { SyncStrip } from '../../../components/wallet/sync-strip';
 import { EmptyBox, HomeScreen } from './home-screen';
-import { BalanceGroup, BalanceRow, Tile } from '../../../components/wallet/balance-rows';
+import {
+  BalanceGroup,
+  BalanceRow,
+  LineActions,
+  Tile,
+} from '../../../components/wallet/balance-rows';
 import type { BalanceView } from '../../../components/wallet/balance-hero';
 import { SharedWallets } from './shared-wallets';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
@@ -136,10 +143,19 @@ export const ZcashContent = ({
   const birthdayQuery = zcashBirthdayQuery(hasWallet ? selectedKeyInfo?.id : undefined);
   const walletBirthday = useQuery(birthdayQuery).data ?? 0;
 
-  // derive transparent addresses for UTXO lookup (shared hook with caching)
-  const { tAddresses, isLoading: tAddrLoading } = useTransparentAddresses(isMainnet);
-  const transparent = useTransparentBalance(tAddresses, tAddrLoading || tAddresses.length > 0);
-  const { totalZat: transparentZat, isLoading: utxoLoading } = transparent;
+  // the transparent figure is the last check: asked on intent, never on a timer
+  const { tAddresses } = useTransparentAddresses(isMainnet);
+  const transparent = useTransparentBalance(tAddresses);
+  const transparentZat = transparent.last?.zat ?? 0n;
+  const tip = chainTip?.height ?? 0;
+  const eachBlock = useStore(s => s.privacy.settings.zcashTransparentEachBlock);
+  // opted in: each new tip the sync sees asks again, only while zafu is open
+  const lastRead = transparent.last !== undefined;
+  useEffect(() => {
+    if (lastRead && newTip(eachBlock, tip, transparent.last)) {
+      transparent.check(tip);
+    }
+  }, [lastRead, eachBlock, tip, tAddresses.length]);
 
   // per-pool split (orchard legacy / ironwood active)
   const poolsQ = useWorkerValue(
@@ -155,7 +171,7 @@ export const ZcashContent = ({
     useWorkerValue(zcashWorkerQuery.pending(storeId), workerSyncHeight).data ?? NO_PENDING;
 
   // the figures still show the pocket switched away from: dimmed, never current
-  const held = balance.isPlaceholderData || poolsQ.isPlaceholderData || transparent.held;
+  const held = balance.isPlaceholderData || poolsQ.isPlaceholderData;
 
   // NU6.3 turnstile migration flow (feature-flagged; see feature-flags.ts)
   const [showIronwoodMigrate, setShowIronwoodMigrate] = useState(false);
@@ -224,7 +240,10 @@ export const ZcashContent = ({
 
   const inFlight = pendingSends.filter(t => t.status === 'pending');
   const failedSends = pendingSends.filter(t => t.status === 'failed');
-  const empty = totalZat === 0n && inFlight.length === 0 && balanceState === 'ready';
+  // a swap or lp address was handed out and never checked: keep its row and its
+  // "check now" on screen rather than calling the pocket empty
+  const tUnchecked = transparent.last === null && tAddresses.length > 1;
+  const empty = totalZat === 0n && inFlight.length === 0 && balanceState === 'ready' && !tUnchecked;
   const reading = totalZat === 0n && balanceState === 'loading';
 
   // NU6.3 turnstile: eligible once the flag is on, activation has passed,
@@ -360,20 +379,47 @@ export const ZcashContent = ({
           <BalanceRow
             tile={<Tile tone='warn'>t</Tile>}
             label='transparent'
-            tag={<span className='text-[11px] text-warn'>public</span>}
-            amount={zec(transparentZat)}
+            tag={
+              <span className='truncate text-[11px] text-fg-muted'>
+                <span className='text-warn'>public</span>
+                {transparent.checking ? ' · checking' : transparent.failed && ' · no answer'}
+              </span>
+            }
+            amount={transparent.last ? zec(transparentZat) : undefined}
+            note={
+              transparent.last && (
+                <span className='text-[11px] text-fg-muted'>
+                  checked {ago(transparent.last.at)}
+                </span>
+              )
+            }
             onPress={openPoolNotes('transparent')}
             action={
-              transparentZat > 0n && (
-                <Button
-                  variant='secondary'
-                  size='sm'
-                  className='shrink-0 border-surface-border text-network-accent'
-                  onClick={() => setShieldOpen(true)}
-                >
-                  shield
-                </Button>
-              )
+              <>
+                <LineActions
+                  actions={[
+                    {
+                      icon: 'i-lucide-refresh-cw',
+                      label: 'check now',
+                      onPress: () => transparent.check(tip),
+                      busy: transparent.checking,
+                    },
+                  ]}
+                />
+                {transparentZat > 0n && (
+                  <Button
+                    variant='secondary'
+                    size='sm'
+                    className='shrink-0 border-surface-border text-network-accent'
+                    onClick={() => {
+                      setShieldOpen(true);
+                      transparent.check(tip);
+                    }}
+                  >
+                    shield
+                  </Button>
+                )}
+              </>
             }
           />
         </BalanceGroup>
@@ -434,11 +480,11 @@ export const ZcashContent = ({
       <Sheet open={shieldOpen} onOpenChange={setShieldOpen} title='shield'>
         <ShieldTransparent
           transparentZat={transparentZat}
-          utxoLoading={utxoLoading}
+          utxoLoading={transparent.checking}
           hasMnemonic={hasMnemonic}
           watchOnly={watchOnly}
           tAddresses={tAddresses}
-          funded={new Set(transparent.utxos.map(u => u.address)).size}
+          funded={transparent.last?.funded}
           isMainnet={isMainnet}
           zidecarUrl={zidecarUrl}
         />

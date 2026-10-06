@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Segmented } from '@repo/ui/components/ui/segmented';
+import { Button } from '@repo/ui/components/ui/button';
 import { Sensitive } from '../../components/sensitive';
 import { ShieldTransparent } from '../../components/zcash/shield-transparent';
 import { useStore } from '../../state';
@@ -267,13 +268,6 @@ export const PoolNotesPage = () => {
   const watchOnly = hasMnemonic ? undefined : activeZcashWallet;
   const isMainnet = watchOnly?.mainnet ?? true;
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
-  const { tAddresses } = useTransparentAddresses(isMainnet);
-  const {
-    totalZat: transparentZat,
-    utxos,
-    isLoading: utxoLoading,
-    error: utxoError,
-  } = useTransparentBalance(tAddresses);
 
   const active = filter === 'ironwood' ? notes.ironwood : notes.orchard;
   const label = filter === 'ironwood' ? 'ironwood' : 'orchard';
@@ -303,13 +297,8 @@ export const PoolNotesPage = () => {
 
         {filter === 'transparent' ? (
           <TransparentSection
-            transparentZat={transparentZat}
-            utxos={utxos}
-            utxoLoading={utxoLoading}
-            utxoError={utxoError}
             hasMnemonic={hasMnemonic}
             watchOnly={watchOnly ?? undefined}
-            tAddresses={tAddresses}
             isMainnet={isMainnet}
             zidecarUrl={zidecarUrl}
           />
@@ -329,84 +318,94 @@ export const PoolNotesPage = () => {
   );
 };
 
-/** transparent (public) tab: subtotal, shield affordance, UTXO list. */
+/** transparent (public) tab: subtotal, shield affordance, UTXO list. Opening it is what checks. */
 const TransparentSection = ({
-  transparentZat,
-  utxos,
-  utxoLoading,
-  utxoError,
   hasMnemonic,
   watchOnly,
-  tAddresses,
   isMainnet,
   zidecarUrl,
 }: {
-  transparentZat: bigint;
-  utxos: Utxo[];
-  utxoLoading: boolean;
-  utxoError: Error | null;
   hasMnemonic?: boolean;
   watchOnly?: { label: string; mainnet: boolean; orchardFvk?: string; ufvk?: string; id?: string };
-  tAddresses: string[];
   isMainnet: boolean;
   zidecarUrl: string;
-}) => (
-  <>
-    <div className='flex items-baseline justify-between gap-2 px-0.5'>
-      <span className='text-data text-fg-high lowercase'>
-        transparent - {utxos.length} utxo{utxos.length === 1 ? '' : 's'}
-      </span>
-      <span className='font-mono text-xs tabular-nums text-fg-muted'>
-        <Sensitive>{fmtZec(transparentZat)} ZEC</Sensitive>
-      </span>
-    </div>
+}) => {
+  const { tAddresses } = useTransparentAddresses(isMainnet);
+  const { last, checking, failed, check } = useTransparentBalance(tAddresses);
+  const ready = tAddresses.length > 0;
+  // once per open, as soon as the addresses are known
+  useEffect(() => {
+    if (ready) {
+      check();
+    }
+  }, [ready]);
+  const transparentZat = last?.zat ?? 0n;
+  // the coins themselves are this session's only; a check from disk has just the sum
+  const utxos = last?.utxos ?? [];
+  const utxoLoading = checking || (!failed && !last?.utxos);
+  return (
+    <>
+      <div className='flex items-baseline justify-between gap-2 px-0.5'>
+        <span className='text-data text-fg-high lowercase'>
+          transparent - {utxos.length} utxo{utxos.length === 1 ? '' : 's'}
+        </span>
+        <span className='font-mono text-xs tabular-nums text-fg-muted'>
+          <Sensitive>{fmtZec(transparentZat)} ZEC</Sensitive>
+        </span>
+      </div>
 
-    {/* shield affordance - the same flow as home's transparent row */}
-    {transparentZat > 0n && (
-      <ShieldTransparent
-        transparentZat={transparentZat}
-        utxoLoading={utxoLoading}
-        hasMnemonic={hasMnemonic}
-        watchOnly={watchOnly}
-        tAddresses={tAddresses}
-        funded={new Set(utxos.map(u => u.address)).size}
-        isMainnet={isMainnet}
-        zidecarUrl={zidecarUrl}
-      />
-    )}
-
-    <div className='flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto'>
-      {utxoLoading && utxos.length === 0 ? (
-        <div className='flex flex-col gap-2 animate-pulse'>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className='flex items-center gap-3 bg-elev-1 p-3'>
-              <div className='h-9 w-9 shrink-0 bg-elev-2/60' />
-              <div className='flex-1 space-y-1.5'>
-                <div className='h-3 w-1/2 bg-elev-2/60' />
-                <div className='h-2 w-1/3 bg-elev-2/40' />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : utxoError ? (
-        <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-          <p className='text-sm text-red-400'>transparent funds didn't load · please try again</p>
-        </div>
-      ) : utxos.length === 0 ? (
-        <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-          <div className='bg-primary/10 p-4'>
-            <span className='i-ph-shield-check h-8 w-8 text-zigner-gold' />
-          </div>
-          <p className='text-sm text-fg-muted lowercase'>no transparent funds - all shielded</p>
-        </div>
-      ) : (
-        utxos.map(u => (
-          <UtxoRow key={`${Array.from(u.txid).join('-')}:${u.outputIndex}`} utxo={u} />
-        ))
+      {/* shield affordance - the same flow as home's transparent row */}
+      {transparentZat > 0n && (
+        <ShieldTransparent
+          transparentZat={transparentZat}
+          utxoLoading={utxoLoading}
+          hasMnemonic={hasMnemonic}
+          watchOnly={watchOnly}
+          tAddresses={tAddresses}
+          funded={last?.funded}
+          isMainnet={isMainnet}
+          zidecarUrl={zidecarUrl}
+        />
       )}
-    </div>
-  </>
-);
+
+      <div className='flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto'>
+        {utxoLoading && utxos.length === 0 ? (
+          <div className='flex flex-col gap-2 animate-pulse'>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className='flex items-center gap-3 bg-elev-1 p-3'>
+                <div className='h-9 w-9 shrink-0 bg-elev-2/60' />
+                <div className='flex-1 space-y-1.5'>
+                  <div className='h-3 w-1/2 bg-elev-2/60' />
+                  <div className='h-2 w-1/3 bg-elev-2/40' />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : failed ? (
+          <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
+            <p className='text-sm text-fg-muted lowercase'>
+              the node didn't answer · nothing changed
+            </p>
+            <Button variant='quiet' size='sm' onClick={() => check()}>
+              check again
+            </Button>
+          </div>
+        ) : utxos.length === 0 ? (
+          <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
+            <div className='bg-primary/10 p-4'>
+              <span className='i-ph-shield-check h-8 w-8 text-zigner-gold' />
+            </div>
+            <p className='text-sm text-fg-muted lowercase'>no transparent funds - all shielded</p>
+          </div>
+        ) : (
+          utxos.map(u => (
+            <UtxoRow key={`${Array.from(u.txid).join('-')}:${u.outputIndex}`} utxo={u} />
+          ))
+        )}
+      </div>
+    </>
+  );
+};
 
 /** shielded (ironwood / orchard) tab: header + refresh + note list. */
 const ShieldedSection = ({
