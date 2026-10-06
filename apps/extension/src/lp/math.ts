@@ -243,3 +243,97 @@ export const zecText = (zat: bigint): string => {
   const n = Number(zat) / 1e8;
   return n >= 0.01 ? n.toFixed(4) : n.toFixed(5);
 };
+
+/** THORChain's own rune, in a memo's asset slot */
+export const RUNE_POOL_ASSET = 'THOR.RUNE';
+
+/**
+ * A two-sided add: each half names the other half's address (THORNode
+ * memo_add.go, `+:POOL:PAIREDADDR`). The zec half names the thor1, the rune
+ * half names the zec lp t-address; THORNode keys the position by the thor1
+ * and holds whichever half lands first as pending until the other comes.
+ */
+export const pairedAddMemo = (otherAddress: string): string => `${ADD_MEMO}:${otherAddress}`;
+
+/** how a two-sided take-out pays: both sides at the pool price, or all in one (memo_withdraw.go `:ASSET`) */
+export type PayoutAs = 'both' | 'zec' | 'rune';
+
+/** sent from the thor1 with 0 rune: THORNode finds the position by the sender (handler.go getMsgWithdrawFromMemo) */
+export const pairedWithdrawMemo = (bps: number, as: PayoutAs = 'both'): string =>
+  `${withdrawMemo(bps)}${as === 'zec' ? `:${LP_POOL}` : as === 'rune' ? `:${RUNE_POOL_ASSET}` : ''}`;
+
+/**
+ * Takes back a half that is waiting for the other: with no units, THORNode's
+ * withdraw removes the pending record and pays the pending rune to the thor1
+ * and any pending zec to the lp address (withdraw.go, lp.Units == 0).
+ */
+export const RECOVER_MEMO = withdrawMemo(10_000);
+
+/** the rune that pairs `zat` at the pool's ratio, 1e8 */
+export const runeFor = (pool: PoolDepth, zat: bigint): bigint =>
+  pool.asset > 0n ? (zat * pool.rune) / pool.asset : 0n;
+
+/** the zec that pairs `rune` at the pool's ratio, zat */
+export const zecFor = (pool: PoolDepth, rune: bigint): bigint =>
+  pool.rune > 0n ? (rune * pool.asset) / pool.rune : 0n;
+
+/** how far a pair is off the pool's ratio, percent of the rune it should carry; the off part is paid as slip */
+export const offRatioPct = (pool: PoolDepth, zat: bigint, rune: bigint): number => {
+  const want = runeFor(pool, zat);
+  return want > 0n ? (Number(rune - want) / Number(want)) * 100 : 0;
+};
+
+/** a two-sided add's units and share, by THORNode's own formula */
+export const quotePaired = (pool: PoolDepth, zat: bigint, rune: bigint, px?: Prices) => {
+  if (zat <= 0n || rune <= 0n) {
+    return undefined;
+  }
+  const units = poolUnitsFor(pool, zat, rune);
+  const after = { asset: pool.asset + zat, rune: pool.rune + rune, units: pool.units + units };
+  const sh = Number(units) / Number(after.units);
+  if (!px) {
+    return { units, sharePct: sh * 100 };
+  }
+  const put = (Number(zat) / 1e8) * px.zec + (Number(rune) / 1e8) * px.rune;
+  const worth = sh * ((Number(after.asset) / 1e8) * px.zec + (Number(after.rune) / 1e8) * px.rune);
+  return { units, sharePct: sh * 100, costPct: (1 - worth / put) * 100 };
+};
+
+/**
+ * What a two-sided take-out of `bps` pays, before the outbound fees: both
+ * shares as they are, or one side swapped into the other through what
+ * remains of the pool (withdraw.go calculateWithdraw with a withdrawal asset).
+ */
+export const pairedWithdraw = (
+  pool: PoolDepth,
+  lpUnits: bigint,
+  bps: number,
+  minSlipBps: bigint,
+  as: PayoutAs,
+): { zat: bigint; rune: bigint } => {
+  if (pool.units === 0n || pool.rune === 0n || pool.asset === 0n || lpUnits === 0n) {
+    return { zat: 0n, rune: 0n };
+  }
+  const claim = share(BigInt(bps), 10_000n, lpUnits);
+  const outRune = share(claim, pool.units, pool.rune);
+  const outAsset = share(claim, pool.units, pool.asset);
+  if (as === 'zec') {
+    return { zat: withdrawZec(pool, lpUnits, bps, minSlipBps), rune: 0n };
+  }
+  if (as === 'rune') {
+    return {
+      zat: 0n,
+      rune: swapOut(pool.asset - outAsset, outAsset, pool.rune - outRune, minSlipBps) + outRune,
+    };
+  }
+  return { zat: outAsset, rune: outRune };
+};
+
+/** rune as text: two places from 1, four below */
+export const runeText = (base: bigint): string => {
+  const n = Number(base) / 1e8;
+  return n >= 1 ? n.toFixed(2) : n.toFixed(4);
+};
+
+/** whole rune from a decimal string, as 1e8; undefined when it isn't a positive amount */
+export const parseRune = parseZec;

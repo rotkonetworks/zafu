@@ -3,6 +3,7 @@ import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { randomThorKeyHex, thorKeyFromHex } from '@repo/wallet/networks/thorchain/derive';
 import { create } from 'zustand';
 import { AllSlices, initializeStore } from '../state';
 import { LpCard } from '../components/lp-card';
@@ -24,10 +25,15 @@ import {
   changeFlight,
   changeLp,
   exportLp,
+  exportLpRune,
+  optInRune,
+  optOutRune,
   patchLpPocket,
   readLp,
   readLpPocket,
   restoreLp,
+  restoreLpRune,
+  RUNE_COUNTER,
   saveFlight,
 } from './store';
 
@@ -221,5 +227,153 @@ describe('one writer at a time, in storage', () => {
     const stored = (await readLpPocket(ID))?.flight;
     expect(stored?.cancelled).toBe(true);
     expect(stored?.stage).toBe('shield');
+  });
+});
+
+describe('the rune opt-in', () => {
+  /** the keyring's own sealing, as lp.html uses it for a random key */
+  const ring = () => {
+    const useStore = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
+    return useStore.getState().keyRing;
+  };
+
+  test('none until chosen: no record, no counter, nothing for the backup', async () => {
+    await changeLp(() => ({ 'vault-a': { index: 21, address: LP } }));
+    expect((await readLpPocket('vault-a'))?.rune).toBeUndefined();
+    expect(await exportLpRune(() => 'zid-a')).toBeUndefined();
+    expect(localMock.get('cosmosChainCounters')).toBeUndefined();
+  });
+
+  test('a seed opt-in: an index from its own counter; off keeps the index and source', async () => {
+    await changeLp(() => ({ 'vault-a': { index: 21, address: LP } }));
+    const r = await optInRune('vault-a');
+    expect(r).toEqual({ index: 1, on: true, source: 'seed' });
+    expect(localMock.get('cosmosChainCounters')).toEqual({ [RUNE_COUNTER]: 1 });
+    await patchLpPocket('vault-a', { rune: { ...r!, address: 'thor1abc' } });
+    expect(JSON.stringify(localMock.get('zecLp'))).not.toContain('thor1abc');
+    await optOutRune('vault-a');
+    expect((await readLpPocket('vault-a'))?.rune).toEqual({ index: 1, on: false, source: 'seed' });
+    expect((await optInRune('vault-a'))?.index).toBe(1);
+    expect(localMock.get('cosmosChainCounters')).toEqual({ [RUNE_COUNTER]: 1 });
+  });
+
+  test('a record from before the source field reads as a seed one (sealed, old shape)', async () => {
+    await changeLp(() => ({
+      'vault-a': {
+        index: 21,
+        address: LP,
+        rune: { index: 4, on: true, address: 'thor1old' } as never,
+      },
+    }));
+    expect((await readLpPocket('vault-a'))?.rune).toEqual({
+      index: 4,
+      on: true,
+      source: 'seed',
+      address: 'thor1old',
+    });
+  });
+
+  test('a pocket without an lp record cannot opt in, and a random one without its key is refused', async () => {
+    expect(await optInRune('vault-none')).toBeUndefined();
+    await changeLp(() => ({ v: { index: 2 } }));
+    expect(await optInRune('v', 'random')).toBeUndefined();
+    expect((await readLpPocket('v'))?.rune).toBeUndefined();
+  });
+
+  test('a random key: made once, sealed like a seed, kept through off and on, and never in the clear', async () => {
+    const keyRing = ring();
+    const hex = randomThorKeyHex();
+    const fresh = vi.fn(() => keyRing.sealSecret(hex));
+    await changeLp(() => ({ 'vault-a': { index: 21, address: LP } }));
+    const r = await optInRune('vault-a', 'random', fresh);
+    expect(r?.source).toBe('random');
+    expect(r?.box).toMatch(/^\{"nonce"/);
+    expect(await keyRing.openSealed(r!.box!)).toBe(hex);
+    expect(JSON.stringify([...localMock.entries()])).not.toContain(hex);
+    await optOutRune('vault-a');
+    const again = await optInRune('vault-a', 'random', fresh);
+    expect(again?.box).toBe(r?.box);
+    expect(fresh).toHaveBeenCalledTimes(1);
+  });
+
+  test('the random-key backup round trip: same key, same address, sealed again on the new install', async () => {
+    const keyRing = ring();
+    const hex = randomThorKeyHex();
+    const address = thorKeyFromHex(hex).address;
+    await changeLp(() => ({
+      'vault-a': { index: 21, address: LP },
+      'vault-a#1': { index: 22, address: LP },
+      'vault-a#2': { index: 23, address: LP },
+    }));
+    await optInRune('vault-a', 'random', () => keyRing.sealSecret(hex));
+    await optInRune('vault-a#1', 'fvk');
+    await optInRune('vault-a#2', 'seed');
+    const backup = await exportLpRune(
+      id => (id === 'vault-a' ? 'zid-a' : undefined),
+      box => keyRing.openSealed(box),
+    );
+    expect(backup).toEqual({
+      'zid-a': {
+        '0': { index: 1, on: true, source: 'random', key: hex },
+        '1': { index: 2, on: true, source: 'fvk' },
+        '2': { index: 3, on: true, source: 'seed' },
+      },
+    });
+
+    // a new install: a different password, so a different session key
+    localMock.clear();
+    sessionMock.clear();
+    const fresh = ring();
+    await fresh.setPassword('an0ther-P@ssword');
+    await restoreLp({ 'zid-a': { '0': 21, '1': 22, '2': 23 } }, () => 'vault-new');
+    await restoreLpRune(
+      backup,
+      () => 'vault-new',
+      plain => fresh.sealSecret(plain),
+    );
+    const back = (await readLpPocket('vault-new'))!.rune!;
+    expect(back.source).toBe('random');
+    expect(back.box).not.toBe(undefined);
+    expect(await fresh.openSealed(back.box!)).toBe(hex);
+    expect(thorKeyFromHex(await fresh.openSealed(back.box!)).address).toBe(address);
+    expect((await readLpPocket('vault-new#1'))?.rune).toEqual({
+      index: 2,
+      on: true,
+      source: 'fvk',
+    });
+    expect((await readLpPocket('vault-new#2'))?.rune).toEqual({
+      index: 3,
+      on: true,
+      source: 'seed',
+    });
+    expect(localMock.get('cosmosChainCounters')).toEqual({ [RUNE_COUNTER]: 3 });
+    expect(JSON.stringify([...localMock.entries()])).not.toContain(hex);
+  });
+
+  test('a password change seals the random key again, and it still opens', async () => {
+    const useStore = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
+    const keyRing = useStore.getState().keyRing;
+    const hex = randomThorKeyHex();
+    await changeLp(() => ({ 'vault-a': { index: 21, address: LP } }));
+    const r = await optInRune('vault-a', 'random', () => keyRing.sealSecret(hex));
+    expect(await keyRing.changePassword('s0meUs3rP@ssword', 'n3w-P@ssword!')).toBe(true);
+    const after = (await readLpPocket('vault-a'))!.rune!;
+    expect(after.box).not.toBe(r!.box);
+    expect(await useStore.getState().keyRing.openSealed(after.box!)).toBe(hex);
+  });
+
+  test('a random entry without its key, or with junk, restores nothing', async () => {
+    await changeLp(() => ({ v: { index: 2 } }));
+    const seal = vi.fn(async (p: string) => p);
+    await restoreLpRune({ z: { '0': { index: 5, on: true, source: 'random' } } }, () => 'v', seal);
+    await restoreLpRune(
+      { z: { '0': { index: 5, on: true, source: 'random', key: 'zz' } } },
+      () => 'v',
+      seal,
+    );
+    await restoreLpRune({ z: { '0': { index: -1, on: true }, '1': 'x' } }, () => 'v');
+    await restoreLpRune('junk', () => 'v');
+    expect((await readLpPocket('v'))?.rune).toBeUndefined();
+    expect(seal).not.toHaveBeenCalled();
   });
 });

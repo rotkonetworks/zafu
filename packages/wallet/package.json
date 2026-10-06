@@ -38,6 +38,8 @@
     "./networks/injective/feegrant": "./src/networks/injective/feegrant.ts",
     "./networks/transparent/conduit": "./src/networks/transparent/conduit.ts",
     "./networks/ethereum/derive": "./src/networks/ethereum/derive.ts",
+    "./networks/thorchain/derive": "./src/networks/thorchain/derive.ts",
+    "./networks/thorchain/tx": "./src/networks/thorchain/tx.ts",
     "./networks/bitcoin/derive": "./src/networks/bitcoin/derive.ts",
     "./networks/zcash/diversified-address": "./src/networks/zcash/diversified-address.ts",
     "./license": "./src/license.ts"

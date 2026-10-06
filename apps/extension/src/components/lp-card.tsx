@@ -59,14 +59,24 @@ export const LpCard = ({ storeId }: { storeId?: string }) => {
                   ? 'needs you'
                   : moving.stage === 'refunded'
                     ? 'sent back'
-                    : moving.kind === 'add'
+                    : moving.kind === 'add' || moving.kind === 'add2'
                       ? 'adding'
-                      : 'taking out'
+                      : moving.kind === 'swap'
+                        ? 'on its way'
+                        : 'taking out'
                 : readAgo(Date.now() - rec!.cache!.readAt)}
               <span className='i-lucide-eye size-[11px] text-warn' aria-hidden='true' />
             </span>
           }
-          amount={rec?.cache ? zecText(BigInt(rec.cache.zat)) : zecText(BigInt(moving!.amountZat))}
+          amount={
+            rec?.cache
+              ? zecText(BigInt(rec.cache.zat))
+              : zecText(
+                  BigInt(
+                    moving!.amountZat === '0' ? (moving!.expectZat ?? '0') : moving!.amountZat,
+                  ),
+                )
+          }
           note={
             rec?.cache && (
               <span className='text-[11px] text-fg-muted'>

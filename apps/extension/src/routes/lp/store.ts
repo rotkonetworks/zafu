@@ -24,7 +24,10 @@ import {
   planTransparentDepositInWorker,
   sendTransparentDepositInWorker,
   shieldInWorker,
+  signThorDepositInWorker,
   spawnNetworkWorker,
+  thorAddressInWorker,
+  type ThorKeyIn,
 } from '../../state/keyring/network-worker';
 import { refreshEgress } from '../../net/egress';
 import { setDestinationOptIn } from '../../net/ledger';
@@ -36,7 +39,9 @@ import {
   cancelFlight,
   cancellable,
   isDone,
+  isPaired,
   needs,
+  recoverHalf,
   resumed,
   shieldRefund,
   StaleFlight,
@@ -49,20 +54,47 @@ import {
   askZat,
   DEFAULT_ADD,
   parseZec,
+  pairedAddMemo,
+  pairedWithdraw,
+  pairedWithdrawMemo,
+  parseZec as parseAmount,
   quoteAdd,
+  RECOVER_MEMO,
+  runeFor,
   withdrawMemo,
   withdrawZec,
+  zecFor,
+  type PayoutAs,
 } from '../../lp/math';
 import {
   beginFlight,
   changeFlight,
   changeLp,
   onLpChange,
+  optInRune,
+  optOutRune,
   patchLpPocket,
   readLpPocket,
   saveFlight,
   type LpCache,
+  type LpRune,
+  type RuneSource,
 } from '../../lp/store';
+import { randomThorKeyHex } from '@repo/wallet/networks/thorchain/derive';
+import { selectActiveZcashWallet } from '../../state/wallets';
+import {
+  NO_ACCOUNT_LINE,
+  pairedLive,
+  quoteRune,
+  readRune,
+  readRuneTx,
+  readSwapped,
+  reserveOf,
+  RUNE_FEE,
+  sendRuneTx,
+  type RuneQuote,
+  type RuneRead,
+} from '../../lp/rune';
 import {
   lpEgress,
   MIDGARD_DEST,
@@ -83,7 +115,7 @@ import {
 /** the three the page talks to, asked once together on the first look */
 export const LP_EGRESS = [THORNODE_DEST, MIDGARD_DEST, PRICES_DEST] as const;
 
-export type View = 'add' | 'position' | 'withdraw' | 'twoSided';
+export type View = 'add' | 'position' | 'withdraw' | 'twoSided' | 'rune' | 'withdraw2';
 export type Sheet = 'public' | 'history';
 
 export interface LpState {
@@ -123,6 +155,21 @@ export interface LpState {
   moved?: { was?: number; now: number };
   shieldedZat?: bigint;
   error?: string;
+  /** the pocket's rune opt-in, as stored; undefined until the person chose rune here */
+  rune?: LpRune;
+  /** a cold wallet's choice at the opt-in: a new key here (default) or the viewing key */
+  runeChoice: 'random' | 'fvk';
+  /** the bound wallet signs on a device: the opt-in offers the choice */
+  cold?: boolean;
+  /** the thor1's balance, account and paired position: read only while the opt-in is on */
+  runeRead?: RuneRead;
+  runeErr?: string;
+  /** a two-sided take-out pays both sides, or all in one */
+  payoutAs: PayoutAs;
+  /** the zec to swap for rune, typed */
+  swapAmt: string;
+  swapQuote?: RuneQuote;
+  swapErr?: string;
 }
 
 const initial: LpState = {
@@ -135,6 +182,9 @@ const initial: LpState = {
   amt: DEFAULT_ADD,
   part: 100,
   pocket: 'main pocket',
+  payoutAs: 'both',
+  swapAmt: '',
+  runeChoice: 'random',
 };
 
 /** the zcash network fee of a shield-out to a t-address, about: two orchard actions and the t-output */
@@ -148,6 +198,8 @@ export const ASK_CAP_LINE =
   "thorchain's least amount for a take-out is past what zafu pays for one · nothing was sent · please try again later";
 export const CANCEL_LATE_LINE =
   'this step had already gone out, so it can no longer be cancelled · it is tracked here';
+export const HALF_WAITING_LINE =
+  'a half is still waiting in the pool · please take it back from your position first · nothing was sent';
 export const BUSY_LINE = 'an add or take-out is already on its way · please finish it first';
 
 export const lpStore = createStore<LpState>()(() => initial);
@@ -256,6 +308,8 @@ const reload = async () => {
     set({
       flight: rec?.flight,
       cache: rec?.cache,
+      rune: rec?.rune,
+      ...(rec?.rune?.on ? {} : { runeRead: undefined }),
       ...(rec?.address ? { lp: { index: rec.index, address: rec.address } } : {}),
     });
   }
@@ -312,6 +366,7 @@ const boot = async () => {
     phase: 'ready',
     storeId,
     keyId: key.id,
+    cold: isColdKey(key.type),
     account,
     pocket,
     away: false,
@@ -321,6 +376,7 @@ const boot = async () => {
     intro: needsAsk(view) ? (prefs.seen ? 'egress' : 'first') : null,
     cache: rec?.cache,
     flight,
+    rune: rec?.rune,
     lp: rec?.address ? { index: rec.index, address: rec.address } : undefined,
   });
   watch();
@@ -333,6 +389,10 @@ const boot = async () => {
   }
   if (flight && rec?.flight && flight !== rec.flight) {
     await saveFlight(storeId, flight).catch(() => reload());
+  }
+  // an opted-in rune account restored without its address: derived again in the worker
+  if (rec?.rune?.on && !rec.rune.address) {
+    await deriveRune().catch(() => undefined);
   }
   // a restored index has no address yet: derived here, locally
   if (rec && !rec.address) {
@@ -438,6 +498,7 @@ export const refresh = async () => {
     return;
   }
   const n = ++refreshes;
+  void refreshRune();
   const [thor, mid, zecUsd] = await Promise.all([
     readThor(lp?.address).catch((e: unknown) => {
       set({ readErr: lineOf(e) });
@@ -561,6 +622,15 @@ const depsOf = (storeId: string, lp: { index: number; address: string }): DriveD
   utxoZat: async () =>
     (await getTransparentUtxosInWorker(zidecar(), [lp.address])).map(u => BigInt(u.valueZat)),
   refundReason: get().egress.midgard ? txid => readRefundReason(txid, lp.address) : undefined,
+  // only with the opt-in on: a pocket that never chose rune has no rune side at all
+  ...(runeOn()
+    ? {
+        runeSend: (memo: string, rune: bigint) => runeSend(memo, rune),
+        paired: async () => (await readRune(runeOn()!.address!)).paired,
+        swapped: (txid: string) => readSwapped(txid),
+        runeTx: (hash: string) => readRuneTx(hash),
+      }
+    : {}),
   save: async (f, after) => {
     const w = await saveFlight(storeId, f, after);
     set({ flight: w });
@@ -809,3 +879,366 @@ export const finish = async () => {
   await reload();
   void refresh();
 };
+
+/** the pocket's rune account, only while the opt-in is on and its address known */
+const runeOn = () => {
+  const r = get().rune;
+  return r?.on && r.address ? r : undefined;
+};
+
+/** this page's wallet: for the cold choice and its viewing key */
+const boundWallet = () => {
+  const s = useStore.getState();
+  const k = s.keyRing.keyInfos.find(x => x.id === get().keyId);
+  return { key: k, zcash: selectActiveZcashWallet(s) };
+};
+
+/** a cold wallet (no phrase in zafu) chooses where its rune key comes from; a hot one never does */
+export const isColdKey = (type?: string) => !!type && type !== 'mnemonic';
+
+/** the wallet's unified viewing key string, exactly as stored (the fvk source's input) */
+const viewingKey = (): string | undefined => {
+  const z = boundWallet().zcash;
+  return z?.ufvk ?? (z?.orchardFvk?.startsWith('uview') ? z.orchardFvk : undefined);
+};
+
+/** what the worker opens for this pocket's rune key: the sealed seed, the sealed random key, or the viewing key */
+const runeKeyIn = async (rune: LpRune): Promise<ThorKeyIn> => {
+  const away = awayLine();
+  if (away) {
+    throw new Error(away);
+  }
+  if (rune.source === 'seed') {
+    return { source: 'seed', vault: await vaultOf() };
+  }
+  if (rune.source === 'random') {
+    if (!rune.box) {
+      throw new Error('this rune key could not be opened · nothing was sent');
+    }
+    return { source: 'random', vault: useStore.getState().keyRing.getBoxUnlock(rune.box) };
+  }
+  const fvk = viewingKey();
+  if (!fvk) {
+    throw new Error("this wallet's viewing key is not here · nothing was sent");
+  }
+  return { source: 'fvk', fvk };
+};
+
+/** derive the thor1 for the pocket's rune index in the worker, and keep it on the record */
+const deriveRune = async () => {
+  const { storeId, rune } = get();
+  if (!storeId || !rune?.on) {
+    return;
+  }
+  const address = await thorAddressInWorker(await runeKeyIn(rune), rune.index);
+  await changeLp(book => {
+    const p = book[storeId];
+    return p?.rune?.on && p.rune.index === rune.index
+      ? { ...book, [storeId]: { ...p, rune: { ...p.rune, address } } }
+      : book;
+  });
+  set({ rune: { ...rune, address } });
+};
+
+let runeReads = 0;
+/** the thor1's balance, account and paired position; nothing without the opt-in or with thornode off */
+export const refreshRune = async () => {
+  const r = runeOn();
+  if (!r || !get().egress.thornode) {
+    return;
+  }
+  const n = ++runeReads;
+  try {
+    const read = await readRune(r.address!);
+    if (n === runeReads && runeOn()?.address === read.address) {
+      set({ runeRead: read, runeErr: undefined });
+    }
+  } catch (e) {
+    if (n === runeReads) {
+      set({ runeErr: lineOf(e) });
+    }
+  }
+};
+
+/**
+ * "add with rune too": the one step that makes this pocket's rune account.
+ * Its index comes from the counter (or the one it had before), the thor1 is
+ * derived in the worker, and only then is anything about it read.
+ */
+export const chooseRune = async () => {
+  const { storeId, follower, away } = get();
+  if (follower || away || !storeId) {
+    return;
+  }
+  await ensureLpAddress();
+  if (!get().lp) {
+    set({ error: 'the lp address is not ready yet · please try again in a moment' });
+    return;
+  }
+  const cold = isColdKey(boundWallet().key?.type);
+  const source: RuneSource = cold ? get().runeChoice : 'seed';
+  const r = await optInRune(storeId, source, async () => {
+    // made only now, at the opt-in, and sealed at once like a seed
+    const hex = randomThorKeyHex();
+    return useStore.getState().keyRing.sealSecret(hex);
+  });
+  if (!r) {
+    return;
+  }
+  set({ rune: r, error: undefined });
+  try {
+    if (!r.address) {
+      await deriveRune();
+    }
+  } catch (e) {
+    set({ error: lineOf(e) });
+    return;
+  }
+  await refreshRune();
+};
+
+/** may the person stop using rune here: nothing two-sided in the pool, waiting, or on its way */
+export const mayStopRune = (s: Pick<LpState, 'rune' | 'runeRead' | 'flight'>): boolean =>
+  !!s.rune?.on &&
+  !!s.runeRead &&
+  !pairedLive(s.runeRead.paired) &&
+  !(s.flight && isPaired(s.flight) && !isDone(s.flight));
+
+/** "stop using rune here": the opt-in is forgotten and nothing more is read; the index stays for later */
+export const stopRune = async () => {
+  const { storeId, follower } = get();
+  if (follower || !storeId || !mayStopRune(get())) {
+    return;
+  }
+  await optOutRune(storeId);
+  runeReads++;
+  set({
+    rune: get().rune && {
+      index: get().rune!.index,
+      on: false,
+      source: get().rune!.source,
+      ...(get().rune!.box ? { box: get().rune!.box } : {}),
+    },
+    runeRead: undefined,
+    runeErr: undefined,
+    swapQuote: undefined,
+    view: 'add',
+  });
+};
+
+/** sign in the worker, simulate, broadcast: one rune MsgDeposit from the pocket's thor1 */
+const runeSend = async (memo: string, rune: bigint): Promise<string> => {
+  const r = runeOn();
+  if (!r) {
+    throw new Error('this pocket does not use rune here · nothing was sent');
+  }
+  const read = await readRune(r.address!);
+  if (!read.account) {
+    throw new Error(NO_ACCOUNT_LINE);
+  }
+  if (rune + read.fee > read.balance) {
+    throw new Error(
+      'your rune address holds less than this needs with its network fee · nothing was sent',
+    );
+  }
+  const tx = await signThorDepositInWorker(await runeKeyIn(r), {
+    index: r.index,
+    expected: r.address!,
+    rune: rune.toString(),
+    memo,
+    accountNumber: read.account.accountNumber,
+    sequence: read.account.sequence,
+  });
+  const { txhash } = await sendRuneTx(tx);
+  if (!txhash) {
+    throw new Error('thorchain did not take the rune deposit · nothing was sent');
+  }
+  void refreshRune();
+  return txhash;
+};
+
+/** the rune the add would carry, at the pool ratio last read */
+export const runeHalfOf = (s: Pick<LpState, 'amt' | 'thor'>): bigint | undefined => {
+  const a = parseAmount(s.amt);
+  return a && s.thor ? runeFor(s.thor.pool, a) : undefined;
+};
+
+/** what the thor1 must hold for the add: the rune half, its fee, and the reserve kept back */
+export const runeNeedOf = (s: Pick<LpState, 'amt' | 'thor' | 'runeRead'>): bigint | undefined => {
+  const half = runeHalfOf(s);
+  const fee = s.runeRead?.fee ?? RUNE_FEE;
+  return half === undefined ? undefined : half + fee + reserveOf(fee);
+};
+
+/** add with rune too: the person confirmed; the rune half goes first, then the zec half */
+export const startAdd2 = async () => {
+  const { storeId, lp, thor, amt, shieldedZat, follower, away, runeRead } = get();
+  const r = runeOn();
+  const a = parseAmount(amt);
+  if (follower || away || !storeId || !lp || !thor || !a || !r || thor.addPaused) {
+    return;
+  }
+  if (shieldedZat === undefined || a + ADD_FEES > shieldedZat) {
+    set({
+      error:
+        'this is more than this pocket holds shielded, with the network fees · nothing was sent',
+    });
+    return;
+  }
+  // a half already waiting would pair with this add's zec, and this rune would be left waiting
+  if (runeRead?.paired && (runeRead.paired.pendingRune > 0n || runeRead.paired.pendingAsset > 0n)) {
+    set({ error: HALF_WAITING_LINE });
+    return;
+  }
+  const half = runeFor(thor.pool, a);
+  const need = runeNeedOf(get());
+  if (!runeRead || need === undefined || runeRead.balance < need) {
+    set({ error: 'your rune address holds less than this needs · nothing was sent' });
+    return;
+  }
+  await begin(
+    storeId,
+    startFlight('add2', a, pairedAddMemo(r.address!), {
+      owner: storeId,
+      thor: r.address,
+      runeBase: half.toString(),
+      unitsBefore: (runeRead.paired?.units ?? 0n).toString(),
+    }),
+  );
+};
+
+export const setPayoutAs = (payoutAs: PayoutAs) => set({ payoutAs });
+
+/** take out a two-sided position: asked from the thor1 with 0 rune */
+export const startWithdraw2 = async () => {
+  const { storeId, thor, part, payoutAs, follower, away, runeRead } = get();
+  const r = runeOn();
+  const p = runeRead?.paired;
+  if (follower || away || !storeId || !thor || !r || !p || p.units === 0n || thor.outPaused) {
+    return;
+  }
+  if (runeRead.balance < runeRead.fee) {
+    set({ error: 'your rune address needs its network fee to ask · nothing was sent' });
+    return;
+  }
+  const bps = part * 100;
+  const pays = pairedWithdraw(thor.pool, p.units, bps, thor.minSlipBps, payoutAs);
+  const now = Date.now();
+  await begin(
+    storeId,
+    startFlight('withdraw2', 0n, pairedWithdrawMemo(bps, payoutAs), {
+      owner: storeId,
+      thor: r.address,
+      payoutAs,
+      bps,
+      stage: 'ask',
+      at: { ask: now },
+      unitsBefore: p.units.toString(),
+      expectZat: afterFee(pays.zat, thor.inbound?.outboundFee ?? 0n).toString(),
+      expectRune: pays.rune.toString(),
+    }),
+  );
+};
+
+/**
+ * A half that waits for the other, taken back at the person's word, from the
+ * thor1: pending rune returns there, pending zec to the lp address, which is
+ * then shielded back.
+ */
+export const startRecover = async () => {
+  const { storeId, follower, away, runeRead, flight } = get();
+  const r = runeOn();
+  const p = runeRead?.paired;
+  if (follower || away || !storeId || !r || !p || p.units > 0n) {
+    return;
+  }
+  if (p.pendingRune === 0n && p.pendingAsset === 0n) {
+    return;
+  }
+  if (flight && !isDone(flight) && flight.kind === 'add2') {
+    set({ confirmed: flight.id });
+    await changeFlight(storeId, f => (f?.id === flight.id ? recoverHalf(f) : false));
+    await runFlight();
+    return;
+  }
+  const now = Date.now();
+  await begin(
+    storeId,
+    startFlight('add2', 0n, RECOVER_MEMO, {
+      owner: storeId,
+      thor: r.address,
+      stage: 'recover',
+      at: { recover: now },
+      runeTxid: p.pendingTxId ?? 'pending',
+      // zec that was waiting comes back to the lp address, and is shielded
+      ...(p.pendingAsset > 0n ? { outZat: p.pendingAsset.toString() } : {}),
+    }),
+  );
+};
+
+export const setSwapAmt = (swapAmt: string) =>
+  set({ swapAmt, swapQuote: undefined, swapErr: undefined });
+
+/** the zec that buys what the add still needs in rune, about, at the pool ratio and a little over */
+export const swapGuessOf = (s: Pick<LpState, 'amt' | 'thor' | 'runeRead'>): bigint | undefined => {
+  const need = runeNeedOf(s);
+  if (need === undefined || !s.thor || !s.runeRead) {
+    return undefined;
+  }
+  const short = need - s.runeRead.balance;
+  return short > 0n ? (zecFor(s.thor.pool, short) * 103n) / 100n + 1_000n : 0n;
+};
+
+let quotes = 0;
+/** a fresh zec -> rune quote for what is typed; only the newest is kept */
+export const quoteSwap = async () => {
+  const r = runeOn();
+  const zat = parseAmount(get().swapAmt);
+  if (!r || !zat || !get().egress.thornode) {
+    set({ swapQuote: undefined });
+    return;
+  }
+  const n = ++quotes;
+  try {
+    const q = await quoteRune(zat, r.address!);
+    if (n === quotes) {
+      set({ swapQuote: q, swapErr: undefined });
+    }
+  } catch (e) {
+    if (n === quotes) {
+      set({ swapQuote: undefined, swapErr: lineOf(e) });
+    }
+  }
+};
+
+/** swap zec for rune to the thor1: the same shield-out and t-address deposit an add makes */
+export const startRuneSwap = async () => {
+  const { storeId, lp, swapQuote: q, shieldedZat, follower, away } = get();
+  const r = runeOn();
+  if (follower || away || !storeId || !lp || !r || !q) {
+    return;
+  }
+  if (q.expiry <= Date.now()) {
+    set({ swapQuote: undefined, swapErr: 'this quote expired · please ask again' });
+    return;
+  }
+  if (shieldedZat === undefined || q.amountZat + ADD_FEES > shieldedZat) {
+    set({
+      swapErr:
+        'this is more than this pocket holds shielded, with the network fees · nothing was sent',
+    });
+    return;
+  }
+  await begin(
+    storeId,
+    startFlight('swap', q.amountZat, q.memo, {
+      owner: storeId,
+      thor: r.address,
+      expectRune: q.runeOut.toString(),
+      vault: q.vault,
+    }),
+  );
+  set({ swapQuote: undefined, swapAmt: '' });
+};
+
+export const setRuneChoice = (runeChoice: LpState['runeChoice']) => set({ runeChoice });

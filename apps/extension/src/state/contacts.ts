@@ -34,7 +34,7 @@ import {
   type SettingsBackup,
 } from './settings-backup';
 import type { PrivacySettings } from './privacy';
-import { exportLp, restoreLp } from '../lp/store';
+import { exportLp, exportLpRune, restoreLp, restoreLpRune } from '../lp/store';
 
 /**
  * Encrypted backup of ALL local, chain-irreplaceable personal data: contacts +
@@ -46,7 +46,7 @@ import { exportLp, restoreLp } from '../lp/store';
 export interface PersonalDataBackup {
   version: 4;
   exportedAt: number;
-  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames, passwordLogins, yourAddresses, relNext, people, lp } JSON */
+  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames, passwordLogins, yourAddresses, relNext, people, lp, lpRune } JSON */
   data: BoxJson;
   keyPrint: KeyPrintJson;
 }
@@ -716,12 +716,16 @@ export const createContactsSlice =
         // rooms you are in and their relay history, capped per thread
         const people = await readPeopleBackup();
         // each pocket's lp address index: a liquidity position is credited to it
-        const lp = await exportLp(id => {
+        const ownerOf = (id: string) => {
           const k = get().keyRing.keyInfos.find(x => x.id === id);
           return k && pocketOwner(k);
-        });
+        };
+        const lp = await exportLp(ownerOf);
+        // only the pockets that chose to add with rune too: their opt-in and index, never a key
+        const lpRune = await exportLpRune(ownerOf, box => get().keyRing.openSealed(box));
         const plaintext = JSON.stringify({
           lp,
+          lpRune,
           relNext,
           people,
           passwordLogins,
@@ -781,6 +785,8 @@ export const createContactsSlice =
           relNext?: Record<string, BackupRelNext>;
           /** each pocket's lp address index by owner key (absent in older backups) */
           lp?: unknown;
+          /** the pockets that opted in to adding with rune: { index, on } (absent unless one did) */
+          lpRune?: unknown;
         };
 
         // the vault id a backup's relationships name may be one this restore
@@ -854,6 +860,11 @@ export const createContactsSlice =
         await restoreLp(
           parsed.lp,
           owner => get().keyRing.keyInfos.find(k => pocketOwner(k) === owner)?.id,
+        );
+        await restoreLpRune(
+          parsed.lpRune,
+          owner => get().keyRing.keyInfos.find(k => pocketOwner(k) === owner)?.id,
+          plain => get().keyRing.sealSecret(plain),
         );
         if (parsed.passwordLogins !== undefined) {
           await restorePasswordLogins(parsed.passwordLogins, mode);

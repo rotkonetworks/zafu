@@ -16,6 +16,7 @@
 import { checkVault, type DepositPlan, type DepositRequest } from '../workers/transparent-deposit';
 import {
   advance,
+  HALF_BLOCKS,
   needs,
   sending,
   sent,
@@ -24,8 +25,9 @@ import {
   type Facts,
   type Flight,
 } from './flight';
-import { askClears, memoFits } from './math';
+import { askClears, memoFits, pairedAddMemo, RECOVER_MEMO } from './math';
 import type { TxSeen, ZecInbound } from './thor';
+import type { PairedPosition } from './rune';
 
 export { StaleFlight };
 
@@ -53,6 +55,17 @@ export interface DriveDeps {
   utxoZat: () => Promise<bigint[]>;
   /** Midgard's reason, when it may be asked */
   refundReason?: (txid: string) => Promise<string | undefined>;
+  /**
+   * Two-sided only (the pocket opted in to rune): sign one rune MsgDeposit in
+   * the worker, simulate it, broadcast it; its hash.
+   */
+  runeSend?: (memo: string, rune: bigint) => Promise<string>;
+  /** the position under the thor1 */
+  paired?: () => Promise<PairedPosition | undefined>;
+  /** a swap to rune: has THORChain paid it out */
+  swapped?: (txid: string) => Promise<boolean>;
+  /** a rune MsgDeposit by hash: on chain, refused there, or nowhere */
+  runeTx?: (hash: string) => Promise<{ state: 'included' | 'failed' | 'missing'; log?: string }>;
   /**
    * Write `f` over the stored flight it was made from (same id and rev) and
    * hand back what was written; throws StaleFlight when the stored one moved
@@ -93,13 +106,16 @@ const mine = (f: Flight, d: DriveDeps) => {
  * stops and asks (continue re-pins). A take-out's ask must still clear the
  * dust read now, within the cap.
  */
+const isAdd = (f: Flight) => f.kind === 'add' || f.kind === 'add2';
+
 const payable = async (f: Flight, d: DriveDeps): Promise<{ inbound: ZecInbound; f: Flight }> => {
   if (!memoFits(f.memo)) {
     throw new Error('this memo is longer than 80 bytes · nothing was sent');
   }
   const v = await d.vault();
-  if (f.kind === 'add' ? v.addPaused : v.outPaused) {
-    throw new Error(PAUSED_LINE[f.kind]);
+  // a swap is not liquidity: its quote already checked that zec trades
+  if (f.kind !== 'swap' && (isAdd(f) ? v.addPaused : v.outPaused)) {
+    throw new Error(PAUSED_LINE[isAdd(f) ? 'add' : 'withdraw']);
   }
   await checkVault(v.inbound.address, true);
   if (f.vault && f.vault !== v.inbound.address) {
@@ -129,17 +145,42 @@ export const observe = async (f: Flight, d: DriveDeps, to: string): Promise<Fact
   if (f.stage === 'settle') {
     x.short = BigInt((await d.plan(reqOf(f, d, to))).short);
   }
-  if ((f.stage === 'seen' || f.stage === 'credit' || f.stage === 'payout') && f.sendTxid) {
-    x.seen = await d.seen(f.sendTxid);
-    if (f.stage === 'credit') {
+  // a two-sided take-out's ask is the rune MsgDeposit; THORNode tracks it by that hash
+  const asked = f.kind === 'withdraw2' ? f.runeTxid : f.sendTxid;
+  if ((f.stage === 'seen' || f.stage === 'credit' || f.stage === 'payout') && asked) {
+    x.seen = await d.seen(asked);
+    if (f.stage === 'credit' && f.kind !== 'add2') {
       x.units = await d.units();
     }
     if (f.stage === 'payout' && !x.seen.out && x.seen.finalised && d.refundReason) {
-      x.refundReason = await d.refundReason(f.sendTxid).catch(() => undefined);
+      x.refundReason = await d.refundReason(asked).catch(() => undefined);
     }
     if (x.seen.out?.refund && d.refundReason) {
-      x.refundReason = await d.refundReason(f.sendTxid).catch(() => undefined);
+      x.refundReason = await d.refundReason(asked).catch(() => undefined);
     }
+  }
+  if (f.stage === 'half') {
+    x.height = d.height?.();
+    const late =
+      f.halfHeight !== undefined &&
+      x.height !== undefined &&
+      x.height - f.halfHeight >= HALF_BLOCKS;
+    if (late && f.runeTxid && d.runeTx) {
+      x.runeTx = await d.runeTx(f.runeTxid);
+    }
+  }
+  if (f.kind === 'swap' && f.stage === 'seen' && f.sendTxid && d.swapped && !x.seen?.out?.refund) {
+    x.swapped = await d.swapped(f.sendTxid);
+  }
+  if (
+    d.paired &&
+    (f.stage === 'half' ||
+      f.stage === 'recovering' ||
+      (f.stage === 'credit' && f.kind === 'add2') ||
+      (f.stage === 'payout' && f.kind === 'withdraw2'))
+  ) {
+    const p = await d.paired();
+    x.paired = p ?? { units: 0n, pendingRune: 0n, pendingAsset: 0n };
   }
   if (f.stage === 'payout') {
     x.height = d.height?.();
@@ -177,6 +218,30 @@ export const act = async (f: Flight, d: DriveDeps): Promise<Flight> => {
         sent(out, await d.shieldOut(BigInt(plan.short)), { fundZat: plan.short }),
         true,
       );
+    }
+    if (step === 'rune' || step === 'recover') {
+      if (!d.runeSend || !f.thor) {
+        throw new Error('this pocket does not use rune here · nothing was sent');
+      }
+      // the pauses that stop zec liquidity stop its rune half too; a take-back goes regardless
+      if (step === 'rune') {
+        const v = await d.vault();
+        if (isAdd(f) ? v.addPaused : v.outPaused) {
+          throw new Error(PAUSED_LINE[isAdd(f) ? 'add' : 'withdraw']);
+        }
+      }
+      const [memo, rune] =
+        step === 'recover'
+          ? [RECOVER_MEMO, 0n]
+          : f.kind === 'add2'
+            ? [pairedAddMemo(d.address), BigInt(f.runeBase ?? '0')]
+            : [f.memo, 0n];
+      if (f.kind === 'add2' && step === 'rune' && rune <= 0n) {
+        throw new Error('this add has no rune half · nothing was sent');
+      }
+      const out = await d.save(sending(f));
+      at = out;
+      return await d.save(sent(out, await d.runeSend(memo, rune)), true);
     }
     if (step === 'send') {
       const p = await payable(f, d);
