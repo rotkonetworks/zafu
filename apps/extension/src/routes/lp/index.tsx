@@ -186,13 +186,13 @@ export const LpPage = () => {
     <ScrollShell
       art={artOf(screen)}
       label='zec liquidity'
-      aside='w-[360px]'
+      aside='w-[240px] 2xl:w-[360px]'
       back={back}
       step={step}
     >
       {PasswordModal}
-      <div className='flex flex-1 items-stretch gap-12 pt-3'>
-        <div className='flex w-[480px] max-w-full shrink-0 flex-col justify-center gap-4'>
+      <div className='flex flex-1 items-stretch gap-10 pt-3'>
+        <div className='flex min-w-0 max-w-[480px] flex-[1_1_480px] flex-col justify-center gap-4'>
           {(follower || away) && screen !== 'locked' && screen !== 'loading' && (
             <span className='border border-warn/40 bg-elev-1 px-3.5 py-2.5 text-xs text-fg'>
               {follower

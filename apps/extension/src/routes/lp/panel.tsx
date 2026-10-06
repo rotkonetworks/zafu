@@ -78,13 +78,15 @@ const Group = ({
     {rows.map(r => (
       <div key={r.k} className='flex h-[27px] items-center gap-2.5'>
         <span className='w-[128px] shrink-0 text-xs text-fg-muted'>{r.k}</span>
-        <span className='flex flex-1 items-center'>
+        <span className='flex min-w-0 flex-1 items-center'>
           {r.tag ? (
             <span className='inline-flex h-[18px] items-center whitespace-nowrap border border-dashed border-border-hard px-1.5 text-[10px] tracking-[0.04em] text-fg-dim'>
               {r.v}
             </span>
           ) : (
-            <span className={cn('text-[13px] tabular-nums', r.c ?? 'text-fg-high')}>{r.v}</span>
+            <span className={cn('truncate text-[13px] tabular-nums', r.c ?? 'text-fg-high')}>
+              {r.v}
+            </span>
           )}
         </span>
         {r.src && <span className='text-[11px] tabular-nums text-fg-dim'>{r.src}</span>}
@@ -228,7 +230,7 @@ export const Panel = ({ screen }: { screen: string }) => {
           { k: 'lp address', v: short(s.address) || 'made on first add' },
         ];
   return (
-    <div className='flex w-[440px] shrink-0 flex-col self-stretch border border-border-soft bg-elev-1 max-xl:hidden'>
+    <div className='flex min-w-0 max-w-[440px] flex-[1_1_440px] flex-col self-stretch border border-border-soft bg-elev-1 max-xl:hidden'>
       <div className='flex h-12 shrink-0 items-center gap-2.5 border-b border-border-soft px-[18px]'>
         <span className='flex-1 text-xs tracking-[0.04em] text-fg-muted'>
           zec.zec pool · thorchain
