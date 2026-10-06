@@ -1,9 +1,10 @@
 /**
  * A t->t deposit with an OP_RETURN memo (a THORChain swap out of zec), as two
  * services over a chain client and the wasm: `planDeposit` prices it from the
- * address's UTXOs with no key, for the review; `sendDeposit` builds it from
- * public data, has SpendKeys sign it, checks the signed bytes pay exactly what
- * was reviewed, and broadcasts.
+ * address's UTXOs with no key, for the review; `buildDeposit` builds it from
+ * public data, a signer signs it (SpendKeys in the worker for a hot wallet,
+ * zigner over QR for a cold one), and `finishDeposit` checks the signed bytes
+ * pay exactly what was reviewed before it broadcasts.
  *
  * Every input comes from the one address `tAddress` (the swap's own fresh
  * t-branch index `tIndex`), and change returns to it, because THORChain
@@ -192,12 +193,34 @@ export const planDeposit = async (
   return { fee: String(p.fee), change: String(p.change), short: String(p.short) };
 };
 
-export const sendDeposit = async (
+/** what the signed bytes must pay: the review, and change back to the funding address */
+export interface DepositWant {
+  toScript: string;
+  amountZat: bigint;
+  memoHex: string;
+  ownScript: string;
+}
+
+export interface BuiltDeposit {
+  /** the unsigned PCZT */
+  pcztHex: string;
+  /** one per input, for a signer that signs sighashes */
+  sighashes: string[];
+  want: DepositWant;
+}
+
+/**
+ * Build the reviewed deposit from public data: the address's coins and the
+ * pubkey of the key that signs (`pubkeyHex`, the swap's own t-branch index).
+ * Refuses an unpayable vault, and a fee that moved since the review. Hot and
+ * cold build the same bytes; only who signs them differs.
+ */
+export const buildDeposit = async (
   wasm: DepositWasm,
   chain: DepositChain,
-  keys: Keys,
+  pubkeyHex: string,
   req: DepositRequest & { reviewedFee: string },
-): Promise<{ txid: string; fee: string; txHex: string }> => {
+): Promise<BuiltDeposit> => {
   await checkVault(req.to, req.mainnet);
   // a tex vault is paid as its P2PKH twin: the same output bytes, from transparent inputs only
   const [recipient, toScript] = await Promise.all([
@@ -210,7 +233,7 @@ export const sendDeposit = async (
   const built = JSON.parse(
     wasm.build_unsigned_transparent_transaction(
       utxosJson(utxos),
-      keys.transparent_pubkey(req.tIndex),
+      pubkeyHex,
       recipient,
       BigInt(req.amountZat),
       height + 1,
@@ -222,16 +245,126 @@ export const sendDeposit = async (
   if (String(built.fee) !== req.reviewedFee) {
     throw new Error(FEE_MOVED);
   }
-  const txHex = keys.sign_shielding(
-    req.tIndex,
-    built.unsigned_tx_hex,
-    JSON.stringify(built.sighashes),
+  return {
+    pcztHex: built.unsigned_tx_hex,
+    sighashes: built.sighashes,
+    // the wasm refuses any coin that is not this pubkey's P2PKH, so every input pays this script
+    want: {
+      toScript,
+      amountZat: BigInt(req.amountZat),
+      memoHex: data,
+      ownScript: hex(utxos[0]!.script),
+    },
+  };
+};
+
+/** check the signed bytes pay exactly what was reviewed, then broadcast them */
+export const finishDeposit = async (
+  chain: DepositChain,
+  txHex: string,
+  want: DepositWant,
+  fee: string,
+): Promise<{ txid: string; fee: string; txHex: string }> => {
+  checkDeposit(txHex, want);
+  return { txid: await chain.broadcast(txHex), fee, txHex };
+};
+
+/** hot: SpendKeys signs the swap's own index in the worker */
+export const sendDeposit = async (
+  wasm: DepositWasm,
+  chain: DepositChain,
+  keys: Keys,
+  req: DepositRequest & { reviewedFee: string },
+): Promise<{ txid: string; fee: string; txHex: string }> => {
+  const built = await buildDeposit(wasm, chain, keys.transparent_pubkey(req.tIndex), req);
+  const txHex = keys.sign_shielding(req.tIndex, built.pcztHex, JSON.stringify(built.sighashes));
+  return finishDeposit(chain, txHex, built.want, req.reviewedFee);
+};
+
+/**
+ * A device-signed PCZT's transparent signatures, one per input in order.
+ *
+ * A PCZT input keeps `partial_signatures: BTreeMap<[u8; 33], Vec<u8>>`; in
+ * the serialized PCZT that is the 33-byte pubkey, a length and DER || 0x01
+ * (SIGHASH_ALL). Each one is read where the signer's own pubkey is followed by
+ * exactly that shape, which the pubkey's other places in a PCZT (its hash160
+ * preimage, a derivation key) never are. Nothing here is trusted: the wasm
+ * verifies every signature against its input's sighash and key before it
+ * finalizes, and the finished bytes are checked against the review.
+ */
+export const transparentSignaturesOf = (
+  signedPczt: Uint8Array,
+  pubkeyHex: string,
+): { sig_hex: string; pubkey_hex: string }[] => {
+  const key = fromHex(pubkeyHex);
+  const found: { sig_hex: string; pubkey_hex: string }[] = [];
+  for (let at = 0; at + key.length + 2 < signedPczt.length; at++) {
+    if (!key.every((b, i) => signedPczt[at + i] === b)) {
+      continue;
+    }
+    const len = signedPczt[at + key.length]!;
+    const sig = signedPczt.subarray(at + key.length + 1, at + key.length + 1 + len);
+    // DER: SEQUENCE (0x30), its length, then the sighash byte
+    if (
+      len >= 9 &&
+      len <= 73 &&
+      sig.length === len &&
+      sig[0] === 0x30 &&
+      sig[1] === len - 3 &&
+      sig[len - 1] === 0x01
+    ) {
+      found.push({ sig_hex: hex(sig), pubkey_hex: pubkeyHex });
+      at += key.length + len;
+    }
+  }
+  return found;
+};
+
+/** zcli crates/zcash-wasm: apply transparent signatures, finalize, extract */
+export interface FinalizeWasm {
+  complete_shielding_pczt(pczt_hex: string, signatures_json: string): string;
+}
+
+/**
+ * Cold: the device signed the PCZT. Its signatures are applied to the PCZT
+ * zafu built (verified against each input's sighash and key), the spends
+ * finalized and the tx extracted - the same completion the hot SpendKeys
+ * runs. Whatever else the device's PCZT says is not used.
+ */
+export const signedDepositTx = (
+  wasm: FinalizeWasm,
+  unsignedPcztHex: string,
+  signedPczt: Uint8Array,
+  pubkeyHex: string,
+): string => {
+  const sigs = transparentSignaturesOf(signedPczt, pubkeyHex);
+  if (sigs.length === 0) {
+    throw new Error('zigner returned this deposit unsigned · nothing was sent');
+  }
+  return wasm.complete_shielding_pczt(unsignedPcztHex, JSON.stringify(sigs));
+};
+
+/**
+ * Cold, the second half: the device's signed PCZT finished against the PCZT
+ * zafu built and showed it, then held to the review - the vault, the amount,
+ * the memo, and change back to the swap's own address - before broadcast.
+ */
+export const finishColdDeposit = async (
+  wasm: FinalizeWasm,
+  chain: DepositChain,
+  req: DepositRequest & { reviewedFee: string },
+  signed: { unsignedPcztHex: string; signedPczt: Uint8Array; pubkeyHex: string },
+): Promise<{ txid: string; fee: string; txHex: string }> => {
+  await checkVault(req.to, req.mainnet);
+  const [toScript, ownScript] = await Promise.all([
+    transparentAddressToScriptHex(req.to, req.mainnet),
+    transparentAddressToScriptHex(req.tAddress, req.mainnet),
+  ]);
+  const txHex = signedDepositTx(wasm, signed.unsignedPcztHex, signed.signedPczt, signed.pubkeyHex);
+  return finishDeposit(
+    chain,
+    txHex,
+    { toScript, amountZat: BigInt(req.amountZat), memoHex: memoHex(req.memo), ownScript },
+    req.reviewedFee,
   );
-  checkDeposit(txHex, {
-    toScript,
-    amountZat: BigInt(req.amountZat),
-    memoHex: data,
-    ownScript: hex(utxos[0]!.script),
-  });
-  return { txid: await chain.broadcast(txHex), fee: req.reviewedFee, txHex };
 };

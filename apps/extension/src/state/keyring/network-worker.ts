@@ -92,6 +92,8 @@ export interface NetworkWorkerMessage {
     | 'shield-unsigned'
     | 'shield-complete'
     | 'transparent-deposit-plan'
+    | 'transparent-deposit-unsigned'
+    | 'transparent-deposit-complete'
     | 'transparent-deposit'
     | 'list-wallets'
     | 'delete-wallet'
@@ -1348,6 +1350,42 @@ export const sendTransparentDepositInWorker = async (
     storeId,
   );
 
+/** a cold deposit's request for zigner: the full module QR and the PCZT zafu keeps */
+export interface ColdDepositRequest {
+  pcztHex: string;
+  urFrames: string[];
+  cborData: Uint8Array;
+  cborBytes: number;
+  /** always false: a compact answer cannot carry transparent signatures */
+  compactRequest: false;
+  fee: string;
+}
+
+/** build the reviewed deposit for zigner, keyed by the wallet's viewing key; nothing is signed */
+export const buildColdDepositInWorker = (
+  storeId: string,
+  serverUrl: string,
+  req: DepositRequest & { reviewedFee: string },
+  ufvk: string,
+): Promise<ColdDepositRequest> =>
+  callWorker('zcash', 'transparent-deposit-unsigned', { serverUrl, ufvk, ...req }, storeId);
+
+/** finish the reviewed deposit with zigner's signed PCZT, check it, and broadcast */
+export const completeColdDepositInWorker = (
+  storeId: string,
+  serverUrl: string,
+  req: DepositRequest & { reviewedFee: string },
+  ufvk: string,
+  unsignedPcztHex: string,
+  signedPcztHex: string,
+): Promise<{ txid: string; fee: string }> =>
+  callWorker(
+    'zcash',
+    'transparent-deposit-complete',
+    { serverUrl, ufvk, unsignedPcztHex, signedPcztHex, ...req },
+    storeId,
+  );
+
 /** result of building an unsigned send transaction */
 export interface SendTxUnsignedResult {
   sighash: string;
@@ -1542,6 +1580,8 @@ export const buildSendTxPcztInWorker = async (
   fragmentSize = 400,
   /** lets stopBuildInWorker stop this build */
   cancelKey?: string,
+  /** zigner signs it: the request rides `ur:zigner-module` (keystone keeps `ur:zcash-pczt`) */
+  zigner = false,
 ): Promise<SendTxPcztUnsignedResult> => {
   return callWorker(
     network,
@@ -1557,6 +1597,7 @@ export const buildSendTxPcztInWorker = async (
       fragmentSize,
       frost,
       cancelKey,
+      zigner,
     },
     walletId,
   );

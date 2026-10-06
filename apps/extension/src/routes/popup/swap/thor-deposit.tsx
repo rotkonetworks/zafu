@@ -5,21 +5,37 @@
  * to that same address. When the address holds too little, a first step
  * moves the shortfall there from the shielded pool. Each step is reviewed and
  * confirmed on its own; nothing moves on until the user says so.
+ *
+ * A zigner wallet signs both steps on the device, one qr round each: the move
+ * is an ordinary shielded send to the swap's address, and the deposit is the
+ * same reviewed bytes a hot wallet signs, finished here and checked against
+ * the review before it is broadcast.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useStore as useZustand } from 'zustand';
 import { Button } from '@repo/ui/components/ui/button';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { Sensitive } from '../../../components/sensitive';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
+import { selectActiveZcashWallet } from '../../../state/wallets';
 import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
 import {
+  applySignatureContributionsInWorker,
+  buildColdDepositInWorker,
   buildSendTxInWorker,
+  buildSendTxPcztInWorker,
+  completeColdDepositInWorker,
   planTransparentDepositInWorker,
   sendTransparentDepositInWorker,
+  type SignatureContribution,
 } from '../../../state/keyring/network-worker';
+import { walletKind } from '../../../signing/wallet-kind';
+import { signAndBroadcast } from '../../../signing/cold-send';
+import { createZignerRound, isZignerDeclined } from '../../../signing/zigner-round';
+import { ZignerRoundView } from '../../../components/zigner-round-view';
 import type { VaultUnlock } from '../../../state/keyring/types';
 import { checkVault, type DepositPlan } from '../../../workers/transparent-deposit';
 import type { Quote } from '../../../state/swap/provider';
@@ -88,7 +104,14 @@ export const ThorDeposit = ({
   onShield: () => void;
 }) => {
   const tAddress = swapT.address;
-  const walletId = useStore(selectEffectiveKeyInfo)?.id;
+  const keyInfo = useStore(selectEffectiveKeyInfo);
+  const walletId = keyInfo?.id;
+  const zcashWallet = useStore(selectActiveZcashWallet);
+  // a zigner wallet signs on the device; the viewing key builds what it signs
+  const cold = !!keyInfo && walletKind(keyInfo, zcashWallet) === 'zigner';
+  const ufvk =
+    zcashWallet?.ufvk ??
+    (zcashWallet?.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
   const storeId = useStore(activeZcashStoreId) ?? walletId;
   const pocket = useStore(activeAccountIndex);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
@@ -97,6 +120,21 @@ export const ThorDeposit = ({
   const { requestAuth, PasswordModal } = usePasswordGate();
   const [phase, setPhase] = useState<Phase>({ at: 'planning' });
   const [moved, setMoved] = useState(false);
+  // the device round on screen (cold only); stepping back from it cancels the round
+  const round = useMemo(
+    () =>
+      createZignerRound((pczt, json) =>
+        applySignatureContributionsInWorker(
+          'zcash',
+          storeId!,
+          pczt,
+          JSON.parse(json) as SignatureContribution[],
+        ),
+      ),
+    [storeId],
+  );
+  const shown = useZustand(round.store, s => s.shown);
+  useEffect(() => () => void round.cancel(), [round]);
 
   const req = {
     tAddress,
@@ -144,18 +182,33 @@ export const ThorDeposit = ({
     };
   }, [phase.at, tAddress, zidecarUrl]);
 
-  /** unlock, then run one confirmed step; a decline goes back to its review */
+  /**
+   * Run one confirmed step: a hot wallet unlocks and signs here, a zigner one
+   * on the device. Stepping back from the device goes back to its review.
+   */
   const step = async (
     busy: { at: keyof typeof SHORT },
-    run: (vault: VaultUnlock) => Promise<void>,
+    review: Phase,
+    run: { hot: (vault: VaultUnlock) => Promise<void>; cold: (ufvk: string) => Promise<void> },
   ) => {
-    if (!walletId || !(await requestAuth())) {
+    if (!walletId || (!cold && !(await requestAuth()))) {
       return;
     }
     setPhase(busy);
     try {
-      await run(await getVaultUnlock(walletId));
+      if (cold) {
+        if (!ufvk) {
+          throw new Error('this zigner wallet has no viewing key here · please re-import it');
+        }
+        await run.cold(ufvk);
+      } else {
+        await run.hot(await getVaultUnlock(walletId));
+      }
     } catch (e) {
+      if (isZignerDeclined(e)) {
+        setPhase(review);
+        return;
+      }
       const line = lineOf(e);
       setPhase({ at: 'stopped', error: /insufficient/i.test(line) ? SHORT[busy.at] : line });
     }
@@ -167,20 +220,50 @@ export const ThorDeposit = ({
       setPhase({ at: 'expired', moved: false });
       return;
     }
-    return step({ at: 'moving' }, async vault => {
-      await buildSendTxInWorker(
-        'zcash',
-        storeId!,
-        zidecarUrl,
-        tAddress,
-        plan.short,
-        '',
-        pocket,
-        true,
-        vault,
-      );
-      setMoved(true);
-    });
+    return step(
+      { at: 'moving' },
+      { at: 'move', plan },
+      {
+        hot: async vault => {
+          await buildSendTxInWorker(
+            'zcash',
+            storeId!,
+            zidecarUrl,
+            tAddress,
+            plan.short,
+            '',
+            pocket,
+            true,
+            vault,
+          );
+          setMoved(true);
+        },
+        // an ordinary zigner send to the swap's address, over the module envelope
+        cold: async key => {
+          const built = await buildSendTxPcztInWorker(
+            'zcash',
+            storeId!,
+            zidecarUrl,
+            tAddress,
+            plan.short,
+            '',
+            0,
+            true,
+            key,
+            false,
+            undefined,
+            undefined,
+            true,
+          );
+          await signAndBroadcast(round.signer(built, 'move zec to the swap address'), built, {
+            walletId: storeId!,
+            zidecarUrl,
+            mainnet: true,
+          });
+          setMoved(true);
+        },
+      },
+    );
   };
 
   const pay = (plan: DepositPlan) => {
@@ -189,16 +272,60 @@ export const ThorDeposit = ({
       setPhase({ at: 'expired', moved: true });
       return;
     }
-    return step({ at: 'paying' }, async vault => {
-      const { txid } = await sendTransparentDepositInWorker(
-        storeId!,
-        zidecarUrl,
-        { ...req, reviewedFee: plan.fee },
-        vault,
-      );
-      onSent(txid);
-    });
+    const reviewed = { ...req, reviewedFee: plan.fee };
+    return step(
+      { at: 'paying' },
+      { at: 'pay', plan },
+      {
+        hot: async vault => {
+          const { txid } = await sendTransparentDepositInWorker(
+            storeId!,
+            zidecarUrl,
+            reviewed,
+            vault,
+          );
+          onSent(txid);
+        },
+        // the same reviewed bytes, signed on the device, checked here before broadcast
+        cold: async key => {
+          const ask = await buildColdDepositInWorker(storeId!, zidecarUrl, reviewed, key);
+          const signed = await round.sign(ask, 'the swap deposit');
+          const { txid } = await completeColdDepositInWorker(
+            storeId!,
+            zidecarUrl,
+            reviewed,
+            key,
+            ask.pcztHex,
+            signed,
+          );
+          onSent(txid);
+        },
+      },
+    );
   };
+
+  // a step waiting on the device: its qr, then the camera for zigner's answer
+  if (shown) {
+    return (
+      <div className='flex h-full flex-col bg-canvas'>
+        <ScreenHeader
+          title='sign on zigner'
+          onBack={() => round.cancel()}
+          meta={phase.at === 'moving' ? '1 / 2' : moved ? '2 / 2' : undefined}
+        />
+        <Strip>
+          <Sensitive>
+            {phase.at === 'moving'
+              ? `${shown.label} · ${shortAddress(tAddress)}`
+              : `${shown.label} · ${zec(amountZat)} zec`}
+          </Sensitive>
+        </Strip>
+        <Main className='items-center gap-4 px-5 pt-6'>
+          <ZignerRoundView round={round} />
+        </Main>
+      </div>
+    );
+  }
 
   if (phase.at === 'stopped') {
     return (
@@ -279,9 +406,11 @@ export const ThorDeposit = ({
             ],
             ['fee', <Sensitive key='fee'>{`${zec(fee)} zec`}</Sensitive>],
             ['then', 'the swap, reviewed next'],
+            // two device rounds: this move, and the deposit after it confirms
+            ...(cold ? ([['zigner', 'signs this move, then the swap']] as const) : []),
           ]}
           privacy='public · the amount and your address show'
-          confirm='move zec'
+          confirm={cold ? 'move zec · sign with zigner' : 'move zec'}
           onEdit={onBack}
           onConfirm={() => void move(phase.plan)}
         />
@@ -307,7 +436,7 @@ export const ThorDeposit = ({
               </span>,
             ],
           ]}
-          confirm='confirm and send'
+          confirm={cold ? 'sign with zafu zigner' : 'confirm and send'}
           onEdit={onBack}
           onConfirm={() => void pay(phase.plan)}
         >
