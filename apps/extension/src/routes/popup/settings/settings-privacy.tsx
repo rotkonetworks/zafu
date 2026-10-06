@@ -13,6 +13,7 @@ import type { NetworkType } from '../../../state/keyring/network-types';
 import { hasFeature } from '../../../config/networks';
 import {
   DEFAULT_CONTACT_DISCOVERY_RELAY,
+  discoveryOn,
   relayEndpointForStorage,
 } from '../../../config/contact-discovery-relay';
 import { usePopupNav } from '../../../utils/navigate';
@@ -170,7 +171,7 @@ export function ContactDiscoverySection({ onExplain }: { onExplain?: (label: str
   useEffect(() => {
     void localExtStorage.get('zidDiscovery').then(v => {
       const next = {
-        enabled: v?.enabled === true,
+        enabled: discoveryOn(v),
         relayEndpoint: v?.relayEndpoint ?? '',
         relayToken: v?.relayToken ?? '',
       };

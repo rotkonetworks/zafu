@@ -45,3 +45,7 @@ export const isUsableRelayEndpoint = (endpoint: string): boolean => {
     return false;
   }
 };
+
+/** discovery is on unless the person turned it off: only an explicit false opts out */
+export const discoveryOn = (stored?: { enabled?: boolean } | null): boolean =>
+  stored?.enabled !== false;

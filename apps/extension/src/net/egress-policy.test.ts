@@ -19,7 +19,8 @@ describe('a fresh zcash-only wallet', () => {
       ['https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetLightdInfo', 'allow'],
       // other services on the same host are their own, optional destinations
       ['wss://relay.zafu.pro/ws', 'opt-in'],
-      ['https://relay.zafu.pro/bucket?appScope=x', 'opt-in'],
+      // private contact discovery is on unless turned off
+      ['https://relay.zafu.pro/bucket?appScope=x', 'allow'],
       ['https://relay.zafu.pro/rendezvous/open', 'opt-in'],
       // networks the user did not enable
       ['https://penumbra.rotko.net/penumbra.core.app.v1.QueryService/AppParameters', 'network-off'],
@@ -149,11 +150,15 @@ describe('optional services', () => {
     expect(outcome(ownRelay, 'https://r.example/bucket?x=1')).toBe('allow');
   });
 
-  it('discovery is one destination: off until the first site grant, then only its relay', () => {
+  it('discovery is one destination: on unless turned off, then only its relay', () => {
     const own = { relayEndpoint: 'https://r.example' };
-    expect(outcome({ ...ZCASH_ONLY, zidDiscovery: own }, 'https://r.example/bucket')).toBe(
-      'opt-in',
-    );
+    expect(
+      outcome(
+        { ...ZCASH_ONLY, zidDiscovery: { ...own, enabled: false } },
+        'https://r.example/bucket',
+      ),
+    ).toBe('opt-in');
+    expect(outcome({ ...ZCASH_ONLY, zidDiscovery: own }, 'https://r.example/bucket')).toBe('allow');
     const on = { ...ZCASH_ONLY, zidDiscovery: { ...own, enabled: true } };
     expect(outcome(on, 'https://r.example/bucket')).toBe('allow');
     expect(outcome(on, 'https://r.example/other')).not.toBe('allow');
@@ -242,10 +247,15 @@ describe('edges', () => {
     expect(outcome({}, 'http://localhost:8787/zafu/ota/v1/stream')).toBe('allow');
   });
 
-  it('nothing is on with nothing enabled', () => {
+  it('nothing is on with nothing enabled, but private contact discovery', () => {
     expect(outcome({}, 'https://zcash.rotko.net/x')).toBe('network-off');
     expect(
       describeEgress({})
+        .filter(d => d.on)
+        .map(d => d.id),
+    ).toEqual(['custom-networks', 'contact-discovery']);
+    expect(
+      describeEgress({ zidDiscovery: { enabled: false } })
         .filter(d => d.on)
         .map(d => d.id),
     ).toEqual(['custom-networks']);
@@ -352,11 +362,20 @@ describe('wallets sealed at rest', () => {
 describe('two optional services on one url', () => {
   // contact discovery and the people relay both default to relay.zafu.pro/bucket
   const url = 'https://relay.zafu.pro/bucket?appScope=zafu-group-v1&epoch=1&shard=ab';
+  // discovery is on unless turned off; these cases turn it off to look at the people relay alone
+  const discoveryOff = { zidDiscovery: { enabled: false } };
   const decide = (optIns: Record<string, 'allowed' | 'blocked'>) =>
-    decideEgress(url, 'service-worker', compileEgress({ netEgress: { optIns } }));
+    decideEgress(url, 'service-worker', compileEgress({ ...discoveryOff, netEgress: { optIns } }));
 
   test('off until one of them is on', () => {
     expect(decide({}).allow).toBe(false);
+  });
+
+  test('discovery left alone lets the shared url through', () => {
+    expect(decideEgress(url, 'service-worker', compileEgress({}))).toMatchObject({
+      allow: true,
+      destination: 'contact-discovery',
+    });
   });
 
   test('the people relay on lets the shared url through', () => {
@@ -378,7 +397,11 @@ describe('two optional services on one url', () => {
       endpoint: 'https://relay.example.org',
       hosts: ['https://relay.zafu.pro'],
     };
-    const t = compileEgress({ netEgress: { optIns: { 'people-relay': 'allowed' } }, peopleRelay });
+    const t = compileEgress({
+      ...discoveryOff,
+      netEgress: { optIns: { 'people-relay': 'allowed' } },
+      peopleRelay,
+    });
     for (const host of ['https://relay.example.org', 'https://relay.zafu.pro']) {
       expect(decideEgress(`${host}/bucket?shard=ab`, 'service-worker', t)).toMatchObject({
         allow: true,

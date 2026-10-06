@@ -42,7 +42,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { isValidExternalSender } from '../../senders/external';
 import { isValidInternalSender } from '../../senders/internal';
-import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../../config/contact-discovery-relay';
+import { DEFAULT_CONTACT_DISCOVERY_RELAY, discoveryOn } from '../../config/contact-discovery-relay';
 import { setSiteFindsFriends, siteFindsFriends } from '../../state/find-friends';
 import { PopupPath } from '../../routes/popup/paths';
 import { holdTab } from '../../discovery-presence-port';
@@ -209,7 +209,7 @@ export const contactDiscoveryRequestDeps: ContactDiscoveryRequestDeps = {
   settings: async () => {
     const stored = await localExtStorage.get('zidDiscovery');
     return {
-      enabled: stored?.enabled === true,
+      enabled: discoveryOn(stored),
       // Blank means the built-in default (an explicit endpoint the user typed
       // always wins). Computed here so the success reply names the real relay.
       relayEndpoint: (stored?.relayEndpoint ?? '').trim() || DEFAULT_CONTACT_DISCOVERY_RELAY,
