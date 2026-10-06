@@ -27,6 +27,7 @@ import {
   orchardReceiverOf,
 } from '@repo/wallet/networks/zcash/unified-address';
 import { localExtStorage } from '@repo/storage-chrome/local';
+import { discoveryOn } from '../config/contact-discovery-relay';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo, selectEnabledNetworks, selectGetMnemonic } from '../state/keyring';
 import { deriveRelationshipKeys, getZidIndex, mintRelationshipIndex } from '../state/identity';
@@ -157,7 +158,7 @@ export const useMyCards = () => {
         ]);
       }
     }
-    const discovery = (await localExtStorage.get('zidDiscovery'))?.enabled === true;
+    const discovery = discoveryOn(await localExtStorage.get('zidDiscovery'));
     return {
       ...(raw ? { zcash: bytesToHex(raw) } : {}),
       ...(mine?.address.startsWith('utest') ? { testnet: true } : {}),

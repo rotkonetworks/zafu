@@ -25,7 +25,7 @@ import { LIVE_REGISTRY_DIR, REGISTRY_EGRESS } from '../transparent/registry-endp
 import { ZCASHME_BASE_URL } from '../services/zcashme/api';
 import { THORNODE_URLS } from '../services/thornode';
 import { MIDGARD_URL } from '../services/midgard';
-import { DEFAULT_CONTACT_DISCOVERY_RELAY } from '../config/contact-discovery-relay';
+import { DEFAULT_CONTACT_DISCOVERY_RELAY, discoveryOn } from '../config/contact-discovery-relay';
 import {
   PEOPLE_RELAY,
   PEOPLE_RELAY_KEY,
@@ -257,7 +257,7 @@ export const DESTINATIONS: DestinationSpec[] = [
     id: 'contact-discovery',
     label: 'contact discovery relay',
     purpose: 'relay',
-    gate: { kind: 'optional', setting: i => i.zidDiscovery?.enabled === true },
+    gate: { kind: 'optional', setting: i => discoveryOn(i.zidDiscovery) },
     urls: i => [
       `${(i.zidDiscovery?.relayEndpoint?.trim() || DEFAULT_CONTACT_DISCOVERY_RELAY).replace(/\/$/, '')}/bucket`,
     ],

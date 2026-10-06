@@ -7,6 +7,7 @@
  */
 
 import { localExtStorage } from '@repo/storage-chrome/local';
+import { discoveryOn } from '../config/contact-discovery-relay';
 import type { ZidSitePreference } from './identity';
 
 const DEFAULT_PREF: ZidSitePreference = { mode: 'site', rotation: 0, identity: 'default' };
@@ -42,4 +43,4 @@ export const setSiteFindsFriends = async (origin: string, on: boolean): Promise<
 
 /** discovery on wallet-wide (the relay may still be refused by the site gate) */
 export const discoveryEnabled = async (): Promise<boolean> =>
-  (await localExtStorage.get('zidDiscovery'))?.enabled === true;
+  discoveryOn(await localExtStorage.get('zidDiscovery'));

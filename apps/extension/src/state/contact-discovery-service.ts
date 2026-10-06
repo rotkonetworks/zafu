@@ -27,6 +27,7 @@ import type { Contact } from './contacts';
 import { discoverForScope } from './contact-discovery';
 import {
   DEFAULT_CONTACT_DISCOVERY_RELAY,
+  discoveryOn,
   isUsableRelayEndpoint,
 } from '../config/contact-discovery-relay';
 import { siteFindsFriends } from './find-friends';
@@ -62,7 +63,7 @@ export const contactDiscoveryDeps: ContactDiscoveryDeps = {
   settings: async () => {
     const stored = await localExtStorage.get('zidDiscovery');
     return {
-      enabled: stored?.enabled === true,
+      enabled: discoveryOn(stored),
       // An opted-in wallet with no endpoint of its own uses the built-in
       // relay: opting in is the consent, and a blank field must not leave the
       // feature dead. Explicit endpoints still win.
