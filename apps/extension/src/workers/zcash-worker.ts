@@ -5868,9 +5868,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // zigner: the module envelope (see `zigner` above). keystone: the
         // standard zashi/keystone-sdk `{1: bytes}` CBOR wrap under `ur:zcash-pczt`.
+        // Full (0x03), not compact: only the UR type changes for a zigner
+        // orchard send, so its answer is the whole signed PCZT exactly as
+        // before. Compact orchard with a transparent output has not been run
+        // on a device yet.
         const request = orchardSignRequest(wasmModule, parsed.pczt_hex, {
           zigner: sendPayload.zigner === true,
-          compact: COMPACT_SIGN_REQUEST,
+          compact: false,
           fragmentSize: fragOf(sendPayload.fragmentSize),
         });
         const { urFrames, envelope: cbor } = request;

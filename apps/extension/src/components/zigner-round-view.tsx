@@ -4,6 +4,7 @@
  * The caller frames it (a popup screen, or lp.html's sheet).
  */
 
+import { useState } from 'react';
 import { useStore } from 'zustand';
 import { Button } from '@repo/ui/components/ui/button';
 import { AnimatedQrDisplay } from '../shared/components/animated-qr-display';
@@ -16,6 +17,8 @@ const urTypeOf = (frames: string[]) =>
 
 export const ZignerRoundView = ({ round, size = 300 }: { round: ZignerRound; size?: number }) => {
   const { shown, scanning } = useStore(round.store);
+  // a camera that would not start, said under the qr it goes back to
+  const [cameraError, setCameraError] = useState<string>();
   if (!shown) {
     return null;
   }
@@ -27,7 +30,10 @@ export const ZignerRoundView = ({ round, size = 300 }: { round: ZignerRound; siz
           <AnimatedQrScanner
             inline
             onComplete={bytes => void round.answer(bytes)}
-            onError={() => round.scan(false)}
+            onError={err => {
+              setCameraError(err);
+              round.scan(false);
+            }}
             onClose={() => round.scan(false)}
             title="zigner's answer"
             urTypeFilter={urType}
@@ -45,6 +51,7 @@ export const ZignerRoundView = ({ round, size = 300 }: { round: ZignerRound; siz
             frameInterval={200}
           />
           <span className='text-[13px] text-fg-high'>scan this with zigner, approve there</span>
+          {cameraError && <span className='text-xs text-warn'>{cameraError}</span>}
         </>
       )}
       {scanning ? (
@@ -52,7 +59,13 @@ export const ZignerRoundView = ({ round, size = 300 }: { round: ZignerRound; siz
           show the qr again
         </Button>
       ) : (
-        <Button onClick={() => round.scan(true)} className='w-full'>
+        <Button
+          onClick={() => {
+            setCameraError(undefined);
+            round.scan(true);
+          }}
+          className='w-full'
+        >
           scan zigner's answer
         </Button>
       )}
