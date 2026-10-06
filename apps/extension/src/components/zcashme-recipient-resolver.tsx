@@ -24,8 +24,6 @@ import {
 } from '../services/zcashme/api';
 import { pickDecoys } from '../services/zcashme/decoys';
 import { useZcashMe } from '../services/zcashme/config';
-import { useStore } from '../state';
-import { privacySettingsSelector } from '../state/privacy';
 import { zcashMeLabel, zcashMeUsername } from '../services/zcashme/label';
 import { cn } from '@repo/ui/lib/utils';
 
@@ -69,7 +67,6 @@ function ProfileCard({ profile, onPick }: { profile: ZcashMeProfile; onPick: () 
 export function ZcashMeRecipientResolver({ input, onResolve }: Props) {
   const handle = parseZcashMeHandle(input);
   const { config, index } = useZcashMe();
-  const proxyEnabled = useStore(privacySettingsSelector).proxy.enabled;
   const [pending, setPending] = useState(false);
   const [live, setLive] = useState<{
     handle: string;
@@ -174,7 +171,7 @@ export function ZcashMeRecipientResolver({ input, onResolve }: Props) {
         <span className='text-xs'>look up /{handle} on zcash.me</span>
       </button>
       <p className='mt-1 text-label text-fg-muted'>
-        zcash.me sees {proxyEnabled ? '' : 'your ip and '}/{handle}
+        zcash.me sees your ip and /{handle}
         {config.decoys > 0 && (index?.snapshot.profiles.length ?? 0) > 1 && ' among decoys'}
       </p>
       {needBareConfirm && (

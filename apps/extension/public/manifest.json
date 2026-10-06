@@ -82,10 +82,9 @@
     "offscreen",
     "alarms",
     "sidePanel",
-    "contextMenus",
-    "proxy"
+    "contextMenus"
   ],
-  "optional_permissions": ["webRequest", "scripting"],
+  "optional_permissions": ["webRequest", "scripting", "proxy"],
   "host_permissions": ["<all_urls>"],
   "externally_connectable": {
     "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"]

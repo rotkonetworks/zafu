@@ -10,8 +10,8 @@
  *
  * Snapshot sources (used by `directory` mode, and by `live` mode as a
  * cache when present): a mirror url, or the user's own api key. The key
- * is the user's own and is stored like the proxy config - plain local
- * storage, never bundled, never sent anywhere but zcash.me.
+ * is the user's own: plain local storage, never bundled, never sent
+ * anywhere but zcash.me.
  *
  * Config and index are module-level so every popup surface (tx rows,
  * inbox threads, the picker, settings) shares one storage read and

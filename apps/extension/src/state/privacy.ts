@@ -52,15 +52,6 @@ export const LIGHT_CLIENT_NETWORKS: NetworkType[] = [];
  */
 export const TRANSPARENT_NETWORKS: NetworkType[] = ['cosmos'];
 
-export interface ProxyConfig {
-  /** proxy enabled */
-  enabled: boolean;
-  /** SOCKS5 proxy host */
-  host: string;
-  /** SOCKS5 proxy port */
-  port: number;
-}
-
 export interface PrivacySettings {
   /**
    * enable balance fetching for transparent networks
@@ -148,13 +139,6 @@ export interface PrivacySettings {
   openZafuLinks: boolean;
 
   /**
-   * SOCKS5 proxy for all extension network traffic.
-   * routes zidecar, license, relay, and rpc connections through proxy.
-   * hides IP from all servers. uses chrome.proxy API.
-   */
-  proxy: ProxyConfig;
-
-  /**
    * enable the zid identity feature.
    *
    * when true (default): zid display in menu, sign approvals work, sites
@@ -207,9 +191,6 @@ export interface PrivacySlice {
   /** update a single setting */
   setSetting: <K extends keyof PrivacySettings>(key: K, value: PrivacySettings[K]) => Promise<void>;
 
-  /** update proxy config and apply to chrome.proxy */
-  setProxy: (config: ProxyConfig) => Promise<void>;
-
   /** reset all settings to privacy-maximizing defaults */
   resetToDefaults: () => Promise<void>;
 
@@ -233,7 +214,6 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enableExplorerLinks: false,
   openZcashLinks: true,
   openZafuLinks: true,
-  proxy: { enabled: false, host: '', port: 1080 },
   enableIdentity: true,
   hideBalances: false,
   txSigningSecurity: DEFAULT_TX_SIGNING_SECURITY,
@@ -257,39 +237,6 @@ export const createPrivacySlice =
       await local.set('privacySettings' as keyof LocalStorageState, settings as never);
     },
 
-    setProxy: async (config: ProxyConfig) => {
-      set(state => {
-        state.privacy.settings.proxy = config;
-      });
-
-      const settings = get().privacy.settings;
-      await local.set('privacySettings' as keyof LocalStorageState, settings as never);
-
-      // apply to chrome.proxy API
-      if (chrome?.proxy?.settings) {
-        if (config.enabled && config.host) {
-          await chrome.proxy.settings.set({
-            value: {
-              mode: 'fixed_servers',
-              rules: {
-                singleProxy: {
-                  scheme: 'socks5',
-                  host: config.host,
-                  port: config.port,
-                },
-              },
-            },
-            scope: 'regular',
-          });
-        } else {
-          await chrome.proxy.settings.set({
-            value: { mode: 'direct' },
-            scope: 'regular',
-          });
-        }
-      }
-    },
-
     resetToDefaults: async () => {
       set(state => {
         state.privacy.settings = { ...DEFAULT_PRIVACY_SETTINGS };
@@ -299,14 +246,6 @@ export const createPrivacySlice =
         'privacySettings' as keyof LocalStorageState,
         DEFAULT_PRIVACY_SETTINGS as never,
       );
-
-      // clear proxy
-      if (chrome?.proxy?.settings) {
-        await chrome.proxy.settings.set({
-          value: { mode: 'direct' },
-          scope: 'regular',
-        });
-      }
     },
 
     hasLeakyFeatures: () => {

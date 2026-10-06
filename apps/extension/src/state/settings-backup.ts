@@ -38,9 +38,6 @@ export interface SettingsBackup {
 
 const poolKeys = () => Object.keys(COSMOS_CHAINS).map(c => [c, rpcPoolKey(c)] as const);
 
-/** proxy is shelved and is applied to chrome.proxy only through setProxy, so it never rides along */
-const withoutProxy = ({ proxy: _proxy, ...rest }: Partial<PrivacySettings>) => rest;
-
 export const exportSettings = async (privacy: PrivacySettings): Promise<SettingsBackup> => {
   const prefs: Partial<Record<PrefKey, unknown>> = {};
   for (const k of PREF_KEYS) {
@@ -56,7 +53,8 @@ export const exportSettings = async (privacy: PrivacySettings): Promise<Settings
       nodePools[c] = stored[k] as string[];
     }
   }
-  return { privacy: withoutProxy(privacy), prefs, nodePools };
+  // only known keys of the right type ride along, so nothing stale or retired is carried
+  return { privacy: restoredPrivacy(DEFAULT_PRIVACY_SETTINGS, privacy), prefs, nodePools };
 };
 
 /** the privacy settings after restoring `incoming` over `current`, keys limited to known ones */
@@ -71,7 +69,7 @@ export const restoredPrivacy = (
   if (typeof legacy === 'boolean' && incoming?.keepPenumbraSyncing === undefined) {
     next.keepPenumbraSyncing = legacy;
   }
-  for (const [k, v] of Object.entries(withoutProxy(incoming ?? {}))) {
+  for (const [k, v] of Object.entries(incoming ?? {})) {
     const key = k as keyof PrivacySettings;
     if (key in DEFAULT_PRIVACY_SETTINGS && typeof v === typeof DEFAULT_PRIVACY_SETTINGS[key]) {
       (next as Record<string, unknown>)[key] = v;

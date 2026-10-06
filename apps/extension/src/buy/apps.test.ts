@@ -113,7 +113,9 @@ describe('manifest permissions', () => {
     const { readFileSync } = await import('node:fs');
     for (const f of ['public/manifest.json', 'public/beta-manifest.json']) {
       const m = JSON.parse(readFileSync(f, 'utf8')) as Record<string, string[]>;
-      expect(m['optional_permissions']).toEqual(['webRequest', 'scripting']);
+      // proxy waits for a per-destination transport to ask for it
+      expect(m['optional_permissions']).toEqual(['webRequest', 'scripting', 'proxy']);
+      expect(m['permissions']).not.toContain('proxy');
       expect(m['permissions']).not.toContain('webRequest');
       expect(m['permissions']).not.toContain('scripting');
       expect(m['permissions']).not.toContain('tabs');
