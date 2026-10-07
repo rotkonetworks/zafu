@@ -75,6 +75,8 @@ export const ZCASH_CHAIN_CHECK_KEY = 'zcashChainCheck';
 export interface ZcashChainCheck {
   serverUrl: string;
   status: 'checked' | 'unverified' | 'failed';
+  /** why a chain is not verified (see fly-verify.ts); 'clock' is this computer's */
+  reason?: string;
   tip?: number;
   /** blocks between the proven tip and the proven note tree roots */
   depth?: number;

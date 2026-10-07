@@ -41,6 +41,8 @@ export interface ZcashSyncState {
    * be shown; `failure.raw` is diagnostics and belongs behind a disclosure.
    */
   failure: SyncFailure | null;
+  /** the last chain check of the chosen node */
+  chain?: ZcashChainCheck;
 }
 
 /**
@@ -183,7 +185,8 @@ export function useZcashSyncStatus(): ZcashSyncState {
   const { workerSyncHeight, workerChainHeight, workerError, workerFailure, notesPreparing } =
     useZcashWorkerSync();
   // a node whose chain did not check out stays paused across popup opens
-  const chainFailed = useZcashChainCheck()?.status === 'failed';
+  const chain = useZcashChainCheck();
+  const chainFailed = chain?.status === 'failed';
 
   const {
     data: chainTip,
@@ -205,6 +208,7 @@ export function useZcashSyncStatus(): ZcashSyncState {
 
   return {
     chainTip: chainTip ?? null,
+    chain,
     workerSyncHeight,
     workerChainHeight,
     notesPreparing,

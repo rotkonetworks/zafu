@@ -25,7 +25,12 @@ export interface ProvenChain {
 
 export type ChainCheck =
   | { status: 'checked'; chain: ProvenChain; ms: number }
-  | { status: 'unverified'; reason: 'testnet' | 'lightwalletd' | 'unreachable'; detail?: string }
+  | {
+      status: 'unverified';
+      /** clock: the proof holds by the node's clock, so this computer's is off */
+      reason: 'testnet' | 'lightwalletd' | 'unreachable' | 'clock';
+      detail?: string;
+    }
   | { status: 'failed'; detail: string };
 
 /**
@@ -46,49 +51,96 @@ export const FLY_REPLAY_SLACK = 24;
 
 export const flyMinHeight = (lastTip: number): number => Math.max(0, lastTip - FLY_REPLAY_SLACK);
 
+/** a clock this far from the node's own is the odd one out, not the node */
+export const CLOCK_SKEW_MS = 5 * 60_000;
+
+/** what a node answered: the proof, and its own clock (the http Date) when it gave one */
+export interface FlyProof {
+  proof: Uint8Array;
+  serverTime?: number;
+}
+
 export interface FlyDeps {
   mainnet: boolean;
   /** the node's GetFlyClientProof; undefined on a standard lightwalletd */
-  fetchProof?: () => Promise<Uint8Array>;
+  fetchProof?: () => Promise<FlyProof>;
   verify: (proof: Uint8Array, nowSecs: bigint, minHeight: number, mainnet: boolean) => string;
   /** the highest tip this wallet has verified on this network */
   lastTip: number;
+  /** this node proved its chain before: a refusal now is a downgrade, not "no proof" */
+  provedBefore?: boolean;
   now?: () => number;
 }
 
 const text = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/** the node said it has no such rpc (grpc UNIMPLEMENTED, or a proxy's 404) */
+const refused = (e: unknown) => {
+  const { grpcStatus, httpStatus } = (e ?? {}) as { grpcStatus?: number; httpStatus?: number };
+  return grpcStatus === 12 || httpStatus === 404;
+};
+
+/** the freshness window, as opposed to the rollback floor or a bad proof */
+const FRESHNESS = /older than 90 minutes|hours ahead/;
+
+const DOWNGRADE = 'this node proved its chain before and no longer offers a proof';
+
 /**
- * Fetch and check the node's proof. Only a proof that arrived and did not
- * check out is `failed`; not getting one is `unverified`.
+ * Fetch and check the node's proof. A proof that arrived and did not check
+ * out is `failed`, and so is a node that proved itself before and now refuses.
+ * Not getting a proof otherwise is `unverified`, as is a proof that holds by
+ * the node's own clock when this computer's is the odd one out.
  */
 export const checkChain = async ({
   mainnet,
   fetchProof,
   verify,
   lastTip,
+  provedBefore = false,
   now = Date.now,
 }: FlyDeps): Promise<ChainCheck> => {
   if (!mainnet) {
     return { status: 'unverified', reason: 'testnet' };
   }
   if (!fetchProof) {
-    return { status: 'unverified', reason: 'lightwalletd' };
+    return provedBefore
+      ? { status: 'failed', detail: DOWNGRADE }
+      : { status: 'unverified', reason: 'lightwalletd' };
   }
-  let proof: Uint8Array;
+  let answer: FlyProof;
   try {
-    proof = await fetchProof();
+    answer = await fetchProof();
   } catch (e) {
-    return { status: 'unverified', reason: 'unreachable', detail: text(e) };
+    return provedBefore && refused(e)
+      ? { status: 'failed', detail: `${DOWNGRADE}: ${text(e)}` }
+      : { status: 'unverified', reason: 'unreachable', detail: text(e) };
   }
+  const minHeight = flyMinHeight(lastTip);
+  const at = (ms: number) => () =>
+    JSON.parse(verify(answer.proof, BigInt(Math.floor(ms / 1000)), minHeight, true)) as ProvenChain;
   const start = now();
   try {
-    const chain = JSON.parse(
-      verify(proof, BigInt(Math.floor(start / 1000)), flyMinHeight(lastTip), true),
-    ) as ProvenChain;
+    const chain = at(start)();
     return { status: 'checked', chain, ms: now() - start };
   } catch (e) {
-    return { status: 'failed', detail: text(e) };
+    const { serverTime } = answer;
+    const clockOff =
+      FRESHNESS.test(text(e)) &&
+      serverTime !== undefined &&
+      Math.abs(serverTime - start) > CLOCK_SKEW_MS &&
+      holds(at(serverTime));
+    return clockOff
+      ? { status: 'unverified', reason: 'clock', detail: text(e) }
+      : { status: 'failed', detail: text(e) };
+  }
+};
+
+const holds = (f: () => unknown) => {
+  try {
+    f();
+    return true;
+  } catch {
+    return false;
   }
 };
 

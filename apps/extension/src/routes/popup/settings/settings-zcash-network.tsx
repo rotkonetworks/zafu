@@ -22,7 +22,6 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
 import { cn } from '@repo/ui/lib/utils';
 import { useExplain } from './settings-explain';
-import { syncFailureMessage } from '../../../state/sync-failure';
 
 /** the wallet's stored birthday (an external system, read once per wallet) */
 const useBirthday = (vaultId: string | undefined) => {
@@ -127,7 +126,7 @@ export const SettingsZcashNetwork = () => {
   const status = resyncing
     ? 'reading the chain again'
     : paused
-      ? syncFailureMessage('chainUnproven')
+      ? "this server's chain didn't check out"
       : failure
         ? failure.message
         : !workerSyncHeight
@@ -189,7 +188,9 @@ export const SettingsZcashNetwork = () => {
               !preset && endpoint && 'your own node',
               chain?.status === 'checked'
                 ? "chain checked against zcash's proof of work"
-                : 'chain not verified',
+                : chain?.reason === 'clock'
+                  ? "this computer's clock looks off"
+                  : 'chain not verified',
             ]
               .filter(Boolean)
               .join(' · ')}

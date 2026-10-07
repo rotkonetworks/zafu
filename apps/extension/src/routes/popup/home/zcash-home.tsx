@@ -83,6 +83,26 @@ const PENDING_VERB: Record<NonNullable<HistoryEntry['kind']>, string> = {
   migrate: 'moving to ironwood',
 };
 
+/** the chain notices the home shows in its status slot, two short lines each */
+const CHAIN_NOTICE: Partial<
+  Record<
+    string,
+    { tone: 'warn' | 'info'; icon: string; lines: [string, string]; chooseNode?: boolean }
+  >
+> = {
+  paused: {
+    tone: 'warn',
+    icon: 'i-ph-warning',
+    lines: ["this server's chain didn't check out", 'balances are paused · nothing was lost'],
+    chooseNode: true,
+  },
+  clock: {
+    tone: 'info',
+    icon: 'i-ph-clock',
+    lines: ["this computer's clock looks off", "zafu can't check the chain until it's right"],
+  },
+};
+
 /** zcash home: sync strip, hero balance, actions, in-flight, pools, activity */
 export const ZcashContent = ({
   hasMnemonic,
@@ -97,7 +117,13 @@ export const ZcashContent = ({
   const isMainnet = useStore(selectZcashIsMainnet);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const zcashBackend = useStore(selectZcashBackend);
-  const { chainTip, workerSyncHeight, failure: syncFailure, notesPreparing } = useZcashSyncStatus();
+  const {
+    chainTip,
+    workerSyncHeight,
+    failure: syncFailure,
+    notesPreparing,
+    chain,
+  } = useZcashSyncStatus();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -254,8 +280,29 @@ export const ZcashContent = ({
   const orchardRefusal =
     ironwoodLive && pools.orchard > 0n && kind ? CAPS[kind].refuses?.orchard : undefined;
 
-  // one message at a time: ironwood move > orchard waits > backup nudge
-  const messageSlot: ReactNode = orchardRefusal ? (
+  // the node's chain: paused when its proof did not check out, a quiet word
+  // when this computer's clock keeps zafu from checking it
+  const chainNotice = syncFailure?.kind === 'chainUnproven' ? 'paused' : chain?.reason;
+  const chainSlot = chainNotice && CHAIN_NOTICE[chainNotice];
+
+  // one message at a time: the chain > ironwood move > orchard waits > backup nudge
+  const messageSlot: ReactNode = chainSlot ? (
+    <StatusSlot
+      tone={chainSlot.tone}
+      icon={chainSlot.icon}
+      action={
+        chainSlot.chooseNode
+          ? {
+              label: 'choose another node',
+              onClick: () => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`),
+            }
+          : undefined
+      }
+    >
+      <span className='text-fg-high'>{chainSlot.lines[0]}</span>
+      <span>{chainSlot.lines[1]}</span>
+    </StatusSlot>
+  ) : orchardRefusal ? (
     <StatusSlot icon='i-ph-lock-simple'>
       <span className='text-fg-high'>
         {orchardRefusal.title} · <Sensitive className='tabular'>{zec(pools.orchard)}</Sensitive> zec
@@ -291,7 +338,7 @@ export const ZcashContent = ({
           network='zcash'
           rebuilds
           synced={allSynced}
-          failure={syncFailure}
+          failure={syncFailure?.kind === 'chainUnproven' ? null : syncFailure}
           preparing={notesPreparing}
           percent={overallPct}
           connecting={chainHeight <= 0}

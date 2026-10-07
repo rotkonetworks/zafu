@@ -63,12 +63,12 @@ import {
   type TreeWrite,
 } from './note-trees';
 import { ironwoodBranchRefusal } from './branch-ids';
+import type { ZcashChainCheck } from '../state/keyring/network-worker';
 import {
   checkChain,
   FLY_BURIAL,
   FLY_PROOF_MAX_BYTES,
   poolsOffProof,
-  type ChainCheck,
   type ProvenChain,
 } from './fly-verify';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
@@ -2805,36 +2805,41 @@ const syncLoop = async (
   // reading blocks; never on every new block (a proof is ~1.5 MB).
   const flyTipKey = [`chain:${mainnet ? 'main' : 'test'}`, 'flyTip'];
   let proofThisRun = false;
-  let chainStatus: ChainCheck['status'] | undefined;
+  /** the run's last chain check, as the page stores it */
+  let chainRecord: ZcashChainCheck | undefined;
   /** proven roots not yet compared with the trees */
   let proven: ProvenChain | undefined;
   let readBlocks = false;
   let checkedAtCatchUp = false;
   const checkNodeChain = async (): Promise<void> => {
     const lastTip = (await idbGet<{ value: number }>('meta', flyTipKey))?.value ?? 0;
+    // a node that proved its chain once must keep proving it (no quiet downgrade)
+    const provedKey = `proved:${backendKey(serverUrl)}`;
+    const provedBefore = !!(await idbGet<{ value: boolean }>('meta', [flyTipKey[0]!, provedKey]))
+      ?.value;
     const check = await checkChain({
       mainnet,
       fetchProof: zidecar && (() => zidecar.getFlyClientProof(FLY_BURIAL, FLY_PROOF_MAX_BYTES)),
       verify: (...a) => wasmModule!.verify_flyclient(...a),
       lastTip,
+      provedBefore,
     });
-    chainStatus = check.status;
+    chainRecord = {
+      serverUrl,
+      status: check.status,
+      ...(check.status === 'unverified' && { reason: check.reason }),
+      ...(check.status === 'checked' && {
+        tip: check.chain.tip_height,
+        depth: check.chain.tip_height - check.chain.roots_height,
+        ms: Math.round(check.ms),
+      }),
+    };
     workerSelf.postMessage({
       type: 'sync-progress',
       id: '',
       network: 'zcash',
       walletId,
-      payload: {
-        chain: {
-          serverUrl,
-          status: check.status,
-          ...(check.status === 'checked' && {
-            tip: check.chain.tip_height,
-            depth: check.chain.tip_height - check.chain.roots_height,
-            ms: Math.round(check.ms),
-          }),
-        },
-      },
+      payload: { chain: chainRecord },
     });
     if (check.status === 'failed') {
       throw syncError(
@@ -2850,6 +2855,9 @@ const syncLoop = async (
     }
     proofThisRun = true;
     proven = check.chain;
+    if (!provedBefore) {
+      await idbPutMeta(flyTipKey[0]!, provedKey, true);
+    }
     if (check.chain.tip_height > lastTip) {
       await idbPutMeta(flyTipKey[0]!, flyTipKey[1]!, check.chain.tip_height);
     }
@@ -3047,7 +3055,7 @@ const syncLoop = async (
             chainHeight,
             notesFound: state.notes.length,
             blocksScanned: 0,
-            ...(chainStatus && { chain: { serverUrl, status: chainStatus } }),
+            ...(chainRecord && { chain: chainRecord }),
           },
         });
         // a pass with notes still to recover goes straight on (after the tip

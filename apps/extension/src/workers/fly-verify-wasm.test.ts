@@ -26,19 +26,19 @@ interface Wasm {
   verify_flyclient: FlyDeps['verify'];
 }
 
-describe('flyclient chain check on the real wasm', () => {
-  let wasm: Wasm;
-  beforeAll(async () => {
-    wasm = (await import('@repo/zcash-wasm')) as unknown as Wasm;
-    wasm.initSync({
-      module: readFileSync(resolve(process.cwd(), '../../packages/zcash-wasm/zafu_wasm_bg.wasm')),
-    });
+let wasm: Wasm;
+beforeAll(async () => {
+  wasm = (await import('@repo/zcash-wasm')) as unknown as Wasm;
+  wasm.initSync({
+    module: readFileSync(resolve(process.cwd(), '../../packages/zcash-wasm/zafu_wasm_bg.wasm')),
   });
+});
 
+describe('flyclient chain check on the real wasm', () => {
   const check = (over: Partial<FlyDeps> = {}) =>
     checkChain({
       mainnet: true,
-      fetchProof: () => Promise.resolve(PROOF),
+      fetchProof: () => Promise.resolve({ proof: PROOF }),
       verify: (...a) => wasm.verify_flyclient(...a),
       lastTip: 0,
       now: () => TIP_TIME_MS + 60_000,
@@ -59,7 +59,9 @@ describe('flyclient chain check on the real wasm', () => {
     const bad = PROOF.slice();
     // inside the first epoch's commit header (its previous-block hash)
     bad[40] = bad[40]! ^ 0x01;
-    expect((await check({ fetchProof: () => Promise.resolve(bad) })).status).toBe('failed');
+    expect((await check({ fetchProof: () => Promise.resolve({ proof: bad }) })).status).toBe(
+      'failed',
+    );
   });
 
   test('a tip older than 90 minutes fails', async () => {
@@ -93,6 +95,90 @@ describe('flyclient chain check on the real wasm', () => {
       fetchProof: () => Promise.reject(new Error('gRPC GetFlyClientProof: unimplemented')),
     });
     expect(r).toMatchObject({ status: 'unverified', reason: 'unreachable' });
+  });
+});
+
+describe('a stale tip: this computer or the node', () => {
+  const AFTER = TIP_TIME_MS + 60_000;
+  const check = (localMs: number, serverTime?: number) =>
+    checkChain({
+      mainnet: true,
+      fetchProof: () => Promise.resolve({ proof: PROOF, serverTime }),
+      verify: (...a) => wasm.verify_flyclient(...a),
+      lastTip: 0,
+      now: () => localMs,
+    });
+
+  test('a clock hours ahead of the node is this computer, not the node: unverified', async () => {
+    expect(await check(TIP_TIME_MS + 3 * 3_600_000, AFTER)).toMatchObject({
+      status: 'unverified',
+      reason: 'clock',
+    });
+  });
+
+  test('a clock hours behind the node (tip "in the future") is this computer too', async () => {
+    expect(await check(TIP_TIME_MS - 3 * 3_600_000, AFTER)).toMatchObject({
+      status: 'unverified',
+      reason: 'clock',
+    });
+  });
+
+  test('a stale tip against a clock that agrees with the node is the node: failed', async () => {
+    const late = TIP_TIME_MS + 3 * 3_600_000;
+    expect((await check(late, late + 30_000)).status).toBe('failed');
+  });
+
+  test('a stale tip with no node clock to compare stays failed', async () => {
+    expect((await check(TIP_TIME_MS + 3 * 3_600_000)).status).toBe('failed');
+  });
+
+  test('a node clock that does not save the proof either is the node: failed', async () => {
+    // both clocks far past the tip: the node's own clock says its tip is stale
+    expect((await check(TIP_TIME_MS + 3 * 3_600_000, TIP_TIME_MS + 6 * 3_600_000)).status).toBe(
+      'failed',
+    );
+  });
+});
+
+describe('a node that proved its chain before', () => {
+  const unimplemented = () =>
+    Promise.reject(
+      Object.assign(new Error('gRPC GetFlyClientProof: FlyClient proofs are not enabled'), {
+        grpcStatus: 12,
+      }),
+    );
+  const check = (over: Partial<FlyDeps>) =>
+    checkChain({ mainnet: true, verify: () => '', lastTip: 0, ...over });
+
+  test('answering unimplemented now is a downgrade: failed', async () => {
+    expect((await check({ provedBefore: true, fetchProof: unimplemented })).status).toBe('failed');
+  });
+
+  test('dropping the rpc (a proxy 404) is a downgrade too', async () => {
+    const gone = () =>
+      Promise.reject(
+        Object.assign(new Error('gRPC GetFlyClientProof: HTTP 404'), { httpStatus: 404 }),
+      );
+    expect((await check({ provedBefore: true, fetchProof: gone })).status).toBe('failed');
+  });
+
+  test('now reporting itself a lightwalletd is a downgrade too', async () => {
+    expect((await check({ provedBefore: true, fetchProof: undefined })).status).toBe('failed');
+  });
+
+  test('a network blip is not a downgrade: unverified', async () => {
+    const blip = () => Promise.reject(new TypeError('Failed to fetch'));
+    expect(await check({ provedBefore: true, fetchProof: blip })).toMatchObject({
+      status: 'unverified',
+      reason: 'unreachable',
+    });
+  });
+
+  test('a node that never proved itself stays not verified', async () => {
+    expect(await check({ fetchProof: unimplemented })).toMatchObject({
+      status: 'unverified',
+      reason: 'unreachable',
+    });
   });
 });
 
