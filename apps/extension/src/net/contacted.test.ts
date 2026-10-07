@@ -73,6 +73,17 @@ describe('what zafu contacted lately', () => {
     expect((await storage.local.get(CONTACTED_KEY))[CONTACTED_KEY]).toEqual(raw);
   });
 
+  it('starts afresh over a box that does not hold a log', async () => {
+    const key = (await Key.create('test-password')).key;
+    await storage.session.set({ passwordKey: await key.toJson() });
+    await storage.local.set({
+      [CONTACTED_KEY]: { encrypted: (await key.seal('not json')).toJson() },
+    });
+    noteContacted({ a: { n: 2, at: NOW } });
+    await flushContacted(NOW);
+    expect(await readContacted(NOW)).toEqual({ a: { last: NOW, days: { [dayOf(NOW)]: 2 } } });
+  });
+
   it('clears', async () => {
     await unlock();
     noteContacted({ a: { n: 1, at: NOW } });

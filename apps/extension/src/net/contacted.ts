@@ -88,6 +88,14 @@ export const fromTally = (tally: ContactTally): ContactedLog =>
     Object.entries(tally).map(([id, t]) => [id, { last: t.at, days: { [dayOf(t.at)]: t.n } }]),
   );
 
+const parseJson = (s: string | null): unknown => {
+  try {
+    return s ? JSON.parse(s) : null;
+  } catch {
+    return null;
+  }
+};
+
 let pending: ContactedLog = {};
 let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -103,10 +111,7 @@ const write = (batch: ContactedLog, now: number): Promise<boolean> =>
     const plain = isEncryptedWrapper(raw)
       ? await key.unseal(Box.fromJson(raw.encrypted)).catch(() => null)
       : null;
-    const next = pruneContacted(
-      mergeContacted(parseContacted(plain ? JSON.parse(plain) : null), batch),
-      now,
-    );
+    const next = pruneContacted(mergeContacted(parseContacted(parseJson(plain)), batch), now);
     await localExtStorage.set(KEY, { encrypted: (await key.seal(JSON.stringify(next))).toJson() });
     return true;
   });
