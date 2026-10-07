@@ -101,6 +101,7 @@ import { backOff } from 'exponential-backoff';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { networkAllowsBackgroundSync } from './state/privacy';
 import { startUiOpenSession } from './ui-open-session';
+import { postNym } from './net/nym-bridge';
 import { startPeopleRelay } from './people/sw';
 import { penumbraTiming } from './penumbra/timing';
 import { createChainCheck } from './penumbra/chain-check';
@@ -172,6 +173,8 @@ const ui = startUiOpenSession(
     },
     pause: () => {
       console.log('[sw] last UI surface closed, requesting zcash sync stop');
+      // nothing runs while zafu is closed: the next send starts a fresh tunnel
+      postNym({ type: 'stop' });
       requestStopAllSync('zcash');
       if (!keepPenumbraSyncing) {
         penumbraSync('pause');
