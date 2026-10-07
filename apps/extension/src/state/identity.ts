@@ -135,7 +135,7 @@ import { hmac } from '@noble/hashes/hmac';
 import { hkdf } from '@noble/hashes/hkdf';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { xwingPublicKeyFromSeed, XWING_LENGTHS } from '@zafu/pq';
-import { isPublicSuffix } from './public-suffix';
+import { isPasswordSuffix } from './password-suffixes';
 
 /**
  * ZID domain separator - v2 uses two-stage KDF.
@@ -975,7 +975,7 @@ export const normalizeOriginV1 = (raw: string): string =>
 export const normalizeOrigin = (raw: string): string => {
   const host = hostOfTyped(raw);
   const rest = host.replace(COMMON_LABEL, '');
-  return rest !== host && !isPublicSuffix(rest) ? rest : host;
+  return rest !== host && !isPasswordSuffix(rest) ? rest : host;
 };
 
 /** the site a scheme derives from */
