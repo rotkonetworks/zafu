@@ -174,11 +174,61 @@ describe('a node that proved its chain before', () => {
     });
   });
 
+  test('a downgrade is marked, so it can be kept unverified', async () => {
+    expect(await check({ provedBefore: true, fetchProof: unimplemented })).toMatchObject({
+      status: 'failed',
+      downgrade: true,
+    });
+  });
+
   test('a node that never proved itself stays not verified', async () => {
     expect(await check({ fetchProof: unimplemented })).toMatchObject({
       status: 'unverified',
       reason: 'unreachable',
     });
+  });
+});
+
+describe('a node kept unverified after it stopped proving', () => {
+  const unimplemented = () =>
+    Promise.reject(Object.assign(new Error('not enabled'), { grpcStatus: 12 }));
+  const check = (over: Partial<FlyDeps>) =>
+    checkChain({ mainnet: true, verify: () => '', lastTip: 0, accepted: true, ...over });
+
+  test('no proof is no longer a pause: not verified, as kept', async () => {
+    expect(await check({ fetchProof: unimplemented })).toMatchObject({
+      status: 'unverified',
+      reason: 'accepted',
+    });
+    expect(await check({ fetchProof: undefined })).toMatchObject({
+      status: 'unverified',
+      reason: 'accepted',
+    });
+  });
+
+  test('a timeout says the same quiet thing', async () => {
+    const blip = () => Promise.reject(new TypeError('Failed to fetch'));
+    expect(await check({ fetchProof: blip })).toMatchObject({ reason: 'accepted' });
+  });
+
+  test('a proof that does not check out still pauses, and cannot be kept', async () => {
+    const out = await check({
+      fetchProof: async () => ({ proof: new Uint8Array([1]) }),
+      verify: () => {
+        throw new Error('bad proof');
+      },
+    });
+    expect(out).toMatchObject({ status: 'failed' });
+    expect(out).not.toHaveProperty('downgrade');
+  });
+
+  test('proving itself again is checked as before', async () => {
+    const chain = { tip_height: 5, roots_height: 4 };
+    const out = await check({
+      fetchProof: async () => ({ proof: new Uint8Array([1]) }),
+      verify: () => JSON.stringify(chain),
+    });
+    expect(out).toMatchObject({ status: 'checked', chain });
   });
 });
 

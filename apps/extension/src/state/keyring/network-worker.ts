@@ -76,7 +76,11 @@ export const ZCASH_CHAIN_CHECK_KEY = 'zcashChainCheck';
 export interface ZcashChainCheck {
   serverUrl: string;
   status: 'checked' | 'unverified' | 'failed';
-  /** why a chain is not verified (see fly-verify.ts); 'clock' is this computer's */
+  /**
+   * why a chain is not verified (see fly-verify.ts); 'clock' is this
+   * computer's; on a failure, 'downgrade' when a node that proved itself
+   * stopped offering a proof
+   */
   reason?: string;
   tip?: number;
   /** blocks between the proven tip and the proven note tree roots */
@@ -112,6 +116,7 @@ export interface NetworkWorkerMessage {
     | 'transparent-deposit-complete'
     | 'transparent-deposit'
     | 'chain-tip'
+    | 'fly-accept-unverified'
     | 'list-wallets'
     | 'delete-wallet'
     | 'get-notes'
@@ -1421,6 +1426,10 @@ export const holdColdDepositInWorker = (
 /** the light client's chain tip */
 export const chainTipInWorker = (serverUrl: string): Promise<number> =>
   callWorker('zcash', 'chain-tip', { serverUrl });
+
+/** keep using a node that stopped proving its chain, until it proves it again */
+export const acceptUnverifiedNodeInWorker = (serverUrl: string, mainnet: boolean): Promise<null> =>
+  callWorker('zcash', 'fly-accept-unverified', { serverUrl, mainnet });
 
 /** result of building an unsigned send transaction */
 export interface SendTxUnsignedResult {

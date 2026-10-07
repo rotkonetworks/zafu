@@ -239,6 +239,13 @@ function lookupBackend(serverUrl: string): ZcashBackend {
   return backendRegistry.get(backendKey(serverUrl)) ?? backendOfEndpoint(serverUrl);
 }
 
+/** a node's FlyClient standing here: it proved its chain, or its downgrade was accepted */
+type FlyTrust = true | 'accepted';
+
+/** the meta row (and key) of a node's FlyTrust on a network */
+const flyTrustKey = (serverUrl: string, mainnet: boolean) =>
+  [`chain:${mainnet ? 'main' : 'test'}`, `proved:${backendKey(serverUrl)}`] as const;
+
 /** the sync client for an endpoint; call sites without a backend in scope use the registry */
 const makeZcashClient = (serverUrl: string, backend?: ZcashBackend): ZcashClient =>
   zcashClient(serverUrl, backend ?? lookupBackend(serverUrl));
@@ -270,6 +277,7 @@ interface WorkerMessage {
     | 'transparent-deposit-complete'
     | 'transparent-deposit'
     | 'chain-tip'
+    | 'fly-accept-unverified'
     | 'list-wallets'
     | 'delete-wallet'
     | 'get-notes'
@@ -2816,21 +2824,23 @@ const syncLoop = async (
   let checkedAtCatchUp = false;
   const checkNodeChain = async (): Promise<void> => {
     const lastTip = (await idbGet<{ value: number }>('meta', flyTipKey))?.value ?? 0;
-    // a node that proved its chain once must keep proving it (no quiet downgrade)
-    const provedKey = `proved:${backendKey(serverUrl)}`;
-    const provedBefore = !!(await idbGet<{ value: boolean }>('meta', [flyTipKey[0]!, provedKey]))
-      ?.value;
+    // a node that proved its chain once must keep proving it (no quiet
+    // downgrade), unless the person accepted it unverified
+    const [trustRow, trustKey] = flyTrustKey(serverUrl, mainnet);
+    const trust = (await idbGet<{ value: FlyTrust }>('meta', [trustRow, trustKey]))?.value;
     const check = await checkChain({
       mainnet,
       fetchProof: zidecar && (() => zidecar.getFlyClientProof(FLY_BURIAL, FLY_PROOF_MAX_BYTES)),
       verify: (...a) => wasmModule!.verify_flyclient(...a),
       lastTip,
-      provedBefore,
+      provedBefore: trust === true,
+      accepted: trust === 'accepted',
     });
     chainRecord = {
       serverUrl,
       status: check.status,
       ...(check.status === 'unverified' && { reason: check.reason }),
+      ...(check.status === 'failed' && check.downgrade && { reason: 'downgrade' }),
       ...(check.status === 'checked' && {
         tip: check.chain.tip_height,
         depth: check.chain.tip_height - check.chain.roots_height,
@@ -2858,8 +2868,9 @@ const syncLoop = async (
     }
     proofThisRun = true;
     proven = check.chain;
-    if (!provedBefore) {
-      await idbPutMeta(flyTipKey[0]!, provedKey, true);
+    // proving itself again also ends an accepted downgrade
+    if (trust !== true) {
+      await idbPutMeta(trustRow, trustKey, true);
     }
     if (check.chain.tip_height > lastTip) {
       await idbPutMeta(flyTipKey[0]!, flyTipKey[1]!, check.chain.tip_height);
@@ -7227,6 +7238,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           walletId,
           payload: { txid: sent.txid, fee: sent.fee },
         });
+        return;
+      }
+
+      case 'fly-accept-unverified': {
+        const { serverUrl, mainnet } = payload as { serverUrl: string; mainnet: boolean };
+        const [row, key] = flyTrustKey(serverUrl, mainnet);
+        await idbPutMeta(row, key, 'accepted' satisfies FlyTrust);
+        workerSelf.postMessage({ type: 'result', id, network: 'zcash', walletId, payload: null });
         return;
       }
 
