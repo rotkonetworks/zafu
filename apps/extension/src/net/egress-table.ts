@@ -17,6 +17,8 @@ export type EgressRealm =
   | 'page'
   | 'offscreen'
   | 'worker'
+  /** the nym tunnel's own worker: reaches nym and nothing else */
+  | 'nym'
   | 'content-script';
 
 /**
@@ -27,6 +29,7 @@ export type EgressRealm =
  *  - `unknown`: not a destination zafu knows or the user added
  *  - `content-script`: a web page's context never talks to anyone
  *  - `not-ready`: this realm has no policy yet (fails closed)
+ *  - `transport-down`: it goes over nym, and nym was not reachable in time
  */
 export type EgressReason =
   | 'blocked'
@@ -34,17 +37,18 @@ export type EgressReason =
   | 'opt-in'
   | 'unknown'
   | 'content-script'
-  | 'not-ready';
+  | 'not-ready'
+  | 'transport-down';
 
 /** One (host, path prefix) a destination owns, with its compiled answer. */
 export interface EgressRule {
-  /** `hostOf` key: hostname, plus port when non-default */
+  /** `hostOf` key: hostname, plus port when non-default; `*:<port>` is any host on that port */
   host: string;
   /** path prefix; '' owns the whole host. The longest matching prefix wins. */
   path: string;
   destination: string;
   allow: boolean;
-  reason?: Exclude<EgressReason, 'content-script' | 'not-ready' | 'unknown'>;
+  reason?: Exclude<EgressReason, 'content-script' | 'not-ready' | 'unknown' | 'transport-down'>;
   /**
    * An optional service's rule. Two optional services can use one url (the
    * bucket relay serves both contact discovery and people messages): a
@@ -54,7 +58,18 @@ export interface EgressRule {
   shared?: boolean;
   /** a chain node the person chose (or a preset one): a redirect within its host is followed */
   node?: boolean;
+  /** the only realm this rule serves; a realm-bound realm (nym) is served by nothing else */
+  realm?: EgressRealm;
+  /** this request class goes over nym, never directly */
+  nym?: RequestClass;
 }
+
+/**
+ * Requests that name you or your transaction. Over nym when it is on:
+ *  - `broadcast`: a transaction you send
+ *  - `own-tx`: a lookup of a transaction that is yours
+ */
+export type RequestClass = 'broadcast' | 'own-tx';
 
 export interface EgressTable {
   rules: EgressRule[];
@@ -62,10 +77,12 @@ export interface EgressTable {
   hosts: Record<string, 'allowed' | 'blocked'>;
   /** the Keplr-compatible site surface is on, so the worker may ask about unknown hosts */
   adhoc: boolean;
+  /** send over nym: requests of a nym class go through the tunnel */
+  nym?: boolean;
 }
 
 export type EgressDecision =
-  | { allow: true; host?: string; destination?: string }
+  | { allow: true; host?: string; destination?: string; nym?: RequestClass }
   | { allow: false; host: string; destination?: string; reason: EgressReason };
 
 const pathOf = (url: string): string => {
@@ -76,11 +93,20 @@ const pathOf = (url: string): string => {
   }
 };
 
+/** `*:9001` owns every host on that port (nym's entry gateways, picked by its directory) */
+const hostMatches = (ruleHost: string, host: string): boolean =>
+  ruleHost === host || (ruleHost.startsWith('*:') && host.endsWith(ruleHost.slice(1)));
+
 /**
  * Every rule tied for `url`: same host, longest path prefix, in table order.
  * The first owns it; the rest share it only when all of them are `shared`.
  */
-export const matchRules = (table: EgressTable, url: string): EgressRule[] => {
+export const matchRules = (
+  table: EgressTable,
+  url: string,
+  /** only the rules that serve this realm; every rule when absent */
+  realm?: EgressRealm,
+): EgressRule[] => {
   const host = hostOf(url);
   if (!host) {
     return [];
@@ -88,7 +114,8 @@ export const matchRules = (table: EgressTable, url: string): EgressRule[] => {
   const path = pathOf(url);
   let best: EgressRule[] = [];
   for (const rule of table.rules) {
-    if (rule.host === host && path.startsWith(rule.path)) {
+    const serves = !realm || (rule.realm ? rule.realm === realm : realm !== 'nym');
+    if (serves && hostMatches(rule.host, host) && path.startsWith(rule.path)) {
       const len = best[0]?.path.length ?? -1;
       if (rule.path.length > len) {
         best = [rule];
@@ -134,7 +161,7 @@ export const decideEgress = (
   if (isLocalDeviceHost(host)) {
     return { allow: true, host };
   }
-  const ties = matchRules(table, url);
+  const ties = matchRules(table, url, realm);
   // shared optional rules: the url passes when any of them is on
   const rule = ties.find(r => r.allow) ?? ties[0];
   const destination = rule?.destination;
@@ -143,7 +170,7 @@ export const decideEgress = (
     return { allow: false, host, destination, reason: 'blocked' };
   }
   if (override === 'allowed' || rule?.allow) {
-    return { allow: true, host, destination };
+    return { allow: true, host, destination, ...(rule?.nym ? { nym: rule.nym } : {}) };
   }
   return { allow: false, host, destination, reason: rule?.reason ?? 'unknown' };
 };

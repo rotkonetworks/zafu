@@ -218,6 +218,44 @@ describe('installEgress', () => {
   });
 });
 
+describe('send over nym', () => {
+  const NYM_TABLE: EgressTable = {
+    ...ALLOW_ZCASH,
+    rules: [
+      ...ALLOW_ZCASH.rules,
+      {
+        host: 'zcash.rotko.net',
+        path: '/zidecar.v1.Zidecar/SendTransaction',
+        destination: 'zcash',
+        allow: true,
+        nym: 'broadcast',
+      },
+    ],
+    nym: true,
+  };
+
+  it('fails closed when nym is not reachable: transport-down, nothing sent directly', async () => {
+    const { isEgressBlocked } = await install(NYM_TABLE);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const done = fetch('https://zcash.rotko.net/zidecar.v1.Zidecar/SendTransaction', {
+        method: 'POST',
+      }).catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      const err = await done;
+      expect(isEgressBlocked(err)).toBe(true);
+      expect((err as { refusal: { reason: string } }).refusal.reason).toBe('transport-down');
+      expect((err as Error).message).toBe("nym isn't reachable right now. nothing was sent.");
+      expect(nativeFetch).not.toHaveBeenCalled();
+      // the same host's sync is not held by nym
+      await fetch('https://zcash.rotko.net/zidecar.v1.Zidecar/GetCompactBlocks');
+      expect(nativeFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('table relay', () => {
   it('serves its table to a worker even when the storage realm is asleep', async () => {
     const egress = await import('./egress');

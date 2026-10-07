@@ -38,8 +38,15 @@ import { BUNDLED_SERVICE_CONFIG } from '../services/voting/bundled-config';
 import { BASE_RPC, PEER_HOSTS } from '../config/ramps';
 import { PAY_APPS } from '../buy/apps';
 import { hostOf } from './destination';
-import { matchRules, type EgressRule, type EgressTable } from './egress-table';
+import {
+  matchRules,
+  type EgressRealm,
+  type EgressRule,
+  type EgressTable,
+  type RequestClass,
+} from './egress-table';
 import type { NetPurpose } from './purpose';
+import { NYM } from './nym-bridge';
 
 export type { EgressDecision, EgressRealm, EgressReason, EgressTable } from './egress-table';
 
@@ -111,7 +118,41 @@ export interface DestinationSpec {
   urls: (i: EgressInputs) => (string | undefined)[];
   /** shelved service: not listed in settings, never on by default */
   hidden?: boolean;
+  /** the only realm that may reach it */
+  realm?: EgressRealm;
 }
+
+/**
+ * The requests that name you or your transaction, by destination. They go
+ * over nym while it is on; everything else to the same host stays direct
+ * (sync cannot stream through nym, and every wallet downloads the same blocks).
+ */
+const NYM_CLASSES: { cls: RequestClass; destination: string; paths: string[] }[] = [
+  {
+    cls: 'broadcast',
+    destination: 'zcash',
+    paths: [
+      '/zidecar.v1.Zidecar/SendTransaction',
+      '/cash.z.wallet.sdk.rpc.CompactTxStreamer/SendTransaction',
+    ],
+  },
+  {
+    cls: 'own-tx',
+    destination: 'zcash',
+    paths: [
+      '/zidecar.v1.Zidecar/GetTransaction',
+      '/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetTransaction',
+    ],
+  },
+];
+
+/** nym's exits only open these ports: a node on any other stays direct rather than unreachable */
+const NYM_EXIT_PORTS = new Set(['443', '80', '81', '9001']);
+
+const portOf = (url: string): string => {
+  const u = new URL(url);
+  return u.port || (u.protocol === 'http:' || u.protocol === 'ws:' ? '80' : '443');
+};
 
 /** the user's own rpc pool for a chain: what its balance checks rotate across */
 const rpcPool = (i: EgressInputs, chainId: CosmosChainId): string[] => {
@@ -354,6 +395,17 @@ export const DESTINATIONS: DestinationSpec[] = [
     urls: () => ['https://api.skip.build'],
   },
   {
+    id: NYM,
+    // asked at every tunnel start: the directory sees that you use nym, not
+    // what you send. The entry gateway is whichever the directory offers, on
+    // its websocket port.
+    label: 'nym',
+    purpose: 'relay',
+    gate: { kind: 'optional', setting: () => true },
+    urls: () => ['https://validator.nymtech.net/api', 'wss://*:9001'],
+    realm: 'nym',
+  },
+  {
     id: 'license',
     label: 'license server',
     purpose: 'license',
@@ -470,6 +522,7 @@ export const describeEgress = (i: EgressInputs): DestinationView[] => {
 /** Compile settings into the table every realm decides against. */
 export const compileEgress = (i: EgressInputs): EgressTable => {
   const rules: EgressRule[] = [];
+  const nym = stateOf(destinationSpec(NYM)!, i).on;
   for (const spec of DESTINATIONS) {
     const { on, why } = stateOf(spec, i);
     // one malformed input must not cost every other destination its row
@@ -483,14 +536,21 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
     for (const url of urls) {
       const target = url ? targetOf(url) : undefined;
       if (target) {
-        rules.push({
+        const rule: EgressRule = {
           ...target,
           destination: spec.id,
           allow: on,
           reason: on ? undefined : REASON[why],
           ...(spec.gate.kind === 'optional' ? { shared: true } : {}),
           ...(spec.purpose === 'chain-rpc' ? { node: true } : {}),
-        });
+          ...(spec.realm ? { realm: spec.realm } : {}),
+        };
+        rules.push(rule);
+        if (nym && on && NYM_EXIT_PORTS.has(portOf(url!))) {
+          for (const { cls, paths } of NYM_CLASSES.filter(c => c.destination === spec.id)) {
+            rules.push(...paths.map(p => ({ ...rule, path: `${target.path}${p}`, nym: cls })));
+          }
+        }
       }
     }
   }
@@ -500,5 +560,5 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
       hosts[host] = record.state;
     }
   }
-  return { rules, hosts, adhoc: i.keplrCompat === true };
+  return { rules, hosts, adhoc: i.keplrCompat === true, nym };
 };
