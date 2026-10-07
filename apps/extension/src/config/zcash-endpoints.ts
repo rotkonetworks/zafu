@@ -17,7 +17,7 @@
  * entry in settings and the lightwalletd backend code path both stay.
  *
  * Two backend flavors (see state/keyring/zcash-backend.ts):
- *   - zidecar - rotko-hosted; mempool watch and the tip cross-check.
+ *   - zidecar - rotko-hosted; mempool watch.
  *   - lightwalletd - public ECC lightwalletd / Zaino. Mempool watch is
  *     unavailable on this backend.
  *
@@ -60,7 +60,7 @@ export interface ZcashEndpointPreset {
  * Mainnet preset list. Order = visual order in the picker.
  *
  * Defaults to rotko's zidecar: the only preset that answers grpc-web with
- * CORS, and the one with mempool watch and the tip cross-check. It is
+ * CORS, and the one with mempool watch. It is
  * trusted for chain data like any other node. Anyone who can't reach it has
  * the public lightwalletd fallbacks one tap away.
  */
