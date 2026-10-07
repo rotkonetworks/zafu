@@ -40,8 +40,6 @@ export const selectPrivateDefaults = (s: AllSlices) => {
   return !(
     p.enableTransparentBalances ||
     p.enableTransactionHistory ||
-    p.transparentBackgroundSync ||
-    p.enablePriceFetching ||
     p.enableExplorerLinks
   );
 };

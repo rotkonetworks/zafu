@@ -35,11 +35,6 @@ export const SETTINGS_EXPLAIN = {
     on: 'the home screen and detail sheets show past activity',
     off: 'nothing is listed; past transactions still happened on-chain',
   },
-  'privacy.priceDisplay': {
-    blurb: 'shows a fiat estimate next to on-chain amounts.',
-    on: 'zafu asks a price service to convert the figure shown',
-    off: 'amounts show only in the asset itself, no price lookup',
-  },
   'privacy.transparentBalances': {
     blurb: 'what waits on your deposit addresses, before it is shielded.',
     on: 'zafu asks the nodes you picked, from your ip, when you tap a transparent line',

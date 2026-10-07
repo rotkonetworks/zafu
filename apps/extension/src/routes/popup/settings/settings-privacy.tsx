@@ -117,13 +117,6 @@ const PRIVACY_ROWS: readonly {
     group: 'on screen',
   },
   {
-    key: 'enablePriceFetching',
-    label: 'price display',
-    explainId: 'privacy.priceDisplay',
-    group: 'on screen',
-    visible: n => hasFeature(n, 'cosmos'),
-  },
-  {
     key: 'enableTransparentBalances',
     label: 'transparent balances',
     explainId: 'privacy.transparentBalances',

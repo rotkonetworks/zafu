@@ -741,18 +741,11 @@ chrome.alarms.onAlarm.addListener(async alarm => {
     if (!ui.open) {
       return;
     }
-    // privacy check: shielded (penumbra, zcash) networks always sync - trial
-    // decryption / p2p never leak addresses, so they have no toggle. Only
-    // transparent networks honor transparentBackgroundSync (off unless set;
-    // penumbra's "keep syncing when closed" is its own setting since v5).
-    // (Gating ALL sync on the raw flag wrongly disabled zcash background sync
-    // with no way to re-enable it, since zcash shows no toggle.)
-    const privacySettings = await localExtStorage.get('privacySettings');
+    // shielded (penumbra, zcash) networks always sync - trial decryption
+    // never leaks addresses; a transparent network's sync names them, so it
+    // never runs in the background
     const activeNetwork = await localExtStorage.get('activeNetwork');
-    const transparentBg = privacySettings?.transparentBackgroundSync === true;
-    const allowed = activeNetwork
-      ? networkAllowsBackgroundSync(activeNetwork, transparentBg)
-      : true;
+    const allowed = activeNetwork ? networkAllowsBackgroundSync(activeNetwork) : true;
     if (!allowed) {
       if (globalThis.__DEV__) {
         console.info('Background sync disabled by user privacy settings');
