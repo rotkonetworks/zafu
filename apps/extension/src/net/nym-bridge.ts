@@ -8,10 +8,12 @@
  * fail closed. A broadcast that could not reach nym is held while a zafu
  * window offers to send it directly instead, this once.
  *
- * Bundled into every worker: no imports beyond the table's.
+ * Bundled into every worker: no imports beyond the table's and the
+ * service worker's offscreen-document call.
  */
 
 import { hostOf } from './destination';
+import { ensureOffscreenDocument } from '../offscreen-document';
 import type { RequestClass } from './egress-table';
 
 /** the nym destination: "send over nym" is on unless the person blocks it (`optIns.nym`) */
@@ -100,16 +102,23 @@ const waitFor = <T>(
     send();
   });
 
-type Runtime = { sendMessage?: (m: unknown) => Promise<unknown> } | undefined;
+interface Chrome {
+  offscreen?: unknown;
+  runtime?: { sendMessage?: (m: unknown) => Promise<unknown> };
+}
 
 /**
  * Start the tunnel if it is not up (the host ignores this while nym is off).
- * Realms with chrome.runtime make sure the offscreen document exists first;
- * a web worker already lives inside it.
+ * The service worker makes sure the offscreen document exists; pages ask it
+ * to; a web worker already lives inside it.
  */
 export const startNym = async (): Promise<void> => {
-  const runtime = (globalThis as { chrome?: { runtime?: Runtime } }).chrome?.runtime;
-  await runtime?.sendMessage?.({ type: 'ZCASH_ENSURE_OFFSCREEN' })?.catch(() => undefined);
+  const chrome = (globalThis as { chrome?: Chrome }).chrome;
+  await (
+    chrome?.offscreen
+      ? ensureOffscreenDocument()
+      : chrome?.runtime?.sendMessage?.({ type: 'ZCASH_ENSURE_OFFSCREEN' })
+  )?.catch(() => undefined);
   postNym({ type: 'start' });
 };
 
