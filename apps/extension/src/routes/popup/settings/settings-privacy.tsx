@@ -3,7 +3,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../state';
 import { selectZcashBackend } from '../../../state/networks';
 import { privacySelector, type PrivacySettings } from '../../../state/privacy';
-import { selectActiveNetwork } from '../../../state/keyring';
+import { selectEnabledNetworks } from '../../../state/keyring';
 import { Section, SettingsScreen } from './settings-screen';
 import { Row } from '@repo/ui/components/ui/row';
 import { selectConnectedSiteCount } from './settings-status';
@@ -69,14 +69,14 @@ function ZcashWireRows({
   const zidecar = useStore(s => !!ZCASH_BACKENDS[selectZcashBackend(s)].extras);
   const setMemo = useStore(s => s.networks.setMemoSyncStrategy);
   const setMempool = useStore(s => s.networks.setMempoolWatch);
-  if (!zidecar) {
-    return null;
-  }
+  const needs = zidecar ? undefined : 'needs a zidecar node';
   return (
     <>
       <Row
         type='toggle'
         label='zcash: memo decoys'
+        description={needs}
+        disabled={!zidecar}
         checked={memo === 'private'}
         onChange={v => void setMemo('zcash', v ? 'private' : 'fast')}
         {...explainProps('privacy.zcashMemoDecoys')}
@@ -84,6 +84,8 @@ function ZcashWireRows({
       <Row
         type='toggle'
         label='zcash: instant pending'
+        description={needs}
+        disabled={!zidecar}
         checked={mempool === 'on'}
         onChange={v => void setMempool('zcash', v ? 'on' : 'off')}
         {...explainProps('privacy.zcashInstantPending')}
@@ -94,7 +96,7 @@ function ZcashWireRows({
 
 type Group = 'on screen' | 'network' | 'people';
 
-/** the boolean privacy settings, in board order. `visible` hides a row the active network has no use for. */
+/** the boolean privacy settings, in board order. `visible` hides a row no enabled network has a use for. */
 const PRIVACY_ROWS: readonly {
   key: keyof PrivacySettings;
   label: string;
@@ -316,13 +318,14 @@ export function PeopleRelayRow({ onExplain }: { onExplain?: (label: string) => v
 /** privacy: one screen, no nested "all controls" (SetPrivacy.dc.html). proxy is shelved, so it has no row. */
 export function SettingsPrivacy() {
   const { settings, setSetting } = useStore(privacySelector);
-  const activeNetwork = useStore(selectActiveNetwork);
+  const enabled = useStore(selectEnabledNetworks);
+  const zcashOn = enabled.some(n => hasFeature(n, 'zcash'));
   const sites = useStore(selectConnectedSiteCount);
   const navigate = usePopupNav();
   const { explainProps, sheet } = useExplain();
 
   const rows = (group: Group) =>
-    PRIVACY_ROWS.filter(r => r.group === group && (!r.visible || r.visible(activeNetwork))).map(
+    PRIVACY_ROWS.filter(r => r.group === group && (!r.visible || enabled.some(r.visible))).map(
       r => (
         <Row
           key={r.key}
@@ -342,7 +345,7 @@ export function SettingsPrivacy() {
         <Section title='on screen'>{rows('on screen')}</Section>
         <Section title='network'>
           {rows('network')}
-          {hasFeature(activeNetwork, 'zcash') && <ZcashWireRows explainProps={explainProps} />}
+          {zcashOn && <ZcashWireRows explainProps={explainProps} />}
           <Row
             type='screen'
             label='everything zafu talks to'
@@ -356,9 +359,7 @@ export function SettingsPrivacy() {
             <ContactDiscoverySection {...explainProps('privacy.contactDiscovery')} />
           )}
           <PeopleRelayRow {...explainProps('privacy.peopleRelay')} />
-          {hasFeature(activeNetwork, 'zcash') && (
-            <ZcashMeRow {...explainProps('privacy.zcashMe')} />
-          )}
+          {zcashOn && <ZcashMeRow {...explainProps('privacy.zcashMe')} />}
           {rows('people')}
         </Section>
         <Section title='sites'>

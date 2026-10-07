@@ -20,7 +20,7 @@ vi.mock('@repo/storage-chrome/local', () => ({
 }));
 vi.mock('../../../state', () => ({ useStore: () => undefined }));
 vi.mock('../../../state/privacy', () => ({ privacySelector: () => undefined }));
-vi.mock('../../../state/keyring', () => ({ selectActiveNetwork: () => undefined }));
+vi.mock('../../../state/keyring', () => ({ selectEnabledNetworks: () => [] }));
 vi.mock('../../../state/keyring/network-types', () => ({ isIbcNetwork: () => false }));
 vi.mock('../../../state/license', () => ({ isPro: () => false }));
 vi.mock('./settings-screen', () => ({ SettingsScreen: () => null }));
