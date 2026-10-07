@@ -12,8 +12,8 @@
 
 import { wrap, type Remote } from 'comlink';
 import type { IMixTunnelWorker } from '@nymproject/mix-tunnel';
-import { nymRoutingOn } from './egress';
-import { NYM_CHANNEL, NYM_WORKER_NAME, type NymMessage } from './nym-bridge';
+import { checkEgress, EgressBlockedError, nymRoutingOn } from './egress';
+import { NYM_CHANNEL, NYM_WORKER_NAME, type NymMessage, type NymRequestInit } from './nym-bridge';
 
 const channel = new BroadcastChannel(NYM_CHANNEL);
 const say = (m: NymMessage): void => channel.postMessage(m);
@@ -74,6 +74,7 @@ export const startNymTunnel = async (): Promise<void> => {
     console.warn('[nym] the tunnel did not start:', e);
     if (tunnel === mine) {
       stopNymTunnel();
+      say({ type: 'state', ready: false, down: true });
     }
     return;
   }
@@ -100,10 +101,15 @@ export const stopNymTunnel = (): void => {
 
 export const nymTunnelRunning = (): boolean => worker !== undefined;
 
-const relay = async (id: string, url: string, init: unknown): Promise<void> => {
+const relay = async (id: string, url: string, init: NymRequestInit): Promise<void> => {
   try {
     if (!tunnel || !ready) {
       throw new TypeError('nym is not running');
+    }
+    // the tunnel carries only what the policy allows, whoever asks
+    const decision = checkEgress(url);
+    if (!decision.allow) {
+      throw new EgressBlockedError(decision);
     }
     say({ type: 'response', id, ...(await (await tunnel).mixFetch(url, init)) });
   } catch (e) {

@@ -38,7 +38,8 @@ export type NymMessage =
   | { type: 'start' }
   | { type: 'stop' }
   | { type: 'ping' }
-  | { type: 'state'; ready: boolean }
+  /** `down`: the last start failed, so a waiting request need not wait out its bound */
+  | { type: 'state'; ready: boolean; down?: boolean }
   | { type: 'fetch'; id: string; url: string; init: NymRequestInit }
   | {
       type: 'response';
@@ -115,7 +116,7 @@ export const startNym = async (): Promise<void> => {
 /** true once the tunnel is ready, false if it was not within `ms` */
 export const nymReady = async (ms = NYM_READY_MS): Promise<boolean> =>
   (await waitFor(
-    m => (m.type === 'state' && m.ready ? true : undefined),
+    m => (m.type !== 'state' ? undefined : m.ready ? true : m.down ? false : undefined),
     ms,
     () => void startNym().then(() => postNym({ type: 'ping' })),
   )) ?? false;
