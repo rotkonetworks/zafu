@@ -196,7 +196,12 @@ export const recordOutcome = async (
 const refusedThisSession = new Set<string>();
 export const recordRefusal = async (refusal: EgressRefusal): Promise<void> => {
   const key = `${refusal.host}|${refusal.reason}`;
-  if (refusedThisSession.has(key) || refusal.reason === 'not-ready') {
+  // nym being down is no refusal of the host: it is said where it happened
+  if (
+    refusedThisSession.has(key) ||
+    refusal.reason === 'not-ready' ||
+    refusal.reason === 'transport-down'
+  ) {
     return;
   }
   refusedThisSession.add(key);
