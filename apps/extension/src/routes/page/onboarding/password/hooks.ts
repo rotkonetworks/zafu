@@ -126,9 +126,7 @@ export const useFinalizeOnboarding = () => {
     } else if (zcashWalletImport) {
       // zcash zigner import - use ZID as canonical deviceId for dedup
       const zignerData: ZignerZafuImport = {
-        viewingKey: zcashWalletImport.orchardFvk
-          ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
-          : (zcashWalletImport.ufvk ?? undefined),
+        viewingKey: zcashWalletImport.ufvk,
         accountIndex: zcashWalletImport.accountIndex,
         deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
         zidPublicKey: zcashWalletImport.zidPublicKey,

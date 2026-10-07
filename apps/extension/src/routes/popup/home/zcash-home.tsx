@@ -12,6 +12,7 @@ import {
   selectPenumbraOnly,
 } from '../../../state/keyring';
 import { selectActiveZcashWallet, selectZcashIsMainnet } from '../../../state/wallets';
+import { zcashViewKey } from '../../../state/zcash-view-key';
 import { CAPS, walletKind } from '../../../signing/wallet-kind';
 import {
   activeAccountIndex,
@@ -19,6 +20,7 @@ import {
   activePocketBirthday,
 } from '../../../state/pockets';
 import { Sensitive } from '../../../components/sensitive';
+import type { SyncNotice } from '../../../components/zcash/sync-status';
 import { PopupPath } from '../paths';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
@@ -85,6 +87,12 @@ const PENDING_VERB: Record<NonNullable<HistoryEntry['kind']>, string> = {
   send: 'sending',
   shield: 'shielding',
   migrate: 'moving to ironwood',
+};
+
+const NO_KEY: SyncNotice = {
+  tone: 'warn',
+  text: "zafu can't read this wallet's viewing key, so it can't sync",
+  meta: 'please scan your signer again',
 };
 
 /** zcash home: sync strip, hero balance, actions, in-flight, pools, activity */
@@ -215,6 +223,10 @@ export const ZcashContent = ({
     );
   }
 
+  // a cold wallet sync cannot start for (useZcashAutoSync) says so here, never a silent 0%
+  const keyless =
+    !hasMnemonic && kind !== 'ledger-transparent' && !!zcashWallet && !zcashViewKey(zcashWallet);
+
   const chainHeight = chainTip?.height ?? 0;
   // A pocket's own birthday is the scan floor once it has one: its notes
   // cannot predate its creation. Account 0 falls back to the wallet's.
@@ -328,6 +340,7 @@ export const ZcashContent = ({
           rebuilds
           synced={allSynced}
           failure={syncFailure?.kind === 'chainUnproven' ? null : syncFailure}
+          notice={keyless ? NO_KEY : undefined}
           preparing={notesPreparing}
           percent={overallPct}
           connecting={chainHeight <= 0}

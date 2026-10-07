@@ -220,19 +220,13 @@ export const ImportZigner = () => {
         // fall back to a hash-based deviceId so reimporting the same FVK
         // still dedups against itself.
         const kind = zcashWalletImport.coldSignerType ?? 'zigner';
-        const ufvkOrFvkB64 = zcashWalletImport.orchardFvk
-          ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
-          : (zcashWalletImport.ufvk ?? undefined);
-        let deviceId = zcashWalletImport.zidPublicKey;
-        if (!deviceId) {
-          deviceId =
-            kind === 'keystone' && ufvkOrFvkB64
-              ? keystoneDeviceId(ufvkOrFvkB64)
-              : `zcash-${Date.now()}`;
-        }
+        const ufvk = zcashWalletImport.ufvk;
+        const deviceId =
+          zcashWalletImport.zidPublicKey ??
+          (kind === 'keystone' && ufvk ? keystoneDeviceId(ufvk) : `zcash-${Date.now()}`);
         const defaultLabel = kind === 'keystone' ? 'keystone zcash' : 'zigner zcash';
         const zignerData: ZignerZafuImport = {
-          viewingKey: ufvkOrFvkB64,
+          viewingKey: ufvk,
           accountIndex: zcashWalletImport.accountIndex,
           deviceId,
           zidPublicKey: zcashWalletImport.zidPublicKey,
