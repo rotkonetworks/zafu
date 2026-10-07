@@ -34,7 +34,7 @@ const UnreadDot = () => {
       >
         {asking}
       </span>
-      <span className='sr-only'>, {asking} asking to join</span>
+      <span className='sr-only'>, {asking} waiting to come in</span>
     </>
   ) : unread ? (
     <>

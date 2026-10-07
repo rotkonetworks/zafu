@@ -37,6 +37,7 @@ import {
 } from '../../shared/vault-seal';
 import type { DepositPlan, DepositRequest, MoveCoin } from '../../workers/transparent-deposit';
 import type { StopOutcome } from '../../workers/build-abort';
+import type { DoorPakeCall } from '../../workers/door-pake';
 
 /** true only inside the offscreen document - the one place that owns real Workers */
 const isOffscreenHost = (): boolean =>
@@ -119,6 +120,7 @@ export interface NetworkWorkerMessage {
     | 'get-history'
     | 'get-pending-sends'
     | 'sync-memos'
+    | 'door-pake'
     | 'frost-dkg-part1'
     | 'frost-dkg-part2'
     | 'frost-dkg-part3'
@@ -1937,6 +1939,10 @@ const secretCall = async <T>(type: NetworkWorkerMessage['type'], args: unknown):
   );
   return (await open(await callWorker<SealedReply>('zcash', type, { sealed }))) as T;
 };
+
+/** one SPAKE2 step of a door (people/door-run); the words and keys cross sealed */
+export const doorPakeInWorker = <T>(call: DoorPakeCall): Promise<T> =>
+  secretCall('door-pake', call);
 
 /** DKG round 1: generate ephemeral identity + signed commitment */
 export const frostDkgPart1InWorker = async (

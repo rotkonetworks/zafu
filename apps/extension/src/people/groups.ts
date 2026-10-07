@@ -1,11 +1,17 @@
 /**
- * Groups, chat only: make one, open its door, ask to join, allow, and read
- * the roster from the founder's log (groups design 3.2, 3.3, 4.1).
+ * Groups: make one, open its door, come in by the code, and read the roster
+ * from the founder's log (groups design 3.2, 3.3, 4.1).
  *
  * Membership lives on a zirc channel log the founder writes and posts into
- * the group room: genesis, `+v` founder, `+v` each person they allowed. Every
+ * the group room: genesis, `+v` founder, `+v` each person who came in. Every
  * member verifies it from genesis, so the relay can withhold a roster update
- * but never forge one. Proposals, seals and the DKG are not here yet.
+ * but never forge one. Only someone who holds the room secret can ask in the
+ * room, and the secret only leaves inside a door run (people/door) or a memo
+ * invite, so the founder's device voices every ask it reads there.
+ *
+ * A shared wallet is a group made with a k of n: once n are on the roster,
+ * the founder's device says the start of its keys in the room (people/
+ * frost-room), and every member's device makes its share as it comes by.
  */
 
 import {
@@ -18,7 +24,6 @@ import {
 import type { ChannelGenesis, ChannelRecord } from '@zafu/zirc';
 import {
   GROUP_ROOM_PLAINTEXT_BYTES,
-  Room,
   ZAFU_GROUP_APP_SCOPE,
   type RoomMessage,
 } from '@zafu/zirc/room';
@@ -26,23 +31,24 @@ import { bytesToHex } from '@noble/hashes/utils';
 import type { XidKeys } from '../state/identity';
 import { cleanName, memberName, wordName } from './word-name';
 import {
-  CODE_RE,
-  codeNames,
+  ANSWERS_PER_CODE,
   DOOR_MS,
   DOOR_SCOPE,
+  DOOR_VERSION,
   decodeWire,
-  doorSecret,
   encodeWire,
   makeCode,
-  normalizeCode,
-  openInviteBody,
-  sealInviteBody,
+  plateSecret,
+  splitCode,
+  type InviteBody,
 } from './door';
-import { ephemeralIdentity, identityOf, verify } from './keys';
+import { packFrost, startBody, type Deal } from './frost-room';
+import { identityOf, verify } from './keys';
 import type { Gate, PeopleApi, PeopleService, RecordHandler } from './service';
 import { PeopleNeedsRelay } from './service';
-import type { GroupMember, PeopleRoom } from './vault';
-import { presenceEpoch, type RelayTransport } from '@zafu/zid';
+import type { DoorHeard, GroupMember, PeopleRoom } from './vault';
+import { presenceEpoch } from '@zafu/zid';
+import { OLD_CODE_RE, normalizeCode } from './protocol';
 
 export interface GroupDeps {
   walletId: () => Promise<string | undefined>;
@@ -52,21 +58,14 @@ export interface GroupDeps {
   /** where new rooms live */
   relay: () => Promise<string>;
   gate: (relay: string) => Promise<Gate>;
-  transport: (relay: string, size: number, signal: AbortSignal) => RelayTransport;
   now?: () => number;
 }
 
 export const groupId = (G: string) => `g:${G}`;
 export const doorId = (G: string) => `d:${G}`;
 
-/** what a code opens, before anyone asks to join */
-export interface DoorCard {
-  G: string;
-  group: string;
-  from: string;
-  count: number;
-  founder: string;
-}
+/** the door you type a code into says this when its maker needs a newer zafu */
+export const OLDER_CODE = 'this code is from an older zafu';
 
 const randomHex = (n: number) => bytesToHex(crypto.getRandomValues(new Uint8Array(n)));
 
@@ -89,9 +88,32 @@ const ensureGate = async (deps: GroupDeps, relay: string) => {
   }
 };
 
+/** k of n, read from a request: undefined for a plain group */
+const wantOf = (r: Record<string, unknown>): { k: number; n: number } | undefined => {
+  const [k, n] = [Number(r['k']), Number(r['n'])];
+  return Number.isInteger(k) && Number.isInteger(n) && k >= 2 && k <= n && n <= 32
+    ? { k, n }
+    : undefined;
+};
+
+/** what a door's records add to what it heard: each record once, newest kept */
+const heardOf = (room: PeopleRoom, records: RoomMessage[]): DoorHeard[] => {
+  const seen = new Set((room.door?.heard ?? []).map(h => `${h.from}:${JSON.stringify(h.wire)}`));
+  const fresh = records.flatMap(m => {
+    const w = decodeWire(m.body);
+    const wire = w?.kind === 'wh' || w?.kind === 'wj' || w?.kind === 'wa' ? w : undefined;
+    const key = wire && `${m.author}:${JSON.stringify(wire)}`;
+    if (!wire || seen.has(key!)) {
+      return [];
+    }
+    seen.add(key!);
+    return [{ from: m.author, at: m.ts, wire }];
+  });
+  return fresh;
+};
+
 export const createGroups = (deps: GroupDeps) => {
   const now = deps.now ?? (() => Date.now());
-  const peeks = new Map<string, DoorCard>();
 
   const keysFor = (room: Pick<PeopleRoom, 'walletId' | 'signer'>) =>
     deps.keys(room.walletId, room.signer.gen, room.signer.G!);
@@ -108,10 +130,54 @@ export const createGroups = (deps: GroupDeps) => {
     await api.send(room.id, encodeWire({ kind: 'names', names: g.names ?? {} }), 'action');
   };
 
+  /** a door this group answers at: a fresh code and salt, open an hour */
+  const openDoor = async (api: PeopleApi, room: PeopleRoom, at: number) => {
+    const code = makeCode();
+    const salt = randomHex(16);
+    const door: PeopleRoom = {
+      id: doorId(room.group!.G),
+      walletId: room.walletId,
+      kind: 'door',
+      name: room.name,
+      appScope: DOOR_SCOPE,
+      secret: plateSecret(splitCode(code)!.plate),
+      size: GROUP_ROOM_PLAINTEXT_BYTES,
+      relay: room.relay,
+      signer: room.signer,
+      joined: false,
+      createdAt: at,
+      // a new code is a new mailbox: nothing older to read
+      since: presenceEpoch(Math.floor(at / 1000)),
+      until: at + DOOR_MS,
+      door: { code, role: 'host', salt, heard: [], answered: [] },
+    };
+    await api.addRoom(door);
+    await api.send(door.id, encodeWire({ kind: 'wh', v: DOOR_VERSION, salt }), 'action');
+    return code;
+  };
+
+  /** doors whose hour ended a day ago are let go */
+  const sweep = (api: PeopleApi) =>
+    api.rooms().then(async rooms => {
+      for (const r of rooms) {
+        if (r.kind === 'door' && (r.until ?? 0) < now() - 86_400_000) {
+          await api.updateRoom(r.id, () => undefined);
+        }
+      }
+    });
+
   // -- the founder ---------------------------------------------------------
 
-  /** `nick`: what they call you in this group; empty, and your word name is used */
-  const create = async (svc: PeopleService, name: string, nick = '') => {
+  /**
+   * `nick`: what they call you in this group; empty, and your word name is
+   * used. `want`: a shared wallet, k of n.
+   */
+  const create = async (
+    svc: PeopleService,
+    name: string,
+    nick = '',
+    want?: { k: number; n: number },
+  ) => {
     const walletId = await deps.walletId();
     const group = name.trim().slice(0, 48);
     if (!walletId || !group) {
@@ -119,6 +185,7 @@ export const createGroups = (deps: GroupDeps) => {
     }
     const relay = await deps.relay();
     await ensureGate(deps, relay);
+    await sweep(svc.api);
     const gen = await deps.generation(walletId);
     const G = randomHex(16);
     const keys = await deps.keys(walletId, gen, G);
@@ -134,26 +201,22 @@ export const createGroups = (deps: GroupDeps) => {
     ];
     const mine = cleanName(nick);
     const names = { [me.pubkey]: mine || me.name! };
-    const code = makeCode(me.pubkey);
     const at = now();
-    const base = {
-      walletId,
-      relay,
-      size: GROUP_ROOM_PLAINTEXT_BYTES,
-      signer: { gen, G },
-      createdAt: at,
-      // a group is born here: nothing older to read
-      since: presenceEpoch(Math.floor(at / 1000)),
-    };
     const room: PeopleRoom = {
-      ...base,
       id: groupId(G),
+      walletId,
       kind: 'group',
       name: group,
       ...(mine ? { nick: mine } : {}),
       appScope: ZAFU_GROUP_APP_SCOPE,
       secret: randomHex(32),
+      size: GROUP_ROOM_PLAINTEXT_BYTES,
+      relay,
+      signer: { gen, G },
       joined: true,
+      createdAt: at,
+      // a group is born here: nothing older to read
+      since: presenceEpoch(Math.floor(at / 1000)),
       group: {
         G,
         founder: me.pubkey,
@@ -161,108 +224,13 @@ export const createGroups = (deps: GroupDeps) => {
         log: { genesis, records },
         names,
         members: rosterOf({ genesis, records }, names, at),
+        ...(want ? { want } : {}),
       },
     };
-    const door = await openDoor(room, code, at);
     await svc.api.addRoom(room);
-    await svc.api.addRoom(door);
+    const code = await openDoor(svc.api, room, at);
     await postRoster(svc.api, room);
-    await postCard(svc.api, door, room);
     return { id: room.id, code };
-  };
-
-  const openDoor = async (room: PeopleRoom, code: string, at: number): Promise<PeopleRoom> => ({
-    id: doorId(room.group!.G),
-    walletId: room.walletId,
-    kind: 'door',
-    name: room.name,
-    appScope: DOOR_SCOPE,
-    secret: bytesToHex(await doorSecret(code)),
-    size: GROUP_ROOM_PLAINTEXT_BYTES,
-    relay: room.relay,
-    signer: room.signer,
-    joined: false,
-    createdAt: at,
-    // a new code is a new room: nothing older to read
-    since: presenceEpoch(Math.floor(at / 1000)),
-    until: at + DOOR_MS,
-    group: { ...room.group!, code, requests: [], log: undefined, names: undefined },
-  });
-
-  const postCard = (api: PeopleApi, door: PeopleRoom, room: PeopleRoom) => {
-    const g = room.group!;
-    return api.send(
-      door.id,
-      encodeWire({
-        kind: 'card',
-        G: g.G,
-        founder: g.founder,
-        group: room.name,
-        from: memberName(g.founder, g.names?.[g.founder]),
-        count: g.members.length,
-      }),
-      'action',
-    );
-  };
-
-  /** the founder lets one person in: +v on the log, the secret sealed to them */
-  const allow = async (svc: PeopleService, G: string, key: string) => {
-    const rooms = await svc.api.room(groupId(G));
-    const door = await svc.api.room(doorId(G));
-    const ask = door?.group?.requests?.find(r => r.key === key);
-    if (!rooms || !door || !ask || !rooms.group?.mine || !rooms.group.log) {
-      throw new Error('nobody is asking');
-    }
-    const me = identityOf(await keysFor(rooms));
-    const { genesis, records } = rooms.group.log;
-    const voiced = rosterOf(rooms.group.log).some(m => m.key === key);
-    const next = voiced
-      ? records
-      : [
-          ...records,
-          await appendRecord({
-            genesis,
-            records,
-            author: me,
-            body: { kind: 'mode', mode: '+v', subject: key },
-          }),
-        ];
-    const names = { ...rooms.group.names, [key]: ask.name };
-    const at = now();
-    const room = await svc.api.updateRoom(groupId(G), r => ({
-      ...r,
-      group: {
-        ...r.group!,
-        log: { genesis, records: next },
-        names,
-        members: rosterOf({ genesis, records: next }, names, at),
-      },
-    }));
-    await svc.api.send(
-      doorId(G),
-      encodeWire({
-        kind: 'invite',
-        to: key,
-        sealed: sealInviteBody(ask.sealKey, {
-          secret: rooms.secret,
-          relay: rooms.relay,
-          group: rooms.name,
-        }),
-      }),
-      'action',
-    );
-    // remembered on the door: a pass that read the ask before this allow must not bring it back
-    await svc.api.updateRoom(doorId(G), r => ({
-      ...r,
-      group: {
-        ...r.group!,
-        requests: r.group!.requests?.filter(q => q.key !== key),
-        allowed: [...(r.group!.allowed ?? []), key],
-      },
-    }));
-    if (room) {
-      await postRoster(svc.api, room);
-    }
   };
 
   /** the founder: a fresh code when the hour is up */
@@ -272,187 +240,215 @@ export const createGroups = (deps: GroupDeps) => {
       throw new Error('only the founder can invite');
     }
     await ensureGate(deps, room.relay);
-    const code = makeCode(room.group.founder);
-    const door = await openDoor(room, code, now());
-    await svc.api.addRoom(door);
-    await postCard(svc.api, door, room);
-    return { code };
+    return { code: await openDoor(svc.api, room, now()) };
   };
 
-  /** the founder: not this person (their ask is not shown again) */
-  const decline = (svc: PeopleService, G: string, key: string) =>
-    svc.api.updateRoom(doorId(G), r => ({
-      ...r,
-      group: {
-        ...r.group!,
-        requests: r.group!.requests?.filter(q => q.key !== key),
-        declined: [...(r.group!.declined ?? []), key],
-      },
+  /** the founder answered one run: its record in the mailbox, and the words in the thread */
+  const answer = async (svc: PeopleService, r: Record<string, unknown>) => {
+    const door = await svc.api.room(String(r['roomId']));
+    const d = door?.door;
+    const jid = String(r['jid']);
+    const wire = {
+      kind: 'wa' as const,
+      v: DOOR_VERSION,
+      salt: String(r['salt']),
+      jid,
+      x: String(r['x']),
+      tag: String(r['tag']),
+      box: String(r['box']),
+    };
+    const ok = decodeWire(encodeWire(wire))?.kind === 'wa';
+    if (
+      !door ||
+      d?.role !== 'host' ||
+      !ok ||
+      wire.salt !== d.salt ||
+      (door.until ?? 0) < now() ||
+      (d.answered ?? []).some(a => a.jid === jid) ||
+      (d.answered ?? []).length >= ANSWERS_PER_CODE
+    ) {
+      throw new Error('this door does not answer that');
+    }
+    const words = String(r['words'] ?? '').slice(0, 40);
+    await svc.api.send(door.id, encodeWire(wire), 'action');
+    await svc.api.updateRoom(door.id, x => ({
+      ...x,
+      door: { ...x.door!, answered: [...(x.door!.answered ?? []), { jid, words, at: now() }] },
     }));
+    await svc.api.note(groupId(door.signer.G!), {
+      hash: `n:door:${jid}`,
+      body: `someone came in with the code · words to compare: ${words}`,
+      ts: Math.floor(now() / 1000),
+    });
+    return { ok: true };
+  };
 
   // -- the joiner ------------------------------------------------------------
 
-  /** read a door: who invites you, to what. Nothing is written. */
-  const peek = async (svc: PeopleService, raw: string): Promise<DoorCard | null> => {
+  /**
+   * a code typed in: its mailbox, read back over the door's hour. The same
+   * code again finds the door already open. Nothing is said yet: the
+   * screen's SPAKE2 step speaks once it has read the founder's hello.
+   */
+  const open = async (svc: PeopleService, raw: string, nick = '') => {
     const code = normalizeCode(raw);
-    if (!CODE_RE.test(code)) {
+    if (OLD_CODE_RE.test(code)) {
+      throw new Error(OLDER_CODE);
+    }
+    const plate = splitCode(code)?.plate;
+    const walletId = await deps.walletId();
+    if (!plate || !walletId) {
       throw new Error("zafu couldn't read this code");
     }
     const relay = await deps.relay();
     await ensureGate(deps, relay);
-    const room = new Room(ephemeralIdentity(), {
-      appScope: DOOR_SCOPE,
-      channel: '#zafu',
-      roomSecret: await doorSecret(code),
-      relay: deps.transport(relay, GROUP_ROOM_PLAINTEXT_BYTES, svc.signal()),
-      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
-      now: () => Math.floor(now() / 1000),
-    });
-    const { messages } = await room.sync(12);
-    // a card counts when it is signed by the founder it names (zirc verified
-    // the author's signature) and the code's last word names that founder.
-    // Nobody's timestamp decides: two different founders that both fit mean
-    // someone holding the code ground a key to match, and the door is refused.
-    const cards = messages.flatMap(m => {
-      const w = decodeWire(m.body);
-      return w?.kind === 'card' && w.founder === m.author && codeNames(code, w.founder)
-        ? [{ m, w }]
-        : [];
-    });
-    const founders = new Set(cards.map(c => c.w.founder));
-    if (founders.size > 1) {
-      throw new Error('this door is unclear');
-    }
-    // the founder's own newest card: the count may have grown since the first
-    const card = cards.sort((a, b) => b.m.seq - a.m.seq)[0];
-    if (!card) {
-      return null;
-    }
-    const { G, group, from, count, founder } = card.w;
-    const found = { G, group, from, count, founder };
-    peeks.set(code, found);
-    return found;
-  };
-
-  /**
-   * ask to join: your room key for this group, your name, your X-Wing key.
-   * The name is the one you chose for this group, or your word name for it.
-   */
-  const ask = async (svc: PeopleService, raw: string, nick = '') => {
-    const code = normalizeCode(raw);
-    const card = peeks.get(code) ?? (await peek(svc, code));
-    const walletId = await deps.walletId();
-    if (!card || !walletId) {
-      throw new Error('this code opens nothing right now');
-    }
-    const relay = await deps.relay();
-    const gen = await deps.generation(walletId);
-    const keys = await deps.keys(walletId, gen, card.G);
+    await sweep(svc.api);
     const at = now();
+    const was = (await svc.api.rooms()).find(
+      x =>
+        x.kind === 'door' &&
+        x.door?.role === 'join' &&
+        x.door.code === code &&
+        !x.door.wrong &&
+        (x.until ?? 0) > at,
+    );
+    if (was) {
+      void svc.api.sync(was.id).catch(() => undefined);
+      return { id: was.id };
+    }
+    const jid = randomHex(8);
     const mine = cleanName(nick);
     const door: PeopleRoom = {
-      id: doorId(card.G),
+      id: `d:${jid}`,
       walletId,
       kind: 'door',
-      name: card.group,
+      name: code,
       ...(mine ? { nick: mine } : {}),
       appScope: DOOR_SCOPE,
-      secret: bytesToHex(await doorSecret(code)),
+      secret: plateSecret(plate),
       size: GROUP_ROOM_PLAINTEXT_BYTES,
       relay,
-      signer: { gen, G: card.G },
+      // a key for this door alone: nothing it signs links to the group or to you
+      signer: { gen: await deps.generation(walletId), G: randomHex(16) },
       joined: false,
       createdAt: at,
+      // the founder's hello can be up to an hour old
+      since: presenceEpoch(Math.floor((at - DOOR_MS) / 1000)),
       until: at + DOOR_MS,
-      group: {
-        G: card.G,
-        founder: card.founder,
-        mine: false,
-        members: [],
-        names: { [card.founder]: cleanName(card.from) },
-      },
+      door: { code, role: 'join', jid, seed: randomHex(32), sent: [], heard: [] },
     };
     await svc.api.addRoom(door);
-    await svc.api.send(
-      door.id,
-      encodeWire({
-        kind: 'ask',
-        key: keys.pubkey,
-        name: mine || wordName(keys.pubkey),
-        seal: keys.xwingPublicKey,
-      }),
-      'action',
-    );
+    await svc.api.sync(door.id);
     return { id: door.id };
   };
 
-  // -- what a pass does with the records it found ----------------------------
-
-  const onDoor: RecordHandler = async (room, records, api) => {
-    const g = room.group;
-    if (!g) {
-      return undefined;
+  /** a joiner speaks to one founder's hello */
+  const join = async (svc: PeopleService, r: Record<string, unknown>) => {
+    const door = await svc.api.room(String(r['roomId']));
+    const d = door?.door;
+    const wire = {
+      kind: 'wj' as const,
+      v: DOOR_VERSION,
+      salt: String(r['salt']),
+      jid: d?.jid ?? '',
+      y: String(r['y']),
+    };
+    if (!door || d?.role !== 'join' || decodeWire(encodeWire(wire))?.kind !== 'wj') {
+      throw new Error('this door does not say that');
     }
-    const wires = records.map(m => ({ m, w: decodeWire(m.body) }));
-    if (g.mine) {
-      const asks = wires.flatMap(({ m, w }) =>
-        // an ask is signed by the key it names: nobody can ask in another's name
-        w?.kind === 'ask' && w.key === m.author
-          ? [{ key: w.key, name: memberName(w.key, w.name), sealKey: w.seal, at: m.ts * 1000 }]
-          : [],
-      );
-      const members = new Set(
-        ((await api.room(groupId(g.G)))?.group?.members ?? []).map(x => x.key),
-      );
-      const fresh = asks.filter(a => !members.has(a.key));
-      return fresh.length
-        ? r => {
-            const q = r.group?.requests ?? [];
-            const seen = new Set([
-              ...q.map(x => x.key),
-              ...(r.group?.declined ?? []),
-              ...(r.group?.allowed ?? []),
-            ]);
-            const add = fresh.filter(a => !seen.has(a.key));
-            return add.length ? { ...r, group: { ...r.group!, requests: [...q, ...add] } } : r;
-          }
-        : undefined;
-    }
-    if (g.opened) {
-      return undefined;
-    }
-    const me = await api.me(room);
-    const invite = wires.find(
-      ({ m, w }) => w?.kind === 'invite' && w.to === me && m.author === g.founder,
-    );
-    if (invite?.w?.kind !== 'invite') {
-      return undefined;
-    }
-    const keys = await keysFor(room);
-    const body = openInviteBody(keys.xwingSeed, invite.w.sealed);
-    await api.addRoom({
-      id: groupId(g.G),
-      walletId: room.walletId,
-      kind: 'group',
-      name: body.group || room.name,
-      ...(room.nick ? { nick: room.nick } : {}),
-      appScope: ZAFU_GROUP_APP_SCOPE,
-      secret: body.secret,
-      size: GROUP_ROOM_PLAINTEXT_BYTES,
-      relay: body.relay,
-      signer: room.signer,
-      joined: true,
-      createdAt: api.now(),
-      group: { G: g.G, founder: g.founder, mine: false, members: [], names: g.names },
-    });
-    void api.sync(groupId(g.G)).catch(() => undefined);
-    return r => ({ ...r, group: { ...r.group!, opened: true }, until: api.now() });
+    await svc.api.send(door.id, encodeWire(wire), 'action');
+    await svc.api.updateRoom(door.id, x => ({
+      ...x,
+      door: { ...x.door!, sent: [...new Set([...(x.door!.sent ?? []), wire.salt])] },
+    }));
+    return { ok: true };
   };
 
-  /**
-   * The founder: someone who joined by a memo invite asks in the room itself
-   * (only an invited person holds its secret). They go on the roster.
-   */
+  /** the answer opened: the group joins this wallet, and an ask puts you on its roster */
+  const enter = async (svc: PeopleService, r: Record<string, unknown>) => {
+    const door = await svc.api.room(String(r['roomId']));
+    const invite = r['invite'] as InviteBody | undefined;
+    const walletId = await deps.walletId();
+    if (
+      !door?.door ||
+      door.door.role !== 'join' ||
+      !walletId ||
+      !/^[0-9a-f]{64}$/.test(invite?.secret ?? '') ||
+      !/^[0-9a-f]{32}$/.test(invite?.G ?? '') ||
+      !/^[0-9a-f]{64}$/.test(invite?.founder ?? '') ||
+      typeof invite?.relay !== 'string'
+    ) {
+      throw new Error('not an invite');
+    }
+    const { G } = invite;
+    const words = String(r['words'] ?? '').slice(0, 40);
+    const want = wantOf({ ...invite.want });
+    if (!(await svc.api.room(groupId(G)))?.joined) {
+      const gen = await deps.generation(walletId);
+      const keys = await deps.keys(walletId, gen, G);
+      await svc.api.addRoom({
+        id: groupId(G),
+        walletId,
+        kind: 'group',
+        name: invite.group || 'a group',
+        ...(door.nick ? { nick: door.nick } : {}),
+        appScope: ZAFU_GROUP_APP_SCOPE,
+        secret: invite.secret,
+        size: GROUP_ROOM_PLAINTEXT_BYTES,
+        relay: invite.relay,
+        signer: { gen, G },
+        joined: true,
+        createdAt: now(),
+        group: {
+          G,
+          founder: invite.founder,
+          mine: false,
+          members: [],
+          names: { [invite.founder]: cleanName(invite.from) },
+          ...(want ? { want } : {}),
+        },
+      });
+      await svc.api.send(
+        groupId(G),
+        encodeWire({
+          kind: 'ask',
+          key: keys.pubkey,
+          name: door.nick || wordName(keys.pubkey),
+          seal: keys.xwingPublicKey,
+        }),
+        'action',
+      );
+      await svc.api.note(groupId(G), {
+        hash: `n:door:${door.door.jid}`,
+        body: `you came in with the code · words to compare: ${words}`,
+        ts: Math.floor(now() / 1000),
+      });
+      void svc.api.sync(groupId(G)).catch(() => undefined);
+    }
+    await svc.api.updateRoom(door.id, x => ({
+      ...x,
+      until: now(),
+      door: { ...x.door!, G, words },
+    }));
+    return { G };
+  };
+
+  /** every answer said the words differ */
+  const wrong = (svc: PeopleService, r: Record<string, unknown>) =>
+    svc.api.updateRoom(String(r['roomId']), x =>
+      x.door?.role === 'join' ? { ...x, until: now(), door: { ...x.door, wrong: true } } : x,
+    );
+
+  // -- what a pass does with the records it found ----------------------------
+
+  const onDoor: RecordHandler = async (room, records) => {
+    const fresh = room.door ? heardOf(room, records) : [];
+    return fresh.length
+      ? r => ({ ...r, door: { ...r.door!, heard: [...r.door!.heard, ...fresh].slice(-200) } })
+      : undefined;
+  };
+
+  /** The founder: everyone who asks in the room itself goes on the roster. */
   const voiceAsks = async (
     room: PeopleRoom,
     records: RoomMessage[],
@@ -474,6 +470,9 @@ export const createGroups = (deps: GroupDeps) => {
     let { records: log } = g.log;
     const names = { ...g.names };
     for (const a of asks) {
+      if (roster.has(a.key)) {
+        continue;
+      }
       log = [
         ...log,
         await appendRecord({
@@ -501,9 +500,37 @@ export const createGroups = (deps: GroupDeps) => {
     return next;
   };
 
+  /**
+   * The founder of a shared wallet: once n are on the roster, the start of
+   * its keys, said once. The first n members make it; a later ask still
+   * joins the chat.
+   */
+  const startWhenFull = async (room: PeopleRoom, api: PeopleApi, deal?: Deal) => {
+    const g = room.group;
+    const want = g?.want;
+    if (!g?.mine || !want || want.started || g.members.length < want.n) {
+      return;
+    }
+    const body = startBody(
+      g.members.slice(0, want.n).map(m => m.key),
+      want.k,
+      room.name,
+      deal ? { deal } : {},
+    );
+    // a room is read by one pass at a time, so said, then marked, is said once
+    for (const b of await packFrost(body)) {
+      await api.send(room.id, b, 'action');
+    }
+    await api.updateRoom(room.id, r => ({
+      ...r,
+      group: { ...r.group!, want: { ...r.group!.want!, started: body.id } },
+    }));
+  };
+
   const onGroup: RecordHandler = async (seen, records, api) => {
     // the room as it stands after any new member went on the roster
     const room = (await voiceAsks(seen, records, api)) ?? seen;
+    await startWhenFull(room, api, room.group?.deal);
     const g = room.group;
     if (!g) {
       return undefined;
@@ -545,7 +572,7 @@ export const createGroups = (deps: GroupDeps) => {
     if (log === g.log && !heard) {
       return undefined;
     }
-    // applied to the room as it is NOW: an allow may have landed while this
+    // applied to the room as it is NOW: an ask may have been voiced while this
     // pass read the relay, and a stale roster must never undo it. The log only
     // grows, so the longer verified one is the newer; the founder's own names
     // are theirs, a member takes the founder's latest word.
@@ -568,16 +595,14 @@ export const createGroups = (deps: GroupDeps) => {
   return {
     ops: {
       'group-create': (r: Record<string, unknown>, s: PeopleService) =>
-        create(s, String(r['name'] ?? ''), String(r['nick'] ?? '')),
-      'group-allow': (r: Record<string, unknown>, s: PeopleService) =>
-        allow(s, String(r['G']), String(r['key'])),
-      'group-decline': (r: Record<string, unknown>, s: PeopleService) =>
-        decline(s, String(r['G']), String(r['key'])),
+        create(s, String(r['name'] ?? ''), String(r['nick'] ?? ''), wantOf(r)),
       'group-renew': (r: Record<string, unknown>, s: PeopleService) => renew(s, String(r['G'])),
-      'door-peek': (r: Record<string, unknown>, s: PeopleService) =>
-        peek(s, String(r['code'] ?? '')),
-      'door-ask': (r: Record<string, unknown>, s: PeopleService) =>
-        ask(s, String(r['code'] ?? ''), String(r['nick'] ?? '')),
+      'door-open': (r: Record<string, unknown>, s: PeopleService) =>
+        open(s, String(r['code'] ?? ''), String(r['nick'] ?? '')),
+      'door-join': (r: Record<string, unknown>, s: PeopleService) => join(s, r),
+      'door-answer': (r: Record<string, unknown>, s: PeopleService) => answer(s, r),
+      'door-enter': (r: Record<string, unknown>, s: PeopleService) => enter(s, r),
+      'door-wrong': (r: Record<string, unknown>, s: PeopleService) => wrong(s, r),
     },
     handlers: { door: onDoor, group: onGroup },
   };

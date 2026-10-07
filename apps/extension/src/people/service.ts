@@ -302,7 +302,8 @@ export const createPeopleService = (
         roomSecret: hexBytes(rec.secret),
         relay: deps.transport(rec.relay, rec.size, s.abort.signal),
         plaintextBytes: rec.size,
-        ...(rec.kind === 'pair' || rec.kind === 'card' ? { shardFor: pairShard(rec.secret) } : {}),
+        // a door's mailbox moves each window too: its secret is only the code's number
+        ...(rec.kind !== 'group' ? { shardFor: pairShard(rec.secret) } : {}),
         now: () => Math.floor(now() / 1000),
         ...(rec.head ? { head: rec.head } : {}),
       },

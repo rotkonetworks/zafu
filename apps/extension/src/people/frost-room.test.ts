@@ -10,14 +10,13 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { beforeAll, describe, expect, test, vi } from 'vitest';
-import { scryptAsync } from '@noble/hashes/scrypt';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { RelayTransport } from '@zafu/zid';
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { deriveRoomKeys } from '../state/identity';
-import { chain, createPeopleService } from './service';
-import { createGroups, doorId, groupId } from './groups';
-import { identityOf } from './keys';
+import { chain } from './service';
+import { groupId } from './groups';
+import { comeIn, peopleWallet, realPake, relayBoard } from './door.test-util';
 import {
   advance,
   allowedIn,
@@ -49,23 +48,6 @@ import { advanceSign, decline, proposalsOf, seal, type SignCalls } from './room-
 // a busy CI runner, well past the 5s default.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-// The door code's scrypt (N 2^16, 64 MiB) is paid by the founder and by every
-// joiner, so it was most of each test's set-up time. These tests are about the
-// wallet made in the room, not the door's cost; groups.test.ts keeps the real
-// one. Same scrypt and salt, a cheap N: still one secret per code everywhere.
-vi.mock('./door', async importOriginal => {
-  const door = await importOriginal<typeof import('./door')>();
-  return {
-    ...door,
-    doorSecret: (code: string) =>
-      scryptAsync(
-        new TextEncoder().encode(door.normalizeCode(code)),
-        new TextEncoder().encode('zafu-group-door-v2'),
-        { ...door.DOOR_KDF, N: 2 ** 4 },
-      ),
-  };
-});
-
 type Wasm = typeof import('@repo/zcash-wasm');
 let W: Wasm;
 let frost: FrostCalls;
@@ -92,22 +74,6 @@ type PropBody = Extract<FrostBody, { t: 'prop' }>;
 /** a payment body under its own id */
 const propOf = (p: Omit<PropBody, 't' | 'id'>): PropBody => ({ t: 'prop', id: propId(p), ...p });
 
-const relayBoard = () => {
-  const board = new Map<string, Map<string, Uint8Array>>();
-  return (): RelayTransport => ({
-    putBucket: async req => {
-      const k = `${req.appScope}|${req.epoch}|${req.shard}`;
-      const coord = board.get(k) ?? new Map();
-      req.entries.forEach(e => coord.set(bytesToHex(e.tag), e.blob));
-      board.set(k, coord);
-    },
-    getBucket: async req =>
-      [...(board.get(`${req.appScope}|${req.epoch}|${req.shard}`)?.entries() ?? [])].map(
-        ([tag, blob]) => ({ tag: hexToBytes(tag), blob }),
-      ),
-  });
-};
-
 const PHRASES = [
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
   'legal winner thank year wave sausage worth useful legal winner thank yellow',
@@ -116,43 +82,15 @@ const PHRASES = [
 ];
 
 const wallet = (n: number, transport: () => RelayTransport, clock: { t: number }) => {
-  const walletId = `w${n}`;
-  const phrase = PHRASES[n]!;
-  let rooms: PeopleRoom[] = [];
-  let threads: Record<string, Thread> = {};
-  const keys = async (_w: string, gen: number, G: string) => deriveRoomKeys(phrase, gen, G);
-  const groups = createGroups({
-    walletId: async () => walletId,
-    keys,
-    generation: async () => 0,
-    relay: async () => 'https://relay.example',
-    gate: async () => 'on',
-    transport,
-    now: () => clock.t,
-  });
-  const service = createPeopleService(
-    {
-      readRooms: async () => structuredClone(rooms),
-      writeRooms: async r => ((rooms = structuredClone(r)), true),
-      readThreads: async () => structuredClone(threads),
-      writeThreads: async t => ((threads = structuredClone(t)), true),
-      walletId: async () => walletId,
-      identity: async room => identityOf(await keys(walletId, room.signer.gen, room.signer.G!)),
-      gate: async () => 'on',
-      transport,
-      status: () => undefined,
-      now: () => clock.t,
-    },
-    { ...groups.handlers, group: chain(groups.handlers.group, foldFrost) },
-  );
-  const op = (name: keyof typeof groups.ops, args: Record<string, unknown>) =>
-    groups.ops[name](args, service) as Promise<never>;
+  const base = peopleWallet(`w${n}`, PHRASES[n]!, transport, clock, h => ({
+    ...h,
+    group: chain(h.group, foldFrost),
+  }));
+  const { service, op, me } = base;
   const seats: Seat[] = [];
-  const me = (G: string) => deriveRoomKeys(phrase, 0, G);
-  const room = (G: string) => rooms.find(r => r.id === groupId(G))!;
+  const room = (G: string) => base.room(groupId(G))!;
   return {
-    service,
-    op,
+    ...base,
     seats,
     me,
     room,
@@ -178,7 +116,7 @@ const wallet = (n: number, transport: () => RelayTransport, clock: { t: number }
   };
 };
 
-/** a founder and `n - 1` people it allowed, all reading the same group */
+/** a founder and `n - 1` people who came in by its code, all reading the same group */
 const group = async (n: number) => {
   const transport = relayBoard();
   const clock = { t: Date.UTC(2026, 9, 4, 12) };
@@ -189,20 +127,14 @@ const group = async (n: number) => {
     code: string;
   };
   const G = id.slice(2);
+  const pake = await realPake();
   for (const w of rest) {
-    await w.op('door-ask', { code });
+    await comeIn(founder!, w, code, G, clock, pake);
   }
-  await founder!.service.open();
-  for (const w of rest) {
-    await founder!.op('group-allow', { G, key: w.me(G).pubkey });
-  }
-  for (const w of rest) {
-    await w.service.open();
-    await w.service.settled();
+  for (const w of ws) {
     await w.service.check();
   }
   expect(founder!.room(G).group?.members).toHaveLength(n);
-  expect(founder!.room(doorId(G))).toBeUndefined();
   return { ws, G, clock };
 };
 

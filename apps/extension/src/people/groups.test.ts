@@ -1,186 +1,83 @@
 /**
- * Two wallets make a group through its door on a fake relay: the founder
- * makes it, the other reads the code, asks, is allowed, opens the invite,
- * reads the roster from the founder's log, and they talk. A guesser who has
- * the code reads names and keys but cannot open the invite, and a roster
- * record nobody authorised is refused.
+ * Groups through the door, on a fake relay and the real SPAKE2: the founder
+ * makes a group, others type its code and come in, the roster comes from the
+ * founder's log, and they talk. A wrong word is seen at once and opens
+ * nothing, the relay's mailbox never holds the words, two codes that share a
+ * number stay apart, and a roster record nobody authorised is refused.
  *
  * @vitest-environment node
  */
 
-import { describe, expect, test, vi } from 'vitest';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
-import type { RelayTransport } from '@zafu/zid';
+import { beforeAll, describe, expect, test, vi } from 'vitest';
+import { hexToBytes } from '@noble/hashes/utils';
 import { appendRecord } from '@zafu/zirc';
 import { GROUP_ROOM_PLAINTEXT_BYTES, Room, ZAFU_GROUP_APP_SCOPE } from '@zafu/zirc/room';
 import { deriveRoomKeys } from '../state/identity';
-import { createPeopleService, threadKey } from './service';
-import { createGroups, doorId, groupId } from './groups';
-import {
-  codeNames,
-  decodeWire,
-  DOOR_SCOPE,
-  doorSecret,
-  encodeWire,
-  makeCode,
-  openInviteBody,
-  CODE_RE,
-} from './door';
-import { ephemeralIdentity, identityOf } from './keys';
+import { doorId, groupId, OLDER_CODE } from './groups';
+import { ANSWERS_PER_CODE, CODE_RE, encodeWire, makeCode, splitCode } from './door';
+import { doorView, hostStep, joinStep, type DoorPake } from './door-run';
+import { allowedIn, ceremonyOf, foldFrost } from './frost-room';
+import { identityOf } from './keys';
+import { chain } from './service';
 import { wordName } from './word-name';
-import type { PeopleRoom, Thread } from './vault';
+import { comeIn, peopleWallet, realPake, relayBoard } from './door.test-util';
 
-// every door here runs the real scrypt (N 2^16, 64 MiB) once per member: about
-// a second a test on a busy CI runner, so leave room past the 5s default
 vi.setConfig({ testTimeout: 30_000 });
-
-const relayBoard = () => {
-  const board = new Map<string, Map<string, Uint8Array>>();
-  return (): RelayTransport => ({
-    putBucket: async req => {
-      const k = `${req.appScope}|${req.epoch}|${req.shard}`;
-      const coord = board.get(k) ?? new Map();
-      req.entries.forEach(e => coord.set(bytesToHex(e.tag), e.blob));
-      board.set(k, coord);
-    },
-    getBucket: async req =>
-      [...(board.get(`${req.appScope}|${req.epoch}|${req.shard}`)?.entries() ?? [])].map(
-        ([tag, blob]) => ({ tag: hexToBytes(tag), blob }),
-      ),
-  });
-};
 
 const ALICE =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const BOB = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
-const RELAY = 'https://relay.example';
+const CAROL = 'letter advice cage absurd amount doctor acoustic avoid letter advice cage above';
+const EVE = 'zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong';
 
-const wallet = (
-  walletId: string,
-  phrase: string,
-  transport: () => RelayTransport,
-  clock: { t: number },
-) => {
-  let rooms: PeopleRoom[] = [];
-  let threads: Record<string, Thread> = {};
-  const keys = async (_w: string, gen: number, G: string) => deriveRoomKeys(phrase, gen, G);
-  const groups = createGroups({
-    walletId: async () => walletId,
-    keys,
-    generation: async () => 0,
-    relay: async () => RELAY,
-    gate: async () => 'on',
-    transport,
-    now: () => clock.t,
-  });
-  const service = createPeopleService(
-    {
-      readRooms: async () => structuredClone(rooms),
-      writeRooms: async r => ((rooms = structuredClone(r)), true),
-      readThreads: async () => structuredClone(threads),
-      writeThreads: async t => ((threads = structuredClone(t)), true),
-      walletId: async () => walletId,
-      identity: async room => identityOf(await keys(walletId, room.signer.gen, room.signer.G!)),
-      gate: async () => 'on',
-      transport,
-      status: () => undefined,
-      now: () => clock.t,
-    },
-    groups.handlers,
-  );
-  const op = (name: keyof typeof groups.ops, args: Record<string, unknown>) =>
-    groups.ops[name](args, service) as Promise<never>;
+let pake: DoorPake;
+beforeAll(async () => {
+  pake = await realPake();
+});
+
+const setup = (...phrases: string[]) => {
+  const transport = relayBoard();
+  const clock = { t: Date.UTC(2026, 9, 7, 12) };
   return {
-    service,
-    op,
-    groups,
-    room: (id: string) => rooms.find(r => r.id === id),
-    lines: (id: string) =>
-      threads[threadKey({ walletId, id })]?.items.map(i => `${i.name}: ${i.body}`),
+    transport,
+    clock,
+    ws: phrases.map((p, i) =>
+      peopleWallet(`w${i}`, p, transport, clock, h => ({
+        ...h,
+        group: chain(h.group, foldFrost),
+      })),
+    ),
   };
 };
 
+const make = async (w: ReturnType<typeof setup>['ws'][number], args: Record<string, unknown>) => {
+  const { id, code } = (await w.op('group-create', args)) as { id: string; code: string };
+  return { G: id.slice(2), code };
+};
+
 describe('a group through its door', () => {
-  test('make, ask, allow, join, talk', async () => {
-    const transport = relayBoard();
-    const clock = { t: Date.UTC(2026, 9, 3, 12) };
-    const a = wallet('wa', ALICE, transport, clock);
-    const b = wallet('wb', BOB, transport, clock);
-
-    const { id, code } = (await a.op('group-create', {
-      name: 'treasury',
-      nick: 'alice',
-    })) as unknown as {
-      id: string;
-      code: string;
-    };
+  test('make, type the code, come in, talk: no allow step, the same words on both sides', async () => {
+    const { ws, clock } = setup(ALICE, BOB);
+    const [a, b] = ws as [(typeof ws)[0], (typeof ws)[0]];
+    const { G, code } = await make(a, { name: 'treasury', nick: 'alice' });
     expect(code).toMatch(CODE_RE);
-    const G = id.slice(2);
 
-    clock.t += 30_000;
-    const card = await b.op('door-peek', { code });
-    expect(card).toMatchObject({ G, group: 'treasury', count: 1, from: 'alice' });
-    await b.op('door-ask', { code });
-
-    clock.t += 30_000;
-    await a.service.open();
-    const asks = a.room(doorId(G))?.group?.requests ?? [];
-    expect(asks).toHaveLength(1);
+    const door = await comeIn(a, b, code, G, clock, pake);
+    expect(doorView(door, clock.t)).toBe('in');
     const bobKey = deriveRoomKeys(BOB, 0, G).pubkey;
-    expect(asks[0]!.key).toBe(bobKey);
-    // a pass that read the ask before "allow" and lands after it
-    const stale = structuredClone(a.room(doorId(G))!);
-    const bob = deriveRoomKeys(BOB, 0, G);
-    const late = await a.groups.handlers.door(
-      stale,
-      [
-        {
-          body: encodeWire({ kind: 'ask', key: bobKey, name: 'x', seal: bob.xwingPublicKey }),
-          author: bobKey,
-          ts: Math.floor(clock.t / 1000),
-        } as never,
-      ],
-      a.service.api,
-    );
-    // and a pass over the group room that read its roster before "allow"
-    const aliceRoomKey = deriveRoomKeys(ALICE, 0, G).pubkey;
-    const staleRoster = await a.groups.handlers.group(
-      structuredClone(a.room(groupId(G))!),
-      [
-        {
-          body: encodeWire({ kind: 'names', names: {} }),
-          author: aliceRoomKey,
-          ts: Math.floor(clock.t / 1000),
-        } as never,
-      ],
-      a.service.api,
-    );
+    const aliceKey = deriveRoomKeys(ALICE, 0, G).pubkey;
+    expect(a.room(groupId(G))?.group?.members.map(m => m.key)).toEqual([aliceKey, bobKey]);
+    expect(b.room(groupId(G))?.group?.members.map(m => m.key)).toEqual([aliceKey, bobKey]);
+    expect(b.room(groupId(G))?.name).toBe('treasury');
     // bob chose no name: the founder sees his word name for this group, never hex
-    expect(asks[0]!.name).toBe(wordName(bobKey));
+    expect(a.room(groupId(G))?.group?.names?.[bobKey]).toBe(wordName(bobKey));
 
-    await a.op('group-allow', { G, key: bobKey });
-    expect(a.room(groupId(G))?.group?.members.map(m => m.key)).toEqual([
-      deriveRoomKeys(ALICE, 0, G).pubkey,
-      bobKey,
-    ]);
-    expect(a.room(doorId(G))?.group?.requests).toEqual([]);
-    await a.service.api.updateRoom(doorId(G), r => (late ? late(r) : r));
-    expect(a.room(doorId(G))?.group?.requests).toEqual([]);
-    await a.service.api.updateRoom(groupId(G), r => (staleRoster ? staleRoster(r) : r));
-    expect(a.room(groupId(G))?.group?.members.map(m => m.key)).toEqual([aliceRoomKey, bobKey]);
-
-    clock.t += 30_000;
-    await b.service.open(); // opens the invite, joins the group
-    await b.service.settled();
-    await b.service.check(); // and reads the roster from the founder's log
-    const joined = b.room(groupId(G));
-    expect(joined?.joined).toBe(true);
-    expect(joined?.name).toBe('treasury');
-    expect(joined?.group?.members.map(m => m.key)).toEqual([
-      deriveRoomKeys(ALICE, 0, G).pubkey,
-      bobKey,
-    ]);
-    expect(b.room(doorId(G))?.group?.opened).toBe(true);
+    // both sides were shown the same two words, and nothing asked them to compare
+    const words = a.room(doorId(G))?.door?.answered?.[0]?.words;
+    expect(words?.split(' ')).toHaveLength(2);
+    expect(door.door?.words).toBe(words);
+    expect(a.lines(groupId(G))?.some(l => l.includes(words!))).toBe(true);
+    expect(b.lines(groupId(G))?.some(l => l.includes(words!))).toBe(true);
 
     expect(await a.service.say(groupId(G), 'alice sent the logo files')).toBe('sent');
     clock.t += 10_000;
@@ -188,135 +85,136 @@ describe('a group through its door', () => {
     expect(await b.service.say(groupId(G), 'paying her today?')).toBe('sent');
     clock.t += 10_000;
     await a.service.check();
-    expect(a.lines(groupId(G))).toEqual([
+    const said = (w: typeof a) => w.lines(groupId(G))?.filter(l => !l.startsWith(': '));
+    expect(said(a)).toEqual([
       'alice: alice sent the logo files',
       `${wordName(bobKey)}: paying her today?`,
     ]);
-    // the roster names agree on both sides
-    const aliceKey = deriveRoomKeys(ALICE, 0, G).pubkey;
-    expect(b.room(groupId(G))?.group?.members.map(m => m.name)).toEqual([
-      'alice',
-      wordName(bobKey),
-    ]);
-    expect(a.room(groupId(G))?.group?.names?.[aliceKey]).toBe('alice');
-    expect(b.lines(groupId(G))).toEqual(a.lines(groupId(G)));
-
-    // once allowed, the ask is not shown again on the next pass
-    await a.service.check();
-    expect(a.room(doorId(G))?.group?.requests).toEqual([]);
+    expect(said(b)).toEqual(said(a));
   });
 
-  test('a guesser with the code reads the door but cannot open the invite', async () => {
-    const transport = relayBoard();
-    const clock = { t: Date.UTC(2026, 9, 3, 12) };
-    const a = wallet('wa', ALICE, transport, clock);
-    const b = wallet('wb', BOB, transport, clock);
-    const { id, code } = (await a.op('group-create', { name: 'treasury' })) as unknown as {
-      id: string;
-      code: string;
-    };
-    const G = id.slice(2);
-    await b.op('door-ask', { code });
-    await a.service.open();
-    const bobKey = deriveRoomKeys(BOB, 0, G).pubkey;
-    await a.op('group-allow', { G, key: bobKey });
+  test('a wrong word is seen at once, opens nothing, and leaves the roster as it was', async () => {
+    const { ws, clock } = setup(ALICE, EVE);
+    const [a, e] = ws as [(typeof ws)[0], (typeof ws)[0]];
+    const { G, code } = await make(a, { name: 'treasury' });
+    const [n, w1] = code.split('-');
+    const guess = `${n}-${w1}-${w1 === 'zoo' ? 'abandon' : 'zoo'}`;
 
-    const eve = deriveRoomKeys('zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong', 0, G);
-    const door = new Room(identityOf(eve), {
-      appScope: DOOR_SCOPE,
-      roomSecret: await doorSecret(code),
-      relay: transport(),
-      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
-      now: () => Math.floor(clock.t / 1000),
-    });
-    const wires = (await door.sync(12)).messages.map(m => decodeWire(m.body));
-    expect(wires.map(w => w?.kind).sort()).toEqual(['ask', 'card', 'invite']);
-    const invite = wires.find(w => w?.kind === 'invite');
-    expect(invite?.kind).toBe('invite');
-    expect(() =>
-      openInviteBody(eve.xwingSeed, (invite as { sealed: Uint8Array }).sealed),
-    ).toThrow();
-    // and the one it was sealed to opens it
-    const body = openInviteBody(
-      deriveRoomKeys(BOB, 0, G).xwingSeed,
-      (invite as { sealed: Uint8Array }).sealed,
+    const door = await comeIn(a, e, guess, G, clock, pake);
+    expect(doorView(door, clock.t)).toBe('wrong');
+    expect(e.room(groupId(G))).toBeUndefined();
+    expect(a.room(groupId(G))?.group?.members).toHaveLength(1);
+    // the founder answered one run: the one guess it got
+    expect(a.room(doorId(G))?.door?.answered).toHaveLength(1);
+  });
+
+  test("the relay's mailbox holds the number's records, never the words", async () => {
+    const { ws, clock } = setup(ALICE, BOB);
+    const [a, b] = ws as [(typeof ws)[0], (typeof ws)[0]];
+    const { G, code } = await make(a, { name: 'treasury' });
+    await comeIn(a, b, code, G, clock, pake);
+    const said = JSON.stringify(a.room(doorId(G))?.door?.heard);
+    expect(said).toContain('"wj"');
+    expect(said).toContain('"wa"');
+    for (const w of splitCode(code)!.words.split('-')) {
+      expect(said).not.toMatch(new RegExp(`\\b${w}\\b`));
+    }
+  });
+
+  test('two codes on one number: the joiner speaks to both, and comes into the one whose words it has', async () => {
+    const { ws, clock } = setup(ALICE, CAROL, BOB);
+    const [a, c, b] = ws as [(typeof ws)[0], (typeof ws)[0], (typeof ws)[0]];
+    const one = await make(a, { name: 'treasury' });
+    const two = await make(c, { name: 'studio' });
+    // carol's door moved onto alice's number: the same mailbox, other words
+    const moved = `${splitCode(one.code)!.plate}-${splitCode(two.code)!.words}`;
+    await c.service.api.updateRoom(doorId(two.G), r => ({
+      ...r,
+      secret: a.room(doorId(one.G))!.secret,
+      door: { ...r.door!, code: moved },
+    }));
+    c.service.close();
+    await c.service.api.send(
+      doorId(two.G),
+      encodeWire({ kind: 'wh', v: 1, salt: c.room(doorId(two.G))!.door!.salt! }),
+      'action',
     );
-    expect(body.secret).toBe(a.room(groupId(G))?.secret);
+
+    const { id } = (await b.op('door-open', { code: one.code })) as { id: string };
+    await joinStep(b.room(id)!, pake, b.call);
+    expect(b.room(id)?.door?.sent).toHaveLength(2);
+    for (const [w, G] of [
+      [a, one.G],
+      [c, two.G],
+    ] as const) {
+      await w.service.check();
+      await hostStep(w.room(doorId(G))!, w.room(groupId(G)), pake, w.call);
+    }
+    await b.service.check();
+    await joinStep(b.room(id)!, pake, b.call);
+    const door = b.room(id)!;
+    expect(doorView(door, clock.t)).toBe('in');
+    expect(door.door?.G).toBe(one.G);
+    expect(b.room(groupId(two.G))).toBeUndefined();
   });
 
-  test('the code names its founder: a code holder posting a newer card does not take the door', async () => {
-    const transport = relayBoard();
-    const clock = { t: Date.UTC(2026, 9, 3, 12) };
-    const a = wallet('wa', ALICE, transport, clock);
-    const b = wallet('wb', BOB, transport, clock);
-    const { id, code } = (await a.op('group-create', { name: 'treasury' })) as unknown as {
-      id: string;
-      code: string;
-    };
-    const G = id.slice(2);
-    const door = async (who: ReturnType<typeof ephemeralIdentity>) =>
-      new Room(who, {
-        appScope: DOOR_SCOPE,
-        roomSecret: await doorSecret(code),
-        relay: transport(),
-        plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
-        now: () => Math.floor(clock.t / 1000),
-      });
-    const fakeCard = (founder: string) =>
-      encodeWire({
-        kind: 'card',
-        G: 'ee'.repeat(16),
-        founder,
-        group: 'treasury',
-        from: 'alice',
-        count: 1,
-      });
-
-    // a later card from someone the code does not name: ignored
-    clock.t += 60_000;
-    let eve = ephemeralIdentity();
-    while (codeNames(code, eve.pubkey)) {
-      eve = ephemeralIdentity();
-    }
-    await (await door(eve)).send(fakeCard(eve.pubkey), { kind: 'action' });
-    expect(await b.op('door-peek', { code })).toMatchObject({ G, group: 'treasury' });
-
-    // a key ground to fit the code's last word: two founders fit, so the door is refused
-    let ground = ephemeralIdentity();
-    while (!codeNames(code, ground.pubkey)) {
-      ground = ephemeralIdentity();
-    }
-    await (await door(ground)).send(fakeCard(ground.pubkey), { kind: 'action' });
-    await expect(b.op('door-peek', { code })).rejects.toThrow(/unclear/);
+  test('a code from an older zafu says so', async () => {
+    const { ws } = setup(BOB);
+    await expect(ws[0]!.op('door-open', { code: '673-chaos-mail-kite' })).rejects.toThrow(
+      OLDER_CODE,
+    );
   });
 
-  test('a code is three digits and three words, the last naming its founder', () => {
-    const founder = ephemeralIdentity().pubkey;
-    const code = makeCode(founder);
-    expect(code).toMatch(CODE_RE);
-    expect(codeNames(code, founder)).toBe(true);
-    // the same digits and words with any other last word do not name them
-    const parts = code.split('-');
-    const swapped = [...parts.slice(0, 3), parts[3] === 'kite' ? 'mail' : 'kite'].join('-');
-    expect(codeNames(swapped, founder)).toBe(false);
+  test('a code is a number and two words; the founder answers at most a dozen runs', () => {
+    for (let i = 0; i < 50; i++) {
+      const code = makeCode();
+      expect(code).toMatch(CODE_RE);
+      const { plate } = splitCode(code)!;
+      expect(plate).toBeGreaterThanOrEqual(1);
+      expect(plate).toBeLessThanOrEqual(999);
+    }
+    expect(ANSWERS_PER_CODE).toBe(12);
+  });
+
+  test('a shared wallet: once n are in, the founder starts its keys, by itself, for the n', async () => {
+    const { ws, clock, transport } = setup(ALICE, BOB, CAROL);
+    const [a, b, c] = ws as [(typeof ws)[0], (typeof ws)[0], (typeof ws)[0]];
+    const { G, code } = await make(a, { name: 'savings', k: 2, n: 3 });
+    expect(a.room(groupId(G))?.group?.want).toEqual({ k: 2, n: 3 });
+
+    await comeIn(a, b, code, G, clock, pake);
+    expect(a.room(groupId(G))?.group?.want?.started).toBeUndefined();
+    expect(b.room(groupId(G))?.group?.want).toEqual({ k: 2, n: 3 });
+
+    clock.t += 10 * 60_000;
+    await comeIn(a, c, code, G, clock, pake);
+    await a.service.check();
+    await b.service.check();
+    await c.service.check();
+    const started = a.room(groupId(G))?.group?.want?.started;
+    expect(started).toBeTruthy();
+    for (const w of [a, b, c]) {
+      const r = w.room(groupId(G))!;
+      const cer = ceremonyOf(r.frost?.msgs, allowedIn(r, w.me(G).pubkey));
+      expect(cer?.id).toBe(started);
+      expect(cer?.k).toBe(2);
+      expect(cer?.members).toHaveLength(3);
+    }
+
+    // full: a fourth who types the code is not answered
+    const e = peopleWallet('w9', EVE, transport, clock);
+    const { id } = (await e.op('door-open', { code })) as { id: string };
+    await joinStep(e.room(id)!, pake, e.call);
+    await a.service.check();
+    await hostStep(a.room(doorId(G))!, a.room(groupId(G)), pake, a.call);
+    expect(a.room(doorId(G))?.door?.answered).toHaveLength(2);
   });
 
   test('a roster record the founder did not write is refused', async () => {
-    const transport = relayBoard();
-    const clock = { t: Date.UTC(2026, 9, 3, 12) };
-    const a = wallet('wa', ALICE, transport, clock);
-    const b = wallet('wb', BOB, transport, clock);
-    const { id, code } = (await a.op('group-create', { name: 'treasury' })) as unknown as {
-      id: string;
-      code: string;
-    };
-    const G = id.slice(2);
-    await b.op('door-ask', { code });
-    await a.service.open();
-    await a.op('group-allow', { G, key: deriveRoomKeys(BOB, 0, G).pubkey });
-    await b.service.open();
-    await b.service.settled();
-    await b.service.check();
+    const { ws, clock, transport } = setup(ALICE, BOB);
+    const [a, b] = ws as [(typeof ws)[0], (typeof ws)[0]];
+    const { G, code } = await make(a, { name: 'treasury' });
+    await comeIn(a, b, code, G, clock, pake);
 
     // bob, a member, voices someone himself and posts it as the next log record
     const room = b.room(groupId(G))!;

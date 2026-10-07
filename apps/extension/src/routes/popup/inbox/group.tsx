@@ -23,7 +23,9 @@ import { KeyCard, MakeSharedSheet } from './shared-wallet';
 import { PaymentCard, ProposeSheet } from './payments';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { whenOf } from './threads';
-import { JoinAsks, asksOf } from './join-asks';
+import { useDoors } from '../../../people/use-door';
+import { doorId } from '../../../people/groups';
+import type { PeopleRoom } from '../../../people/vault';
 import { useMemberName } from './use-member-name';
 import { SendState } from './send-state';
 
@@ -34,6 +36,13 @@ const dayOf = (s: number) => {
 
 /** how many people, said as a person would */
 export const peopleCount = (n: number) => (n === 1 ? 'just you' : `${n} people`);
+
+/** a shared wallet still filling: "2 of 3 · waiting for 1 more" */
+export const waitingLine = (room: PeopleRoom): string | undefined => {
+  const want = room.group?.want;
+  const left = want ? want.n - (room.group?.members.length || 1) : 0;
+  return want && left > 0 ? `${want.k} of ${want.n} · waiting for ${left} more` : undefined;
+};
 
 const Line = ({
   item,
@@ -69,8 +78,9 @@ export function GroupPage() {
   const roomId = `g:${G}`;
   const rooms = useMyRooms();
   const room = rooms.find(r => r.id === roomId);
-  // the founder's open door: who is asking shows here too, pinned
-  const { door } = asksOf(rooms, G);
+  // the founder's open door answers while the group is on screen
+  const door = rooms.find(r => r.id === doorId(G) && (r.until ?? 0) > Date.now());
+  useDoors();
   const nameFor = useMemberName(room);
   const thread = useThread(room);
   const [draft, setDraft] = useState('');
@@ -158,12 +168,11 @@ export function GroupPage() {
         line={
           ms
             ? `${ms.threshold} of ${ms.maxSigners} · ${held === undefined ? '…' : held ? fmtZec(Number(held) / 1e8, 4) : '0.00'} zec shared`
-            : `group chat · ${peopleCount(room.group?.members.length || 1)}`
+            : (waitingLine(room) ?? `group chat · ${peopleCount(room.group?.members.length || 1)}`)
         }
         onInvite={room.group?.mine ? () => navigate(groupInvitePath(G)) : undefined}
       />
       <RelaySlot />
-      <JoinAsks room={room} door={door} />
       <div
         ref={scroll.ref}
         onScroll={scroll.onScroll}
@@ -180,12 +189,16 @@ export function GroupPage() {
               {dayOf(it.ts) !== (prev ? dayOf(prev.ts) : '') && (
                 <span className='self-center text-[11px] text-fg-dim'>{dayOf(it.ts)}</span>
               )}
-              <Line
-                item={it}
-                name={nameOf(it)}
-                showName={prev?.author !== it.author || prev.mine !== it.mine}
-                say={say}
-              />
+              {it.kind === 'note' ? (
+                <span className='self-center text-center text-[11px] text-fg-dim'>{it.body}</span>
+              ) : (
+                <Line
+                  item={it}
+                  name={nameOf(it)}
+                  showName={prev?.author !== it.author || prev.mine !== it.mine}
+                  say={say}
+                />
+              )}
             </div>
           );
         })}
@@ -202,16 +215,19 @@ export function GroupPage() {
           }
         }}
       >
-        {!shared.ceremony && !shared.seat && (room.group?.members.length ?? 0) >= 2 && (
-          <button
-            type='button'
-            aria-label='make it a shared wallet'
-            onClick={() => setMaking(true)}
-            className='grid size-11 shrink-0 place-items-center border border-border-soft bg-elev-2 text-zigner-gold hover:bg-border-soft'
-          >
-            <span className='i-lucide-plus size-[18px]' aria-hidden='true' />
-          </button>
-        )}
+        {!shared.ceremony &&
+          !shared.seat &&
+          !room.group?.want &&
+          (room.group?.members.length ?? 0) >= 2 && (
+            <button
+              type='button'
+              aria-label='make it a shared wallet'
+              onClick={() => setMaking(true)}
+              className='grid size-11 shrink-0 place-items-center border border-border-soft bg-elev-2 text-zigner-gold hover:bg-border-soft'
+            >
+              <span className='i-lucide-plus size-[18px]' aria-hidden='true' />
+            </button>
+          )}
         <Input
           aria-label='message'
           placeholder='message the group'

@@ -177,7 +177,11 @@ const step = async (walletId: string, roomId: string) => {
   const me = await roomKeysOf(room);
   const io = ioFor(room);
   const c = ceremonyOf(room.frost.msgs, allowedIn(room, me.pubkey));
-  await advance(c, c && room.frost.mine?.[c.id], me, frost, io);
+  let kept = c && room.frost.mine?.[c.id];
+  if (c && !kept?.ok && cameFor(room, c)) {
+    kept = await io.keep(c.id, { ok: true });
+  }
+  await advance(c, kept, me, frost, io);
   // payments this device sealed: name the signers, release shares, finish
   const seat = seatOf(useStore.getState().wallets.zcashWallets, room);
   const w = walletOf(seat);
@@ -216,6 +220,16 @@ const kick = (walletId: string, roomId: string) => {
       runs.delete(key);
     }
   })();
+};
+
+/**
+ * A shared wallet you came into by its code: the founder's start with the k
+ * of n the code named. Typing the words was your yes to those terms, so
+ * nothing more is asked.
+ */
+const cameFor = (room: PeopleRoom, c: Ceremony): boolean => {
+  const want = room.group?.want;
+  return !!want && c.by === room.group?.founder && c.k === want.k && c.members.length === want.n;
 };
 
 /** the seat a room's ceremony left in this wallet, if it finished here */
@@ -272,7 +286,15 @@ export const useFrostRoom = (room: PeopleRoom | undefined): FrostView => {
     const t = setInterval(() => kick(room.walletId, room.id), 10_000);
     return () => clearInterval(t);
   }, [live, room?.walletId, room?.id]);
-  return { me, ceremony, mine: ceremony && kept[ceremony.id], seat, payments, kept };
+  const mine = ceremony && kept[ceremony.id];
+  return {
+    me,
+    ceremony,
+    mine: ceremony && room && cameFor(room, ceremony) ? { ...mine, ok: true } : mine,
+    seat,
+    payments,
+    kept,
+  };
 };
 
 /**

@@ -15,7 +15,7 @@ import type { PeopleRoom } from './vault';
 
 const ME = 'a'.repeat(64);
 const KEN = 'b'.repeat(64);
-const CODE = '673-chaos-mail-kite';
+const CODE = '7-fern-dusk';
 
 const pair: PeopleRoom = {
   id: 'p:ken',
