@@ -8,12 +8,16 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ChainTip } from '../state/keyring/zidecar-client';
-import { zcashClient } from '../state/keyring/zcash-backend';
+import { backendKey, zcashClient } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
 import { selectZcashBackend } from '../state/networks';
 import { selectActiveNetwork } from '../state/keyring';
 import { activeZcashStoreId } from '../state/pockets';
-import { zcashSyncHeightKey } from '../state/keyring/network-worker';
+import {
+  ZCASH_CHAIN_CHECK_KEY,
+  zcashSyncHeightKey,
+  type ZcashChainCheck,
+} from '../state/keyring/network-worker';
 import { classifySyncFailure, stalledFailure, type SyncFailure } from '../state/sync-failure';
 
 const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
@@ -35,6 +39,29 @@ export interface ZcashSyncState {
    * be shown; `failure.raw` is diagnostics and belongs behind a disclosure.
    */
   failure: SyncFailure | null;
+}
+
+/**
+ * the last chain check of the chosen node, from storage (asks no node); a
+ * check of another node says nothing about this one
+ */
+export function useZcashChainCheck(): ZcashChainCheck | undefined {
+  const endpoint = useStore(s => s.networks.networks.zcash.endpoint);
+  const [check, setCheck] = useState<ZcashChainCheck>();
+  useEffect(() => {
+    const read = (v: unknown) => setCheck(v as ZcashChainCheck | undefined);
+    void chrome.storage.local.get(ZCASH_CHAIN_CHECK_KEY).then(r => read(r[ZCASH_CHAIN_CHECK_KEY]));
+    const onChanged = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if (ZCASH_CHAIN_CHECK_KEY in changes) {
+        read(changes[ZCASH_CHAIN_CHECK_KEY].newValue);
+      }
+    };
+    chrome.storage.local.onChanged.addListener(onChanged);
+    return () => chrome.storage.local.onChanged.removeListener(onChanged);
+  }, []);
+  return check && (!endpoint || backendKey(check.serverUrl) === backendKey(endpoint))
+    ? check
+    : undefined;
 }
 
 /**
@@ -153,6 +180,11 @@ export function useZcashSyncStatus(): ZcashSyncState {
   const zcashActive = useStore(selectActiveNetwork) === 'zcash';
   const { workerSyncHeight, workerChainHeight, workerError, workerFailure, notesPreparing } =
     useZcashWorkerSync();
+  // a node whose chain did not check out stays paused across popup opens
+  const chainFailure =
+    useZcashChainCheck()?.status === 'failed'
+      ? classifySyncFailure('chain proof did not check out', 'chain-unproven')
+      : null;
 
   const {
     data: chainTip,
@@ -180,9 +212,9 @@ export function useZcashSyncStatus(): ZcashSyncState {
     isLoading: tipLoading,
     // workerError (sync loop / auto-sync failures) takes precedence over the
     // tip query error - it's the one the user actually needs to act on.
-    error: workerError ?? tipError,
+    error: chainFailure ? new Error(chainFailure.raw) : (workerError ?? tipError),
     // Query errors have no structured code (they come out of fetch), so they
     // are sniffed; worker failures were classified when they arrived.
-    failure: workerFailure ?? (tipError ? classifySyncFailure(tipError) : null),
+    failure: chainFailure ?? workerFailure ?? (tipError ? classifySyncFailure(tipError) : null),
   };
 }

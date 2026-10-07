@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
-import { useZcashWorkerSync } from '../../../hooks/zcash-sync';
+import { useZcashChainCheck, useZcashWorkerSync } from '../../../hooks/zcash-sync';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { formatBlockMonth, rescanStartHeight } from '../../../utils/zcash-blocks';
 import { rescanZcash } from '../../../services/zcash-resync';
@@ -91,6 +91,7 @@ export const SettingsZcashNetwork = () => {
   // local progress only: opening this screen asks no node
   const { workerSyncHeight, workerChainHeight: tip, workerFailure: failure } = useZcashWorkerSync();
   const [birthday, setBirthday] = useBirthday(vaultId);
+  const chain = useZcashChainCheck();
 
   const [params] = useSearchParams();
   const [sheet, setSheet] = useState<'start' | 'date' | 'node' | null>(() =>
@@ -176,7 +177,14 @@ export const SettingsZcashNetwork = () => {
           <Row
             type='value'
             label='node'
-            description={(!preset && endpoint && 'your own node') || undefined}
+            description={[
+              !preset && endpoint && 'your own node',
+              chain?.status === 'checked'
+                ? "chain checked against zcash's proof of work"
+                : 'chain not verified',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
             value={preset?.label ?? ((endpoint && hostOf(endpoint)) || 'auto')}
             onPress={() => setSheet('node')}
             {...explainProps('network.zcashNode')}

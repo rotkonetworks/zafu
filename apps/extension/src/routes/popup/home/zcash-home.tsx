@@ -97,13 +97,7 @@ export const ZcashContent = ({
   const isMainnet = useStore(selectZcashIsMainnet);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const zcashBackend = useStore(selectZcashBackend);
-  const {
-    chainTip,
-    workerSyncHeight,
-    error: syncError,
-    failure: syncFailure,
-    notesPreparing,
-  } = useZcashSyncStatus();
+  const { chainTip, workerSyncHeight, failure: syncFailure, notesPreparing } = useZcashSyncStatus();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -226,17 +220,20 @@ export const ZcashContent = ({
   // server's own pipeline says nothing about this wallet's balance.
   const overallPct = caughtUp ? 100 : Math.min(100, (scanProgress / scanRange) * 100);
 
-  const balanceView: BalanceView = held
-    ? 'held'
-    : balanceState === 'error' && totalZat === 0n
-      ? 'error'
-      : balanceState === 'loading' && totalZat === 0n
-        ? 'loading'
-        : allSynced
-          ? 'ready'
-          : totalZat === 0n
-            ? 'unknown'
-            : 'partial';
+  const balanceView: BalanceView =
+    syncFailure?.kind === 'chainUnproven'
+      ? 'paused'
+      : held
+        ? 'held'
+        : balanceState === 'error' && totalZat === 0n
+          ? 'error'
+          : balanceState === 'loading' && totalZat === 0n
+            ? 'loading'
+            : allSynced
+              ? 'ready'
+              : totalZat === 0n
+                ? 'unknown'
+                : 'partial';
 
   const inFlight = pendingSends.filter(t => t.status === 'pending');
   const failedSends = pendingSends.filter(t => t.status === 'failed');
@@ -294,7 +291,7 @@ export const ZcashContent = ({
           network='zcash'
           rebuilds
           synced={allSynced}
-          failure={syncError ? syncFailure : null}
+          failure={syncFailure}
           preparing={notesPreparing}
           percent={overallPct}
           connecting={chainHeight <= 0}
@@ -360,7 +357,7 @@ export const ZcashContent = ({
 
       {messageSlot}
 
-      {reading || balanceView === 'error' ? null : empty ? (
+      {reading || balanceView === 'error' || balanceView === 'paused' ? null : empty ? (
         <EmptyBox look={HOME_LOOK.zcash} />
       ) : (
         <BalanceGroup heading={HOME_LOOK.zcash.heading} held={held}>

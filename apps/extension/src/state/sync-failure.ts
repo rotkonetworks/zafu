@@ -18,9 +18,8 @@
  *     though the user-facing meaning is identical.
  *   - `parseFatal` → `consensus`: "this endpoint served data the wallet
  *     cannot use" (a refused batch, a branch id with no pool), terminal and
- *     node-attributable. zafu does not verify the chain against a proof; the
- *     node is trusted for chain data, and this kind only names data that is
- *     inconsistent on its face.
+ *     node-attributable. It only names data that is inconsistent on its
+ *     face; a chain proof that did not check out is `chainUnproven`.
  *   - vizor defaults an unclassified error to *retry*; zafu defaults it to
  *     *visible* (`autoRetries: false`). This is a money path: a
  *     classification bug must never turn a real failure into a silent
@@ -34,6 +33,7 @@ export type SyncFailureKind =
   | 'endpoint'
   | 'consensus'
   | 'wrongNetwork'
+  | 'chainUnproven'
   | 'chainRecovery'
   | 'storageBusy'
   | 'storageFatal'
@@ -70,6 +70,7 @@ export const SYNC_ERROR_CODES = [
   'endpoint',
   'consensus',
   'wrong-network',
+  'chain-unproven',
   'chain-recovery',
   'storage-busy',
   'storage-fatal',
@@ -86,6 +87,7 @@ const KIND_BY_CODE: Record<SyncErrorCode, SyncFailureKind> = {
   endpoint: 'endpoint',
   consensus: 'consensus',
   'wrong-network': 'wrongNetwork',
+  'chain-unproven': 'chainUnproven',
   'chain-recovery': 'chainRecovery',
   'storage-busy': 'storageBusy',
   'storage-fatal': 'storageFatal',
@@ -102,6 +104,7 @@ const MESSAGES: Record<SyncFailureKind, string> = {
   endpoint: "the node isn't answering · please choose another",
   consensus: 'this node sent data zafu could not verify · please choose another',
   wrongNetwork: 'this node serves another zcash network · please choose another',
+  chainUnproven: "this server's chain didn't check out · balances are paused, nothing was lost",
   chainRecovery: 'the chain moved while syncing · zafu keeps trying',
   storageBusy: 'wallet data is busy · zafu keeps trying',
   storageFatal: 'wallet data could not be read · please reload zafu',
@@ -120,6 +123,7 @@ const ACTIONS: Partial<Record<SyncFailureKind, SyncFailureAction>> = {
   endpoint: CHOOSE,
   consensus: CHOOSE,
   wrongNetwork: CHOOSE,
+  chainUnproven: { label: 'choose another node', kind: 'settings' },
   // A local problem must never make the wallet blame the node (vizor's rule).
   storageFatal: { label: 'reload', kind: 'reload' },
   unknown: TRY_AGAIN,
@@ -130,6 +134,7 @@ const AUTO_RETRIES: Record<SyncFailureKind, boolean> = {
   endpoint: false,
   consensus: false,
   wrongNetwork: false,
+  chainUnproven: false,
   // Surfaced only once the in-run rewind budget is spent; the next sync run
   // starts with a fresh budget, so recovery really does continue.
   chainRecovery: true,
