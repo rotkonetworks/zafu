@@ -14,6 +14,9 @@ import {
   stepLines,
   stopped,
   type Flight,
+  memoText,
+  unsealsFor,
+  usesRune,
 } from './flight';
 import { ADD_MEMO, withdrawMemo, zecText } from './math';
 
@@ -168,6 +171,14 @@ describe('the tracker lines', () => {
     expect(lines.map(l => l.state)).toEqual(['done', 'now', 'later', 'later', 'later']);
     expect(lines[0]!.at).toBe(f.at.settle);
     expect(lines[2]!.d).toBe('memo +:ZEC.ZEC · 0.0100 zec');
+    expect(lines[2]!.copy).toBeUndefined();
+  });
+
+  // a paired add's memo carries the whole thor1: the line shows its ends, the copy keeps it all
+  it('cuts the addresses in a memo, never the rest', () => {
+    const memo = '+:ZEC.ZEC:thor1pcfs5vnlz8dppzshzc2jhca5ckfafflv4429pc';
+    expect(memoText(memo)).toBe('+:ZEC.ZEC:thor1…29pc');
+    expect(memoText('-:ZEC.ZEC:5000')).toBe('-:ZEC.ZEC:5000');
   });
 });
 
@@ -201,5 +212,25 @@ describe('cancel before the pool gets it', () => {
     );
     expect(cancellable(f)).toBe(false);
     expect(cancelFlight(f)).toBe(f);
+  });
+});
+
+describe('what an lp confirm unseals', () => {
+  it('a zigner moving zec opens nothing here: no password before its qr', () => {
+    expect(unsealsFor(true, false)).toBe('nothing');
+  });
+
+  it('a phrase, or any rune step (its key is held here), asks', () => {
+    expect(unsealsFor(false, false)).toBe('secret');
+    expect(unsealsFor(true, true)).toBe('secret');
+    expect(unsealsFor(undefined, false)).toBe('secret');
+  });
+
+  it('knows which flights sign with the rune key', () => {
+    expect(usesRune(startFlight('add2', 1n, ADD_MEMO))).toBe(true);
+    expect(usesRune(startFlight('withdraw2', 1n, ADD_MEMO))).toBe(true);
+    expect(usesRune(startFlight('add', 1n, ADD_MEMO))).toBe(false);
+    expect(usesRune(startFlight('swap', 1n, ADD_MEMO))).toBe(false);
+    expect(usesRune(undefined)).toBe(false);
   });
 });

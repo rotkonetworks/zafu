@@ -63,7 +63,7 @@ export interface PoolNotes {
 }
 
 /**
- * Format zatoshi -> ZEC string. Mirrors the home / pool-balance-card
+ * Format zatoshi -> zec string. Mirrors the home / pool-balance-card
  * formatter: trim trailing zeros but keep at least four decimals so note
  * amounts read consistently ("0.0001" not "0").
  */
@@ -163,7 +163,7 @@ function NoteRow({ note }: { note: DecryptedNoteWithTxid }) {
       <div className='min-w-0 flex-1'>
         <div className='flex items-center justify-between gap-2'>
           <span className='font-mono text-sm tabular-nums text-fg-high'>
-            <Sensitive>{fmtZec(BigInt(note.value))} ZEC</Sensitive>
+            <Sensitive>{fmtZec(BigInt(note.value))} zec</Sensitive>
           </span>
           <span
             className={cn(
@@ -198,7 +198,7 @@ function PoolHeader({ label, notes }: { label: string; notes: DecryptedNoteWithT
         {label} - {count} note{count === 1 ? '' : 's'}
       </span>
       <span className='font-mono text-xs tabular-nums text-fg-muted'>
-        <Sensitive>{fmtZec(subtotal(notes))} ZEC</Sensitive>
+        <Sensitive>{fmtZec(subtotal(notes))} zec</Sensitive>
       </span>
     </div>
   );
@@ -230,7 +230,7 @@ function UtxoRow({ utxo }: { utxo: Utxo }) {
       <div className='min-w-0 flex-1'>
         <div className='flex items-center justify-between gap-2'>
           <span className='font-mono text-sm tabular-nums text-fg-high'>
-            <Sensitive>{fmtZec(utxo.valueZat)} ZEC</Sensitive>
+            <Sensitive>{fmtZec(utxo.valueZat)} zec</Sensitive>
           </span>
           <span className='shrink-0 bg-elev-2 px-1.5 py-0.5 text-label leading-none text-fg-dim'>
             public
@@ -343,14 +343,20 @@ const TransparentSection = ({
   // the coins themselves are this session's only; a check from disk has just the sum
   const utxos = last?.utxos ?? [];
   const utxoLoading = checking || (!failed && !last?.utxos);
+  // a check read back from disk keeps the sum and how many addresses held it, not the coins
+  const count = last?.utxos
+    ? `${utxos.length} utxo${utxos.length === 1 ? '' : 's'}`
+    : last?.funded
+      ? `on ${last.funded} address${last.funded === 1 ? '' : 'es'}`
+      : '';
   return (
     <>
       <div className='flex items-baseline justify-between gap-2 px-0.5'>
         <span className='text-data text-fg-high lowercase'>
-          transparent - {utxos.length} utxo{utxos.length === 1 ? '' : 's'}
+          transparent{count && ` - ${count}`}
         </span>
         <span className='font-mono text-xs tabular-nums text-fg-muted'>
-          <Sensitive>{fmtZec(transparentZat)} ZEC</Sensitive>
+          <Sensitive>{fmtZec(transparentZat)} zec</Sensitive>
         </span>
       </div>
 

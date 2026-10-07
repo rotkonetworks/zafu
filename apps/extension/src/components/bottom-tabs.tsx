@@ -107,9 +107,8 @@ export const BottomTabs = memo(() => {
   return (
     <nav
       className={cn(
-        'fixed bottom-0 left-0 right-0 z-50',
-        'border-t border-border-soft bg-canvas',
-        'transform-gpu will-change-transform',
+        // in the layout's flex column, not over it: whatever scrolls ends above the tabs
+        'shrink-0 border-t border-border-soft bg-canvas',
         'contain-layout contain-style',
       )}
     >
@@ -125,5 +124,3 @@ export const BottomTabs = memo(() => {
   );
 });
 BottomTabs.displayName = 'BottomTabs';
-
-export const BOTTOM_TABS_HEIGHT = '3.5rem';

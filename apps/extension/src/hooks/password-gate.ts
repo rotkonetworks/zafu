@@ -3,17 +3,22 @@
  *
  * usage:
  *   const { requestAuth, PasswordModal } = usePasswordGate();
- *   // in submit handler:
- *   const ok = await requestAuth();
- *   if (!ok) return;
- *   // proceed with transaction
+ *   // in submit handler, naming what the action opens:
+ *   const ok = await requestAuth(); // a secret held here: always asks
+ *   const ok = await requestAuth('nothing'); // a device signs: no dialog
  */
 
 import { useState, useCallback, useRef, createElement } from 'react';
 import { PasswordGateModal } from '../shared/components/password-gate';
-import { useStore } from '../state';
-import { selectEffectiveKeyInfo } from '../state/keyring';
-import { CAPS, walletKind } from '../signing/wallet-kind';
+
+/**
+ * What an action unseals. 'secret' is anything zafu holds (a phrase, a
+ * multisig share, a rune key); 'nothing' is a pure device signature (zigner,
+ * keystone, ledger), whose own review and qr or usb are the confirmation.
+ * The caller says it, never the selected wallet: unsealing a share while a
+ * zigner is selected is still a secret, and forgetting to say asks.
+ */
+export type Unseals = 'secret' | 'nothing';
 
 interface GateCallbacks {
   resolve: (authorized: boolean) => void;
@@ -22,14 +27,11 @@ interface GateCallbacks {
 export const usePasswordGate = () => {
   const [open, setOpen] = useState(false);
   const callbacksRef = useRef<GateCallbacks | null>(null);
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
 
-  // a password unlocks what zafu holds (a phrase, a multisig share); a device
-  // signs on its own, so the gate only confirms.
-  const walletType =
-    selectedKeyInfo && !CAPS[walletKind(selectedKeyInfo)].unlockToSign ? 'zigner' : 'mnemonic';
-
-  const requestAuth = useCallback((): Promise<boolean> => {
+  const requestAuth = useCallback((unseals: Unseals = 'secret'): Promise<boolean> => {
+    if (unseals === 'nothing') {
+      return Promise.resolve(true);
+    }
     return new Promise<boolean>(resolve => {
       callbacksRef.current = { resolve };
       setOpen(true);
@@ -52,7 +54,6 @@ export const usePasswordGate = () => {
     open,
     onConfirm: handleConfirm,
     onCancel: handleCancel,
-    walletType,
   });
 
   return { requestAuth, PasswordModal };

@@ -1,8 +1,6 @@
 /**
- * password gate modal - requires password confirmation before transactions
- *
- * mnemonic wallets: password input + verify
- * zigner wallets: informational (QR auth happens in approval popup)
+ * password gate modal - requires password confirmation before transactions.
+ * device wallets never see it: their own review and qr confirm.
  */
 
 import {
@@ -20,16 +18,9 @@ interface PasswordGateModalProps {
   open: boolean;
   onConfirm: () => void;
   onCancel: () => void;
-  /** 'zigner' shows informational message only */
-  walletType?: 'mnemonic' | 'zigner';
 }
 
-export const PasswordGateModal = ({
-  open,
-  onConfirm,
-  onCancel,
-  walletType = 'mnemonic',
-}: PasswordGateModalProps) => {
+export const PasswordGateModal = ({ open, onConfirm, onCancel }: PasswordGateModalProps) => {
   const { isPassword } = useStore(passwordSelector);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -113,78 +104,53 @@ export const PasswordGateModal = ({
                 confirm this transaction
               </DialogTitle>
             </div>
+            <p className='mb-3 text-xs text-fg-muted'>your password, to sign it.</p>
 
-            {walletType === 'zigner' ? (
-              <>
-                <p className='mb-4 text-xs text-fg-muted'>
-                  this transaction is signed on your zigner.
-                </p>
-                <div className='flex gap-2'>
-                  <button
-                    onClick={onCancel}
-                    className='flex-1 border border-border-soft px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-elev-1'
-                  >
-                    not now
-                  </button>
-                  <button
-                    onClick={onConfirm}
-                    className='flex-1 bg-zigner-gold px-4 py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-primary/90'
-                  >
-                    continue
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className='mb-3 text-xs text-fg-muted'>your password, to sign it.</p>
+            <div className='relative mb-3'>
+              <input
+                ref={inputRef}
+                type={reveal ? 'text' : 'password'}
+                value={password}
+                onChange={e => {
+                  setPassword(e.target.value);
+                  setError('');
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder='password'
+                disabled={checking}
+                className='w-full border border-border-soft bg-input px-3 py-2.5 pr-10 text-sm text-fg placeholder:text-fg-muted focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+              />
+              <button
+                type='button'
+                onClick={() => setReveal(prev => !prev)}
+                className='absolute right-3 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg-high'
+              >
+                {reveal ? (
+                  <span className='i-ph-eye h-3.5 w-3.5' />
+                ) : (
+                  <span className='i-ph-eye-slash h-3.5 w-3.5' />
+                )}
+              </button>
+            </div>
 
-                <div className='relative mb-3'>
-                  <input
-                    ref={inputRef}
-                    type={reveal ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => {
-                      setPassword(e.target.value);
-                      setError('');
-                    }}
-                    onKeyDown={handleKeyDown}
-                    placeholder='password'
-                    disabled={checking}
-                    className='w-full border border-border-soft bg-input px-3 py-2.5 pr-10 text-sm text-fg placeholder:text-fg-muted focus:border-zigner-gold focus:outline-none disabled:opacity-50'
-                  />
-                  <button
-                    type='button'
-                    onClick={() => setReveal(prev => !prev)}
-                    className='absolute right-3 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg-high'
-                  >
-                    {reveal ? (
-                      <span className='i-ph-eye h-3.5 w-3.5' />
-                    ) : (
-                      <span className='i-ph-eye-slash h-3.5 w-3.5' />
-                    )}
-                  </button>
-                </div>
+            {error && <p className='mb-3 text-xs text-red-400'>{error}</p>}
 
-                {error && <p className='mb-3 text-xs text-red-400'>{error}</p>}
-
-                <div className='flex gap-2'>
-                  <button
-                    onClick={onCancel}
-                    disabled={checking}
-                    className='flex-1 border border-border-soft px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-elev-1 disabled:opacity-50'
-                  >
-                    not now
-                  </button>
-                  <button
-                    onClick={() => void handleSubmit()}
-                    disabled={checking || !password.trim()}
-                    className='flex-1 bg-zigner-gold px-4 py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-primary/90 disabled:opacity-50'
-                  >
-                    {checking ? 'checking' : 'sign'}
-                  </button>
-                </div>
-              </>
-            )}
+            <div className='flex gap-2'>
+              <button
+                onClick={onCancel}
+                disabled={checking}
+                className='flex-1 border border-border-soft px-4 py-3 text-sm text-fg-muted transition-colors hover:bg-elev-1 disabled:opacity-50'
+              >
+                not now
+              </button>
+              <button
+                onClick={() => void handleSubmit()}
+                disabled={checking || !password.trim()}
+                className='flex-1 bg-zigner-gold px-4 py-3 text-sm text-zigner-gold-foreground transition-colors hover:bg-primary/90 disabled:opacity-50'
+              >
+                {checking ? 'checking' : 'sign'}
+              </button>
+            </div>
           </div>
         </DialogLayer>
       </DialogPortal>

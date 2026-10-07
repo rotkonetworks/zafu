@@ -382,20 +382,30 @@ export const ZcashContent = ({
             tag={
               <span className='truncate text-[11px] text-fg-muted'>
                 <span className='text-warn'>public</span>
-                {transparent.checking ? ' · checking' : transparent.failed && ' · no answer'}
+                {transparent.checking
+                  ? ' · checking'
+                  : transparent.failed
+                    ? ' · no answer'
+                    : transparent.last && ` · ${ago(transparent.last.at)}`}
               </span>
             }
             amount={transparent.last ? zec(transparentZat) : undefined}
-            note={
-              transparent.last && (
-                <span className='text-[11px] text-fg-muted'>
-                  checked {ago(transparent.last.at)}
-                </span>
-              )
-            }
             onPress={openPoolNotes('transparent')}
+            // shield checks again as it opens, so a balance needs no second button
             action={
-              <>
+              transparentZat > 0n ? (
+                <Button
+                  variant='secondary'
+                  size='sm'
+                  className='shrink-0 border-surface-border text-network-accent'
+                  onClick={() => {
+                    setShieldOpen(true);
+                    transparent.check(tip);
+                  }}
+                >
+                  shield
+                </Button>
+              ) : (
                 <LineActions
                   actions={[
                     {
@@ -406,20 +416,7 @@ export const ZcashContent = ({
                     },
                   ]}
                 />
-                {transparentZat > 0n && (
-                  <Button
-                    variant='secondary'
-                    size='sm'
-                    className='shrink-0 border-surface-border text-network-accent'
-                    onClick={() => {
-                      setShieldOpen(true);
-                      transparent.check(tip);
-                    }}
-                  >
-                    shield
-                  </Button>
-                )}
-              </>
+              )
             }
           />
         </BalanceGroup>

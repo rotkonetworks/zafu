@@ -26,6 +26,7 @@
 import type { PayoutAs } from './math';
 
 import type { TxSeen } from './thor';
+import type { Unseals } from '../hooks/password-gate';
 
 export type Stage =
   | 'fund'
@@ -292,9 +293,6 @@ export interface Facts {
  */
 export const HALF_BLOCKS = 100;
 
-export const LOST_LINE =
-  "the rune half didn't arrive · nothing was added · your rune is still in your rune address";
-
 /**
  * How long a take-out waits for THORChain to plan its payout before the page
  * says so: about 30 minutes of THORChain blocks. Past it the flight keeps
@@ -453,6 +451,18 @@ export const shieldRefund = (f: Flight, now = Date.now()): Flight =>
     ? to(f, 'shield', {}, now)
     : f;
 
+/**
+ * What confirming a send opens. A zigner signs its own zec moves and
+ * deposits, so nothing here is unsealed; a phrase, or the rune key a
+ * two-sided step signs with (seed, sealed random key or fvk-derived), is a
+ * secret zafu holds and asks for the password.
+ */
+export const unsealsFor = (cold: boolean | undefined, rune: boolean): Unseals =>
+  cold && !rune ? 'nothing' : 'secret';
+
+/** the flights that sign with the pocket's rune key */
+export const usesRune = (f?: Flight): boolean => f?.kind === 'add2' || f?.kind === 'withdraw2';
+
 export type StepState = 'done' | 'now' | 'later' | 'turned';
 
 export interface StepLine {
@@ -460,7 +470,16 @@ export interface StepLine {
   d?: string;
   at?: number;
   state: StepState;
+  /** the whole memo, behind a copy button, when d shows it cut short */
+  copy?: string;
 }
+
+/** a memo a line can hold: its long parts (addresses) cut to their two ends */
+export const memoText = (memo: string): string =>
+  memo
+    .split(':')
+    .map(p => (p.length > 16 ? `${p.slice(0, 5)}…${p.slice(-4)}` : p))
+    .join(':');
 
 const ORDER: Record<Flight['kind'], Stage[]> = {
   add: ['fund', 'settle', 'send', 'seen', 'credit', 'credited'],
@@ -498,7 +517,7 @@ export interface LineText {
   thor?: string;
 }
 
-type LineOf = (i: number, s: Stage, title: string, d?: string) => StepLine;
+type LineOf = (i: number, s: Stage, title: string, d?: string, copy?: string) => StepLine;
 
 /** a two-sided add: the rune half waits for the zec half, said as it is */
 const pairedAddLines = (
@@ -532,7 +551,8 @@ const pairedAddLines = (
     return [
       ...head.map(l => ({ ...l, state: 'done' as const })),
       {
-        t: "the rune half didn't arrive",
+        // the title already says it didn't arrive; the line says what that means
+        t: 'not seen by thorchain',
         d: 'nothing was added · your rune is still in your rune address',
         at: at('lost'),
         state: 'turned',
@@ -599,7 +619,7 @@ const pairedAddLines = (
   return [
     ...head,
     { ...waiting, state: f.stage === 'half' ? 'now' : rank(f) > 3 ? 'done' : 'later' },
-    line(4, 'send', 'zec half sent', `memo ${f.memo} · ${z(f.amountZat)} zec`),
+    line(4, 'send', 'zec half sent', `memo ${memoText(f.memo)} · ${z(f.amountZat)} zec`, f.memo),
     line(5, 'seen', 'seen by thorchain', 'after 1 confirmation, about 75 s'),
     line(6, 'credit', 'credited', 'both halves in · your units appear'),
   ];
@@ -614,7 +634,13 @@ const pairedOutLines = (
   at: (s: Stage) => number | undefined,
 ): StepLine[] => {
   const r = (s?: string) => (s && t.rune ? t.rune(BigInt(s)) : '');
-  const ask = line(0, 'ask', 'asked the pool', `from ${t.thor ?? 'your rune address'} · ${f.memo}`);
+  const ask = line(
+    0,
+    'ask',
+    'asked the pool',
+    `from ${t.thor ?? 'your rune address'} · ${memoText(f.memo)}`,
+    f.memo,
+  );
   if (f.stage === 'refused') {
     return [
       { ...ask, state: 'done' },
@@ -652,9 +678,11 @@ const pairedOutLines = (
 export const stepLines = (f: Flight, t: LineText): StepLine[] => {
   const z = (s?: string) => (s ? t.zec(BigInt(s)) : '');
   const at = (s: Stage) => f.at[s];
-  const line = (i: number, s: Stage, title: string, d?: string): StepLine => ({
+  const line = (i: number, s: Stage, title: string, d?: string, copy?: string): StepLine => ({
     t: title,
     d,
+    // a memo short enough to show whole needs no copy
+    copy: copy && memoText(copy) !== copy ? copy : undefined,
     at: stateAt(f, i) === 'done' ? at(ORDER[f.kind][i + 1] ?? s) : undefined,
     state: stateAt(f, i),
   });
@@ -673,7 +701,13 @@ export const stepLines = (f: Flight, t: LineText): StepLine[] => {
         f.fundZat ? `${z(f.fundZat)} zec` : undefined,
       ),
       line(1, 'settle', 'one block to settle', 'zcash confirmation'),
-      line(2, 'send', 'sent to thorchain', `${z(f.amountZat)} zec · memo ${f.memo}`),
+      line(
+        2,
+        'send',
+        'sent to thorchain',
+        `${z(f.amountZat)} zec · memo ${memoText(f.memo)}`,
+        f.memo,
+      ),
       line(3, 'seen', 'swapped to rune', `paid to ${t.thor ?? 'your rune address'}`),
     ];
   }
@@ -696,7 +730,13 @@ export const stepLines = (f: Flight, t: LineText): StepLine[] => {
         f.fundZat ? `${z(f.fundZat)} zec` : undefined,
       ),
       line(1, 'settle', 'one block to settle', 'zcash confirmation'),
-      line(2, 'send', 'sent to the pool', `memo ${f.memo} · ${z(f.amountZat)} zec`),
+      line(
+        2,
+        'send',
+        'sent to the pool',
+        `memo ${memoText(f.memo)} · ${z(f.amountZat)} zec`,
+        f.memo,
+      ),
     ];
     if (f.stage === 'refunded' || (f.stage.startsWith('shield') && f.outZat)) {
       return [
@@ -737,7 +777,13 @@ export const stepLines = (f: Flight, t: LineText): StepLine[] => {
       'fund the ask',
       f.fundZat ? `${z(f.fundZat)} zec to your lp address, one block` : 'from your lp address',
     ),
-    line(2, 'ask', 'asked the pool', `${z(f.amountZat)} zec from ${t.address} · ${f.memo}`),
+    line(
+      2,
+      'ask',
+      'asked the pool',
+      `${z(f.amountZat)} zec from ${t.address} · ${memoText(f.memo)}`,
+      f.memo,
+    ),
     line(
       3,
       'payout',

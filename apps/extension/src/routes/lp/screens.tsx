@@ -16,15 +16,7 @@ import { Sensitive } from '../../components/sensitive';
 import { useStore as useZafu } from '../../state';
 import { selectHideBalances } from '../../state/privacy';
 import { depositFeeZat } from '../../workers/transparent-deposit';
-import {
-  cancellable,
-  isDone,
-  LOST_LINE,
-  needs,
-  PAYOUT_BLOCKS,
-  stepLines,
-  type Flight,
-} from '../../lp/flight';
+import { cancellable, isDone, needs, PAYOUT_BLOCKS, stepLines, type Flight } from '../../lp/flight';
 import {
   afterFee,
   costTone,
@@ -910,18 +902,20 @@ export const TrackScreen = ({
   const lost = f.stage === 'lost';
   return (
     <div className='flex flex-col gap-5'>
-      <div className='flex items-end justify-between gap-4'>
-        <h1 className='font-display text-[38px] leading-[1.15] text-fg-high'>{title}</h1>
-        <span className='flex shrink-0 flex-col items-end gap-1.5'>
-          <span className='font-display text-[34px] tabular-nums text-fg-high'>
-            {refunded && f.outZat ? zec(BigInt(f.outZat)) : clock(now - f.started)}
-          </span>
+      <div className='flex flex-col gap-1'>
+        <h1 title={title} className='truncate font-display text-[32px] leading-[1.2] text-fg-high'>
+          {title}
+        </h1>
+        <span className='flex items-baseline justify-between gap-4'>
           <span className='text-[11px] text-fg-muted'>
             {refunded
               ? 'zec at your lp address'
               : f.kind === 'add' || f.kind === 'add2' || f.kind === 'swap'
                 ? 'usually about 4 minutes'
                 : 'usually 3 to 6 minutes'}
+          </span>
+          <span className='font-display text-[28px] tabular-nums text-fg-high'>
+            {refunded && f.outZat ? zec(BigInt(f.outZat)) : clock(now - f.started)}
           </span>
         </span>
       </div>
@@ -978,20 +972,18 @@ export const TrackScreen = ({
             explorer, or stop watching and ask again from your position.
           </span>
         </div>
-      ) : (
+      ) : lost ? null : (
         <div className='flex h-11 items-center border border-border-soft bg-elev-1 px-3.5'>
           <span className='text-xs text-fg'>
-            {lost
-              ? LOST_LINE
-              : halfBack
-                ? 'the rune half still waits in the pool. you may take it back, and the zec is shielded after.'
-                : refunded
-                  ? 'nothing else was lost. it waits at your lp address until you choose.'
-                  : f.stage === 'half'
-                    ? 'the rune half is in. the zec half goes as soon as thorchain shows it waiting.'
-                    : f.kind === 'add' || f.kind === 'add2' || f.kind === 'swap'
-                      ? 'close this any time. anything not yet sent waits until this page is open.'
-                      : 'the pool pays out once thorchain has seen the ask.'}
+            {halfBack
+              ? 'the rune half still waits in the pool. you may take it back, and the zec is shielded after.'
+              : refunded
+                ? 'nothing else was lost. it waits at your lp address until you choose.'
+                : f.stage === 'half'
+                  ? 'the rune half is in. the zec half goes as soon as thorchain shows it waiting.'
+                  : f.kind === 'add' || f.kind === 'add2' || f.kind === 'swap'
+                    ? 'close this any time. anything not yet sent waits until this page is open.'
+                    : 'the pool pays out once thorchain has seen the ask.'}
           </span>
         </div>
       )}

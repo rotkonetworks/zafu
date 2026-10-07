@@ -12,6 +12,9 @@ import { BUY_PRELOAD, openBuyPage } from '../../../buy/open';
  * empty wallet keeps receive and swap (swapping into zec needs none) and
  * greys send.
  */
+// no side padding: four centred flex-1 buttons fit a 360px side panel only without it
+const ACTION = 'h-11 flex-1 gap-1 px-0 text-[13px]';
+
 export const HomeActions = ({
   spendable = true,
   icons = true,
@@ -30,7 +33,7 @@ export const HomeActions = ({
   const receive = (
     <Button
       variant='secondary'
-      className='h-11 flex-1 text-[13px]'
+      className={ACTION}
       data-preload={PopupPath.RECEIVE}
       onClick={() => navigate(PopupPath.RECEIVE)}
     >
@@ -55,7 +58,7 @@ export const HomeActions = ({
       {buy && (
         <Button
           variant='secondary'
-          className='h-11 flex-1 text-[13px]'
+          className={ACTION}
           data-preload={BUY_PRELOAD}
           onClick={openBuyPage}
         >
@@ -65,7 +68,7 @@ export const HomeActions = ({
       )}
       <Button
         variant='secondary'
-        className='h-11 flex-1 text-[13px]'
+        className={ACTION}
         data-preload={PopupPath.SWAP}
         onClick={() => navigate(PopupPath.SWAP)}
       >
@@ -74,7 +77,7 @@ export const HomeActions = ({
       </Button>
       <Button
         variant={spendable ? 'primary' : 'secondary'}
-        className='h-11 flex-1 text-[13px]'
+        className={ACTION}
         disabled={!spendable}
         data-preload={PopupPath.SEND}
         onClick={() => navigate(PopupPath.SEND)}

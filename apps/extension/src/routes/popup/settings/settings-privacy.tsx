@@ -135,7 +135,7 @@ const PRIVACY_ROWS: readonly {
     label: 'zcash: transparent each block',
     explainId: 'privacy.zcashTransparentEachBlock',
     group: 'network',
-    note: 'the node sees these addresses checked together',
+    note: 'the node sees them checked together',
     visible: n => hasFeature(n, 'zcash'),
   },
   {
@@ -221,7 +221,7 @@ export function ContactDiscoverySection({ onExplain }: { onExplain?: (label: str
       <Row
         type='value'
         label='relay'
-        value={saved.relayEndpoint || DEFAULT_CONTACT_DISCOVERY_RELAY}
+        value={relayHost(saved.relayEndpoint || DEFAULT_CONTACT_DISCOVERY_RELAY)}
         onPress={() => setOpen(true)}
         {...explainProps('privacy.contactDiscoveryRelay')}
       />

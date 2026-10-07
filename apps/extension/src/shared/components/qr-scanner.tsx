@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { BrowserQRCodeReader } from '@zxing/browser';
 import { DecodeHintType } from '@zxing/library';
 import { Button } from '@repo/ui/components/ui/button';
+import { CAMERA_LINE, cameraTrouble } from '../camera-error';
 
 interface QrScannerProps {
   onScan: (data: string) => void;
@@ -149,29 +150,9 @@ export const QrScanner = ({
       }
     } catch (err) {
       startingRef.current = false;
-      // Classify by the standardized DOMException NAME first. getUserMedia rejects
-      // with a DOMException whose `.name` is stable across browsers, whereas
-      // `.message` wording differs - Brave/Chromium phrase permission denials
-      // differently, so message-only matching missed Brave and the camera just
-      // died with no guidance (the reported "camera won't pop up in Brave").
-      const name = err instanceof DOMException ? err.name : '';
-      const msg = err instanceof Error ? err.message : "the camera didn't start · please try again";
-      const isPermission =
-        name === 'NotAllowedError' ||
-        name === 'SecurityError' ||
-        name === 'PermissionDeniedError' ||
-        /Permission|NotAllowed|denied/i.test(msg);
-      const isNotFound =
-        name === 'NotFoundError' ||
-        name === 'OverconstrainedError' ||
-        name === 'DevicesNotFoundError' ||
-        /NotFound|no camera|Overconstrained/i.test(msg);
-      const isInUse =
-        name === 'NotReadableError' ||
-        name === 'AbortError' ||
-        /NotReadable|AbortError|Could not start|in use/i.test(msg);
+      const trouble = cameraTrouble(err);
 
-      if (isPermission) {
+      if (trouble === 'permission') {
         // Side panels and popups can't show the permission prompt, so open a
         // dedicated page that can - but ONLY ONCE (grantAttemptedRef), or a
         // browser-level block (Brave) would reopen the tab on every retry.
@@ -199,16 +180,11 @@ export const QrScanner = ({
           }
         }
         setError('permission');
-      } else if (isInUse) {
-        setError('another app is using the camera · please close it, then try again');
-      } else if (isNotFound) {
-        setError(
-          'no camera found. on brave, shields can hide the camera · it can be allowed for zafu, or the code can be pasted instead.',
-        );
       } else {
-        setError(msg || "the camera didn't start · please try again");
+        setError(CAMERA_LINE[trouble]);
       }
-      onErrorRef.current?.(msg);
+      // callers show what they are handed, so they get the calm line too
+      onErrorRef.current?.(CAMERA_LINE[trouble]);
     }
   }, [stopScanning]);
 

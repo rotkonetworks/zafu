@@ -6,6 +6,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
+import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
 
@@ -94,6 +95,8 @@ export interface StepRow {
   d?: string;
   at?: number;
   state: StepState;
+  /** text behind a copy button, when d shows it cut short */
+  copy?: string;
 }
 
 const hhmm = (t?: number) => (t ? new Date(t).toTimeString().slice(0, 5) : '');
@@ -149,6 +152,7 @@ export const StepLines = ({ steps }: { steps: StepRow[] }) => (
           </span>
           {s.d && <span className='text-xs text-fg-muted'>{s.d}</span>}
         </span>
+        {s.copy && <CopyButton text={s.copy} title={s.copy} />}
         <span className='text-xs tabular-nums text-fg-muted'>{hhmm(s.at)}</span>
       </div>
     ))}
