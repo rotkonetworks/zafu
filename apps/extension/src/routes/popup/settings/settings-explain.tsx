@@ -57,7 +57,8 @@ export const SETTINGS_EXPLAIN = {
     off: 'the browser hands those links to your other zcash app',
   },
   'privacy.zafuLinks': {
-    blurb: 'lets zafu open zafu: links from other pages, like a swap or a screen.',
+    blurb:
+      'lets zafu open zafu: links from other pages, like a swap, a card or a group invite, and their zafu.pro forms.',
     on: 'tapping a zafu: link opens the screen it fills, for you to review',
     off: 'those links stay with the page',
   },

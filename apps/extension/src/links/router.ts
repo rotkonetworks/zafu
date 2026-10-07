@@ -372,3 +372,9 @@ const TO_URI: { [K in Intent['kind']]: (i: Extract<Intent, { kind: K }>) => stri
 
 export const toUri = (intent: Intent): string =>
   (TO_URI[intent.kind] as (i: Intent) => string)(intent);
+
+/** the zafu.pro form of a social link, for anyone without zafu; the inverse of `WEB` */
+export const toWebUri = (intent: Extract<Intent, { kind: 'contact' | 'join' }>): string =>
+  intent.kind === 'contact'
+    ? `https://zafu.pro/c#${intent.card}`
+    : `https://zafu.pro/j#${intent.code}`;

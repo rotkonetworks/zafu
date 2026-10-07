@@ -7,6 +7,10 @@
  * open (malformed, several payments) is left to the browser, so the system's
  * zcash app still gets it; nothing else opens `zafu:`, so zafu takes those
  * and answers in its own window.
+ *
+ * A card or group link opened as a page (zafu.pro/c#..., /j#..., say from a
+ * chat app) opens in zafu too, once per link, under the zafu: links setting.
+ * The `#` part goes only to zafu, never anywhere else.
  */
 
 // egress guard first: nothing may capture fetch or open a socket before it
@@ -22,7 +26,7 @@ const apply = (settings: unknown) => {
   }
 };
 
-void chrome.storage.local
+const ready = chrome.storage.local
   .get('privacySettings')
   .then(r => apply(r['privacySettings']))
   .catch(() => undefined);
@@ -66,3 +70,25 @@ document.addEventListener(
   },
   true,
 );
+
+let opened: string | undefined;
+
+/** this page is a zafu.pro card or group link zafu can open: hand it over once */
+const openPage = () => {
+  const href = location.href;
+  const parsed = parseLink(href);
+  if (
+    window !== window.top ||
+    href === opened ||
+    !enabled.openZafuLinks ||
+    !parsed.ok ||
+    (parsed.intent.kind !== 'contact' && parsed.intent.kind !== 'join')
+  ) {
+    return;
+  }
+  opened = href;
+  void chrome.runtime?.sendMessage({ type: OPEN_LINK, uri: href })?.catch(() => undefined);
+};
+
+void ready.then(openPage);
+window.addEventListener('hashchange', () => void ready.then(openPage));

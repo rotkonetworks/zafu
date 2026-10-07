@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { looksLikeLink, notYet, parseLink, SCREENS, toUri, type Intent } from './router';
+import { looksLikeLink, notYet, parseLink, SCREENS, toUri, toWebUri, type Intent } from './router';
 
 const U = 'u1v9gaqrdva0example0address0only0alphanumerics';
 const T = 't1PTs8DQifJxg6HmUq7AgYYFNkbyQa1zjgf';
@@ -261,6 +261,14 @@ describe('contact and join', () => {
     expect(toUri({ kind: 'join', code: '673-chaos-mail-kite' })).toBe(
       'zafu:join/673-chaos-mail-kite',
     );
+  });
+
+  it.each([
+    { kind: 'contact', card },
+    { kind: 'join', code: '673-chaos-mail-kite' },
+  ] as const)('shares $kind as a zafu: link and a zafu.pro link that read the same', i => {
+    expect(intent(toUri(i))).toEqual(i);
+    expect(intent(toWebUri(i))).toEqual(i);
   });
 
   it.each([

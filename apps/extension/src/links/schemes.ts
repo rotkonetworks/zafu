@@ -13,4 +13,10 @@ export type LinkSetting = keyof Pick<PrivacySettings, 'openZcashLinks' | 'openZa
 export const SCHEMES: readonly { test: RegExp; setting: LinkSetting; ownsMalformed: boolean }[] = [
   { test: /^zcash:/i, setting: 'openZcashLinks', ownsMalformed: false },
   { test: /^zafu:/i, setting: 'openZafuLinks', ownsMalformed: true },
+  // a card or group link's web form: the site itself answers one zafu can't read
+  {
+    test: /^https:\/\/(?:www\.)?zafu\.pro\/[cj]\/?#/i,
+    setting: 'openZafuLinks',
+    ownsMalformed: false,
+  },
 ];
