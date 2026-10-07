@@ -391,8 +391,21 @@ export const ZcashContent = ({
             }
             amount={transparent.last ? zec(transparentZat) : undefined}
             onPress={openPoolNotes('transparent')}
+            // shield checks again as it opens, so a balance needs no second button
             action={
-              <>
+              transparentZat > 0n ? (
+                <Button
+                  variant='secondary'
+                  size='sm'
+                  className='shrink-0 border-surface-border text-network-accent'
+                  onClick={() => {
+                    setShieldOpen(true);
+                    transparent.check(tip);
+                  }}
+                >
+                  shield
+                </Button>
+              ) : (
                 <LineActions
                   actions={[
                     {
@@ -403,20 +416,7 @@ export const ZcashContent = ({
                     },
                   ]}
                 />
-                {transparentZat > 0n && (
-                  <Button
-                    variant='secondary'
-                    size='sm'
-                    className='shrink-0 border-surface-border text-network-accent'
-                    onClick={() => {
-                      setShieldOpen(true);
-                      transparent.check(tip);
-                    }}
-                  >
-                    shield
-                  </Button>
-                )}
-              </>
+              )
             }
           />
         </BalanceGroup>
