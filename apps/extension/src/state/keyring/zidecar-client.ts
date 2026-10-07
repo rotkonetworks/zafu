@@ -6,6 +6,7 @@
  * uses raw protobuf encoding (no grpc-web library needed)
  */
 
+import { decodeLightdInfo, type LightdInfo } from './lightd-info';
 import type { FlyProof } from '../../workers/fly-verify';
 import {
   encodeSubtreeRootsArg,
@@ -130,20 +131,14 @@ export class ZidecarClient {
    * `consensusBranchId` is field 6 (hex string, no 0x prefix); the turnstile
    * builder fails closed unless it is the real NU6.3 branch id (0x37a5165b).
    */
-  async getLightdInfo({ bare = false }: { bare?: boolean } = {}): Promise<{
-    vendor: string;
-    consensusBranchId: string;
-    chainName: string;
-    blockHeight: number;
-    saplingActivationHeight: number;
-  }> {
+  async getLightdInfo({ bare = false }: { bare?: boolean } = {}): Promise<LightdInfo> {
     const resp = await this.grpcCallService(
       'cash.z.wallet.sdk.rpc.CompactTxStreamer',
       'GetLightdInfo',
       new Uint8Array(0),
       { bare },
     );
-    return this.parseLightdInfo(resp);
+    return decodeLightdInfo(resp);
   }
 
   /**
@@ -1264,85 +1259,6 @@ export class ZidecarClient {
     }
 
     return { ringKeys, commitment, epoch, context, ringSize };
-  }
-
-  private parseLightdInfo(buf: Uint8Array): {
-    vendor: string;
-    consensusBranchId: string;
-    chainName: string;
-    blockHeight: number;
-    saplingActivationHeight: number;
-  } {
-    // LightdInfo (lightwalletd service.proto):
-    //   field 2:  string vendor
-    //   field 4:  string chainName
-    //   field 5:  uint64 saplingActivationHeight (varint)
-    //   field 6:  string consensusBranchId (hex, no 0x)
-    //   field 8:  uint64 blockHeight (varint)
-    let vendor = '';
-    let consensusBranchId = '';
-    let chainName = '';
-    let blockHeight = 0;
-    let saplingActivationHeight = 0;
-    let pos = 0;
-    const decoder = new TextDecoder();
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 0) {
-        let v = 0,
-          s = 0;
-        while (pos < buf.length) {
-          const b = buf[pos++]!;
-          v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (field === 5) {
-          saplingActivationHeight = v;
-        } else if (field === 8) {
-          blockHeight = v;
-        }
-      } else if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        const data = buf.subarray(pos, pos + len);
-        if (field === 2) {
-          vendor = decoder.decode(data);
-        } else if (field === 4) {
-          chainName = decoder.decode(data);
-        } else if (field === 6) {
-          consensusBranchId = decoder.decode(data);
-        }
-        pos += len;
-      } else {
-        break;
-      }
-    }
-
-    return { vendor, consensusBranchId, chainName, blockHeight, saplingActivationHeight };
   }
 
   private parseLicenseResponse(buf: Uint8Array): LicenseInfo {

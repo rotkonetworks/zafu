@@ -125,6 +125,16 @@ export const SETTINGS_EXPLAIN = {
     footer:
       "when the node sends a proof, zafu checks its chain against zcash's proof of work and pauses balances if it does not hold. a node without one is trusted for the chain: it could hide or delay a payment, though it can never spend your funds. either way it learns your ip and roughly when you sync, never your keys",
   },
+  'network.zcashServer': {
+    blurb: 'what your node says it runs, and the full node behind it.',
+    footer:
+      'zidecar, lightwalletd and zaino all answer the same standard question about themselves. zafu shows that answer and, where it can, opens the exact code it was built from. the node writes this answer itself, so it describes the node but proves nothing - the chain check is what proves',
+  },
+  'network.zcashConnection': {
+    blurb: 'how zafu reached your node on its last sync.',
+    footer:
+      "http/3 runs over quic, which encrypts every packet, including the connection details tcp leaves in the open. http/3 and http/2 both use tls with forward secrecy: a key stolen later cannot open today's traffic. the network still sees which server you talk to and your ip. rotko's nodes also turn off 0-rtt and session resumption, so your separate visits cannot be tied together through the connection",
+  },
   'network.penumbraNode': {
     blurb: 'which node zafu reads the penumbra chain from.',
     footer:
