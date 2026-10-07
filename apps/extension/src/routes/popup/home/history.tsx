@@ -1,4 +1,6 @@
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo, useRef, useEffect, useState } from 'react';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { onEgressBlocked } from '../../../net/egress';
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
@@ -199,6 +201,35 @@ export const HistoryContent = ({
   const zcashQ = useQuery(
     zcashHistoryQuery(zcashStoreId, zidecarUrl, tAddresses, network === 'zcash' && historyEnabled),
   );
+  // transparent rows are looked up over nym: say so when it was down, never drop them quietly
+  const [nymDown, setNymDown] = useState(false);
+  useEffect(
+    () =>
+      onEgressBlocked(
+        r =>
+          r.reason === 'transport-down' &&
+          r.destination === 'zcash' &&
+          r.nym !== 'broadcast' &&
+          setNymDown(true),
+      ),
+    [],
+  );
+  const down =
+    network === 'zcash' && nymDown ? (
+      <StatusSlot
+        tone='warn'
+        icon='i-ph-plug'
+        action={{
+          label: 'try again',
+          onClick: () => {
+            setNymDown(false);
+            void zcashQ.refetch();
+          },
+        }}
+      >
+        couldn't load over nym · try again
+      </StatusSlot>
+    ) : null;
 
   // refetch history when block heights advance (live update, no flicker)
   const prevPenumbraHeight = useRef(latestBlockHeight);
@@ -265,14 +296,18 @@ export const HistoryContent = ({
   }
 
   if (txs.length === 0) {
-    return limit || q.isLoading ? null : (
-      <span className='py-6 text-center text-xs text-fg-muted'>nothing here yet</span>
+    return (
+      down ??
+      (limit || q.isLoading ? null : (
+        <span className='py-6 text-center text-xs text-fg-muted'>nothing here yet</span>
+      ))
     );
   }
 
   const shown = limit ? txs.slice(0, limit) : txs;
   return (
     <section className='flex flex-col gap-2'>
+      {down}
       {limit && (
         <div className='flex h-[18px] items-center justify-between'>
           <h2 className='text-xs tracking-[0.04em] text-fg-muted'>activity</h2>
