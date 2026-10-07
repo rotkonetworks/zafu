@@ -1122,11 +1122,16 @@ export class Room {
    * when a caller invokes it, which should be "the user opened this room" or
    * "this room's alarm fired because the user opted in", never on extension
    * start, unlock, or popup open.
+   *
+   * `untilEpoch` stops the walk early, so a caller sharing a request budget
+   * across rooms reads the oldest windows first and carries on from there
+   * next time, instead of skipping the ones it had no budget for.
    */
-  async syncSince(sinceEpoch: number, maxWindows = 288): Promise<RoomSync> {
+  async syncSince(sinceEpoch: number, maxWindows = 288, untilEpoch?: number): Promise<RoomSync> {
     const current = this.currentEpoch();
     const floor = Math.max(sinceEpoch, current - maxWindows + 1, 0);
-    const windows = Array.from({ length: current - floor + 1 }, (_, i) => floor + i);
+    const last = Math.min(untilEpoch ?? current, current);
+    const windows = Array.from({ length: Math.max(0, last - floor + 1) }, (_, i) => floor + i);
     return this.syncWindows(windows);
   }
 
