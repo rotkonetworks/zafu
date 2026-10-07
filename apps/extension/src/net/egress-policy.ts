@@ -474,6 +474,11 @@ const stateOf = (spec: DestinationSpec, i: EgressInputs): { on: boolean; why: De
 };
 
 const targetOf = (url: string): { host: string; path: string } | undefined => {
+  // any host on a port: kept literal, a browser's url parser escapes the `*`
+  const anyHost = /^wss?:\/\/\*(:\d+)\/?$/.exec(url);
+  if (anyHost) {
+    return { host: `*${anyHost[1]}`, path: '' };
+  }
   const host = hostOf(url);
   if (!host) {
     return undefined;
