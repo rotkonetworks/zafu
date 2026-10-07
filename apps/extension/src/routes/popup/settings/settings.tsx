@@ -24,6 +24,7 @@ import {
   zcashStatus,
   type Status,
 } from './settings-status';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 const useSecurityStatus = () => {
   const unbacked = useStore(selectUnbackedSeatCount);
@@ -128,12 +129,12 @@ const GroupCard = ({ g }: { g: (typeof GROUPS)[number] }) => {
       <span className='flex min-w-0 grow flex-col gap-1'>
         <span className='flex items-baseline gap-2 whitespace-nowrap'>
           <span className='text-sm/[17px] text-fg-high'>{g.title}</span>
-          <span className='truncate text-[11px] text-fg-dim'>{tagline}</span>
+          <Clipped className='text-[11px] text-fg-dim'>{tagline}</Clipped>
         </span>
-        <span className='truncate text-[11px]/[16px] text-fg-muted'>
+        <Clipped className='text-[11px]/[16px] text-fg-muted'>
           {status.text}
           {status.warn && <span className='text-warn'>{status.warn}</span>}
-        </span>
+        </Clipped>
       </span>
       <span className='i-ph-caret-right size-3.5 shrink-0 text-fg-dim' aria-hidden='true' />
     </button>

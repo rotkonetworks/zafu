@@ -11,6 +11,7 @@ import { useViewingKey } from '../../../hooks/use-viewing-key';
 import { usePageNav } from '../../../utils/navigate';
 import { PagePath } from '../paths';
 import { useOnboarding } from '.';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 export const ImportViewingKey = () => {
   const navigate = usePageNav();
@@ -73,7 +74,7 @@ export const ImportViewingKey = () => {
             { warn: 'bg-warning', ok: 'bg-green', idle: 'bg-border-hard' }[tone],
           )}
         />
-        <span className='truncate'>{note?.text ?? 'a unified full viewing key (uview1...)'}</span>
+        <Clipped>{note?.text ?? 'a unified full viewing key (uview1...)'}</Clipped>
       </span>
 
       <Button type='submit' disabled={!ok} className='h-14 w-full text-[15px]'>

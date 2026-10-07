@@ -7,6 +7,7 @@
 import type { ReactNode } from 'react';
 import { cn } from '@repo/ui/lib/utils';
 import { QrCode } from '../../../components/qr-code';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 export function AddressView({
   address,
@@ -67,16 +68,16 @@ export function AddressView({
               pub ? 'border-hanko/35 bg-hanko/8' : 'border-surface-border-soft bg-surface-elev-2',
             )}
           >
-            <code
-              title={address || undefined}
+            <Clipped
+              label='address'
               className={cn(
-                'w-full truncate text-label transition-opacity duration-150',
+                'w-full font-mono text-label transition-opacity duration-150',
                 pub ? 'text-hanko-light' : 'text-fg-high',
                 retired && 'opacity-30',
               )}
             >
               {loading ? 'generating...' : address || 'no wallet selected'}
-            </code>
+            </Clipped>
           </div>
           {onRotate && (
             <button

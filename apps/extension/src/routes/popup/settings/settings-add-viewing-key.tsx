@@ -20,8 +20,7 @@ import { useViewingKey, viewingKeyImport } from '../../../hooks/use-viewing-key'
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { SettingsScreen } from './settings-screen';
-
-const shorten = (a: string) => (a.length <= 26 ? a : `${a.slice(0, 16)}…${a.slice(-8)}`);
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 export const SettingsAddViewingKey = () => {
   const navigate = usePopupNav();
@@ -100,9 +99,9 @@ export const SettingsAddViewingKey = () => {
         {address && (
           <div className='flex flex-col gap-1 border border-border-soft bg-elev-1 p-3'>
             <span className='text-label text-fg-dim lowercase'>this key belongs to</span>
-            <span className='font-mono text-xs text-fg-high' title={address}>
-              {shorten(address)}
-            </span>
+            <Clipped head={16} tail={8} label='address' className='font-mono text-xs text-fg-high'>
+              {address}
+            </Clipped>
           </div>
         )}
 

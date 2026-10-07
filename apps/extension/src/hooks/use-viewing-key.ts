@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import type { ZignerZafuImport } from '../state/keyring/types';
 import { classifyViewingKey, viewingKeyDeviceId, type ViewingKeyKind } from '../utils/viewing-key';
+import { shorten } from '@repo/ui/lib/utils';
 
 interface Zwasm {
   default?: (opts?: { module_or_path?: string }) => Promise<unknown>;
@@ -27,8 +28,6 @@ const decode = async (key: string): Promise<string> => {
   // the wasm hands back raw orchard bytes; encode them as the unified address
   return fixOrchardAddress(zwasm.address_from_ufvk(key, 0), !key.startsWith('uviewtest'));
 };
-
-const shorten = (a: string) => (a.length <= 26 ? a : `${a.slice(0, 16)}…${a.slice(-8)}`);
 
 const REFUSED: Partial<Record<ViewingKeyKind['kind'], string>> = {
   seed: 'this is a recovery phrase · please never paste it here',
@@ -90,7 +89,7 @@ export const useViewingKey = (input: string): ViewingKeyRead => {
   const net = detected.mainnet ? '' : ' (testnet)';
   return {
     ok: { key: detected.key, address: answer.address, mainnet: detected.mainnet },
-    note: { text: `full viewing key${net} · ${shorten(answer.address)}`, bad: false },
+    note: { text: `full viewing key${net} · ${shorten(answer.address, 16, 8)}`, bad: false },
   };
 };
 

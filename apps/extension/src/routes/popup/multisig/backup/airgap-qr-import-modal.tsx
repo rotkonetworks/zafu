@@ -11,6 +11,7 @@ import { AnimatedQrScanner } from '../../../../shared/components/animated-qr-sca
 import { useStore } from '../../../../state';
 import { selectMultisigWallets } from '../../../../state/wallets';
 import type { ImportSummary } from './import-helpers';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 interface AirgapWallet {
   label: string;
@@ -148,9 +149,14 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
                   <p className='text-label text-fg-muted'>
                     {w.threshold}-of-{w.maxSigners} · {w.mainnet ? 'mainnet' : 'testnet'}
                   </p>
-                  <p className='text-label font-mono text-fg-muted truncate'>
-                    {w.address.slice(0, 16)}…{w.address.slice(-8)}
-                  </p>
+                  <Clipped
+                    head={16}
+                    tail={8}
+                    label='address'
+                    className='block text-label font-mono text-fg-muted'
+                  >
+                    {w.address}
+                  </Clipped>
                 </div>
               ))}
             </div>

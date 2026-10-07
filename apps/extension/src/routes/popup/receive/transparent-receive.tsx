@@ -4,6 +4,7 @@
  * since an exchange often keeps paying a whitelisted address.
  */
 
+import { shorten } from '@repo/ui/lib/utils';
 import { useEffect, useState } from 'react';
 import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { conduitFor } from '@repo/wallet/networks/transparent/conduit';
@@ -16,11 +17,7 @@ import { useStore } from '../../../state';
 import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring';
 import { AddressView } from './address-view';
 import { useChainInUse } from '../../../hooks/enable-network';
-import {
-  allocateTransparentAddress,
-  readShownIndices,
-  shortAddress,
-} from '../../../transparent/hd';
+import { allocateTransparentAddress, readShownIndices } from '../../../transparent/hd';
 
 /** how many earlier addresses the list derives at once */
 const EARLIER_SHOWN = 10;
@@ -137,7 +134,7 @@ export const TransparentReceive = ({ chainId }: { chainId: CosmosChainId }) => {
                 <Row
                   key={r.index}
                   type='value'
-                  label={`#${r.index} ${shortAddress(r.address)}`}
+                  label={`#${r.index} ${shorten(r.address, 8, 4)}`}
                   value='copy'
                   onPress={() => copy(r.address)}
                 />

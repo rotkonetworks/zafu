@@ -6,6 +6,7 @@ import { Button } from '@repo/ui/components/ui/button';
 import { useState } from 'react';
 import { PagePath } from '../../page/paths';
 import { openPageInTab } from '../../../utils/popup-detection';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 /** network color for zigner vault badges */
 const networkColors: Record<string, string> = {
@@ -119,7 +120,7 @@ export const SettingsZigner = () => {
                     <div className='flex flex-col gap-2 min-w-0'>
                       <div className='flex items-center gap-2'>
                         <EyeOpenIcon className={`size-4 ${colorClass} flex-shrink-0`} />
-                        <span className='text-data text-fg-high truncate'>{vault.name}</span>
+                        <Clipped className='text-data text-fg-high'>{vault.name}</Clipped>
                         {networks.map(n => (
                           <span key={n} className='text-label px-1 bg-elev-2 text-fg-dim lowercase'>
                             {n}
@@ -128,7 +129,10 @@ export const SettingsZigner = () => {
                       </div>
                       {cosmosAddrs?.map(a => (
                         <span key={a.chainId} className='text-label tabular text-fg-muted pl-6'>
-                          {a.chainId}: {a.address.slice(0, 10)}...{a.address.slice(-6)}
+                          {a.chainId}:{' '}
+                          <Clipped head={10} tail={6} label='address'>
+                            {a.address}
+                          </Clipped>
                         </span>
                       ))}
                     </div>

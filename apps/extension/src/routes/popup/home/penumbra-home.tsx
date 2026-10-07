@@ -43,13 +43,14 @@ import { useTransparent } from './transparent-lines';
 import { PopupPath } from '../paths';
 import { homeFixture } from './fixture';
 import type { BalanceView } from '../../../components/wallet/balance-hero';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 const look = HOME_LOOK.penumbra;
 
 const Line = ({ label, children }: { label: string; children: ReactNode }) => (
   <div className='flex min-h-12 items-center justify-between gap-3 px-3.5 text-[13px]'>
     <span className='text-fg-muted'>{label}</span>
-    <span className='truncate text-fg-high tabular'>{children}</span>
+    <Clipped className='text-fg-high tabular'>{children}</Clipped>
   </div>
 );
 
@@ -139,17 +140,17 @@ export const TokenSheet = ({
                 when the symbol alone can't */}
             {asset?.base?.includes('/') && asset.base !== asset.rawId && (
               <div className='flex min-h-12 items-center gap-2 px-3.5'>
-                <span className='min-w-0 flex-1 truncate font-mono text-[11px] text-fg-muted'>
+                <Clipped className='flex-1 font-mono text-[11px] text-fg-muted' label='base denom'>
                   {asset.base}
-                </span>
+                </Clipped>
                 <CopyButton text={asset.base} className='h-8 px-1' />
               </div>
             )}
             {asset?.rawId && (
               <div className='flex min-h-12 items-center gap-2 px-3.5'>
-                <span className='min-w-0 flex-1 truncate font-mono text-[11px] text-fg-muted'>
+                <Clipped className='flex-1 font-mono text-[11px] text-fg-muted' label='asset id'>
                   {asset.rawId}
-                </span>
+                </Clipped>
                 <CopyButton text={asset.rawId} className='h-8 px-1' />
               </div>
             )}

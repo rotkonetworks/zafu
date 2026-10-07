@@ -12,6 +12,7 @@ import {
   type Zapp,
   type ZappCategory,
 } from './zapps';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 export const pageIndexLoader = async () => {
   const vaults = await localExtStorage.get('vaults');
@@ -186,10 +187,8 @@ export const PageIndex = () => {
                       />
                     </span>
                     <span className='flex min-w-0 flex-col'>
-                      <span className='truncate text-sm text-fg-high'>{zapp.name}</span>
-                      <span className='truncate text-label text-fg-muted' title={zapp.description}>
-                        {zapp.description}
-                      </span>
+                      <Clipped className='text-sm text-fg-high'>{zapp.name}</Clipped>
+                      <Clipped className='text-label text-fg-muted'>{zapp.description}</Clipped>
                     </span>
                     <span className='i-ph-arrow-up-right ml-auto h-4 w-4 shrink-0 text-fg-dim opacity-0 transition-opacity group-hover:opacity-100' />
                   </button>

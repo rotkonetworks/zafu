@@ -40,6 +40,7 @@ import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { SettingsScreen } from './settings-screen';
 import { usePasswordGate } from '../../../hooks/password-gate';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 type PayState =
   | 'idle'
@@ -575,13 +576,17 @@ export const SubscribePage = () => {
               <div className='flex justify-between items-start text-xs font-mono gap-2'>
                 <span className='text-fg-muted shrink-0'>to</span>
                 <span className='text-fg text-right break-all text-label'>
-                  {ROTKO_LICENSE_ADDRESS.slice(0, 20)}...{ROTKO_LICENSE_ADDRESS.slice(-8)}
+                  <Clipped head={20} tail={8} label='address'>
+                    {ROTKO_LICENSE_ADDRESS}
+                  </Clipped>
                 </span>
               </div>
               <div className='flex justify-between items-start text-xs font-mono gap-2'>
                 <span className='text-fg-muted shrink-0'>memo</span>
                 <span className='text-fg text-right break-all text-label'>
-                  {memo.slice(0, 12)}...{memo.slice(-8)}
+                  <Clipped head={12} tail={8} label='memo'>
+                    {memo}
+                  </Clipped>
                 </span>
               </div>
               {isZignerWallet && (

@@ -11,6 +11,7 @@ import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
 import { Mark } from '@repo/ui/components/ui/mark';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string }> = {
   low: { border: 'border-border-soft', bg: '', text: 'text-fg-muted' },
@@ -84,11 +85,11 @@ export const CapabilityApproval = () => {
             <div className='flex w-full items-center gap-2'>
               {!!origin && <OriginIcon origin={origin} size={32} />}
               <div className='flex min-w-0 flex-col'>
-                {title && <span className='truncate text-sm text-fg-high'>{title}</span>}
+                {title && <Clipped className='text-sm text-fg-high'>{title}</Clipped>}
                 {origin && (
-                  <span className='truncate text-xs text-fg-muted'>
+                  <Clipped className='text-xs text-fg-muted' label='site'>
                     <SafeOriginURL origin={origin} />
-                  </span>
+                  </Clipped>
                 )}
               </div>
             </div>

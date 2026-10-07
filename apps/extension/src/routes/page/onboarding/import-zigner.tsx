@@ -14,6 +14,7 @@ import { keystoneDeviceId } from '../../../utils/viewing-key';
 import { setOnboardingValuesInStorage } from './persist-parameters';
 import { SEED_PHRASE_ORIGIN } from './password/types';
 import { localExtStorage } from '@repo/storage-chrome/local';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 /**
  * access-level note on a scanned import. one tight line, no prose - the
@@ -112,8 +113,10 @@ function detailLine(
         <>
           {ctx.parsedCosmosExport.addresses.map(a => (
             <div key={a.chainId} className='break-all font-mono text-label text-fg-muted'>
-              <span className='capitalize text-fg'>{a.chainId}:</span> {a.address.slice(0, 12)}...
-              {a.address.slice(-8)}
+              <span className='capitalize text-fg'>{a.chainId}:</span>{' '}
+              <Clipped head={12} tail={8} label='address'>
+                {a.address}
+              </Clipped>
             </div>
           ))}
         </>

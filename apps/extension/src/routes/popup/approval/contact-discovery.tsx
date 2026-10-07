@@ -18,6 +18,7 @@ import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
 import { Mark } from '@repo/ui/components/ui/mark';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 // `new URL()` throws on a malformed string; the `app` query param is only
 // truthiness-checked upstream, so parse defensively and fall back to the raw text.
@@ -60,11 +61,13 @@ export const ContactDiscoveryApproval = () => {
           <div className='flex w-full items-center gap-2'>
             {!!origin && <OriginIcon origin={origin} size={32} />}
             <div className='flex min-w-0 flex-col'>
-              <span className='truncate text-sm text-fg-high'>{host}</span>
+              <Clipped className='text-sm text-fg-high' label='site'>
+                {host}
+              </Clipped>
               {origin && (
-                <span className='truncate text-xs text-fg-muted'>
+                <Clipped className='text-xs text-fg-muted' label='site'>
                   <SafeOriginURL origin={origin} /> · find friends
-                </span>
+                </Clipped>
               )}
             </div>
           </div>

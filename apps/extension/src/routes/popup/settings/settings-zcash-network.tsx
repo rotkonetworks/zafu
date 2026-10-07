@@ -30,6 +30,7 @@ import { BUNDLED_SERVICE_CONFIG } from '../../../services/voting/bundled-config'
 import { usePopupNav } from '../../../utils/navigate';
 
 type Explain = (id: ExplainId) => { onExplain?: (label: string) => void };
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 /** the wallet's stored birthday (an external system, read once per wallet) */
 const useBirthday = (vaultId: string | undefined) => {
@@ -293,8 +294,8 @@ const ZcashOn = () => {
               )}
             />
             <span className='flex min-w-0 grow flex-col gap-[3px]'>
-              <span className='truncate text-sm text-fg-high'>{status}</span>
-              <span className='truncate text-[11px] text-fg-muted'>
+              <Clipped className='text-sm text-fg-high'>{status}</Clipped>
+              <Clipped className='text-[11px] text-fg-muted'>
                 {[
                   workerSyncHeight > 0 && `block ${workerSyncHeight.toLocaleString()}`,
                   chain?.status === 'checked'
@@ -305,7 +306,7 @@ const ZcashOn = () => {
                 ]
                   .filter(Boolean)
                   .join(' · ')}
-              </span>
+              </Clipped>
             </span>
             {pct != null && <span className='text-label text-fg-muted'>{pct}%</span>}
             {pct != null && (

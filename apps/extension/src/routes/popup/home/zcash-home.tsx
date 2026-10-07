@@ -68,6 +68,8 @@ import { BUY_PRELOAD, openBuyPage } from '../../../buy/open';
 import { LP_PRELOAD, openLpPage } from '../../../lp/open';
 import { LpCard, LpWave } from '../../../components/lp-card';
 import { PAY_APPS } from '../../../buy/apps';
+import { Clipped } from '@repo/ui/components/ui/clipped';
+import { shorten } from '@repo/ui/lib/utils';
 
 const zec = (zat: bigint) => fmtZecHero(Number(zat) / 1e8);
 
@@ -329,7 +331,7 @@ export const ZcashContent = ({
     : () => undefined;
 
   const nameOf = (addr?: string) =>
-    addr && (findByAddress(addr)?.contact.name ?? `${addr.slice(0, 8)}…${addr.slice(-4)}`);
+    addr && (findByAddress(addr)?.contact.name ?? shorten(addr, 8, 4));
 
   return (
     <HomeScreen
@@ -426,14 +428,14 @@ export const ZcashContent = ({
             tile={<Tile tone='warn'>t</Tile>}
             label='transparent'
             tag={
-              <span className='truncate text-[11px] text-fg-muted'>
+              <Clipped className='text-[11px] text-fg-muted'>
                 <span className='text-warn'>public</span>
                 {transparent.checking
                   ? ' · checking'
                   : transparent.failed
                     ? ' · no answer'
                     : transparent.last && ` · ${ago(transparent.last.at)}`}
-              </span>
+              </Clipped>
             }
             amount={transparent.last ? zec(transparentZat) : undefined}
             onPress={openPoolNotes('transparent')}

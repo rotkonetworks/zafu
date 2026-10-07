@@ -25,6 +25,7 @@ import { QrScanner } from '../../../shared/components/qr-scanner';
 import { exitApprovalSurface, usePopupNav } from '../../../utils/navigate';
 import { useApprovalFixture } from './use-approval-fixture';
 import { hostnameOf } from '../../../shared/components/origin-icon';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 type SignStep = 'review' | 'password' | 'show-qr' | 'scan-qr' | 'signing';
 
@@ -224,10 +225,10 @@ export const SignApproval = () => {
             <div className='flex w-full items-center gap-2'>
               <OriginIcon origin={origin} size={32} />
               <div className='flex min-w-0 flex-col'>
-                {title && <span className='truncate text-sm text-fg-high'>{title}</span>}
-                <span className='truncate text-xs text-fg-muted'>
+                {title && <Clipped className='text-sm text-fg-high'>{title}</Clipped>}
+                <Clipped className='text-xs text-fg-muted' label='site'>
                   <DisplayOriginURL url={new URL(origin)} />
-                </span>
+                </Clipped>
               </div>
             </div>
           )}

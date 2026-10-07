@@ -11,6 +11,7 @@ import { useState, useEffect } from 'react';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 import type { KeyInfo } from '../../../state/keyring';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 interface ClearingState {
   inProgress: boolean;
@@ -136,7 +137,7 @@ export const SettingsClearCache = () => {
                 <div className='flex flex-col divide-y divide-border/40 border border-border-soft bg-elev-1'>
                   {g.vaults.map(v => (
                     <div key={v.id} className='px-3 py-2.5'>
-                      <p className='text-sm truncate'>{v.name}</p>
+                      <Clipped className='block text-sm'>{v.name}</Clipped>
                       <div className='flex gap-2 mt-1.5'>
                         <button
                           disabled={clearingState.inProgress}

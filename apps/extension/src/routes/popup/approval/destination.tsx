@@ -16,6 +16,7 @@ import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { NET_EGRESS_INTERNAL_METHODS } from '../../../message/listen/zafu-method-names';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 // `new URL()` throws on a malformed string; the `app` query param is only
 // truthiness-checked upstream, so parse defensively and fall back to the raw text.
@@ -93,9 +94,9 @@ export const DestinationApproval = () => {
           {origin && (
             <div className='border border-border-soft bg-canvas p-3'>
               <p className='kicker mb-1'>requested by</p>
-              <p className='truncate text-xs text-fg-muted'>
+              <Clipped className='block text-xs text-fg-muted' label='site'>
                 <SafeOriginURL origin={origin} />
-              </p>
+              </Clipped>
             </div>
           )}
 

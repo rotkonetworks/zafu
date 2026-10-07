@@ -38,6 +38,7 @@ import {
   type TableFilter,
 } from '../../../state/app-managed-tables';
 import { useAppManagedTables } from '../../../hooks/app-managed-tables';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 /** format zatoshi to ZEC display string */
 const formatZec = (zat: bigint) => {
@@ -46,10 +47,6 @@ const formatZec = (zat: bigint) => {
   const fracStr = frac.toString().padStart(8, '0').replace(/0+$/, '') || '0';
   return `${whole}.${fracStr}`;
 };
-
-/** truncate address for display */
-const truncateAddr = (addr: string) =>
-  addr.length > 16 ? `${addr.slice(0, 8)}...${addr.slice(-8)}` : addr;
 
 /** session status indicator */
 const SessionBadge = () => {
@@ -102,10 +99,12 @@ const WalletRow = ({
           <span className='bg-primary/15 px-1.5 py-0.5 text-label text-zigner-gold leading-none shrink-0'>
             {wallet.multisig!.threshold}-of-{wallet.multisig!.maxSigners}
           </span>
-          <span className='text-sm truncate'>{wallet.label}</span>
+          <Clipped className='text-sm'>{wallet.label}</Clipped>
           {isActive && <span className='i-ph-check h-3 w-3 text-zigner-gold shrink-0' />}
         </div>
-        <span className='text-body text-fg-muted font-mono'>{truncateAddr(wallet.address)}</span>
+        <Clipped head={8} label='address' className='text-body text-fg-muted font-mono'>
+          {wallet.address}
+        </Clipped>
         {wallet.multisig?.zignerWalletId && (
           <span className='text-label text-fg-dim font-mono'>
             zigner: {wallet.multisig.zignerWalletId}
@@ -253,7 +252,7 @@ const AppManagedRow = (props: {
     <div className='flex flex-col gap-2 border border-border-soft bg-elev-1 px-3 py-3'>
       <div className='flex min-w-0 items-center justify-between gap-2'>
         <div className='flex min-w-0 flex-col gap-0.5'>
-          <span className='truncate text-sm'>{props.row.wallet.label}</span>
+          <Clipped className='text-sm'>{props.row.wallet.label}</Clipped>
           <span className='text-label text-fg-dim'>created {created}</span>
         </div>
         {props.row.balanceZat > 0n ? (

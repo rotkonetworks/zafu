@@ -14,6 +14,7 @@ import {
   type RiskLevel,
 } from '@repo/storage-chrome/capabilities';
 import { useApprovalFixture } from './use-approval-fixture';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string }> = {
   low: { border: 'border-border-soft', bg: '', text: 'text-fg-muted' },
@@ -117,14 +118,14 @@ export const OriginApproval = () => {
           <div className='flex w-full items-center gap-2'>
             {!!requestOrigin && <OriginIcon origin={requestOrigin} size={32} />}
             <div className='flex min-w-0 flex-col'>
-              <span className='truncate text-sm text-fg-high'>{title || 'this site'}</span>
-              <span className='truncate text-xs text-fg-muted'>
+              <Clipped className='text-sm text-fg-high'>{title || 'this site'}</Clipped>
+              <Clipped className='text-xs text-fg-muted' label='site'>
                 {originUrl ? (
                   <DisplayOriginURL url={originUrl} />
                 ) : (
                   <span className='break-all'>{requestOrigin}</span>
                 )}
-              </span>
+              </Clipped>
             </div>
           </div>
           <Mark variant='seal' size={40} />
