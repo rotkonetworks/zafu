@@ -36,7 +36,8 @@
 
 export const ZCASHME_BASE_URL = 'https://zcash.me';
 
-const FETCH_TIMEOUT_MS = 10_000;
+// a lookup goes over nym: room for the tunnel's cold start (13-17 s measured)
+const FETCH_TIMEOUT_MS = 45_000;
 /** the server clamps `limit` to 1..100 */
 const DIRECTORY_PAGE_SIZE = 100;
 /** hard stop on pagination so a misbehaving cursor can't loop forever */
