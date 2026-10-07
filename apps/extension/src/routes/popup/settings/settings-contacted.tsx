@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
-import { clearContacted, dayOf, KEEP_DAYS, readContacted } from '../../../net/contacted';
+import { clearContactedEverywhere, dayOf, KEEP_DAYS, readContacted } from '../../../net/contacted';
 import { readEgressView } from '../../../net/egress-opt-in';
 import { clearNetEgressLog, readNetEgressLog } from '../../../net/ledger';
 import { PopupPath } from '../paths';
@@ -74,7 +74,7 @@ export const SettingsContacted = () => {
   }, [now]);
 
   const clear = async () => {
-    await Promise.all([clearContacted(), clearNetEgressLog()]);
+    await Promise.all([clearContactedEverywhere(), clearNetEgressLog()]);
     setLines({ contacted: [], refused: [] });
   };
 

@@ -18,7 +18,7 @@ import { localExtStorage, type LocalStorageState } from '@repo/storage-chrome/lo
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { getKey, isEncryptedWrapper, readEncrypted } from '../state/encrypted-storage';
 import { keyUse } from '../state/keyring-lock';
-import type { ContactTally } from './egress';
+import { CONTACTED_CLEAR, type ContactTally } from './egress';
 
 export const CONTACTED_KEY = 'netContacted';
 const KEY = CONTACTED_KEY as keyof LocalStorageState;
@@ -98,9 +98,11 @@ const parseJson = (s: string | null): unknown => {
 
 let pending: ContactedLog = {};
 let timer: ReturnType<typeof setTimeout> | undefined;
+/** bumped by a clear, so a write already under way drops its batch instead of bringing it back */
+let generation = 0;
 
 /** merged into the sealed log under the key it is read with; false while locked */
-const write = (batch: ContactedLog, now: number): Promise<boolean> =>
+const write = (batch: ContactedLog, now: number, gen: number): Promise<boolean> =>
   keyUse(async () => {
     const key = await getKey(sessionExtStorage);
     if (!key) {
@@ -112,7 +114,11 @@ const write = (batch: ContactedLog, now: number): Promise<boolean> =>
       ? await key.unseal(Box.fromJson(raw.encrypted)).catch(() => null)
       : null;
     const next = pruneContacted(mergeContacted(parseContacted(parseJson(plain)), batch), now);
-    await localExtStorage.set(KEY, { encrypted: (await key.seal(JSON.stringify(next))).toJson() });
+    const sealed = (await key.seal(JSON.stringify(next))).toJson();
+    // a clear that landed while this write was sealing wins
+    if (gen === generation) {
+      await localExtStorage.set(KEY, { encrypted: sealed });
+    }
     return true;
   });
 
@@ -123,8 +129,9 @@ export const flushContacted = async (now = Date.now()): Promise<void> => {
   if (!Object.keys(batch).length) {
     return;
   }
-  const ok = await write(batch, now).catch(() => false);
-  if (!ok) {
+  const gen = generation;
+  const ok = await write(batch, now, gen).catch(() => false);
+  if (!ok && gen === generation) {
     pending = pruneContacted(mergeContacted(batch, pending), now);
   }
 };
@@ -142,8 +149,22 @@ export const readContacted = async (now = Date.now()): Promise<ContactedLog> =>
     now,
   );
 
-/** "clear this list": the stored log, and whatever this realm had not written yet */
+/** the stored log, and whatever this realm had not written yet */
 export const clearContacted = async (): Promise<void> => {
+  generation++;
   pending = {};
-  await localExtStorage.remove(KEY);
+  clearTimeout(timer);
+  timer = undefined;
+  await keyUse(() => localExtStorage.remove(KEY));
+};
+
+/**
+ * "clear this list" from a screen: the service worker, the one writer, drops
+ * its unwritten counts first, so nothing it held comes back on its next write.
+ */
+export const clearContactedEverywhere = async (): Promise<void> => {
+  await Promise.resolve(chrome.runtime.sendMessage({ type: CONTACTED_CLEAR })).catch(
+    () => undefined,
+  );
+  await clearContacted();
 };

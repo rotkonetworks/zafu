@@ -83,6 +83,8 @@ export interface EgressHost {
 }
 
 const CHANNEL = 'zafu-egress';
+/** a runtime message: the service worker drops its unwritten contact counts (./contacted) */
+export const CONTACTED_CLEAR = 'zafu_contacted_clear';
 /** how long a realm gathers its contacts before handing them on as one message */
 const TALLY_MS = 5000;
 /** how long a realm waits for its first table before failing closed */

@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Key } from '@repo/encryption/key';
 import { storage } from '@repo/mock-chrome';
 import {
   CONTACTED_KEY,
   KEEP_DAYS,
   clearContacted,
+  clearContactedEverywhere,
   dayOf,
   flushContacted,
   noteContacted,
@@ -82,6 +83,42 @@ describe('what zafu contacted lately', () => {
     noteContacted({ a: { n: 2, at: NOW } });
     await flushContacted(NOW);
     expect(await readContacted(NOW)).toEqual({ a: { last: NOW, days: { [dayOf(NOW)]: 2 } } });
+  });
+
+  it('a clear drops what was not written yet, so nothing comes back on the next write', async () => {
+    await unlock();
+    noteContacted({ a: { n: 1, at: NOW } });
+    await flushContacted(NOW);
+    noteContacted({ b: { n: 3, at: NOW } });
+    await clearContacted();
+    await flushContacted(NOW);
+    expect(await storage.local.get(CONTACTED_KEY)).toEqual({});
+
+    // and a write already under way when the clear lands is dropped too
+    noteContacted({ c: { n: 2, at: NOW } });
+    const writing = flushContacted(NOW);
+    await clearContacted();
+    await writing;
+    expect(await readContacted(NOW)).toEqual({});
+  });
+
+  it('asks the service worker to drop its counts before clearing', async () => {
+    const send = vi.fn(async () => true);
+    const before = Object.getOwnPropertyDescriptor(globalThis.chrome, 'runtime')!;
+    Object.defineProperty(globalThis.chrome, 'runtime', {
+      configurable: true,
+      value: { ...globalThis.chrome.runtime, sendMessage: send },
+    });
+    try {
+      await unlock();
+      noteContacted({ a: { n: 1, at: NOW } });
+      await flushContacted(NOW);
+      await clearContactedEverywhere();
+      expect(send).toHaveBeenCalledWith({ type: 'zafu_contacted_clear' });
+      expect(await readContacted(NOW)).toEqual({});
+    } finally {
+      Object.defineProperty(globalThis.chrome, 'runtime', before);
+    }
   });
 
   it('clears', async () => {
