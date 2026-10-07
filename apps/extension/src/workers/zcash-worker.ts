@@ -4525,55 +4525,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         try {
           const sent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
 
-          // Direct confirmation lookup. Reconcile confirms a send only on a real
-          // block height, and until now that height came exclusively from the
-          // scan tagging our spent input note. That path is fragile: a block
-          // scanned before the spend was recorded, or a backend that serves
-          // incomplete ironwood actions for a block, leaves our own mined tx with
-          // no height, so it shows "pending" forever even though the explorer has
-          // it confirmed. So for any still-pending send with no height yet, ask
-          // the node outright which block the txid is in - it is OUR broadcast
-          // txid on the SAME node, so this reveals nothing the node did not
-          // already see. Bounded to pending, height-less records; once confirmed,
-          // confirmedHeight is persisted and the lookup never runs for it again.
-          const haveRealHeight = new Set(histTxs.filter(t => t.height > 0).map(t => t.id));
-          const needLookup = sent.filter(
-            s =>
-              !(typeof s.confirmedHeight === 'number' && s.confirmedHeight > 0) &&
-              !haveRealHeight.has(s.txid),
-          );
-          if (needLookup.length > 0) {
-            try {
-              const lookupClient = makeZcashClient(histServerUrl);
-              const found = await Promise.all(
-                needLookup.map(async s => {
-                  try {
-                    const raw = await lookupClient.getTransaction(hexDecode(s.txid));
-                    return raw.height && raw.height > 0 ? { s, height: raw.height } : null;
-                  } catch {
-                    return null; // a failed lookup just leaves it pending
-                  }
-                }),
-              );
-              for (const hit of found) {
-                if (!hit) {
-                  continue;
-                }
-                histTxs.push({
-                  id: hit.s.txid,
-                  height: hit.height,
-                  type: hit.s.kind === 'shield' ? 'shield' : 'send',
-                  amount: (BigInt(hit.s.amount) + BigInt(hit.s.fee)).toString(),
-                  asset: 'ZEC',
-                });
-              }
-            } catch (e) {
-              console.warn(
-                `[zcash-worker] get-history: pending-send height lookup failed: ${errText(e)}`,
-              );
-            }
-          }
-
+          // A send is confirmed by sync finding its spend, never by asking the
+          // node for our own txid: that lookup would tie the txid to this
+          // client's address.
           const result = reconcileSentTxs({
             chainTxs: histTxs,
             sent,
