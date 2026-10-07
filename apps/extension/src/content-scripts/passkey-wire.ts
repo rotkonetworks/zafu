@@ -64,7 +64,9 @@ export const passkeyMessage = (
   }
   if (kind === 'create') {
     const { rpName, userName, userDisplayName, userId, prfRequested } = p;
+    const excludeCredentials = allowOf(p['excludeCredentials']);
     if (
+      excludeCredentials === null ||
       !hex(p['challenge']) ||
       !str(rpName ?? '') ||
       !str(userName ?? '') ||
@@ -82,6 +84,7 @@ export const passkeyMessage = (
       userDisplayName,
       userId,
       prfRequested,
+      excludeCredentials,
       // last, so nothing above can name another handler
       type: PASSKEY_MESSAGE_TYPES.create,
     };
@@ -105,6 +108,64 @@ export const passkeyMessage = (
     prfSalts,
     allowCredentials,
     type: PASSKEY_MESSAGE_TYPES.get,
+  };
+};
+
+/** the refusal codes a page may see; anything else becomes a bare refusal */
+const PAGE_CODES = new Set(['failed', 'cancelled', 'denied', 'exists']);
+
+/**
+ * What the page gets back: on success only the credential fields, on refusal
+ * only `{ success: false }` and one fixed code - never the worker's own words.
+ */
+export const passkeyPageResult = (res: unknown): Record<string, unknown> | undefined => {
+  if (typeof res !== 'object' || res === null) {
+    return undefined;
+  }
+  const r = res as Record<string, unknown>;
+  if (r['success'] === true) {
+    const { credentialId, authenticatorData, publicKey, signature, userHandle } = r;
+    const { prfEnabled, prfResults } = r;
+    return {
+      success: true,
+      credentialId,
+      authenticatorData,
+      publicKey,
+      signature,
+      userHandle,
+      prfEnabled,
+      prfResults,
+    };
+  }
+  const code =
+    typeof r['code'] === 'string' && PAGE_CODES.has(r['code'])
+      ? r['code']
+      : r['cancelled'] === true
+        ? 'cancelled'
+        : undefined;
+  return code ? { success: false, code } : { success: false };
+};
+
+/**
+ * After "not now" or a closed window a page waits before zafu shows it another
+ * passkey screen: 30 s, then twice as long each time, back to 30 s after a
+ * sign-in goes through. Kept in memory by the bridge, per page.
+ */
+export const promptCooldown = (base = 30_000) => {
+  let until = 0;
+  let wait = base;
+  return {
+    quiet: (now: number) => now < until,
+    after: (res: unknown, now: number) => {
+      const r = res as { success?: unknown; code?: unknown } | undefined;
+      if (r?.code === 'denied' || r?.code === 'cancelled') {
+        until = now + wait;
+        wait *= 2;
+      } else if (r?.success === true) {
+        until = 0;
+        wait = base;
+      }
+    },
   };
 };
 

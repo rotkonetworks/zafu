@@ -24,6 +24,12 @@ export type SessionStorageState = {
    * with passwordKey.
    */
   retiredPasswordKey?: { key: KeyJson; until: number };
+  /**
+   * per wallet (vault id), the identity node passkeys and passwords derive
+   * from, so they never decrypt the phrase. Cannot reach a spending key.
+   * Removed with passwordKey.
+   */
+  identityKeys?: Record<string, string>;
   /** the last penumbra DEX price pass (prices per quote, then per asset id), with when it ran */
   penumbraPrices?: { at: number; book: Record<'usd' | 'um', Record<string, number | null>> };
 };

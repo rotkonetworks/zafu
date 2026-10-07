@@ -135,7 +135,7 @@ import { hmac } from '@noble/hashes/hmac';
 import { hkdf } from '@noble/hashes/hkdf';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { xwingPublicKeyFromSeed, XWING_LENGTHS } from '@zafu/pq';
-import { isPublicSuffix } from './public-suffix';
+import { isPasswordSuffix } from './password-suffixes';
 
 /**
  * ZID domain separator - v2 uses two-stage KDF.
@@ -218,6 +218,14 @@ const deriveRoot = (mnemonic: string): Uint8Array => {
 /** derive a named identity subtree root. caller must zeroize. */
 const deriveIdentity = (root: Uint8Array, name: string): Uint8Array =>
   hmac(sha512, root, enc.encode('identity:' + name));
+
+/** a field's bytes behind its u32be length, so no two inputs share bytes */
+const lpBytes = (b: Uint8Array): Uint8Array => {
+  const out = new Uint8Array(4 + b.length);
+  new DataView(out.buffer).setUint32(0, b.length);
+  out.set(b, 4);
+  return out;
+};
 
 /** derive seed from identity + tag. caller must zeroize. */
 const deriveSeed = (identity: Uint8Array, tag: Uint8Array): Uint8Array =>
@@ -834,92 +842,112 @@ export const verifyP256 = (
 };
 
 // -- passkey (non-rotating, long-lived WebAuthn credential) --
+//
+// Passkeys take the identity node, not the phrase: deriveIdentity's output is
+// all they need, and it cannot reach a spending key. They are NOT affected by
+// ZID rotation - passkeys are long-lived, rotating would lock the user out.
+
+/** the identity node passkeys and passwords derive from. caller must zeroize. */
+export const identityKey = (mnemonic: string, name = DEFAULT_IDENTITY): Uint8Array => {
+  const root = deriveRoot(mnemonic);
+  const identity = deriveIdentity(root, name);
+  root.fill(0);
+  return identity;
+};
 
 /**
- * derive a passkey seed for a relying party. NOT affected by ZID rotation.
- * passkeys are long-lived credentials - rotating would lock the user out.
- * re-registration is an explicit action (delete + create new passkey).
+ * A passkey's seed. With a user id it is per relying party AND account (v3),
+ * so two accounts at one site are unlinkable; without one it is the per-rpId
+ * seed every passkey made before v3 uses, unchanged.
  */
-const deriveSeedForPasskey = (identity: Uint8Array, rpId: string): Uint8Array =>
-  deriveSeed(identity, enc.encode('passkey:' + rpId));
+const deriveSeedForPasskey = (identity: Uint8Array, rpId: string, userId?: Uint8Array) =>
+  userId?.length
+    ? deriveSeed(
+        identity,
+        new Uint8Array([
+          ...enc.encode('passkey:v3'),
+          ...lpBytes(enc.encode(rpId)),
+          ...lpBytes(userId),
+        ]),
+      )
+    : deriveSeed(identity, enc.encode('passkey:' + rpId));
 
-/**
- * derive a P-256 keypair for a passkey (non-rotating).
- */
-export const derivePasskeyForSite = (
-  mnemonic: string,
-  identity: string,
+/** run `fn` on a passkey's P-256 key and zeroize it */
+const withPasskey = <T>(
+  identity: Uint8Array,
   rpId: string,
-): { publicKey: string } =>
-  withIdentity(mnemonic, identity, id => {
-    const { privateKey, publicKey } = p256KeypairFromSeed(deriveSeedForPasskey(id, rpId));
-    privateKey.fill(0);
-    return { publicKey: bytesToHex(publicKey) };
-  });
+  userId: Uint8Array | undefined,
+  fn: (key: { privateKey: Uint8Array; publicKey: Uint8Array }) => T,
+): T => {
+  const key = p256KeypairFromSeed(deriveSeedForPasskey(identity, rpId, userId));
+  try {
+    return fn(key);
+  } finally {
+    key.privateKey.fill(0);
+  }
+};
+
+/** a passkey's uncompressed P-256 public key */
+export const passkeyPublicKey = (
+  identity: Uint8Array,
+  rpId: string,
+  userId?: Uint8Array,
+): Uint8Array => withPasskey(identity, rpId, userId, k => k.publicKey);
 
 /**
- * sign with the passkey P-256 key (non-rotating): ES256 over SHA-256(message),
- * as WebAuthn relying parties verify it.
+ * sign with a passkey: ES256 over SHA-256(message), as WebAuthn relying
+ * parties verify it. Returns the DER signature.
  */
 export const signPasskey = (
-  mnemonic: string,
+  identity: Uint8Array,
   rpId: string,
   message: Uint8Array,
-  identity = DEFAULT_IDENTITY,
-): { signature: Uint8Array; publicKey: string } =>
-  withIdentity(mnemonic, identity, id => {
-    const seed = deriveSeedForPasskey(id, rpId);
-    const { privateKey, publicKey } = p256KeypairFromSeed(seed);
-    const sig = p256.sign(message, privateKey, { prehash: true, lowS: true });
-    privateKey.fill(0);
-    return {
-      signature: sig.toDERRawBytes(),
-      publicKey: bytesToHex(publicKey),
-    };
-  });
+  userId?: Uint8Array,
+): Uint8Array =>
+  withPasskey(identity, rpId, userId, k =>
+    p256.sign(message, k.privateKey, { prehash: true, lowS: true }).toDERRawBytes(),
+  );
 
 /**
- * the passkey's credential id: 16 bytes keyed by the passkey seed, so it is
- * different for every user and every relying party, and says nothing about
- * the wallet that made it. Same seed + rpId gives the same id on every device.
+ * the per-rpId passkey's credential id (v2): 16 bytes keyed by its seed, so it
+ * is different for every user and every relying party.
  */
-export const derivePasskeyCredentialId = (
-  mnemonic: string,
-  identity: string,
-  rpId: string,
-): Uint8Array =>
-  withIdentity(mnemonic, identity, id => {
-    const seed = deriveSeedForPasskey(id, rpId);
-    const credId = hmac(sha256, seed.slice(0, 32), enc.encode('zafu passkey credential id v2'));
-    seed.fill(0);
-    return credId.slice(0, 16);
-  });
+export const derivePasskeyCredentialId = (identity: Uint8Array, rpId: string): Uint8Array => {
+  const seed = deriveSeedForPasskey(identity, rpId);
+  const credId = hmac(sha256, seed.slice(0, 32), enc.encode('zafu passkey credential id v2'));
+  seed.fill(0);
+  return credId.slice(0, 16);
+};
+
+/** the key a relying party's v3 credential ids are sealed under. caller must zeroize. */
+export const derivePasskeyWrapKey = (identity: Uint8Array, rpId: string): Uint8Array => {
+  const seed = deriveSeed(
+    identity,
+    new Uint8Array([...enc.encode('passkey-wrap:v3'), ...lpBytes(enc.encode(rpId))]),
+  );
+  const key = seed.slice(0, 32);
+  seed.fill(0);
+  return key;
+};
 
 // -- PRF (WebAuthn pseudo-random function) --
 
 /**
- * derive a PRF output for a site - the WebAuthn hmac-secret / prf extension.
- *
- * sites like Confer.to use PRF to derive encryption keys from passkeys.
- * our implementation: HMAC(identity, "prf:" + origin + "\0" + salt_hex)
- *
- * the output is deterministic: same seed + same site + same salt = same key.
- * this is exactly what the PRF extension spec requires.
+ * derive a PRF output for a passkey - the WebAuthn hmac-secret / prf extension:
+ * HMAC-SHA256(passkey seed, "prf:" + salt_hex). Deterministic: same seed, same
+ * passkey, same salt, same output, as the PRF extension requires.
  */
 export const derivePrf = (
-  mnemonic: string,
-  identity: string,
+  identity: Uint8Array,
   rpId: string,
   saltHex: string,
-): Uint8Array =>
-  withIdentity(mnemonic, identity, id => {
-    // PRF is bound to the passkey (non-rotating), not the ZID rotation
-    const passkeySeed = deriveSeedForPasskey(id, rpId);
-    const prfTag = enc.encode('prf:' + saltHex);
-    const result = hmac(sha256, passkeySeed.slice(0, 32), prfTag);
-    passkeySeed.fill(0);
-    return result;
-  });
+  userId?: Uint8Array,
+): Uint8Array => {
+  const seed = deriveSeedForPasskey(identity, rpId, userId);
+  const result = hmac(sha256, seed.slice(0, 32), enc.encode('prf:' + saltHex));
+  seed.fill(0);
+  return result;
+};
 
 // -- deterministic passwords --
 
@@ -975,19 +1003,12 @@ export const normalizeOriginV1 = (raw: string): string =>
 export const normalizeOrigin = (raw: string): string => {
   const host = hostOfTyped(raw);
   const rest = host.replace(COMMON_LABEL, '');
-  return rest !== host && !isPublicSuffix(rest) ? rest : host;
+  return rest !== host && !isPasswordSuffix(rest) ? rest : host;
 };
 
 /** the site a scheme derives from */
 export const normalizeOriginFor = (scheme: PasswordScheme, raw: string): string =>
   scheme === 1 ? normalizeOriginV1(raw) : normalizeOrigin(raw);
-
-const lpBytes = (b: Uint8Array): Uint8Array => {
-  const out = new Uint8Array(4 + b.length);
-  new DataView(out.buffer).setUint32(0, b.length);
-  out.set(b, 4);
-  return out;
-};
 
 const passwordTag = (
   scheme: PasswordScheme,
@@ -1010,8 +1031,8 @@ const passwordTag = (
 };
 
 export const derivePassword = (
-  mnemonic: string,
-  identity: string,
+  /** the identity node (identityKey), never the phrase */
+  identity: Uint8Array,
   origin: string,
   username: string,
   length = 32,
@@ -1019,35 +1040,34 @@ export const derivePassword = (
   index = 0,
   /** which scheme: a saved login's own, else the current one */
   scheme: PasswordScheme = PASSWORD_SCHEME,
-): string =>
-  withIdentity(mnemonic, identity, id => {
-    if (!Number.isInteger(index) || index < 0 || index > 0xffffffff) {
-      throw new Error('a password rotation is a u32');
-    }
-    const tag = passwordTag(scheme, normalizeOriginFor(scheme, origin), username, index);
-    const seed = deriveSeed(id, tag);
-    const bytes = seed.slice(0, 32);
-    seed.fill(0);
+): string => {
+  if (!Number.isInteger(index) || index < 0 || index > 0xffffffff) {
+    throw new Error('a password rotation is a u32');
+  }
+  const tag = passwordTag(scheme, normalizeOriginFor(scheme, origin), username, index);
+  const seed = deriveSeed(identity, tag);
+  const bytes = seed.slice(0, 32);
+  seed.fill(0);
 
-    // base85 encode for high entropy density + printable chars
-    let result = '';
-    for (let i = 0; i < bytes.length && result.length < length; i += 4) {
-      let val = 0;
-      for (let j = 0; j < 4 && i + j < bytes.length; j++) {
-        // unsigned: `<<` on a byte >= 0x80 would make val negative after 4
-        // shifts, and `%` keeps the dividend's sign, so B85[val % 85] reads
-        // out of range and returns undefined - a password with the literal
-        // word "undefined" baked in. `>>> 0` forces the unsigned reading.
-        val = ((val << 8) | bytes[i + j]!) >>> 0;
-      }
-      for (let j = 0; j < 5 && result.length < length; j++) {
-        result += B85[val % 85]!;
-        val = Math.floor(val / 85);
-      }
+  // base85 encode for high entropy density + printable chars
+  let result = '';
+  for (let i = 0; i < bytes.length && result.length < length; i += 4) {
+    let val = 0;
+    for (let j = 0; j < 4 && i + j < bytes.length; j++) {
+      // unsigned: `<<` on a byte >= 0x80 would make val negative after 4
+      // shifts, and `%` keeps the dividend's sign, so B85[val % 85] reads
+      // out of range and returns undefined - a password with the literal
+      // word "undefined" baked in. `>>> 0` forces the unsigned reading.
+      val = ((val << 8) | bytes[i + j]!) >>> 0;
     }
-    bytes.fill(0);
-    return result.slice(0, length);
-  });
+    for (let j = 0; j < 5 && result.length < length; j++) {
+      result += B85[val % 85]!;
+      val = Math.floor(val / 85);
+    }
+  }
+  bytes.fill(0);
+  return result.slice(0, length);
+};
 
 // -- backwards compatibility --
 

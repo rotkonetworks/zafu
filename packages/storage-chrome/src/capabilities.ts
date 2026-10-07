@@ -93,10 +93,10 @@ export interface OriginPermissions {
 
 /**
  * Capabilities whose grant lets a site act SILENTLY, with no per-call
- * confirmation, once approved once: `zafu_decrypt`/`zafu_encrypt` (encrypt)
- * and `passkey_get` (passkey). An interactive capability like `send_tx`
- * still shows a popup on every call, so a standing grant there is not a
- * standing silent-access grant - only these need a TTL.
+ * confirmation, once approved once: `zafu_decrypt`/`zafu_encrypt` (encrypt).
+ * An interactive capability like `send_tx` or `passkey` (every sign-in takes
+ * a tap) still shows a popup on every call, so a standing grant there is not
+ * a standing silent-access grant - only these need a TTL.
  *
  * `auto_sign` is NOT included even though its own comment says "time-limited":
  * nothing in the codebase ever calls `hasCapability(perms, 'auto_sign')` - the
@@ -106,7 +106,7 @@ export interface OriginPermissions {
  * nothing reads (and `trading-mode.ts` is slated for removal on another
  * branch), so it is left out rather than wired to a dead reader.
  */
-export const TIME_LIMITED_CAPABILITIES: ReadonlySet<Capability> = new Set(['encrypt', 'passkey']);
+export const TIME_LIMITED_CAPABILITIES: ReadonlySet<Capability> = new Set(['encrypt']);
 
 /** default lifetime of a time-limited grant before the site must be asked again. */
 export const GRANT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days

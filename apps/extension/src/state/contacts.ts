@@ -6,6 +6,7 @@
  */
 
 import { readPasswordLogins, restorePasswordLogins } from './password-logins';
+import { readPasskeyGrants, restorePasskeyGrants } from './passkey-grants';
 import { readYourAddresses, restoreYourAddresses } from './your-addresses';
 import type { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
@@ -46,7 +47,7 @@ import { exportLp, exportLpRune, restoreLp, restoreLpRune } from '../lp/store';
 export interface PersonalDataBackup {
   version: 4;
   exportedAt: number;
-  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames, passwordLogins, yourAddresses, relNext, people, lp, lpRune } JSON */
+  /** encrypted { contacts, sent, txNotes, pockets, egress, settings, walletNames, passwordLogins, passkeyGrants, yourAddresses, relNext, people, lp, lpRune } JSON */
   data: BoxJson;
   keyPrint: KeyPrintJson;
 }
@@ -706,6 +707,7 @@ export const createContactsSlice =
           get().keyRing.keyInfos.map(k => [pocketOwner(k), k.name]),
         );
         const passwordLogins = await readPasswordLogins();
+        const passkeyGrants = await readPasskeyGrants();
         const yourAddresses = await readYourAddresses();
         // the relationship counters, keyed like walletNames: the vault id a
         // restore makes is new, so the old one rides along to map contacts
@@ -729,6 +731,7 @@ export const createContactsSlice =
           relNext,
           people,
           passwordLogins,
+          passkeyGrants,
           yourAddresses,
           contacts,
           sent,
@@ -777,6 +780,8 @@ export const createContactsSlice =
           walletNames?: Record<string, string>;
           /** the passwords tool's saved logins (absent in older backups) */
           passwordLogins?: unknown;
+          /** which wallet made a passkey for which site (absent in older backups) */
+          passkeyGrants?: unknown;
           /** your own addresses on other chains (absent in older backups) */
           yourAddresses?: unknown;
           /** people rooms and relay history (absent in older backups) */
@@ -868,6 +873,9 @@ export const createContactsSlice =
         );
         if (parsed.passwordLogins !== undefined) {
           await restorePasswordLogins(parsed.passwordLogins, mode);
+        }
+        if (parsed.passkeyGrants !== undefined) {
+          await restorePasskeyGrants(parsed.passkeyGrants, mode);
         }
         if (parsed.yourAddresses !== undefined) {
           await restoreYourAddresses(parsed.yourAddresses, mode);

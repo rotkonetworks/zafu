@@ -24,6 +24,8 @@ const validSender = (origin: string): chrome.runtime.MessageSender =>
     documentLifecycle: 'active',
     origin,
     url: `${origin}/index.html`,
+    // zafu's content scripts carry its id: passkeys arrive through the bridge
+    id: chrome.runtime.id,
   }) as chrome.runtime.MessageSender;
 
 // zafu's own page: the extension id AND the extension origin (a content script
@@ -220,7 +222,8 @@ describe('global opt-in - the other gates', () => {
       { type: 'zafu_passkey_create', rpId: 'passkey-optin.example' },
       validSender(origin),
     );
-    await flush();
+    // the rpId check loads the suffix list on first use
+    expect(await until(() => createMock.mock.calls.length > 0)).toBe(true);
 
     // the first surface must be the zafu-level question, not the unlock or the
     // per-credential consent: the user is not dragged through an unlock for a

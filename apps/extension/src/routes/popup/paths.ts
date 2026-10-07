@@ -80,7 +80,7 @@ export enum PopupPath {
   // FROST approval (opened by external apps via zafu_frost_*)
   FROST_APPROVE = '/frost-approve',
 
-  // Passkey creation consent (opened by external apps via zafu_passkey_create)
+  // the tap every passkey create and sign-in takes (zafu_passkey_create / _get)
   PASSKEY_APPROVE = '/passkey-approve',
 
   // passkeys and passwords (IdKeys.dc.html)

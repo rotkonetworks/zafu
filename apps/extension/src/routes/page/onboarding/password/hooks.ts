@@ -56,7 +56,7 @@ export const restoreSnapshot = async (snapshot: Record<string, unknown>, keyBefo
       await chrome.storage.local.remove(gone);
     }
     // and the session key that opened it; no retired key outlives the undo
-    await chrome.storage.session.remove('retiredPasswordKey');
+    await chrome.storage.session.remove(['retiredPasswordKey', 'identityKeys']);
     await (keyBefore
       ? chrome.storage.session.set({ passwordKey: keyBefore })
       : chrome.storage.session.remove('passwordKey'));

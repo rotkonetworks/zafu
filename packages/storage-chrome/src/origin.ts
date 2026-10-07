@@ -15,12 +15,10 @@ import {
 // time-limited capabilities. A consumer that needs "is this usable right
 // now" must call `hasCapability` per capability (that is its entire job) -
 // see the two settings screens and contact-discovery-service.ts, which do.
-// A consumer like `zafu_passkey_get` instead needs to tell "this capability
-// was granted once and lapsed" (re-authorize with one popup) apart from
-// "this origin never granted it at all" (hard refuse) - collapsing those by
-// pruning `granted` here would make every expired grant look identical to
-// one that never existed, which is exactly the silent-failure-forever bug
-// the expiry mechanism exists to avoid.
+// A consumer may instead need to tell "this capability was granted once and
+// lapsed" (ask again) apart from "this origin never granted it at all" (hard
+// refuse) - collapsing those by pruning `granted` here would make every
+// expired grant look identical to one that never existed.
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
 
 const getPermissionsArray = async (): Promise<OriginPermissions[]> => {

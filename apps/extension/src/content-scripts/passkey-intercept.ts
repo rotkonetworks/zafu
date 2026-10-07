@@ -27,13 +27,13 @@ const WALLET_TIMEOUT_MS = 5 * 60_000;
 
 interface WalletResponse {
   success?: boolean;
-  error?: string;
-  /** machine-readable outcome: 'failed' means the wallet accepted and failed */
+  /** the only refusal detail a page gets: 'failed' means the wallet accepted and failed */
   code?: string;
   credentialId?: string;
   authenticatorData?: string;
   publicKey?: string;
   signature?: string;
+  userHandle?: string;
   prfEnabled?: boolean;
   prfResults?: { first?: string; second?: string };
 }
@@ -160,11 +160,20 @@ navigator.credentials.create = async function (
       userDisplayName: pk.user?.displayName ?? '',
       userId: pk.user?.id ? bufToHex(pk.user.id) : '',
       prfRequested: !!(pk.extensions as Record<string, unknown>)?.['prf'],
+      excludeCredentials: pk.excludeCredentials?.map(c => ({ id: bufToHex(c.id), type: c.type })),
     });
 
     if (!response?.success) {
+      if (response?.code === 'exists') {
+        // the spec's answer when the site already holds this authenticator's
+        // passkey: never a second credential from the platform
+        throw new DOMException(
+          'zafu already holds a passkey for this account',
+          'InvalidStateError',
+        );
+      }
       if (isWalletFailure(response)) {
-        throw new WalletFailedError(response?.error);
+        throw new WalletFailedError();
       }
       // zafu declined or was unreachable - fall back to the platform authenticator
       return originalCreate(options);
@@ -207,12 +216,12 @@ navigator.credentials.create = async function (
       },
     } as unknown as PublicKeyCredential;
   } catch (e) {
+    if (e instanceof DOMException && e.name === 'InvalidStateError') {
+      throw e;
+    }
     if (e instanceof WalletFailedError) {
-      // keep the wallet's own diagnostic off the page - a dapp has no business
-      // reading service-worker internals ("keyring locked", "failed to decrypt
-      // vault") - but give the user the honest outcome instead of a platform
-      // prompt that cannot satisfy a credential zafu owns.
-      console.warn('[zafu-passkey] create failed:', e.message);
+      // the honest outcome instead of a platform prompt that cannot satisfy a
+      // credential zafu owns; the page learns nothing more than that
       throw new DOMException('zafu could not create the passkey', 'NotAllowedError');
     }
     return originalCreate(options);
@@ -226,7 +235,9 @@ navigator.credentials.get = async function (
   options?: CredentialRequestOptions,
 ): Promise<Credential | null> {
   const pk = options?.publicKey;
-  if (!pk) {
+  // autofill (conditional) sign-in runs on page load with no click; zafu only
+  // answers a sign-in the person started
+  if (!pk || options?.mediation === 'conditional') {
     return originalGet(options);
   }
 
@@ -259,7 +270,7 @@ navigator.credentials.get = async function (
 
     if (!response?.success) {
       if (isWalletFailure(response)) {
-        throw new WalletFailedError(response?.error);
+        throw new WalletFailedError();
       }
       return originalGet(options);
     }
@@ -279,7 +290,7 @@ navigator.credentials.get = async function (
         clientDataJSON: clientDataJSON.buffer,
         authenticatorData: authenticatorData,
         signature: signature,
-        userHandle: null,
+        userHandle: response.userHandle ? hexToBuf(response.userHandle) : null,
       },
       authenticatorAttachment: 'platform',
       getClientExtensionResults: () => {
@@ -299,7 +310,6 @@ navigator.credentials.get = async function (
     } as unknown as PublicKeyCredential;
   } catch (e) {
     if (e instanceof WalletFailedError) {
-      console.warn('[zafu-passkey] get failed:', e.message);
       throw new DOMException('zafu could not sign in with the passkey', 'NotAllowedError');
     }
     return originalGet(options);

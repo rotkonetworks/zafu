@@ -4,6 +4,10 @@
  * window; this script relays them to the service worker and posts the response
  * back. Everything crossing the wire is plain JSON - hex strings, never binary.
  *
+ * It asks only after a click on the page, and after "not now" or a closed
+ * window it waits before asking again (promptCooldown), so a page cannot loop
+ * the passkey screen.
+ *
  * Trust note: this bridge carries the request, it never authorises anything.
  * The service worker derives the origin from the browser-attested sender (not
  * from anything here) and checks the rpId against it, so a page cannot use the
@@ -12,9 +16,11 @@
 // egress guard first: nothing may capture fetch or open a socket before it
 import '../net/egress-install-lite';
 
-import { passkeyMessage } from './passkey-wire';
+import { passkeyMessage, passkeyPageResult, promptCooldown } from './passkey-wire';
 
 const CHANNEL = 'zafu-passkey';
+
+const cooldown = promptCooldown();
 
 interface PasskeyWireRequest {
   channel: string;
@@ -45,14 +51,22 @@ window.addEventListener('message', (ev: MessageEvent) => {
 
   // only the fields this kind uses, with `type` set here - never the page's
   const message = passkeyMessage(kind, payload);
+  // a passkey screen only follows a click on the page, and not while the page
+  // is waiting out a "not now"; activation is per frame, so this world sees
+  // the page's own click
+  const asked = navigator.userActivation?.isActive && !cooldown.quiet(Date.now());
   // orphaned content script (extension reloaded in an open tab) - fail cleanly
-  if (!message || !chrome.runtime?.id || chrome.runtime.id === 'invalid') {
+  if (!message || !asked || !chrome.runtime?.id || chrome.runtime.id === 'invalid') {
     respond(undefined);
     return;
   }
 
   chrome.runtime
     .sendMessage(message)
-    .then((res: unknown) => respond(res))
+    .then((res: unknown) => {
+      const result = passkeyPageResult(res);
+      cooldown.after(result, Date.now());
+      respond(result);
+    })
     .catch(() => respond(undefined));
 });

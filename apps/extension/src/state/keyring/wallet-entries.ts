@@ -619,6 +619,7 @@ export async function nukeAllWalletData(
   then?: string,
 ): Promise<void> {
   await session.remove('passwordKey');
+  await session.remove('identityKeys');
   // grace must never outlive the unlock
   await session.remove('signGraceUntil');
   await session.remove('swapUnlock');

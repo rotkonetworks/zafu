@@ -155,6 +155,49 @@ describe('passkey intercept → bridge relay', () => {
     });
   });
 
+  it('sends excludeCredentials, and a passkey the site already holds is InvalidStateError', async () => {
+    const promise = navigator.credentials.create({
+      publicKey: {
+        rp: { id: 'passkey.example' },
+        challenge: Uint8Array.from([1, 2]),
+        user: { id: Uint8Array.from([3]), name: 'a@b.example' },
+        excludeCredentials: [{ id: Uint8Array.from([0x03, 0x01]), type: 'public-key' }],
+      },
+    } as CredentialCreationOptions);
+    const req = lastRequest();
+    expect(req.payload['excludeCredentials']).toEqual([{ id: '0301', type: 'public-key' }]);
+    bridgeResponds(req, { success: false, code: 'exists' });
+
+    await expect(promise).rejects.toMatchObject({ name: 'InvalidStateError' });
+    expect(platformCreate).not.toHaveBeenCalled();
+  });
+
+  it('hands the site the account (userHandle) the wallet recovered', async () => {
+    const promise = navigator.credentials.get({
+      publicKey: { rpId: 'passkey.example', challenge: Uint8Array.from([5, 6]) },
+    } as CredentialRequestOptions);
+    await vi.waitFor(() => expect(postSpy).toHaveBeenCalled());
+    bridgeResponds(lastRequest(), {
+      success: true,
+      credentialId: '0301',
+      authenticatorData: '01',
+      signature: '02',
+      userHandle: 'a1a1',
+    });
+    const res = ((await promise) as unknown as PublicKeyCredential)
+      .response as AuthenticatorAssertionResponse;
+    expect(Array.from(new Uint8Array(res.userHandle!))).toEqual([0xa1, 0xa1]);
+  });
+
+  it('leaves autofill (conditional) sign-in to the browser: nobody clicked', async () => {
+    const options = {
+      mediation: 'conditional',
+      publicKey: { rpId: 'passkey.example', challenge: Uint8Array.from([5, 6]) },
+    } as CredentialRequestOptions;
+    await expect(navigator.credentials.get(options)).resolves.toEqual({ id: 'platform-get' });
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
   it('ignores a response addressed to another request id', async () => {
     const promise = navigator.credentials.create({
       publicKey: {

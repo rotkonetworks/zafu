@@ -651,7 +651,7 @@ const INTERNAL_RESULT_TYPES = new Set([
   'zafu_frost_result',
   'zafu_capability_result',
   'zafu_zcash_send_result',
-  'zafu_passkey_create_result',
+  'zafu_passkey_result',
 ]);
 chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   const t = (req as { type?: unknown } | null)?.type;
@@ -724,6 +724,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
         // runtime.reload(), so remove it explicitly here too
         await chrome.storage.session.remove([
           'passwordKey',
+          'identityKeys',
           'signGraceUntil',
           'swapUnlock',
           'retiredPasswordKey',

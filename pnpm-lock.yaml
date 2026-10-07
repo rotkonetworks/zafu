@@ -279,6 +279,9 @@ importers:
       stream-browserify:
         specifier: ^3.0.0
         version: 3.0.0
+      tldts:
+        specifier: 7.4.11
+        version: 7.4.11
       usehooks-ts:
         specifier: ^3.1.1
         version: 3.1.1(react@19.2.8)

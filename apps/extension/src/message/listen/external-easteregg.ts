@@ -47,10 +47,15 @@ import {
 } from '@repo/storage-chrome/cosmos-chain-counters';
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { isPro } from '../../state/license';
-import { isValidExternalSender } from '../../senders/external';
+import { isValidExternalSender, type ValidExternalSender } from '../../senders/external';
 import { isValidInternalSender } from '../../senders/internal';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
-import { rpIdMatchesOrigin } from '../../state/public-suffix';
+import { grantsFor, readPasskeyGrants, recordPasskeyGrant } from '../../state/passkey-grants';
+import type { Credential } from '../../state/webauthn';
+import type { KeyInfo } from '../../state/keyring/types';
+import { clientDataJson } from '../../content-scripts/passkey-wire';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
 import { getApprovalSurface } from '../../side-panel-pref';
 import { isSidePanelOpen } from '../../side-panel-presence';
@@ -97,17 +102,6 @@ const ENABLE_FROST_SIGN_ORCHARD = true;
 
 // pending pick requests: requestId → sendResponse callback
 const pendingPicks = new Map<string, (r: unknown) => void>();
-
-// rpId + requesting origin for each pending passkey-create request, keyed by
-// requestId. The mint runs in the service worker (mnemonic access) after the
-// popup approves, so the rpId validated at gate time must survive until the
-// result arrives; the origin is kept for the same reason, so approval can grant
-// the `passkey` capability to the origin that actually asked. Kept here, not in
-// the popup round-trip: an extension page must not choose either value.
-const pendingPasskeyRequests = new Map<
-  string,
-  { origin: string; rpId: string; verified: boolean }
->();
 
 /** is the wallet locked right now? read before an unlock, so a request knows it made the person type their password */
 const walletLocked = async (): Promise<boolean> => !(await sessionExtStorage.get('passwordKey'));
@@ -218,7 +212,6 @@ chrome.windows?.onRemoved?.addListener(windowId => {
     if (!cb) {
       return;
     }
-    pendingPasskeyRequests.delete(requestId);
     // Shape doubles for two callback flavours:
     //  - FROST / pick_contacts / zcash_send sendResponse: they read `success`
     //    and treat this as a cancelled/denied outcome.
@@ -467,6 +460,113 @@ export async function requestCapabilityApprovalPopup(
   return 'denied';
 }
 
+interface PasskeyRefusal {
+  success: false;
+  error?: string;
+  code?: string;
+}
+
+/**
+ * A passkey request comes only through zafu's own content-script bridge, which
+ * asks only after a click and backs off after "not now". The
+ * externally_connectable door has no click to check, so it gets no passkeys.
+ */
+const passkeySender = (sender: chrome.runtime.MessageSender): sender is ValidExternalSender =>
+  sender.id === chrome.runtime.id && isValidExternalSender(sender);
+
+/**
+ * a tap the person did not give: `denied` said not now, `cancelled` never
+ * answered. `busy` (this site's window is already open) carries no code: the
+ * person declined nothing, so the page must not back off for it.
+ */
+const declined = (outcome: 'denied' | 'cancelled' | 'busy'): PasskeyRefusal =>
+  outcome === 'busy'
+    ? { success: false, error: 'denied' }
+    : { success: false, error: outcome, code: outcome };
+
+/**
+ * The passkey switch is on and the wallet is unlocked, both asked for before
+ * any passkey screen opens so a tap never lands on a wallet that cannot act.
+ * `verified`: this request made the person enter their password (sets UV);
+ * a tap on an unlocked wallet is presence, not verification.
+ */
+async function passkeyReady(
+  origin: string,
+): Promise<{ ok: true; verified: boolean } | { ok: false; refusal: PasskeyRefusal }> {
+  const mode = await ensureCapabilityMode('passkey', origin);
+  if (!mode.ok) {
+    return {
+      ok: false,
+      refusal:
+        mode.reason === 'cancelled' ? declined('cancelled') : { success: false, error: 'denied' },
+    };
+  }
+  const verified = await walletLocked();
+  try {
+    const { throwIfNeedsLogin } = await import('../../needs-login');
+    await throwIfNeedsLogin();
+  } catch {
+    return { ok: false, refusal: declined('cancelled') };
+  }
+  return { ok: true, verified };
+}
+
+/**
+ * One tap in zafu for one passkey request. Goes through openApprovalPopup, so
+ * a site gets one passkey window at a time. rpId and wallet ride along for
+ * display only: the worker keeps its own copies and acts on those.
+ */
+async function askPasskeyTap(
+  kind: 'create' | 'get',
+  origin: string,
+  rpId: string,
+  walletId: string,
+): Promise<'approved' | 'denied' | 'cancelled' | 'busy'> {
+  const requestId = crypto.randomUUID();
+  const decided = new Promise<{ approved?: boolean; cancelled?: boolean } | undefined>(resolve =>
+    pendingPicks.set(requestId, r => resolve(r as { approved?: boolean; cancelled?: boolean })),
+  );
+  const params = new URLSearchParams({
+    mode: kind,
+    app: origin,
+    rp: rpId,
+    wallet: walletId,
+    requestId,
+  });
+  const url = chrome.runtime.getURL(`popup.html#/passkey-approve?${params.toString()}`);
+  if (!(await openApprovalPopup(origin, url, requestId))) {
+    pendingPicks.delete(requestId);
+    return 'busy';
+  }
+  const r = await decided;
+  return r?.approved ? 'approved' : r?.cancelled ? 'cancelled' : 'denied';
+}
+
+/** after a tap: the site may ask again, for this rpId and account, answered by this wallet */
+async function grantPasskey(
+  origin: string,
+  rpId: string,
+  wallet: KeyInfo,
+  userId: Uint8Array | undefined,
+): Promise<void> {
+  const { pocketOwner } = await import('../../state/pockets');
+  await grantCapability(origin, 'passkey');
+  await recordPasskeyGrant({
+    origin,
+    rpId,
+    owner: pocketOwner(wallet),
+    ...(userId?.length ? { userId: bytesToHex(userId) } : {}),
+  });
+}
+
+/** the hex credential ids a relying party listed */
+const credentialIds = (list: unknown): string[] =>
+  Array.isArray(list)
+    ? list
+        .map((c: { id?: unknown } | null) => c?.id)
+        .filter((id): id is string => typeof id === 'string')
+    : [];
+
 export const externalMessageListener = (
   req: unknown,
   sender: chrome.runtime.MessageSender,
@@ -488,7 +588,7 @@ export const externalMessageListener = (
     'zafu_frost_result',
     'zafu_capability_result',
     'zafu_zcash_send_result',
-    'zafu_passkey_create_result',
+    'zafu_passkey_result',
   ]);
   if (INTERNAL_RESULT_TYPES.has(type)) {
     // a content script carries this extension's id too, so the id alone is not
@@ -1191,135 +1291,97 @@ export const externalMessageListener = (
     // The popup sends the result back through zafu_zcash_send_result.
 
     // ── passkey / WebAuthn ──
+    // Every create and every sign-in takes one tap in zafu. The `passkey`
+    // grant only means "this site may ask"; it never signs on its own.
 
     case 'zafu_passkey_create': {
-      const { rpId } = msg as { rpId: string };
-      // origin is the browser-attested sender, never a caller-supplied field - // otherwise any site could spoof a connected origin and mint credentials.
-      if (!isValidExternalSender(sender)) {
+      const {
+        rpId,
+        userId: userIdHex,
+        excludeCredentials,
+      } = msg as {
+        rpId: string;
+        userId?: string;
+        excludeCredentials?: unknown;
+      };
+      // origin is the browser-attested sender, never a caller-supplied field
+      if (!passkeySender(sender)) {
         sendResponse({ success: false, error: 'not connected' });
         return true;
       }
-      const reqOrigin = sender.origin;
-      // Minting a site-bound P-256 credential derived from the mnemonic is
-      // high-risk, so it ALWAYS requires explicit per-credential user consent:
-      // there is no `connect` precondition any more, because requiring one made
-      // the whole feature unreachable for a site the user had not already
-      // connected (the popup IS the consent, and approving it grants the
-      // narrow `passkey` capability - approving a passkey must not hand a site
-      // the wider `connect` view). The gates below are unchanged; the mint
-      // itself moved to the result case and runs only after the popup approves.
+      const origin = sender.origin;
       void (async () => {
         try {
-          if (!rpIdMatchesOrigin(rpId, reqOrigin)) {
+          // the full suffix list loads only when a site asks for a passkey
+          const { rpIdMatchesOrigin } = await import('../../state/public-suffix');
+          if (!rpIdMatchesOrigin(rpId, origin)) {
             sendResponse({ success: false, error: 'rpId does not match origin' });
             return;
           }
-          // Global switch before the unlock: an undecided `passkey` asks its
-          // one-time zafu-level question, so the user is not first dragged
-          // through an unlock for a feature they may not want at all.
-          const modeCheck = await ensureCapabilityMode('passkey', reqOrigin);
-          if (!modeCheck.ok) {
-            sendResponse({
-              success: false,
-              error: modeCheck.reason === 'cancelled' ? 'cancelled' : 'denied',
-              ...(modeCheck.reason === 'cancelled' ? { code: 'cancelled' } : {}),
-            });
+          const ready = await passkeyReady(origin);
+          if (!ready.ok) {
+            sendResponse(ready.refusal);
             return;
           }
-          // The mint needs the mnemonic, so an unlocked wallet is a hard
-          // precondition of the consent screen itself. Opening the popup while
-          // locked let the user read a consent screen, press approve, and then
-          // hit a mint that threw 'keyring locked' - whose denial the content
-          // script turned into a silent fallback to the platform authenticator
-          // (the browser's own prompt / NotAllowedError). Asking for the unlock
-          // FIRST makes the popup appear only when approving can actually work.
-          // UV is claimed only when this request made the person enter their
-          // password; an approve tap on an unlocked wallet is presence, not
-          // verification
-          const verified = await walletLocked();
+          const { useStore } = await import('../../state');
+          const wallet = useStore.getState().keyRing.selectedKeyInfo;
+          if (wallet?.type !== 'mnemonic') {
+            sendResponse({ success: false, error: 'no wallet selected', code: 'no-wallet' });
+            return;
+          }
+          // WebAuthn caps a user handle at 64 bytes
+          const userId = hexToBytes(userIdHex ?? '');
+          if (userId.length > 64) {
+            sendResponse({ success: false, error: 'user id too long' });
+            return;
+          }
+          const outcome = await askPasskeyTap('create', origin, rpId, wallet.id);
+          if (outcome !== 'approved') {
+            sendResponse(declined(outcome));
+            return;
+          }
           try {
-            const { throwIfNeedsLogin } = await import('../../needs-login');
-            await throwIfNeedsLogin();
-          } catch {
-            // the user closed the unlock surface without logging in
-            sendResponse({ success: false, error: 'wallet locked', code: 'cancelled' });
-            return;
-          }
-          const requestId = crypto.randomUUID();
-          // the rpId rides along for display only; the worker keeps its own copy
-          const params = new URLSearchParams({ app: reqOrigin, rp: rpId, requestId });
-          const url = chrome.runtime.getURL(`popup.html#/passkey-approve?${params.toString()}`);
-          // Register the pending callback and the validated origin+rpId BEFORE
-          // opening the popup so the onRemoved sweep can find them if the window
-          // closes fast; clear both if openApprovalPopup rejects the request.
-          pendingPicks.set(requestId, sendResponse);
-          pendingPasskeyRequests.set(requestId, { origin: reqOrigin, rpId, verified });
-          if (!(await openApprovalPopup(reqOrigin, url, requestId))) {
-            pendingPicks.delete(requestId);
-            pendingPasskeyRequests.delete(requestId);
-            sendResponse({ success: false, error: 'denied' });
-            return;
-          }
-        } catch {
-          // dynamic import / state read can throw; fall back to the uniform
-          // denied shape so the message channel closes cleanly.
-          sendResponse({ success: false, error: 'denied' });
-        }
-      })();
-      return true;
-    }
-
-    case 'zafu_passkey_create_result': {
-      // internal: passkey approval popup sends result back. The credential is
-      // minted HERE in the service worker (it needs the mnemonic), never in the
-      // popup - the popup only ever decides approve/deny.
-      const requestId = String(msg['requestId'] || '');
-      const callback = pendingPicks.get(requestId);
-      if (callback) {
-        pendingPicks.delete(requestId);
-        const pending = pendingPasskeyRequests.get(requestId);
-        pendingPasskeyRequests.delete(requestId);
-        const approval = msg['result'] as { approved?: boolean } | undefined;
-        if (!approval?.approved || pending === undefined) {
-          callback({ success: false, error: 'denied' });
-          sendResponse({ ok: true });
-          return true;
-        }
-        void (async () => {
-          try {
-            // lazy import to avoid loading webauthn.ts in every page load
-            const { createCredential } = await import('../../state/webauthn');
-            const { useStore } = await import('../../state');
-            const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
-            if (!keyInfo) {
-              callback({ success: false, error: 'no wallet selected', code: 'no-wallet' });
+            const { createCredential, findCredential } = await import('../../state/webauthn');
+            const { getIdentityKey } = await import('../../state/identity-keys');
+            const identity = await getIdentityKey(
+              wallet.id,
+              useStore.getState().keyRing.getMnemonic,
+            );
+            // the site already holds one of this wallet's passkeys: answered
+            // only after the tap, so a page cannot probe for it silently
+            if (await findCredential(identity, rpId, credentialIds(excludeCredentials))) {
+              identity.fill(0);
+              sendResponse({ success: false, error: 'exists', code: 'exists' });
               return;
             }
-            const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
-            const result = createCredential(mnemonic, pending.rpId, pending.verified);
-            // the credential exists only after this approval, so the origin earns
-            // the narrow `passkey` grant HERE - that is what lets a later
-            // zafu_passkey_get sign in without a second popup. Never granted
-            // before the mint succeeds, and never above `passkey` (no `connect`).
-            await grantCapability(pending.origin, 'passkey');
-            const { bytesToHex } = await import('@noble/hashes/utils');
-            callback({
+            const result = await createCredential(identity, rpId, userId, ready.verified);
+            identity.fill(0);
+            await grantPasskey(origin, rpId, wallet, userId);
+            sendResponse({
               success: true,
               credentialId: bytesToHex(result.credentialId),
               authenticatorData: bytesToHex(result.authenticatorData),
               publicKey: bytesToHex(result.publicKey),
               prfEnabled: true,
             });
-          } catch (e) {
-            // `failed`: the user already approved, so this is zafu's own
-            // failure (locked mid-flight, undecryptable vault) - the content
-            // script surfaces it instead of silently rerouting the site to the
-            // platform authenticator, which reads as "the wallet stopped
-            // working" right after a click on approve.
-            callback({ success: false, error: String(e), code: 'failed' });
+          } catch {
+            // `failed`: the person already said yes, so this is zafu's own
+            // failure; the page reports it rather than falling back to the
+            // platform authenticator
+            sendResponse({ success: false, code: 'failed' });
           }
-        })();
-      }
+        } catch {
+          sendResponse({ success: false, error: 'denied' });
+        }
+      })();
+      return true;
+    }
+
+    case 'zafu_passkey_result': {
+      // internal: the passkey screen reports the tap; the worker does the rest
+      const requestId = String(msg['requestId'] || '');
+      takePendingApproval(requestId)?.(msg['result'] || { approved: false });
+      releasePopupGuardForRequest(requestId);
       sendResponse({ ok: true });
       return true;
     }
@@ -1336,18 +1398,20 @@ export const externalMessageListener = (
         challenge?: string;
         clientDataHash: string;
         prfSalts?: { first: string; second?: string };
-        allowCredentials?: { id?: unknown }[];
+        allowCredentials?: unknown;
       };
-      // origin is the browser-attested sender, never a caller-supplied field - // otherwise any site could spoof a connected origin and forge assertions
-      // for an arbitrary rpId (account takeover at the relying party).
-      if (!isValidExternalSender(sender)) {
+      // origin is the browser-attested sender, never a caller-supplied field -
+      // otherwise any site could forge assertions for an arbitrary rpId
+      if (!passkeySender(sender)) {
         sendResponse({ success: false, error: 'not connected' });
         return true;
       }
-      const getOrigin = sender.origin;
+      const origin = sender.origin;
       void (async () => {
         try {
-          if (!rpIdMatchesOrigin(rpId, getOrigin)) {
+          // the full suffix list loads only when a site asks for a passkey
+          const { rpIdMatchesOrigin } = await import('../../state/public-suffix');
+          if (!rpIdMatchesOrigin(rpId, origin)) {
             sendResponse({ success: false, error: 'rpId does not match origin' });
             return;
           }
@@ -1355,16 +1419,14 @@ export const externalMessageListener = (
           // rebuild it here from the challenge and the browser-attested origin
           // and sign only that: a page cannot get a signature over client data
           // naming another origin, or over a hash it chose.
-          const { hexToBytes: h2b0, bytesToHex: b2h0 } = await import('@noble/hashes/utils');
-          const { sha256 } = await import('@noble/hashes/sha256');
-          const { clientDataJson } = await import('../../content-scripts/passkey-wire');
           let clientDataMatches = false;
           try {
             clientDataMatches =
               typeof challengeHex === 'string' &&
               typeof clientDataHashHex === 'string' &&
-              b2h0(sha256(clientDataJson('webauthn.get', h2b0(challengeHex), getOrigin))) ===
-                clientDataHashHex.toLowerCase();
+              bytesToHex(
+                sha256(clientDataJson('webauthn.get', hexToBytes(challengeHex), origin)),
+              ) === clientDataHashHex.toLowerCase();
           } catch {
             clientDataMatches = false;
           }
@@ -1372,92 +1434,84 @@ export const externalMessageListener = (
             sendResponse({ success: false, error: 'client data does not match the request' });
             return;
           }
-          // Global switch: a `passkey` the user turned off must not sign, and
-          // an undecided one asks the one-time zafu-level question rather than
-          // failing as 'not connected' (which would read as a site problem).
-          const modeCheck = await ensureCapabilityMode('passkey', getOrigin);
-          if (!modeCheck.ok) {
-            sendResponse({
-              success: false,
-              error: modeCheck.reason === 'cancelled' ? 'cancelled' : 'denied',
-              ...(modeCheck.reason === 'cancelled' ? { code: 'cancelled' } : {}),
-            });
-            return;
-          }
-          const perms = await getOriginPermissions(getOrigin);
-          // `passkey` is the grant that passkey creation earns, and it is
-          // time-limited (see TIME_LIMITED_CAPABILITIES). A bare `connect`
-          // grant with NO `passkey` at all is a LEGACY credential: the
-          // `passkey` capability did not exist before 2250be97, so every
-          // passkey created on an older release holds only `connect`. Those
-          // sites must not be hard-refused - they re-earn `passkey` through
-          // one approval popup below, same as an expired grant.
-          const everHadPasskey = !!perms?.granted.includes('passkey');
-          const legacyConnectOnly = !everHadPasskey && !!perms?.granted.includes('connect');
-          if (!everHadPasskey && !legacyConnectOnly) {
-            // never had a credential grant or a pre-passkey connect grant -
-            // nothing to re-authorize.
+          // `passkey`, or `connect` for a passkey made before `passkey`
+          // existed, lets the site ask; nothing else may even raise the tap
+          const granted = (await getOriginPermissions(origin))?.granted ?? [];
+          if (!granted.includes('passkey') && !granted.includes('connect')) {
             sendResponse({ success: false, error: 'not connected' });
             return;
           }
-          // Signing needs the mnemonic, and so does the re-authorization
-          // popup below if one is about to open - unlock BEFORE either, same
-          // ordering zafu_passkey_create uses and for the same reason:
-          // approving a popup that then hits 'keyring locked' reads as "the
-          // wallet stopped working" right after the user clicked approve.
-          const verified = await walletLocked();
-          try {
-            const { throwIfNeedsLogin } = await import('../../needs-login');
-            await throwIfNeedsLogin();
-          } catch {
-            // the user closed the unlock surface without logging in
-            sendResponse({ success: false, error: 'wallet locked', code: 'cancelled' });
+          const ready = await passkeyReady(origin);
+          if (!ready.ok) {
+            sendResponse(ready.refusal);
             return;
           }
-          const { signAssertion, pickCredentialId } = await import('../../state/webauthn');
+          const { signAssertion, findCredential, discoverableCredential } =
+            await import('../../state/webauthn');
+          const { getIdentityKey } = await import('../../state/identity-keys');
           const { useStore } = await import('../../state');
-          const { bytesToHex, hexToBytes: h2b } = await import('@noble/hashes/utils');
-          const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
-          if (!keyInfo) {
-            sendResponse({ success: false, error: 'no wallet selected', code: 'no-wallet' });
-            return;
+          const { pocketOwner } = await import('../../state/pockets');
+          const keyRing = useStore.getState().keyRing;
+          // only a wallet that made a passkey for this rpId from this origin
+          // may answer, newest first; an origin with no recorded grant made
+          // its passkey before grants were recorded, with the wallet selected
+          // then and one passkey per rpId
+          const here = grantsFor(await readPasskeyGrants(), origin, rpId);
+          const asked = (here ?? [{ owner: undefined, userId: undefined }]).map(g => ({
+            wallet:
+              g.owner === undefined
+                ? keyRing.selectedKeyInfo
+                : keyRing.keyInfos.find(k => pocketOwner(k) === g.owner),
+            userId: g.userId,
+          }));
+          // the relying party lists the credentials it knows; when none is
+          // this wallet's the request belongs to another authenticator
+          const allowIds = credentialIds(allowCredentials);
+          let found: { wallet: KeyInfo; identity: Uint8Array; credential: Credential } | undefined;
+          for (const { wallet, userId } of asked) {
+            if (wallet?.type !== 'mnemonic') {
+              continue;
+            }
+            const identity = await getIdentityKey(wallet.id, keyRing.getMnemonic);
+            const credential = allowIds.length
+              ? await findCredential(identity, rpId, allowIds)
+              : await discoverableCredential(
+                  identity,
+                  rpId,
+                  userId ? hexToBytes(userId) : undefined,
+                );
+            if (credential) {
+              found = { wallet, identity, credential };
+              break;
+            }
+            identity.fill(0);
           }
-          const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
-          // the relying party lists the credentials it knows; when none is this
-          // wallet's (new or legacy id) the request belongs to another
-          // authenticator, so let the page fall back to it
-          const allowIds = Array.isArray(allowCredentials)
-            ? allowCredentials.map(c => c?.id).filter((id): id is string => typeof id === 'string')
-            : undefined;
-          const credentialId = pickCredentialId(mnemonic, rpId, allowIds);
-          if (!credentialId) {
+          if (!found) {
             sendResponse({ success: false, error: 'no zafu credential for this request' });
             return;
           }
-          if (!hasCapability(perms, 'passkey')) {
-            // either the TTL lapsed, or this is the legacy connect-only case
-            // above (task rule (a): "an expired grant means the user is
-            // asked again", not a silent substitute or a permanent failure).
-            // Re-run the exact approval popup `zafu_request_capability`
-            // uses; on approve this stamps a fresh `passkey` expiry and the
-            // assertion proceeds in the same call.
-            const outcome = await requestCapabilityApprovalPopup(getOrigin, 'passkey', sender);
-            if (outcome !== 'approved') {
-              sendResponse({
-                success: false,
-                error: outcome === 'cancelled' ? 'cancelled' : 'denied',
-                ...(outcome === 'cancelled' ? { code: 'cancelled' } : {}),
-              });
-              return;
-            }
+          const outcome = await askPasskeyTap('get', origin, rpId, found.wallet.id);
+          if (outcome !== 'approved') {
+            found.identity.fill(0);
+            sendResponse(declined(outcome));
+            return;
           }
-          // checked above against the challenge and the sender's origin
-          const clientDataHash = h2b(clientDataHashHex);
-
-          const result = signAssertion(mnemonic, rpId, clientDataHash, prfSalts, verified);
+          // the tap is the user presence the assertion claims
+          const { credential } = found;
+          const result = signAssertion(
+            found.identity,
+            rpId,
+            credential,
+            hexToBytes(clientDataHashHex),
+            prfSalts,
+            ready.verified,
+          );
+          found.identity.fill(0);
+          await grantPasskey(origin, rpId, found.wallet, credential.userId);
           sendResponse({
             success: true,
-            credentialId: bytesToHex(credentialId),
+            credentialId: bytesToHex(credential.id),
+            userHandle: credential.userId ? bytesToHex(credential.userId) : undefined,
             authenticatorData: bytesToHex(result.authenticatorData),
             signature: bytesToHex(result.signature),
             prfResults: result.prfResults
@@ -1469,11 +1523,10 @@ export const externalMessageListener = (
                 }
               : undefined,
           });
-        } catch (e) {
+        } catch {
           // `failed`: zafu holds this credential, so a signing error must be
-          // reported rather than rerouted to the platform authenticator (whose
-          // prompt for a passkey that lives here can never succeed).
-          sendResponse({ success: false, error: String(e), code: 'failed' });
+          // reported rather than rerouted to the platform authenticator
+          sendResponse({ success: false, code: 'failed' });
         }
       })();
       return true;

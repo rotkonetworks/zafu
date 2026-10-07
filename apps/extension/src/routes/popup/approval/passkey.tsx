@@ -1,10 +1,8 @@
 /**
- * passkey-approve - per-credential consent for external dapp passkey creation.
- *
- * opened by zafu_passkey_create. The bus never mints here: this popup only
- * reports approve/deny via zafu_passkey_create_result, and the service worker
- * mints the site-bound P-256 credential (it is the only context with mnemonic
- * access). No seed material ever reaches this window.
+ * passkey-approve - the one tap every passkey request takes: creating one
+ * (zafu_passkey_create) and every sign-in (zafu_passkey_get). This window only
+ * reports the tap via zafu_passkey_result; the service worker mints or signs
+ * with its own copy of the request. No seed material ever reaches it.
  */
 
 import { useSearchParams } from 'react-router-dom';
@@ -15,7 +13,19 @@ import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
 import { Mark } from '@repo/ui/components/ui/mark';
 import { RowGroup } from '@repo/ui/components/ui/row';
 import { useStore } from '../../../state';
-import { selectSelectedKeyInfo } from '../../../state/keyring';
+
+const COPY = {
+  create: {
+    title: (site: string) => `create a passkey for ${site}`,
+    approve: 'create passkey',
+    note: 'the key stays in zafu and comes back with your recovery phrase.',
+  },
+  get: {
+    title: (site: string) => `sign in to ${site}?`,
+    approve: 'sign in',
+    note: undefined,
+  },
+} as const;
 
 // `new URL()` throws on a malformed string; the `app` query param is only
 // truthiness-checked, so parse defensively and fall back to the raw text.
@@ -35,7 +45,9 @@ export const PasskeyApprove = () => {
   const requestId = params.get('requestId') || '';
   // the domain the passkey signs in to; a site may name a parent of its own host
   const rpId = params.get('rp') || '';
-  const keyInfo = useStore(selectSelectedKeyInfo);
+  const copy = COPY[params.get('mode') === 'get' ? 'get' : 'create'];
+  const walletId = params.get('wallet');
+  const keyInfo = useStore(s => s.keyRing.keyInfos.find(k => k.id === walletId));
 
   const respond = async (approved: boolean) => {
     // Deliver the decision BEFORE closing: `window.close()` removes the window
@@ -46,7 +58,7 @@ export const PasskeyApprove = () => {
     // exists; the popup then closes as cancellable as before.
     try {
       await chrome.runtime.sendMessage({
-        type: 'zafu_passkey_create_result',
+        type: 'zafu_passkey_result',
         requestId,
         result: { approved },
       });
@@ -71,7 +83,7 @@ export const PasskeyApprove = () => {
           )}
           <Mark variant='seal' size={40} />
           <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>
-            create a passkey for {origin ? hostnameOf(origin) : 'this site'}
+            {copy.title(origin ? hostnameOf(origin) : 'this site')}
           </h1>
         </header>
       }
@@ -79,7 +91,7 @@ export const PasskeyApprove = () => {
         <ApproveDeny
           approve={() => respond(true)}
           deny={() => respond(false)}
-          approveLabel='create passkey'
+          approveLabel={copy.approve}
           denyLabel='not now'
         />
       }
@@ -99,9 +111,7 @@ export const PasskeyApprove = () => {
             </div>
           )}
         </RowGroup>
-        <p className='text-xs text-fg-muted'>
-          the key stays in zafu and comes back with your recovery phrase.
-        </p>
+        {copy.note && <p className='text-xs text-fg-muted'>{copy.note}</p>}
       </div>
     </ApprovalScreen>
   );

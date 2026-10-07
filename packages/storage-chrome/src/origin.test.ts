@@ -36,20 +36,20 @@ describe('grantCapability - expiry stamping', () => {
 
   test('re-granting an expired time-limited capability refreshes its expiry', async () => {
     const origin = 'https://renew.example';
-    await grantCapability(origin, 'passkey');
+    await grantCapability(origin, 'encrypt');
     const firstPerms = await getOriginPermissions(origin);
-    const firstExpiry = firstPerms!.expires!.passkey!;
+    const firstExpiry = firstPerms!.expires!.encrypt!;
 
     // simulate the grant having expired
-    expect(hasCapability(firstPerms, 'passkey', firstExpiry + 1)).toBe(false);
+    expect(hasCapability(firstPerms, 'encrypt', firstExpiry + 1)).toBe(false);
 
     // re-approval (grantCapability called again) issues a fresh expiry that
     // is never earlier than the one it replaces, and is valid again right now
-    await grantCapability(origin, 'passkey');
+    await grantCapability(origin, 'encrypt');
     const secondPerms = await getOriginPermissions(origin);
-    const secondExpiry = secondPerms!.expires!.passkey!;
+    const secondExpiry = secondPerms!.expires!.encrypt!;
     expect(secondExpiry).toBeGreaterThanOrEqual(firstExpiry);
-    expect(hasCapability(secondPerms, 'passkey')).toBe(true);
+    expect(hasCapability(secondPerms, 'encrypt')).toBe(true);
   });
 
   test('every capability in TIME_LIMITED_CAPABILITIES is stamped on grant', async () => {
@@ -77,11 +77,10 @@ describe('a pre-existing grant with no recorded expiry (upgrade safety)', () => 
 
 describe('`granted` is returned raw - never pruned of expired capabilities', () => {
   test('an expired capability is still reported in `granted` by getOriginPermissions', async () => {
-    // `granted` must stay raw: zafu_passkey_get needs to tell "granted once,
-    // now expired" (re-authorize with one popup, task rule (a)) apart from
-    // "never granted at all" (hard refuse) - pruning `granted` here would
-    // make those two cases indistinguishable to every caller, not just the
-    // two UI counts and the presence-beacon scope that actually want the
+    // `granted` must stay raw: a caller may need to tell "granted once, now
+    // expired" apart from "never granted at all" - pruning `granted` here
+    // would make those two cases indistinguishable to every caller, not just
+    // the two UI counts and the presence-beacon scope that actually want the
     // pruned view (they call hasCapability directly instead - see
     // known-site.tsx, identity/index.tsx, contact-discovery-service.ts).
     const origin = 'https://stale-in-storage.example';
@@ -107,15 +106,15 @@ describe('`granted` is returned raw - never pruned of expired capabilities', () 
     await localExtStorage.set('knownSites', [
       {
         origin,
-        granted: ['passkey'],
+        granted: ['encrypt'],
         denied: [],
         grantedAt: 0,
-        expires: { passkey: Date.now() - 1000 },
+        expires: { encrypt: Date.now() - 1000 },
       },
     ] as never);
 
     const all = await getAllPermissions();
-    expect(all.find(p => p.origin === origin)?.granted).toContain('passkey');
+    expect(all.find(p => p.origin === origin)?.granted).toContain('encrypt');
   });
 });
 
