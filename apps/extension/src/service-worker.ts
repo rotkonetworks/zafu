@@ -102,6 +102,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { networkAllowsBackgroundSync } from './state/privacy';
 import { startUiOpenSession } from './ui-open-session';
 import { postNym } from './net/nym-bridge';
+import { ensureOffscreenDocument } from './offscreen-document';
 import { startPeopleRelay } from './people/sw';
 import { penumbraTiming } from './penumbra/timing';
 import { createChainCheck } from './penumbra/chain-check';
@@ -795,49 +796,14 @@ chrome.alarms.onAlarm.addListener(async alarm => {
 // ── zcash offscreen proving ──
 // The zcash-worker requests offscreen activation before sending prove requests.
 // Only the service worker can call chrome.offscreen.createDocument().
-const OFFSCREEN_PATH = '/offscreen.html';
-
-const withTimeout = <T>(p: Promise<T>, ms: number, label: string): Promise<T> =>
-  Promise.race([
-    p,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
-    ),
-  ]);
-
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type !== 'ZCASH_ENSURE_OFFSCREEN') {
     return false;
   }
-  void (async () => {
-    try {
-      const contexts = await withTimeout(
-        chrome.runtime.getContexts({
-          contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
-        }),
-        3000,
-        'getContexts',
-      );
-      if (!contexts.length) {
-        await withTimeout(
-          chrome.offscreen
-            .createDocument({
-              url: chrome.runtime.getURL(OFFSCREEN_PATH),
-              reasons: [chrome.offscreen.Reason.WORKERS],
-              justification: 'Zcash Halo 2 parallel proving via rayon thread pool',
-            })
-            .catch(() => {
-              /* already exists */
-            }),
-          3000,
-          'createDocument',
-        );
-      }
-      sendResponse({ ok: true });
-    } catch (e) {
-      sendResponse({ ok: false, error: String(e) });
-    }
-  })();
+  void ensureOffscreenDocument().then(
+    () => sendResponse({ ok: true }),
+    (e: unknown) => sendResponse({ ok: false, error: String(e) }),
+  );
   return true;
 });
 
