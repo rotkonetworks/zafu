@@ -18,6 +18,7 @@ import {
 } from '../state/keyring';
 import { keyInfoSupportsNetwork } from '../state/keyring/vault-ops';
 import { selectActiveZcashWallet } from '../state/wallets';
+import { zcashViewKey } from '../state/zcash-view-key';
 import { activePocketBirthday, activeZcashStoreId } from '../state/pockets';
 import {
   spawnNetworkWorker,
@@ -294,9 +295,8 @@ export function useZcashAutoSync() {
     if (!watchOnly) {
       return;
     }
-    const ufvkStr =
-      watchOnly.ufvk ??
-      (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+    // a wallet without a key zafu can read says so on home (zcash-home)
+    const ufvkStr = zcashViewKey(watchOnly);
     if (!ufvkStr || !walletId) {
       return;
     }

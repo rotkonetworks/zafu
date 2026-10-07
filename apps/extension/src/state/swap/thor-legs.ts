@@ -28,6 +28,7 @@ import {
 import type { VaultUnlock } from '../keyring/types';
 import { activeAccountIndex, activeZcashStoreId } from '../pockets';
 import { selectActiveZcashWallet } from '../wallets';
+import { zcashViewKey } from '../zcash-view-key';
 import { walletKind } from '../../signing/wallet-kind';
 import { moveAndDeposit } from '../../signing/move-and-deposit';
 import { createZignerRound, type ZignerRound } from '../../signing/zigner-round';
@@ -74,7 +75,7 @@ export const legContextOf = (s: AllSlices): LegContext | undefined => {
     walletId: key.id,
     pocket: activeAccountIndex(s),
     zidecarUrl: s.networks.networks.zcash.endpoint || 'https://zcash.rotko.net',
-    ufvk: zw?.ufvk ?? (zw?.orchardFvk?.startsWith('uview') ? zw.orchardFvk : undefined),
+    ufvk: zcashViewKey(zw),
     cold: walletKind(key, zw) === 'zigner',
     legsPerUnlock: legsPerUnlock(selectTxSigningSecurity(s)),
     getVaultUnlock: s.keyRing.getVaultUnlock,
