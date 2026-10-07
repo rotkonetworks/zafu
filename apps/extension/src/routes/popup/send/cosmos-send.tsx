@@ -545,7 +545,8 @@ export function CosmosSend({
       return;
     }
 
-    const authorized = await requestAuth();
+    // a zigner signs from its own qr; a phrase here is a secret to open
+    const authorized = await requestAuth(isZigner ? 'nothing' : 'secret');
     if (!authorized) {
       setTxStatus('confirm');
       return;
@@ -674,6 +675,7 @@ export function CosmosSend({
     recordUsage,
     shouldSuggestSave,
     requestAuth,
+    isZigner,
   ]);
 
   const { copied, copy } = useCopy();

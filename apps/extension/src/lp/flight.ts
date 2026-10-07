@@ -26,6 +26,7 @@
 import type { PayoutAs } from './math';
 
 import type { TxSeen } from './thor';
+import type { Unseals } from '../hooks/password-gate';
 
 export type Stage =
   | 'fund'
@@ -449,6 +450,18 @@ export const shieldRefund = (f: Flight, now = Date.now()): Flight =>
   f.stage === 'refunded' || f.stage === 'arrive' || (f.stage === 'lost' && !!f.fundTxid)
     ? to(f, 'shield', {}, now)
     : f;
+
+/**
+ * What confirming a send opens. A zigner signs its own zec moves and
+ * deposits, so nothing here is unsealed; a phrase, or the rune key a
+ * two-sided step signs with (seed, sealed random key or fvk-derived), is a
+ * secret zafu holds and asks for the password.
+ */
+export const unsealsFor = (cold: boolean | undefined, rune: boolean): Unseals =>
+  cold && !rune ? 'nothing' : 'secret';
+
+/** the flights that sign with the pocket's rune key */
+export const usesRune = (f?: Flight): boolean => f?.kind === 'add2' || f?.kind === 'withdraw2';
 
 export type StepState = 'done' | 'now' | 'later' | 'turned';
 

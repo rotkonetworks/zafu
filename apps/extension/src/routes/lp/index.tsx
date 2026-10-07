@@ -14,7 +14,7 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { ScrollShell, type ScrollArt } from '../../components/scroll-shell';
 import { Column, UnlockColumn, useNow } from '../../components/scroll-page';
 import { usePasswordGate } from '../../hooks/password-gate';
-import { isDone } from '../../lp/flight';
+import { isDone, unsealsFor, usesRune } from '../../lp/flight';
 import { zecText } from '../../lp/math';
 import {
   cancelAndShieldBack,
@@ -99,6 +99,7 @@ export const LpPage = () => {
   const follower = useLp(s => s.follower);
   const away = useLp(s => s.away);
   const pocket = useLp(s => s.pocket);
+  const cold = useLp(s => s.cold);
   const hasPos = useLp(s => !!positionOf(s));
   const { requestAuth, PasswordModal } = usePasswordGate();
 
@@ -115,11 +116,11 @@ export const LpPage = () => {
   }, []);
 
   // a watching tab, or a page whose pocket is no longer the one zafu shows, never sends
-  const confirm = (go: () => Promise<void>) => async () => {
+  const confirm = (go: () => Promise<void>, rune: boolean) => async () => {
     if (follower || away) {
       return;
     }
-    if (await requestAuth()) {
+    if (await requestAuth(unsealsFor(cold, rune))) {
       await go();
     }
   };
@@ -169,17 +170,17 @@ export const LpPage = () => {
     blocked: () => <BlockedScreen />,
     track: () => (
       <TrackScreen
-        onContinue={() => void confirm(continueFlight)()}
-        onCancel={() => void confirm(cancelAndShieldBack)()}
-        onRecover={() => void confirm(startRecover)()}
+        onContinue={() => void confirm(continueFlight, usesRune(flight))()}
+        onCancel={() => void confirm(cancelAndShieldBack, usesRune(flight))()}
+        onRecover={() => void confirm(startRecover, true)()}
       />
     ),
-    add: () => <AddScreen onAdd={() => void confirm(startAdd)()} />,
-    position: () => <PositionScreen onRecover={() => void confirm(startRecover)()} />,
-    withdraw: () => <WithdrawScreen onOut={() => void confirm(startWithdraw)()} />,
-    twoSided: () => <TwoSidedScreen onAdd={() => void confirm(startAdd2)()} />,
-    rune: () => <RuneScreen onSwap={() => void confirm(startRuneSwap)()} />,
-    withdraw2: () => <Withdraw2Screen onOut={() => void confirm(startWithdraw2)()} />,
+    add: () => <AddScreen onAdd={() => void confirm(startAdd, false)()} />,
+    position: () => <PositionScreen onRecover={() => void confirm(startRecover, true)()} />,
+    withdraw: () => <WithdrawScreen onOut={() => void confirm(startWithdraw, false)()} />,
+    twoSided: () => <TwoSidedScreen onAdd={() => void confirm(startAdd2, true)()} />,
+    rune: () => <RuneScreen onSwap={() => void confirm(startRuneSwap, false)()} />,
+    withdraw2: () => <Withdraw2Screen onOut={() => void confirm(startWithdraw2, true)()} />,
   };
 
   return (

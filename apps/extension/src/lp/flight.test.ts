@@ -15,6 +15,8 @@ import {
   stopped,
   type Flight,
   memoText,
+  unsealsFor,
+  usesRune,
 } from './flight';
 import { ADD_MEMO, withdrawMemo, zecText } from './math';
 
@@ -210,5 +212,25 @@ describe('cancel before the pool gets it', () => {
     );
     expect(cancellable(f)).toBe(false);
     expect(cancelFlight(f)).toBe(f);
+  });
+});
+
+describe('what an lp confirm unseals', () => {
+  it('a zigner moving zec opens nothing here: no password before its qr', () => {
+    expect(unsealsFor(true, false)).toBe('nothing');
+  });
+
+  it('a phrase, or any rune step (its key is held here), asks', () => {
+    expect(unsealsFor(false, false)).toBe('secret');
+    expect(unsealsFor(true, true)).toBe('secret');
+    expect(unsealsFor(undefined, false)).toBe('secret');
+  });
+
+  it('knows which flights sign with the rune key', () => {
+    expect(usesRune(startFlight('add2', 1n, ADD_MEMO))).toBe(true);
+    expect(usesRune(startFlight('withdraw2', 1n, ADD_MEMO))).toBe(true);
+    expect(usesRune(startFlight('add', 1n, ADD_MEMO))).toBe(false);
+    expect(usesRune(startFlight('swap', 1n, ADD_MEMO))).toBe(false);
+    expect(usesRune(undefined)).toBe(false);
   });
 });
