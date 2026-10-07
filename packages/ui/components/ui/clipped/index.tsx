@@ -45,21 +45,21 @@ export function Clipped({
   const short = middle === undefined ? undefined : shorten(middle, head, tail);
   const full = middle === undefined ? measured : short !== middle ? middle : undefined;
 
-  useLayoutEffect(() => {
+  // middle mode ignores the measure; one observer per span, not per render
+  const measure = () => {
     const el = ref.current!;
     setNested(!!el.parentElement?.closest(PRESSABLE));
-    if (middle !== undefined) {
-      return;
-    }
-    const measure = () => setMeasured(el.scrollWidth > el.clientWidth ? el.textContent : undefined);
-    measure();
+    setMeasured(el.scrollWidth > el.clientWidth ? el.textContent : undefined);
+  };
+  useLayoutEffect(measure);
+  useLayoutEffect(() => {
     if (typeof ResizeObserver === 'undefined') {
       return;
     }
     const ro = new ResizeObserver(measure);
-    ro.observe(el);
+    ro.observe(ref.current!);
     return () => ro.disconnect();
-  });
+  }, []);
 
   const pressable = full !== undefined && !nested;
 
