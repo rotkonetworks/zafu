@@ -4,6 +4,8 @@ import { UserChoice } from '@repo/storage-chrome/records';
 
 const popup = vi.hoisted(() => vi.fn());
 vi.mock('../../popup', () => ({ popup }));
+const openPanelOnGesture = vi.hoisted(() => vi.fn());
+vi.mock('../../side-panel-pref', () => ({ openPanelOnGesture }));
 
 import { isReservedChallenge, signRequestListener, type SignResponse } from './sign-request';
 import { pqKeyAuthMessage } from '@zafu/pq';
@@ -40,6 +42,7 @@ const selectVault = async (type: string, insensitive: Record<string, unknown> = 
 };
 
 beforeEach(() => {
+  openPanelOnGesture.mockReset();
   popup.mockReset();
   popup.mockResolvedValue({ choice: UserChoice.Denied });
 });
@@ -94,5 +97,17 @@ describe("zafu_sign: zafu's own messages are not signable", () => {
     );
     expect(isReservedChallenge('abcd')).toBe(false);
     expect(isReservedChallenge('00000005' + '7a6166752d')).toBe(true);
+  });
+});
+
+describe('zafu_sign: the side panel opens while the click still counts', () => {
+  it('opens it in the same task as the request, before any await', () => {
+    signRequestListener({ type: SIGN_REQUEST_TYPE, challengeHex: 'abcd' }, sender, () => undefined);
+    expect(openPanelOnGesture).toHaveBeenCalledWith(sender);
+  });
+
+  it('opens nothing for a malformed challenge', () => {
+    signRequestListener({ type: SIGN_REQUEST_TYPE, challengeHex: 'xyz' }, sender, () => undefined);
+    expect(openPanelOnGesture).not.toHaveBeenCalled();
   });
 });
