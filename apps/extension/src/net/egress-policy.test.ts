@@ -518,6 +518,8 @@ describe('send over nym: everything that ties you to a transaction or an address
       ['https://1click.chaindefuser.com/v0/tokens', 'direct'],
       ['https://zcash.me/api/lookup/alice', 'names-you'],
       ['https://sponsor.zafu.pro/base/gas', 'names-you'],
+      ['https://prod.vote-chain-primary.valargroup.org/shielded-vote/v1/rounds', 'names-you'],
+      ['https://lb-pir-primary.valargroup.org/query', 'direct'],
     ];
     for (const [url, expected] of rows) {
       expect([url, nymOf(url)]).toEqual([url, expected]);
