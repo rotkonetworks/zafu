@@ -17,7 +17,7 @@ import {
   relayEndpointForStorage,
 } from '../../../config/contact-discovery-relay';
 import { usePopupNav } from '../../../utils/navigate';
-import { readZcashMeConfig, type ZcashMeMode } from '../../../services/zcashme/config';
+import { useZcashMeMode, ZCASHME_MODE_LABEL } from '../../../services/zcashme/config';
 import { useExplain, type ExplainId } from './settings-explain';
 import { ZCASH_BACKENDS } from '../../../state/keyring/zcash-backend';
 import {
@@ -27,21 +27,11 @@ import {
   relayHost,
 } from '../../../config/people-relay';
 
-const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
-  off: 'off',
-  directory: 'directory',
-  live: 'live',
-};
-
-/** zcash.me - a Row(value) reading the persisted mode (an external system,
- *  so this is a plain effect, not derived state); the detail screen owns
- *  the mode picker itself (settings-zcashme.tsx). */
+/** zcash.me - a Row(value) reading the persisted mode; the detail screen
+ *  owns the mode picker itself (settings-zcashme.tsx). */
 export function ZcashMeRow({ onExplain }: { onExplain?: (label: string) => void }) {
   const navigate = usePopupNav();
-  const [mode, setMode] = useState<ZcashMeMode>('off');
-  useEffect(() => {
-    void readZcashMeConfig().then(c => setMode(c.mode));
-  }, []);
+  const mode = useZcashMeMode() ?? 'off';
   return (
     <Row
       type='value'
@@ -215,7 +205,7 @@ export function ContactDiscoverySection({ onExplain }: { onExplain?: (label: str
       />
       <Row
         type='value'
-        label='relay'
+        label='discovery relay'
         value={relayHost(saved.relayEndpoint || DEFAULT_CONTACT_DISCOVERY_RELAY)}
         onPress={() => setOpen(true)}
         {...explainProps('privacy.contactDiscoveryRelay')}

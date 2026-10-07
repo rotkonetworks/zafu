@@ -17,8 +17,8 @@ vi.mock('@repo/storage-chrome/local', () => ({
   localExtStorage: { get: async () => undefined, set: async () => undefined },
 }));
 vi.mock('../../../services/zcashme/config', () => ({
-  readZcashMeConfig: async () => ({ mode: 'off' }),
   useZcashMeMode: () => 'off',
+  ZCASHME_MODE_LABEL: { off: 'off' },
 }));
 vi.mock('../../../utils/navigate', () => ({ usePopupNav: () => () => undefined }));
 vi.mock('./settings-screen', () => ({

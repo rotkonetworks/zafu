@@ -23,6 +23,7 @@ import {
   DEFAULT_ZCASHME_CONFIG,
   readZcashMeConfig,
   writeZcashMeConfig,
+  ZCASHME_MODE_LABEL,
   type ZcashMeConfig,
   type ZcashMeMode,
 } from '../../../services/zcashme/config';
@@ -38,16 +39,14 @@ import {
 import { MAX_DECOYS } from '../../../services/zcashme/decoys';
 import { cn } from '@repo/ui/lib/utils';
 
-const MODES: { value: ZcashMeMode; label: string; detail: string }[] = [
-  { value: 'off', label: 'off', detail: 'nothing leaves the wallet (default)' },
+const MODES: { value: ZcashMeMode; detail: string }[] = [
+  { value: 'off', detail: 'nothing leaves the wallet (default)' },
   {
     value: 'directory',
-    label: 'local directory',
     detail: 'download the whole directory once; lookups and counterparty labels stay local',
   },
   {
     value: 'live',
-    label: 'live lookup',
     detail: 'resolve /name on demand - zcash.me sees your ip and each name you look up',
   },
 ];
@@ -170,7 +169,7 @@ export function SettingsZcashMe() {
                 )}
               />
               <span className='flex flex-col'>
-                <span className='text-xs text-fg-high'>{m.label}</span>
+                <span className='text-xs text-fg-high'>{ZCASHME_MODE_LABEL[m.value]}</span>
                 <span className='text-label text-fg-muted'>{m.detail}</span>
               </span>
             </button>

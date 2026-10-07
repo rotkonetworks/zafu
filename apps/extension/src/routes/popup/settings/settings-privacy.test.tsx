@@ -43,15 +43,15 @@ const byPlaceholder = (placeholder: string): HTMLInputElement => {
   return hit as HTMLInputElement;
 };
 
-/** the "relay" Row(value) - its own "?" explain button makes it a
+/** the "discovery relay" Row(value) - its own "?" explain button makes it a
  *  div[role=button] rather than a <button> (see Row), and the outer label
- *  span's textContent now runs "relay" + the "?" button's own text, so
+ *  span's textContent now runs "discovery relay" + the "?" button's own text, so
  *  match on the start of the label rather than full equality. */
 const openRelaySheet = (): void => {
   const hit = [...document.querySelectorAll('button, [role="button"]')].find(b =>
-    [...b.querySelectorAll('span')][0]?.textContent?.startsWith('relay'),
+    [...b.querySelectorAll('span')][0]?.textContent?.startsWith('discovery relay'),
   );
-  if (!hit) throw new Error('no "relay" row');
+  if (!hit) throw new Error('no "discovery relay" row');
   (hit as HTMLElement).click();
 };
 

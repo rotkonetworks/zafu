@@ -31,6 +31,13 @@ import {
 
 export type ZcashMeMode = 'off' | 'directory' | 'live';
 
+/** each mode's name, the same on the settings row and its screen */
+export const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
+  off: 'off',
+  directory: 'local directory',
+  live: 'live lookup',
+};
+
 export interface ZcashMeConfig {
   mode: ZcashMeMode;
   /** https url serving a `DirectorySnapshot` json; empty = none */
