@@ -69,6 +69,21 @@ type WorkerLike = Pick<Worker, 'postMessage' | 'terminate'>;
  */
 export const zcashSyncHeightKey = (walletId: string): string => `zcashSyncHeight_${walletId}`;
 
+/** the last chain check of a zcash node (see workers/fly-verify.ts); public chain data */
+export const ZCASH_CHAIN_CHECK_KEY = 'zcashChainCheck';
+
+export interface ZcashChainCheck {
+  serverUrl: string;
+  status: 'checked' | 'unverified' | 'failed';
+  /** why a chain is not verified (see fly-verify.ts); 'clock' is this computer's */
+  reason?: string;
+  tip?: number;
+  /** blocks between the proven tip and the proven note tree roots */
+  depth?: number;
+  /** how long the proof took to check, in ms */
+  ms?: number;
+}
+
 export interface NetworkWorkerMessage {
   type:
     | 'init'
@@ -304,11 +319,18 @@ const handleWorkerMessage = (
     // scanned nothing, which is the same lie in the opposite direction.
     // offscreen documents have no chrome.storage; the clients write it
     if (network === 'zcash' && msg.walletId && !isOffscreenHost()) {
-      const { currentHeight } = (msg.payload ?? {}) as { currentHeight?: number };
+      const { currentHeight, chain } = (msg.payload ?? {}) as {
+        currentHeight?: number;
+        chain?: ZcashChainCheck;
+      };
       if (typeof currentHeight === 'number' && currentHeight > 0) {
         void chrome.storage.local
           .set({ [zcashSyncHeightKey(msg.walletId)]: currentHeight })
           .catch(() => {});
+      }
+      // what the node's chain proof said, for screens that ask no node
+      if (chain) {
+        void chrome.storage.local.set({ [ZCASH_CHAIN_CHECK_KEY]: chain }).catch(() => {});
       }
     }
     return;

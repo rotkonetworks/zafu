@@ -9,9 +9,16 @@ import { useOnline } from '../../hooks/use-online';
  * the read failed, nothing to fall back on; unknown - zero while still
  * scanning ("nothing found YET"); partial - positive while scanning (a
  * floor); ready - read to the tip; held - still the pocket switched away
- * from, dimmed until this one's figure lands (never shown as current).
+ * from, dimmed until this one's figure lands (never shown as current);
+ * paused - the node's chain did not check out, so no figure from it is shown.
  */
-export type BalanceView = 'loading' | 'error' | 'unknown' | 'partial' | 'ready' | 'held';
+export type BalanceView = 'loading' | 'error' | 'unknown' | 'partial' | 'ready' | 'held' | 'paused';
+
+/** what stands where the figure would, for a view that has none */
+const NO_FIGURE: Partial<Record<BalanceView, { text: string; tone: string }>> = {
+  error: { text: 'balance unavailable', tone: 'text-hanko' },
+  paused: { text: 'balances paused', tone: 'text-fg-muted' },
+};
 
 /** a dash where a number belongs reads as "gone", so not-yet is a skeleton */
 const BalanceFigure = ({
@@ -26,8 +33,10 @@ const BalanceFigure = ({
   <div className='flex h-11 min-w-0 items-baseline gap-2.5'>
     {view === 'loading' || view === 'unknown' ? (
       <span className='h-9 w-[170px] self-center bg-elev-2' aria-label='reading balance' />
-    ) : view === 'error' ? (
-      <span className='self-center text-xs text-hanko'>balance unavailable</span>
+    ) : NO_FIGURE[view] ? (
+      <span className={cn('self-center text-xs', NO_FIGURE[view].tone)}>
+        {NO_FIGURE[view].text}
+      </span>
     ) : (
       <>
         <span

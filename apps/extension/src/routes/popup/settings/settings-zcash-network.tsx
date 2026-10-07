@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
-import { useZcashWorkerSync } from '../../../hooks/zcash-sync';
+import { useZcashChainCheck, useZcashWorkerSync } from '../../../hooks/zcash-sync';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { formatBlockMonth, rescanStartHeight } from '../../../utils/zcash-blocks';
 import { rescanZcash } from '../../../services/zcash-resync';
@@ -91,6 +91,8 @@ export const SettingsZcashNetwork = () => {
   // local progress only: opening this screen asks no node
   const { workerSyncHeight, workerChainHeight: tip, workerFailure: failure } = useZcashWorkerSync();
   const [birthday, setBirthday] = useBirthday(vaultId);
+  const chain = useZcashChainCheck();
+  const paused = chain?.status === 'failed';
 
   const [params] = useSearchParams();
   const [sheet, setSheet] = useState<'start' | 'date' | 'node' | null>(() =>
@@ -123,13 +125,15 @@ export const SettingsZcashNetwork = () => {
 
   const status = resyncing
     ? 'reading the chain again'
-    : failure
-      ? failure.message
-      : !workerSyncHeight
-        ? 'connecting'
-        : syncing
-          ? 'syncing'
-          : 'up to date';
+    : paused
+      ? "this server's chain didn't check out"
+      : failure
+        ? failure.message
+        : !workerSyncHeight
+          ? 'connecting'
+          : syncing
+            ? 'syncing'
+            : 'up to date';
 
   return (
     <SettingsScreen title='zcash' category='networks' backPath={PopupPath.SETTINGS_NETWORKS}>
@@ -139,7 +143,11 @@ export const SettingsZcashNetwork = () => {
             <span
               className={cn(
                 'size-2 shrink-0',
-                failure ? 'bg-hanko' : status === 'up to date' ? 'bg-success' : 'bg-zigner-gold',
+                failure || paused
+                  ? 'bg-hanko'
+                  : status === 'up to date'
+                    ? 'bg-success'
+                    : 'bg-zigner-gold',
               )}
             />
             <span className='flex min-w-0 grow flex-col gap-[3px]'>
@@ -176,7 +184,16 @@ export const SettingsZcashNetwork = () => {
           <Row
             type='value'
             label='node'
-            description={(!preset && endpoint && 'your own node') || undefined}
+            description={[
+              !preset && endpoint && 'your own node',
+              chain?.status === 'checked'
+                ? "chain checked against zcash's proof of work"
+                : chain?.reason === 'clock'
+                  ? "this computer's clock looks off"
+                  : 'chain not verified',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
             value={preset?.label ?? ((endpoint && hostOf(endpoint)) || 'auto')}
             onPress={() => setSheet('node')}
             {...explainProps('network.zcashNode')}

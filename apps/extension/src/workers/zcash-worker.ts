@@ -63,6 +63,14 @@ import {
   type TreeWrite,
 } from './note-trees';
 import { ironwoodBranchRefusal } from './branch-ids';
+import type { ZcashChainCheck } from '../state/keyring/network-worker';
+import {
+  checkChain,
+  FLY_BURIAL,
+  FLY_PROOF_MAX_BYTES,
+  poolsOffProof,
+  type ProvenChain,
+} from './fly-verify';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 import { BlockPrefetcher } from './block-prefetcher';
 import { once } from './once';
@@ -479,6 +487,12 @@ interface WasmModule extends DepositWasm, FinalizeWasm {
     anchor_height: number,
   ): unknown;
   tree_root_hex(tree_state_hex: string): string;
+  verify_flyclient(
+    resp_proto: Uint8Array,
+    now_secs: bigint,
+    min_height: number,
+    mainnet: boolean,
+  ): string;
   /** leaves in a zcashd-format frontier (the orchard pool) */
   frontier_tree_size?: (tree_state_hex: string) => bigint;
   frontier_tree_size_ironwood?: (tree_state_hex: string) => bigint;
@@ -2695,15 +2709,18 @@ const syncLoop = async (
     height: number,
     ts: { orchardTree: string; ironwoodTree?: string },
   ): Promise<boolean> => {
+    // a proven chain is the authority on the trees: the server's tree state
+    // then only seeds a dropped tree, it never replaces one that differs
+    const again = (pool: TreePool) => (proofThisRun ? undefined : secondAnswer(pool, height));
     const reseeded = await trees.check(
       'orchard',
       height,
       serverTree('orchard', ts),
-      secondAnswer('orchard', height),
+      again('orchard'),
     );
     const iwServer = serverTree('ironwood', ts);
     const iw = iwServer
-      ? await trees.check('ironwood', height, iwServer, secondAnswer('ironwood', height))
+      ? await trees.check('ironwood', height, iwServer, again('ironwood'))
       : false;
     orchardTreeSize = trees.size('orchard') ?? orchardTreeSize;
     ironwoodTreeSize = trees.size('ironwood') ?? ironwoodTreeSize;
@@ -2711,34 +2728,25 @@ const syncLoop = async (
   };
 
   /**
-   * A tree whose root differs from the server's at `height`, twice (the same
-   * second answer `check` asks for), read blocks the server no longer has: a
-   * reorg. The scan cursor is rewound and the range read again, which takes
-   * back the notes and spends found in it. Bounded twice over, so a server
-   * cannot make the wallet re-read at will: the run's rewind budget, and
-   * MISMATCH_REWINDS_PER_WINDOW per wallet per hour (stored). Past either, the
-   * reseed rule of `check` applies. True when the cursor moved.
+   * Trees whose root at `height` is not the chain's read blocks the chain no
+   * longer has: a reorg, or a node serving blocks its proof does not back.
+   * The scan cursor is rewound and the range read again, which takes back the
+   * notes and spends found in it, once `confirmed` (a proven root needs no
+   * second answer; the server's tree state does). Bounded twice over, so a
+   * server cannot make the wallet re-read at will: the run's rewind budget,
+   * and MISMATCH_REWINDS_PER_WINDOW per wallet per hour (stored). Past
+   * either, the reseed rule of `check` applies. True when the cursor moved.
    */
   const rewindOnMismatch = async (
     height: number,
-    ts: { orchardTree: string; ironwoodTree?: string },
+    pools: readonly TreePool[],
+    confirmed: () => Promise<boolean>,
   ): Promise<boolean> => {
-    const pools = (['orchard', 'ironwood'] as const).filter(pool =>
-      trees.differs(pool, height, serverTree(pool, ts)?.root),
-    );
     if (pools.length === 0 || rewindsThisRun >= MAX_REWINDS_PER_RUN) {
       return false;
     }
     const target = Math.max(rewindFloor, height - rewindDistanceForAttempt(rewindsThisRun));
-    if (target >= height) {
-      return false;
-    }
-    let agreed = false;
-    for (const pool of pools) {
-      const second = await secondAnswer(pool, height)().catch(() => undefined);
-      agreed ||= !!second && second.root === serverTree(pool, ts)?.root;
-    }
-    if (!agreed || !trees.differs(pools[0]!, height, serverTree(pools[0]!, ts)?.root)) {
+    if (target >= height || !(await confirmed())) {
       return false;
     }
     const earlier = (await idbGet<{ value: number[] }>('meta', [walletId, 'mismatchRewinds']))
@@ -2754,8 +2762,8 @@ const syncLoop = async (
     await idbPutMeta(walletId, 'mismatchRewinds', history);
     rewindsThisRun++;
     console.warn(
-      `[zcash-worker] ${pools.join(' and ')} note tree root at ${height} differs from the server's ` +
-        `(twice); rewinding to ${target} (attempt ${rewindsThisRun}/${MAX_REWINDS_PER_RUN})`,
+      `[zcash-worker] ${pools.join(' and ')} note tree root at ${height} differs from the chain's; ` +
+        `rewinding to ${target} (attempt ${rewindsThisRun}/${MAX_REWINDS_PER_RUN})`,
     );
     currentHeight = await rewindScanCursor(target);
     lastSaved = currentHeight;
@@ -2772,6 +2780,111 @@ const syncLoop = async (
       },
     });
     return true;
+  };
+
+  /** rewind when the server's tree state at `height` differs, twice (the same node a moment later) */
+  const rewindOnServerMismatch = (
+    height: number,
+    ts: { orchardTree: string; ironwoodTree?: string },
+  ) => {
+    const pools = (['orchard', 'ironwood'] as const).filter(pool =>
+      trees.differs(pool, height, serverTree(pool, ts)?.root),
+    );
+    return rewindOnMismatch(height, pools, async () => {
+      let agreed = false;
+      for (const pool of pools) {
+        const second = await secondAnswer(pool, height)().catch(() => undefined);
+        agreed ||= !!second && second.root === serverTree(pool, ts)?.root;
+      }
+      return agreed && trees.differs(pools[0]!, height, serverTree(pools[0]!, ts)?.root);
+    });
+  };
+
+  // ── chain check (FlyClient, see fly-verify.ts) ──
+  // At the start of the run and once more when it first catches up after
+  // reading blocks; never on every new block (a proof is ~1.5 MB).
+  const flyTipKey = [`chain:${mainnet ? 'main' : 'test'}`, 'flyTip'];
+  let proofThisRun = false;
+  /** the run's last chain check, as the page stores it */
+  let chainRecord: ZcashChainCheck | undefined;
+  /** proven roots not yet compared with the trees */
+  let proven: ProvenChain | undefined;
+  let readBlocks = false;
+  let checkedAtCatchUp = false;
+  const checkNodeChain = async (): Promise<void> => {
+    const lastTip = (await idbGet<{ value: number }>('meta', flyTipKey))?.value ?? 0;
+    // a node that proved its chain once must keep proving it (no quiet downgrade)
+    const provedKey = `proved:${backendKey(serverUrl)}`;
+    const provedBefore = !!(await idbGet<{ value: boolean }>('meta', [flyTipKey[0]!, provedKey]))
+      ?.value;
+    const check = await checkChain({
+      mainnet,
+      fetchProof: zidecar && (() => zidecar.getFlyClientProof(FLY_BURIAL, FLY_PROOF_MAX_BYTES)),
+      verify: (...a) => wasmModule!.verify_flyclient(...a),
+      lastTip,
+      provedBefore,
+    });
+    chainRecord = {
+      serverUrl,
+      status: check.status,
+      ...(check.status === 'unverified' && { reason: check.reason }),
+      ...(check.status === 'checked' && {
+        tip: check.chain.tip_height,
+        depth: check.chain.tip_height - check.chain.roots_height,
+        ms: Math.round(check.ms),
+      }),
+    };
+    workerSelf.postMessage({
+      type: 'sync-progress',
+      id: '',
+      network: 'zcash',
+      walletId,
+      payload: { chain: chainRecord },
+    });
+    if (check.status === 'failed') {
+      throw syncError(
+        'chain-unproven',
+        `the node's chain proof did not check out: ${check.detail}`,
+      );
+    }
+    if (check.status === 'unverified') {
+      console.log(
+        `[zcash-worker] chain not verified (${check.reason}${check.detail ? `: ${check.detail}` : ''})`,
+      );
+      return;
+    }
+    proofThisRun = true;
+    proven = check.chain;
+    if (!provedBefore) {
+      await idbPutMeta(flyTipKey[0]!, provedKey, true);
+    }
+    if (check.chain.tip_height > lastTip) {
+      await idbPutMeta(flyTipKey[0]!, flyTipKey[1]!, check.chain.tip_height);
+    }
+    const { tip_height: tip, roots_height: at } = check.chain;
+    console.log(
+      `[zcash-worker] flyclient: tip ${tip}, roots at ${at} (depth ${tip - at}), ` +
+        `verified in ${Math.round(check.ms)} ms`,
+    );
+  };
+  /** compare the trees with proven roots the scan has reached; true when the cursor moved */
+  const checkProvenRoots = async (): Promise<boolean> => {
+    if (!proven || proven.roots_height > currentHeight) {
+      return false;
+    }
+    const chain = proven;
+    const off = poolsOffProof(chain, (pool, h) => trees.get(pool)?.root_at(h));
+    if (off.length === 0) {
+      proven = undefined;
+      return false;
+    }
+    if (await rewindOnMismatch(chain.roots_height, off, async () => true)) {
+      return true;
+    }
+    throw syncError(
+      'chain-unproven',
+      `the ${off.join(' and ')} note tree at ${chain.roots_height} is not the proven one, and no rewind is left`,
+    );
   };
 
   // mempool watcher: only spawned when explicitly opted in AND on a zidecar
@@ -2888,16 +3001,26 @@ const syncLoop = async (
           );
         }
         networkChecked = true;
+        await checkNodeChain();
       }
       const chainHeight = await getChainTip();
 
       if (currentHeight >= chainHeight) {
+        if (readBlocks && !checkedAtCatchUp) {
+          checkedAtCatchUp = true;
+          await checkNodeChain();
+        }
+        // proven roots first: they decide whether the blocks read are the chain
+        if (await checkProvenRoots()) {
+          dropPipeline();
+          continue;
+        }
         // caught up: compare the note trees with the server's tree state here
         // (a tree that differs is reseeded), then recover any notes the trees
         // do not hold - in the background of a send, never inside one
         try {
           const syncTs = await client.getTreeState(currentHeight);
-          if (await rewindOnMismatch(currentHeight, syncTs)) {
+          if (await rewindOnServerMismatch(currentHeight, syncTs)) {
             dropPipeline();
             continue;
           }
@@ -2927,7 +3050,13 @@ const syncLoop = async (
           id: '',
           network: 'zcash',
           walletId,
-          payload: { currentHeight, chainHeight, notesFound: state.notes.length, blocksScanned: 0 },
+          payload: {
+            currentHeight,
+            chainHeight,
+            notesFound: state.notes.length,
+            blocksScanned: 0,
+            ...(chainRecord && { chain: chainRecord }),
+          },
         });
         // a pass with notes still to recover goes straight on (after the tip
         // check above), so recovery never holds the scan for more than a pass
@@ -3258,6 +3387,7 @@ const syncLoop = async (
         break;
       }
       currentHeight = endHeight;
+      readBlocks = true;
       await saveBatch(
         walletId,
         newIronwoodNotes.length > 0 ? [...newNotes, ...newIronwoodNotes] : newNotes,
@@ -3275,7 +3405,7 @@ const syncLoop = async (
       if (currentHeight % TREE_CHECK_INTERVAL < batchSize) {
         try {
           const batchTs = await client.getTreeState(currentHeight);
-          if (await rewindOnMismatch(currentHeight, batchTs)) {
+          if (await rewindOnServerMismatch(currentHeight, batchTs)) {
             dropPipeline();
             continue;
           }
@@ -3331,6 +3461,20 @@ const syncLoop = async (
       // about to move (rewind) or the endpoint is unhealthy. Re-fetching a few
       // batches is free; applying a batch fetched before a rewind is not.
       dropPipeline();
+
+      // a chain that did not check out: nothing more is read from this node
+      // until the person chooses (or the node proves itself on the next run)
+      if (syncErrorCodeOf(err) === 'chain-unproven') {
+        console.error(`[zcash-worker] sync paused: ${errText(err)}`);
+        workerSelf.postMessage({
+          type: 'sync-error',
+          id: '',
+          network: 'zcash',
+          walletId,
+          payload: { message: errText(err), stalled: true, code: 'chain-unproven' },
+        });
+        break;
+      }
 
       // Chain continuity broken: recover silently rather than telling the
       // user about a tree root. Rewind the scan cursor by an escalating

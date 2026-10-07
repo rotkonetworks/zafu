@@ -3495,6 +3495,56 @@ export function validate_ufvk(ufvk_str) {
 }
 
 /**
+ * Verify a zidecar `GetFlyClientProofResponse` (protobuf bytes, requested
+ * with default `lambda`/`tail`, i.e. 0/0) for a wallet that trusts no
+ * other source: full proof of work from the NU6.3 activation block, the
+ * compiled checkpoint's work and difficulty floors, a tip within 90 minutes
+ * of `now_secs` (unix seconds), and a tip at or above `min_height` (pass
+ * the highest tip this wallet has verified, to refuse a rollback).
+ *
+ * Returns JSON `{tip_height, tip_hash, total_work, orchard_root,
+ * ironwood_root, roots_height}`:
+ * - `tip_hash` is display order (byte-reversed, as explorers and
+ *   `TreeState.hash` print it);
+ * - `orchard_root` / `ironwood_root` are the 32-byte roots in their
+ *   canonical encoding, the same bytes and hex as
+ *   `tree_root_hex(treeState.orchardTree)` /
+ *   `tree_root_hex_ironwood(treeState.ironwoodTree)` for the tree state at
+ *   `roots_height`, so a plain string compare checks a server's tree state;
+ * - `roots_height` is `tip_height - 1` (the tip header commits to the tree
+ *   of earlier blocks), or `tip_height - d` when the request asked for
+ *   `burial = d` (2..=17) and the server sent one.
+ *
+ * Mainnet only: testnet's minimum-difficulty rule admits pow-limit blocks,
+ * so no floor applies there.
+ * @param {Uint8Array} resp_proto
+ * @param {bigint} now_secs
+ * @param {number} min_height
+ * @param {boolean} mainnet
+ * @returns {string}
+ */
+export function verify_flyclient(resp_proto, now_secs, min_height, mainnet) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passArray8ToWasm0(resp_proto, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.verify_flyclient(ptr0, len0, now_secs, min_height, mainnet);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * Get library version
  * @returns {string}
  */
@@ -4167,12 +4217,12 @@ function __wbg_get_imports(memory) {
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4788, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4824, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4790, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4826, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_);
             return ret;
         },

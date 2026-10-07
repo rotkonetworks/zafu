@@ -19,6 +19,7 @@ const KINDS: SyncFailureKind[] = [
   'endpoint',
   'consensus',
   'wrongNetwork',
+  'chainUnproven',
   'chainRecovery',
   'storageBusy',
   'storageFatal',
@@ -56,6 +57,20 @@ describe('classifySyncFailure - structured codes', () => {
     expect(f.kind).toBe('wrongNetwork');
     expect(f.message).toBe('this node serves another zcash network · please choose another');
     expect(f.action?.kind).toBe('settings');
+  });
+
+  it('a chain that did not check out pauses balances and offers another node, never auto-retried', () => {
+    const f = classifySyncFailure(
+      'flyclient: stale: tip is older than 90 minutes',
+      'chain-unproven',
+    );
+    expect(f.kind).toBe('chainUnproven');
+    expect(f.message).toBe(
+      "this server's chain didn't check out · balances are paused, nothing was lost",
+    );
+    expect(f.action).toEqual({ label: 'choose another node', kind: 'settings' });
+    expect(f.autoRetries).toBe(false);
+    expect(isEndpointFailoverCandidate(f)).toBe(false);
   });
 
   it('ignores a code it does not recognise and falls back to sniffing', () => {

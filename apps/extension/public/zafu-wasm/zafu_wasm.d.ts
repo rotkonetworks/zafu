@@ -1075,6 +1075,32 @@ export function validate_seed_phrase(seed_phrase: string): boolean;
 export function validate_ufvk(ufvk_str: string): boolean;
 
 /**
+ * Verify a zidecar `GetFlyClientProofResponse` (protobuf bytes, requested
+ * with default `lambda`/`tail`, i.e. 0/0) for a wallet that trusts no
+ * other source: full proof of work from the NU6.3 activation block, the
+ * compiled checkpoint's work and difficulty floors, a tip within 90 minutes
+ * of `now_secs` (unix seconds), and a tip at or above `min_height` (pass
+ * the highest tip this wallet has verified, to refuse a rollback).
+ *
+ * Returns JSON `{tip_height, tip_hash, total_work, orchard_root,
+ * ironwood_root, roots_height}`:
+ * - `tip_hash` is display order (byte-reversed, as explorers and
+ *   `TreeState.hash` print it);
+ * - `orchard_root` / `ironwood_root` are the 32-byte roots in their
+ *   canonical encoding, the same bytes and hex as
+ *   `tree_root_hex(treeState.orchardTree)` /
+ *   `tree_root_hex_ironwood(treeState.ironwoodTree)` for the tree state at
+ *   `roots_height`, so a plain string compare checks a server's tree state;
+ * - `roots_height` is `tip_height - 1` (the tip header commits to the tree
+ *   of earlier blocks), or `tip_height - d` when the request asked for
+ *   `burial = d` (2..=17) and the server sent one.
+ *
+ * Mainnet only: testnet's minimum-difficulty rule admits pow-limit blocks,
+ * so no floor applies there.
+ */
+export function verify_flyclient(resp_proto: Uint8Array, now_secs: bigint, min_height: number, mainnet: boolean): string;
+
+/**
  * Get library version
  */
 export function version(): string;
@@ -1256,6 +1282,7 @@ export interface InitOutput {
     readonly ur_encode_frames: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly validate_seed_phrase: (a: number, b: number) => number;
     readonly validate_ufvk: (a: number, b: number) => number;
+    readonly verify_flyclient: (a: number, b: number, c: bigint, d: number, e: number) => [number, number, number, number];
     readonly version: () => [number, number];
     readonly walletkeys_calculate_balance: (a: number, b: any, c: any) => [bigint, number, number];
     readonly walletkeys_decrypt_transaction_memos: (a: number, b: number, c: number) => [number, number, number];

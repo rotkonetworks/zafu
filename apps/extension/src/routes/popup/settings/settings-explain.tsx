@@ -116,7 +116,7 @@ export const SETTINGS_EXPLAIN = {
   'network.zcashNode': {
     blurb: 'which node zafu reads the zcash chain from, and asks for your memos.',
     footer:
-      'zafu trusts the node you pick for the chain itself: it could hide or delay a payment, though it can never spend your funds. it learns your ip and roughly when you sync, never your keys',
+      "when the node sends a proof, zafu checks its chain against zcash's proof of work and pauses balances if it does not hold. a node without one is trusted for the chain: it could hide or delay a payment, though it can never spend your funds. either way it learns your ip and roughly when you sync, never your keys",
   },
   'network.penumbraNode': {
     blurb: 'which node zafu reads the penumbra chain from.',
