@@ -6,13 +6,14 @@ import { PopupPath } from '../paths';
 import { CATEGORY_MARKS, SettingsScreen, type SettingsCategory } from './settings-screen';
 import { useAutoLock, AUTO_LOCK_OPTIONS } from './use-auto-lock';
 import { useZafuTheme } from './settings-appearance';
+import { useZcashMeMode } from '../../../services/zcashme/config';
 import {
   devicesStatus,
   networksStatus,
   privacyStatus,
   securityStatus,
   selectConnectedSiteCount,
-  selectPrivateDefaults,
+  selectOpenings,
   selectUnbackedSeatCount,
   selectZignerPaired,
 } from './settings-status';
@@ -26,8 +27,10 @@ const useSecurityStatus = () => {
   );
 };
 
-const usePrivacyStatus = () =>
-  privacyStatus(useStore(selectPrivateDefaults), useStore(selectConnectedSiteCount));
+const usePrivacyStatus = () => {
+  const live = useZcashMeMode() === 'live';
+  return privacyStatus(useStore(selectOpenings) + Number(live), useStore(selectConnectedSiteCount));
+};
 
 const useNetworksStatus = () => networksStatus(useStore(useShallow(selectEnabledNetworks)));
 

@@ -136,6 +136,15 @@ export const useZcashMe = (): { config: ZcashMeConfig | null; index: DirectoryIn
   return { config, index: config && config.mode !== 'off' ? index : null };
 };
 
+/** the mode alone, for a row or a status line: reads the config, never the directory */
+export const useZcashMeMode = (): ZcashMeMode | null => {
+  const config = useSyncExternalStore(onConfigChange, getZcashMeConfig);
+  useEffect(() => {
+    void readZcashMeConfig();
+  }, []);
+  return config?.mode ?? null;
+};
+
 const noProfile = (): ZcashMeProfile | undefined => undefined;
 
 /**

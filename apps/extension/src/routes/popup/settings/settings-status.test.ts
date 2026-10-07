@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import type { AllSlices } from '../../../state';
+import { DEFAULT_PRIVACY_SETTINGS, type PrivacySettings } from '../../../state/privacy';
 import type { ZcashWalletJson } from '../../../state/wallets';
 import {
   devicesStatus,
   networksStatus,
   privacyStatus,
   securityStatus,
+  selectOpenings,
   unbackedSeats,
 } from './settings-status';
 
@@ -32,11 +35,47 @@ describe('settings status lines', () => {
   });
 
   it('reads privacy, networks and devices plainly', () => {
-    expect(privacyStatus(true, 3)).toBe('private defaults · 3 sites connected');
-    expect(privacyStatus(false, 1)).toBe('your settings · 1 site connected');
-    expect(privacyStatus(true, 0)).toBe('private defaults · no sites connected');
+    expect(privacyStatus(0, 3)).toBe('private defaults · 3 sites connected');
+    expect(privacyStatus(1, 1)).toBe('1 setting less private · 1 site connected');
+    expect(privacyStatus(2, 0)).toBe('2 settings less private · no sites connected');
     expect(networksStatus(['zcash', 'penumbra'])).toBe('zcash · penumbra');
     expect(networksStatus([])).toBe('no networks on');
     expect(devicesStatus(true, 'sumi')).toBe('zigner paired · sumi theme');
+  });
+
+  const state = (
+    settings: Partial<PrivacySettings>,
+    enabled: string[],
+    zcash: { endpoint?: string; memoSyncStrategy?: string; mempoolWatch?: string } = {},
+  ) =>
+    ({
+      privacy: { settings: { ...DEFAULT_PRIVACY_SETTINGS, ...settings } },
+      keyRing: { enabledNetworks: enabled },
+      networks: { networks: { zcash: { backend: 'zidecar', ...zcash } } },
+    }) as unknown as AllSlices;
+
+  it('counts what really lets more be seen, only where its network is on', () => {
+    expect(selectOpenings(state({}, ['zcash']))).toBe(0);
+    expect(selectOpenings(state({ enableExplorerLinks: true }, ['zcash']))).toBe(1);
+    expect(
+      selectOpenings(
+        state({ zcashTransparentEachBlock: true }, ['zcash'], {
+          memoSyncStrategy: 'fast',
+          mempoolWatch: 'on',
+        }),
+      ),
+    ).toBe(3);
+    // the zcash-only switches stay quiet while zcash is off
+    expect(
+      selectOpenings(
+        state({ zcashTransparentEachBlock: true }, ['penumbra'], { memoSyncStrategy: 'fast' }),
+      ),
+    ).toBe(0);
+    // a lightwalletd node has no memo decoys or mempool watch to switch
+    expect(
+      selectOpenings(
+        state({}, ['zcash'], { backend: 'lightwalletd', memoSyncStrategy: 'fast' } as never),
+      ),
+    ).toBe(0);
   });
 });
