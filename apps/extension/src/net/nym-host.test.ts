@@ -43,7 +43,11 @@ beforeEach(() => {
   setup.mockClear();
   vi.stubGlobal('Worker', FakeWorker);
   vi.stubGlobal('BroadcastChannel', LocalChannel);
-  vi.stubGlobal('indexedDB', { deleteDatabase: (name: string) => deleted.push(name) });
+  vi.stubGlobal('indexedDB', {
+    deleteDatabase: (name: string) => deleted.push(name),
+    databases: () =>
+      Promise.resolve([{ name: 'wasm-client-storage-zafu-left' }, { name: 'zafu-zcash' }]),
+  });
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -76,12 +80,18 @@ describe('the nym tunnel', () => {
     const first = setup.mock.calls[0]![0]['clientId'];
     host.stopNymTunnel();
     expect(spawned[0]!.terminated).toBe(true);
-    expect(deleted).toEqual([first]);
+    expect(deleted).toContain(`wasm-client-storage-${String(first)}`);
     expect(host.nymTunnelRunning()).toBe(false);
 
     await host.startNymTunnel();
     expect(spawned).toHaveLength(2);
     expect(setup.mock.calls[1]![0]['clientId']).not.toBe(first);
+  });
+
+  it("forgets an identity a closed browser left behind, and nothing of zafu's own", async () => {
+    const host = await import('./nym-host');
+    await host.startNymTunnel();
+    expect(deleted).toEqual(['wasm-client-storage-zafu-left']);
   });
 
   it('stops when the last window closes (a stop on the channel)', async () => {
