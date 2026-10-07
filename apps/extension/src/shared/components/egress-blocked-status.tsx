@@ -22,7 +22,15 @@ export const EgressBlockedStatus = ({
   if (!isEgressBlocked(error)) {
     return null;
   }
-  const { host, destination } = error.refusal;
+  const { host, destination, reason } = error.refusal;
+  // nym was down: nothing to turn on, only to ask again
+  if (reason === 'transport-down') {
+    return (
+      <StatusSlot tone='warn' icon='i-ph-plug' action={{ label: 'try again', onClick: onAllowed }}>
+        {error.message}
+      </StatusSlot>
+    );
+  }
 
   const allow = (): void => {
     if (!destination || allowing) {
