@@ -31,13 +31,18 @@ import {
   type EgressRealm,
   type EgressTable,
 } from './egress-table';
+import { viaNym } from './nym-bridge';
 
 export type EgressRefusal = Extract<EgressDecision, { allow: false }>;
 
 export class EgressBlockedError extends TypeError {
   override readonly name = 'EgressBlockedError';
   constructor(readonly refusal: EgressRefusal) {
-    super(`zafu did not contact ${refusal.host}`);
+    super(
+      refusal.reason === 'transport-down'
+        ? "nym isn't reachable right now. nothing was sent."
+        : `zafu did not contact ${refusal.host}`,
+    );
   }
 }
 
@@ -111,6 +116,14 @@ const urlOf = (input: string | URL | Request): string =>
 export const checkEgress = (input: string | URL | Request): EgressDecision =>
   decideEgress(urlOf(input), realm ?? 'worker', table);
 
+/** "send over nym" is on, once this realm has its table */
+export const nymRoutingOn = async (): Promise<boolean> => {
+  if (!table) {
+    await waitForTable();
+  }
+  return table?.nym === true;
+};
+
 const refuse = (refusal: EgressRefusal): never => {
   emit(refusal, realm ?? 'worker');
   channel?.postMessage({
@@ -166,7 +179,22 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
   ready = new Promise<void>(r => (markReady = r));
 
   const nativeFetch = globalThis.fetch?.bind(globalThis);
-  if (nativeFetch) {
+  const send = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const response = await nativeFetch(input, init);
+    // A followed redirect lands wherever the server says. The request itself
+    // has already gone (a CSP connect-src cannot list user-chosen and LAN
+    // nodes, so nothing stops the hop), but its answer never reaches the
+    // caller unless the final url passes the same policy.
+    if (response.redirected) {
+      const landed = decideRedirect(urlOf(input), response.url, realm ?? 'worker', table);
+      if (!landed.allow) {
+        void response.body?.cancel().catch(() => undefined);
+        refuse(landed);
+      }
+    }
+    return response;
+  };
+  if (typeof nativeFetch === 'function') {
     globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
       if (!table) {
         await waitForTable();
@@ -181,19 +209,18 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
           refuse(decision);
         }
       }
-      const response = await nativeFetch(input, init);
-      // A followed redirect lands wherever the server says. The request itself
-      // has already gone (a CSP connect-src cannot list user-chosen and LAN
-      // nodes, so nothing stops the hop), but its answer never reaches the
-      // caller unless the final url passes the same policy.
-      if (response.redirected) {
-        const landed = decideRedirect(urlOf(input), response.url, realm ?? 'worker', table);
-        if (!landed.allow) {
-          void response.body?.cancel().catch(() => undefined);
-          refuse(landed);
-        }
+      // a request that names you goes through nym, or nowhere
+      if (decision.allow && decision.nym) {
+        const { host: h = '', destination } = decision;
+        return viaNym(
+          input,
+          init,
+          decision.nym,
+          () => send(input, init),
+          () => refuse({ allow: false, host: h, destination, reason: 'transport-down' }),
+        );
       }
-      return response;
+      return send(input, init);
     };
   }
 
