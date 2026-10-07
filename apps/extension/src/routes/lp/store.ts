@@ -15,6 +15,7 @@
 import { createStore } from 'zustand/vanilla';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { useStore } from '../../state';
+import { zcashViewKey } from '../../state/zcash-view-key';
 import { selectEffectiveKeyInfo } from '../../state/keyring';
 import { activeAccountIndex, activePockets, activeZcashStoreId } from '../../state/pockets';
 import {
@@ -1021,7 +1022,7 @@ export const isColdKey = (type?: string) => !!type && type !== 'mnemonic';
 /** the wallet's unified viewing key string, exactly as stored (the fvk source's input) */
 const viewingKey = (): string | undefined => {
   const z = boundWallet().zcash;
-  return z?.ufvk ?? (z?.orchardFvk?.startsWith('uview') ? z.orchardFvk : undefined);
+  return zcashViewKey(z);
 };
 
 /** what the worker opens for this pocket's rune key: the sealed seed, the sealed random key, or the viewing key */

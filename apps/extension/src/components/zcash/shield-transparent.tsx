@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useStore } from '../../state';
+import { zcashViewKey } from '../../state/zcash-view-key';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../../state/keyring';
 import { activeAccountIndex, activePockets, activeZcashStoreId } from '../../state/pockets';
 import { usePasswordGate } from '../../hooks/password-gate';
@@ -243,9 +244,7 @@ export const ShieldTransparent = ({
     if (!watchOnly || !selectedKeyInfo) {
       return;
     }
-    const ufvk =
-      watchOnly.ufvk ??
-      (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+    const ufvk = zcashViewKey(watchOnly);
     if (!ufvk) {
       return;
     }
@@ -579,9 +578,7 @@ function useLedgerShield({
   );
 
   const run = async () => {
-    const ufvk =
-      watchOnly?.ufvk ??
-      (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+    const ufvk = zcashViewKey(watchOnly);
     if (!selectedKeyInfo || !ufvk) {
       return;
     }

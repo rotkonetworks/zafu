@@ -25,6 +25,7 @@ import {
   detectQRNetwork,
   type ZcashFvkExportData,
 } from '@repo/wallet/zcash-zigner';
+import { encodeOrchardUfvk } from '@repo/wallet/networks/zcash/unified-address';
 import {
   isUrString,
   getUrType,
@@ -43,10 +44,8 @@ export interface ParsedZcashCode {
   device: ConnectDevice;
   accountIndex: number;
   label: string | null;
-  /** unified full viewing key string, when the payload carries one */
-  ufvk: string | null;
-  /** raw orchard fvk bytes, for the legacy (pre-UR) binary QR format */
-  orchardFvk: Uint8Array | null;
+  /** unified full viewing key; for the legacy binary code, the orchard-only one its key encodes */
+  ufvk: string;
   mainnet: boolean;
   zidPublicKey?: string;
 }
@@ -69,6 +68,8 @@ export type ParsedConnectCode = ParsedZcashCode | ParsedPenumbraCode;
 export type ConnectCodeErrorReason =
   /** a recognized code from a different flow (e.g. a pending signing request) */
   | 'signing-request'
+  /** a legacy code with no key zafu can sync from: the device needs a newer zigner */
+  | 'older-code'
   /** not recognized as a connect code at all */
   | 'garbage';
 
@@ -110,7 +111,7 @@ export function parseConnectCode(payload: string): ConnectCodeResult {
   }
   if (network === 'zcash' && isZcashFvkQR(trimmed)) {
     try {
-      return fromZcashExport(parseZcashFvkQR(trimmed));
+      return fromZcashLegacy(parseZcashFvkQR(trimmed));
     } catch (cause) {
       return err('garbage', readableCause(cause, 'this code did not read.'));
     }
@@ -185,13 +186,26 @@ function fromZcashUrExport(urExport: {
     accountIndex: urExport.accountIndex,
     label: urExport.label,
     ufvk: urExport.ufvk,
-    orchardFvk: null,
     mainnet: urExport.ufvk.startsWith('uview1'),
     zidPublicKey: urExport.zidPublicKey,
   };
 }
 
-function fromZcashExport(exportData: ZcashFvkExportData): ParsedZcashCode {
+/**
+ * The pre-UR binary code carries only the raw orchard key. Encoded as an
+ * orchard-only unified viewing key it syncs like any other; a code without
+ * even that would add a wallet that can never sync, so it is refused here.
+ */
+function fromZcashLegacy(exportData: ZcashFvkExportData): ConnectCodeResult {
+  const ufvk =
+    exportData.ufvk ??
+    (exportData.orchardFvk && encodeOrchardUfvk(exportData.orchardFvk, exportData.mainnet));
+  if (!ufvk) {
+    return err(
+      'older-code',
+      'this zigner shows an older code · please update zigner and scan again',
+    );
+  }
   return {
     ok: true,
     network: 'zcash',
@@ -199,8 +213,7 @@ function fromZcashExport(exportData: ZcashFvkExportData): ParsedZcashCode {
       exportData.zidPublicKey || !exportData.coldSignerType ? 'zigner' : exportData.coldSignerType,
     accountIndex: exportData.accountIndex,
     label: exportData.label,
-    ufvk: exportData.ufvk ?? null,
-    orchardFvk: exportData.orchardFvk ?? null,
+    ufvk,
     mainnet: exportData.mainnet,
     zidPublicKey: exportData.zidPublicKey,
   };

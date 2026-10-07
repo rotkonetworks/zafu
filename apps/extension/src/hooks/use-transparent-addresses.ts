@@ -14,6 +14,7 @@ import { localExtStorage, type LocalStorageState } from '@repo/storage-chrome/lo
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { readEncrypted, writeEncrypted } from '../state/encrypted-storage';
 import { useStore, type AllSlices } from '../state';
+import { zcashViewKey } from '../state/zcash-view-key';
 import { selectEffectiveKeyInfo, keyRingSelector, selectActiveNetwork } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { deriveZcashTransparent, deriveZcashTransparentFromUfvk } from './use-address';
@@ -70,9 +71,7 @@ const deriveAt = async (
     const mnemonic = await keyRing.getMnemonic(keyInfo.id);
     return Promise.all(indices.map(i => deriveZcashTransparent(mnemonic, pocket, i, isMainnet)));
   }
-  const ufvk =
-    watchOnly?.ufvk ??
-    (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+  const ufvk = zcashViewKey(watchOnly);
   if (!ufvk) {
     return [];
   }
