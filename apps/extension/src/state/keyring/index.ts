@@ -408,6 +408,7 @@ export const createKeyRingSlice =
         void session.remove('retiredPasswordKey');
         // grace must never outlive the unlock
         void session.remove('signGraceUntil');
+        void session.remove('swapUnlock');
         set(state => {
           state.keyRing.status = 'locked';
         });

@@ -621,6 +621,7 @@ export async function nukeAllWalletData(
   await session.remove('passwordKey');
   // grace must never outlive the unlock
   await session.remove('signGraceUntil');
+  await session.remove('swapUnlock');
 
   // drop worker-held IDB connections before attempting any delete
   const { stopNetworkWorker } = await import('./network-worker');

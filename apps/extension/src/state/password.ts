@@ -60,6 +60,7 @@ export const createPasswordSlice =
         void session.remove('retiredPasswordKey');
         // grace must never outlive the unlock
         void session.remove('signGraceUntil');
+        void session.remove('swapUnlock');
       },
       isPassword: async attempt => {
         const keyPrintJson = await local.get('passwordKeyPrint');

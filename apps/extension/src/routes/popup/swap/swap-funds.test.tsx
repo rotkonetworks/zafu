@@ -9,7 +9,7 @@ vi.mock('../../../state/keyring/network-worker', async orig => ({
 }));
 
 import { buildDeposit, RefundedSlot, STEP_FOR } from './crosschain';
-import { MOVE_NEEDS_MS, tooLateToMove } from './thor-deposit';
+import { MOVE_NEEDS_MS, tooLateToMove } from '../../../state/swap/thor-out';
 import { traceOut, u128 } from './penumbra-units';
 import { maxSendable, quoteSend } from '../send/spendable';
 import { nodeStatus } from '../../../state/swap/thornode';
