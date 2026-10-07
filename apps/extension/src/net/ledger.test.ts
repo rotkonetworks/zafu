@@ -6,6 +6,8 @@ import {
   setDestinationDecision,
   setDestinationOptIn,
 } from './ledger';
+import { compileEgress } from './egress-policy';
+import { NYM } from './nym-bridge';
 
 describe('egress choices in the personal-data backup', () => {
   it('round-trips the user decisions and nothing else', async () => {
@@ -47,5 +49,18 @@ describe('egress choices in the personal-data backup', () => {
     expect(after.destinations['x.example']).toBeUndefined();
     expect(after.optIns['y']).toBeUndefined();
     expect(Object.keys(after.optIns)).toEqual(Object.keys(before.optIns));
+  });
+
+  it('carries "send over nym" turned off through a backup and its restore', async () => {
+    await setDestinationOptIn(NYM, 'blocked');
+    const backup = JSON.parse(JSON.stringify(await exportEgressChoices())) as Awaited<
+      ReturnType<typeof exportEgressChoices>
+    >;
+    // a fresh install: the default, on
+    await setDestinationOptIn(NYM, undefined);
+    expect(compileEgress({ netEgress: await readNetEgress() }).nym).toBe(true);
+    await importEgressChoices(backup);
+    expect(compileEgress({ netEgress: await readNetEgress() }).nym).toBe(false);
+    await setDestinationOptIn(NYM, undefined);
   });
 });

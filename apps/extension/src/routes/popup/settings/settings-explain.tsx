@@ -103,6 +103,13 @@ export const SETTINGS_EXPLAIN = {
       },
     ],
   },
+  'privacy.sendOverNym': {
+    blurb: 'sends your transactions, and lookups of them, through the nym mixnet.',
+    on: 'your node sees each transaction arrive from a nym exit, not from you. sync stays direct',
+    off: 'transactions go straight to your node, which sees where they come from',
+    footer:
+      "on by default · nym's directory sees that you use nym, not what you send · a send waits up to a minute for nym to connect",
+  },
   'privacy.zcashMemoDecoys': {
     blurb: 'how zafu asks your node for the memos on your zcash transactions.',
     on: 'zafu adds 2 random decoy buckets for every real one it needs (and shuffles the order), so the node cannot tell which of the buckets it fetched are actually yours',
