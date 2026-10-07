@@ -78,6 +78,8 @@ export interface ZcashChainCheck {
   tip?: number;
   /** blocks between the proven tip and the proven note tree roots */
   depth?: number;
+  /** how long the proof took to check, in ms */
+  ms?: number;
 }
 
 export interface NetworkWorkerMessage {

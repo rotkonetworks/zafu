@@ -2819,7 +2819,6 @@ const syncLoop = async (
       lastTip,
     });
     chainStatus = check.status;
-    const chain = check.status === 'checked' ? check.chain : undefined;
     workerSelf.postMessage({
       type: 'sync-progress',
       id: '',
@@ -2829,7 +2828,11 @@ const syncLoop = async (
         chain: {
           serverUrl,
           status: check.status,
-          ...(chain && { tip: chain.tip_height, depth: chain.tip_height - chain.roots_height }),
+          ...(check.status === 'checked' && {
+            tip: check.chain.tip_height,
+            depth: check.chain.tip_height - check.chain.roots_height,
+            ms: Math.round(check.ms),
+          }),
         },
       },
     });
