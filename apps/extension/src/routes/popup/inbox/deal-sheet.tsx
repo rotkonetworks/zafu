@@ -7,6 +7,7 @@
  * not offered, since its keys could never be made.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
@@ -182,7 +183,7 @@ export const DealSheet = ({
                   c.id === arbiter ? 'bg-zigner-gold/10 text-fg-high' : 'text-fg hover:bg-elev-2',
                 )}
               >
-                <span className='grow truncate'>{c.name}</span>
+                <Clipped className='grow'>{c.name}</Clipped>
                 {c.id === arbiter && <span className='i-lucide-check size-4 text-zigner-gold' />}
               </button>
             ))}

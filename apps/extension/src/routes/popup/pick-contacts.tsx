@@ -7,6 +7,7 @@
  * The page (untrusted) never sees contacts the user didn't select.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useState, useMemo } from 'react';
 import { useStore } from '../../state';
 import { contactsSelector, type Contact } from '../../state/contacts';
@@ -167,11 +168,13 @@ export function ContactPicker() {
 
                 {/* name + address preview */}
                 <div className='flex-1 min-w-0'>
-                  <div className='text-sm truncate'>{contact.name}</div>
+                  <Clipped className='block text-sm'>{contact.name}</Clipped>
                   {contact.addresses.length > 0 && (
                     <div className='text-xs text-fg-muted truncate'>
-                      {contact.addresses[0]!.network} - {contact.addresses[0]!.address.slice(0, 12)}
-                      ...
+                      {contact.addresses[0]!.network} -{' '}
+                      <Clipped head={12} tail={0} label='address'>
+                        {contact.addresses[0]!.address}
+                      </Clipped>
                     </div>
                   )}
                 </div>

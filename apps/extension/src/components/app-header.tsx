@@ -5,6 +5,7 @@
  * lock                 -> locks now, one tap from every screen
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../state';
@@ -91,11 +92,9 @@ export const AppHeader = () => {
           <Mark variant='seal' size={26} />
         )}
         <span className='flex min-w-0 flex-col items-start leading-tight'>
-          <span className='max-w-32 truncate text-sm text-fg-high lowercase'>{walletName}</span>
+          <Clipped className='max-w-32 text-sm text-fg-high lowercase'>{walletName}</Clipped>
           {subtitle && (
-            <span className='max-w-32 truncate text-[11px] text-fg-muted lowercase'>
-              {subtitle}
-            </span>
+            <Clipped className='max-w-32 text-[11px] text-fg-muted lowercase'>{subtitle}</Clipped>
           )}
         </span>
         <span className='i-lucide-chevron-down size-3.5 shrink-0 text-fg-muted' />

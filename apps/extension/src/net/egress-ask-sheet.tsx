@@ -15,6 +15,7 @@
  * noise.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useEffect, useState } from 'react';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
@@ -86,7 +87,9 @@ export const EgressAskSheet = () => {
                 {views.map(v => (
                   <li key={v.id} className='flex justify-between gap-3 text-xs'>
                     <span>{v.label}</span>
-                    <span className='truncate font-mono text-fg-high'>{hostOf(v)}</span>
+                    <Clipped label='host' className='font-mono text-fg-high'>
+                      {hostOf(v)}
+                    </Clipped>
                   </li>
                 ))}
               </ul>

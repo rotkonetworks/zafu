@@ -5,6 +5,7 @@
  * multisig/sign.tsx uses (send/frost-multisig/review).
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
@@ -19,7 +20,6 @@ import type { ZcashWalletJson } from '../../../state/wallets';
 import type { Verdict } from '../send/frost-multisig/multisig-verifier';
 import { reviewSignRequest } from '../send/frost-multisig/review';
 import { Hanko } from './shared-wallet';
-import { shortAddress } from './threads';
 
 const say = (e: unknown) =>
   e instanceof Error ? e.message : 'this did not leave. please try again.';
@@ -156,7 +156,11 @@ export const PaymentCard = ({
           {formatZecAmount(BigInt(p.amt))} <span className='text-sm text-zigner-gold'>zec</span>
         </span>
         <span className='text-xs text-fg-muted'>
-          to {shortAddress(p.to)} · fee up to {formatZecAmount(BigInt(p.fee))} · shielded
+          to{' '}
+          <Clipped head={8} tail={6} label='address'>
+            {p.to}
+          </Clipped>{' '}
+          · fee up to {formatZecAmount(BigInt(p.fee))} · shielded
         </span>
       </div>
       <div className='flex flex-col gap-1 border-t border-border-soft px-3.5 py-2.5'>

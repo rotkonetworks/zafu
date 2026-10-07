@@ -5,6 +5,7 @@
  * check; this one is the check.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { cn } from '@repo/ui/lib/utils';
 import { sealWords } from '../../../people/cards';
 
@@ -49,7 +50,7 @@ export const SealCompare = ({ seal, done }: { seal?: string; done?: boolean }) =
             <span className='text-[10px] text-fg-dim' aria-hidden='true'>
               {i + 1}
             </span>
-            <span className='truncate font-mono text-sm text-fg-high'>{w}</span>
+            <Clipped className='font-mono text-sm text-fg-high'>{w}</Clipped>
           </li>
         ))}
       </ol>

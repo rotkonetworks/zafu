@@ -4,7 +4,7 @@
  * nothing below it moves when it changes.
  */
 
-import { cn } from '@repo/ui/lib/utils';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { requestEgressOptIn } from '../net/egress-opt-in';
 import { refreshEgress } from '../net/egress';
 import { setDestinationOptIn } from '../net/ledger';
@@ -54,9 +54,9 @@ export const RelaySlot = ({ waiting }: { waiting?: string }) => {
                   : undefined;
   return (
     <div className='flex h-8 shrink-0 items-center justify-between gap-3 border-b border-border-soft px-4 text-[11px]'>
-      <span className={cn('truncate', line?.tone === 'warn' ? 'text-warn' : 'text-fg-muted')}>
+      <Clipped className={line?.tone === 'warn' ? 'text-warn' : 'text-fg-muted'}>
         {line?.text}
-      </span>
+      </Clipped>
       {line?.action && (
         <button
           type='button'

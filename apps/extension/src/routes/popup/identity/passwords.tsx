@@ -16,6 +16,7 @@
  * not decrypted here, and the node cannot reach a spending key.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useEffect, useState } from 'react';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Input } from '@repo/ui/components/ui/input';
@@ -139,7 +140,9 @@ export const PasswordsPage = () => {
             <RowGroup>
               {passkeys.map(p => (
                 <div key={p.origin} className='flex h-[50px] items-center gap-3 px-3.5'>
-                  <span className='grow truncate text-sm text-fg-high'>{hostOf(p.origin)}</span>
+                  <Clipped label='site' className='grow text-sm text-fg-high'>
+                    {hostOf(p.origin)}
+                  </Clipped>
                   <span className='text-[11px] text-fg-muted'>{shortDay(p.at)}</span>
                 </div>
               ))}

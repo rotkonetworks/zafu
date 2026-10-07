@@ -8,6 +8,7 @@
  * the screen says so.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
@@ -31,7 +32,6 @@ import { DEFAULT_PEOPLE_RELAY, relayHost } from '../../../config/people-relay';
 import { viaLine } from '../../../links/land';
 import { ScreenHeader } from '../../../components/screen-header';
 import { PopupPath, contactPath, threadPath } from '../paths';
-import { shortAddress } from '../inbox/threads';
 
 export type CardState =
   | { kind: 'unreadable' }
@@ -210,9 +210,9 @@ const Received = ({
         <div className='flex items-center gap-4'>
           <ZidSeal hex={card.key} size={58} />
           <span className='flex min-w-0 flex-col gap-1'>
-            <span className='truncate font-display text-[22px] text-fg-high'>
+            <Clipped className='font-display text-[22px] text-fg-high'>
               {theirName || 'someone'}
-            </span>
+            </Clipped>
             <span className='text-[11px] text-fg-muted'>
               {theirName ? 'the name in their card' : 'their card has no name'}
             </span>
@@ -229,10 +229,10 @@ const Received = ({
           </Fact>
           {card.relay !== DEFAULT_PEOPLE_RELAY && (
             <Fact label='relay'>
-              <span className={cn('truncate', known === false && 'text-warn')}>
+              <Clipped label='relay' className={cn(known === false && 'text-warn')}>
                 {relayHost(card.relay)}
                 {known === false ? ' · new to zafu' : ''}
-              </span>
+              </Clipped>
             </Fact>
           )}
           <Fact label='seal'>check it when you meet</Fact>
@@ -370,15 +370,17 @@ const V1 = ({ card, via }: { card: ContactCard; via: string | null }) => {
       <div className='flex items-center gap-4'>
         <ZidSeal hex={card.zid} size={58} />
         <span className='flex min-w-0 flex-col gap-1'>
-          <span className='truncate font-display text-[22px] text-fg-high'>
+          <Clipped className='font-display text-[22px] text-fg-high'>
             {card.name || 'someone'}
-          </span>
+          </Clipped>
           <span className='text-[11px] text-fg-muted'>an older card · not signed</span>
         </span>
       </div>
       <div className='flex h-[50px] items-center gap-3 border border-border-soft bg-elev-1 px-3.5'>
         <span className='grow text-sm text-fg-high'>zcash</span>
-        <span className='text-xs text-fg-muted'>{shortAddress(card.address)}</span>
+        <Clipped head={8} tail={6} label='address' className='text-xs text-fg-muted'>
+          {card.address}
+        </Clipped>
       </div>
       <Input
         aria-label='name'

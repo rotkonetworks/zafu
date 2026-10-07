@@ -5,6 +5,7 @@
  * stepper and the backup live under "all identity controls".
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
@@ -116,14 +117,14 @@ export const IdentityPage = () => {
                 }}
                 className='flex items-center gap-2 text-left hover:text-zigner-gold'
               >
-                <span className='truncate font-display text-xl text-fg-high'>{label}</span>
+                <Clipped className='font-display text-xl text-fg-high'>{label}</Clipped>
                 <span
                   className='i-lucide-pencil size-3.5 shrink-0 text-fg-dim'
                   aria-hidden='true'
                 />
               </button>
             ) : (
-              <span className='truncate font-display text-xl text-fg-high'>{label}</span>
+              <Clipped className='font-display text-xl text-fg-high'>{label}</Clipped>
             )}
             <span className='text-[11px] text-fg-muted'>
               {zidPubkey

@@ -5,6 +5,7 @@
  * two strangers are never merged into one person.
  */
 
+import { shorten } from '@repo/ui/lib/utils';
 import type { Message } from '../../../state/messages';
 
 export interface DirectThread {
@@ -87,8 +88,7 @@ export const whenOf = (ts: number, now = Date.now()): string => {
   return d.toLocaleDateString('en', { month: 'short', day: 'numeric' }).toLowerCase();
 };
 
-export const shortAddress = (a: string): string =>
-  a.length > 16 ? `${a.slice(0, 8)}…${a.slice(-6)}` : a;
+export const shortAddress = (a: string): string => shorten(a, 8, 6);
 
 /**
  * A card that arrived in a memo, as the memo store keeps it: `name\naddress`
