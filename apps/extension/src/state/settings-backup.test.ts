@@ -75,8 +75,11 @@ describe('settings backup', () => {
     const off = restoredPrivacy(DEFAULT_PRIVACY_SETTINGS, { enableExplorerLinks: false } as never);
     expect(off.explorerLinks).toBe('off');
     expect(off).not.toHaveProperty('enableExplorerLinks');
-    // a backup with neither key leaves the current choice alone
+    // a backup with neither key leaves the current choice alone; an old false replaces it
     const copy = { ...DEFAULT_PRIVACY_SETTINGS, explorerLinks: 'copy' as const };
+    expect(restoredPrivacy(copy, { enableExplorerLinks: false } as never).explorerLinks).toBe(
+      'off',
+    );
     expect(restoredPrivacy(copy, {}).explorerLinks).toBe('copy');
     expect(restoredPrivacy(DEFAULT_PRIVACY_SETTINGS, { explorerLinks: 'copy' }).explorerLinks).toBe(
       'copy',

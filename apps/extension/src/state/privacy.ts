@@ -202,7 +202,7 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
 /**
  * privacy settings as stored or backed up, ready to lay over defaults.
  * before the three-way choice, explorer links were the boolean
- * `enableExplorerLinks`: true becomes 'open', and the old key is dropped.
+ * `enableExplorerLinks`: true becomes 'open', false 'off', and the old key is dropped.
  * a sealed box or anything not a plain object reads as nothing stored.
  */
 export const fromStoredPrivacy = (raw: unknown): Partial<PrivacySettings> => {
@@ -210,8 +210,8 @@ export const fromStoredPrivacy = (raw: unknown): Partial<PrivacySettings> => {
     return {};
   }
   const { enableExplorerLinks, ...rest } = raw as Record<string, unknown>;
-  if (rest['explorerLinks'] === undefined && enableExplorerLinks === true) {
-    rest['explorerLinks'] = 'open';
+  if (rest['explorerLinks'] === undefined && typeof enableExplorerLinks === 'boolean') {
+    rest['explorerLinks'] = enableExplorerLinks ? 'open' : 'off';
   }
   if (!(EXPLORER_LINKS as readonly unknown[]).includes(rest['explorerLinks'])) {
     delete rest['explorerLinks'];
