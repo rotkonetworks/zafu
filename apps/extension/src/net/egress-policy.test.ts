@@ -416,12 +416,10 @@ describe('send over nym: the transport is chosen per request class', () => {
   it('sends and looks up your own transactions over nym, and syncs directly', () => {
     const rows: [string, string][] = [
       ['https://zcash.rotko.net/zidecar.v1.Zidecar/SendTransaction', 'broadcast'],
-      [
-        'https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/SendTransaction',
-        'broadcast',
-      ],
+      // a lightwalletd's native grpc needs http/2, which nym's client lacks: direct
+      ['https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/SendTransaction', 'direct'],
       ['https://zcash.rotko.net/zidecar.v1.Zidecar/GetTransaction', 'own-tx'],
-      ['https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetTransaction', 'own-tx'],
+      ['https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetTransaction', 'direct'],
       ['https://zcash.rotko.net/zidecar.v1.Zidecar/GetCompactBlocks', 'direct'],
       ['https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetBlockRange', 'direct'],
       ['https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetLightdInfo', 'direct'],
@@ -443,22 +441,16 @@ describe('send over nym: the transport is chosen per request class', () => {
 
   it('follows the configured endpoint and its path', () => {
     const inputs = { ...ZCASH_ONLY, networkEndpoints: { zcash: 'https://node.example/lwd' } };
-    expect(
-      nymOf(
-        inputs,
-        'https://node.example/lwd/cash.z.wallet.sdk.rpc.CompactTxStreamer/SendTransaction',
-      ),
-    ).toBe('broadcast');
+    expect(nymOf(inputs, 'https://node.example/lwd/zidecar.v1.Zidecar/SendTransaction')).toBe(
+      'broadcast',
+    );
   });
 
   it('keeps a node on a port nym cannot exit to direct, rather than unreachable', () => {
     const inputs = { ...ZCASH_ONLY, networkEndpoints: { zcash: 'https://node.example:9067' } };
-    expect(
-      nymOf(
-        inputs,
-        'https://node.example:9067/cash.z.wallet.sdk.rpc.CompactTxStreamer/SendTransaction',
-      ),
-    ).toBe('direct');
+    expect(nymOf(inputs, 'https://node.example:9067/zidecar.v1.Zidecar/SendTransaction')).toBe(
+      'direct',
+    );
   });
 
   it("gives nym's directory and gateways to the nym worker only, and nothing else to it", () => {
