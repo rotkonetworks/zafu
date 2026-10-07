@@ -373,8 +373,8 @@ export interface Trees {
   /**
    * Compare the tree with the server's tree state at the tree's newest
    * checkpoint `height`. A dropped tree is reseeded from the server's frontier.
-   * A tree that differs is reseeded only when `again` (a second answer, from
-   * another operator where one is allowed) gives the same root, and no
+   * A tree that differs is reseeded only when `again` (a second answer, the
+   * same node a moment later) gives the same root, and no
    * server-asked reseed of the pool happened in the last RESEED_INTERVAL_MS.
    * True when the pool was reseeded (its notes then need `recover`).
    */

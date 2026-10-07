@@ -104,9 +104,8 @@ are now bound to the batch root and to the request set. But the Ligerito header
 proof carries **no constraint system**: the roots it "proves" are values the
 prover chose and absorbed into its own transcript, so nothing binds them to
 consensus, and block/action omission is undetectable from a single server.
-Cross-endpoint tip comparison is now wired (`workers/cross-verify.ts`) and
-catches a server reporting a chain state no one else agrees with — it does not
-make the wallet trustless. A real fix is a design project.
+The cross-endpoint tip comparison was removed; FlyClient chain verification
+is to replace it. A real fix is a design project.
 
 **Ledger.** Ships flag-off (`HARDWARE_WALLET_ENABLED = false`) and must stay
 that way. It cannot work on mainnet with any released app, for two independent

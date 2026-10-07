@@ -30,9 +30,8 @@ describe('a fresh zcash-only wallet', () => {
         'unknown',
       ],
       ['https://noble-rpc.polkachu.com/status', 'network-off'],
-      // only one browser-reachable preset ships, and it is the primary: no
-      // independent peer exists to cross-check against, so this host is
-      // simply unowned
+      // only one browser-reachable preset ships, and it is the primary: this
+      // host is simply unowned
       ['https://us.zec.stardust.rest:443/x', 'unknown'],
       // optional services, off until asked
       // nothing asks hosh for a reference tip any more
@@ -76,10 +75,10 @@ describe('the required endpoint follows settings', () => {
   it('moves with the configured zcash endpoint', () => {
     const inputs = { ...ZCASH_ONLY, networkEndpoints: { zcash: 'https://eu.zec.rocks:443' } };
     expect(outcome(inputs, 'https://eu.zec.rocks/x')).toBe('allow');
-    // the old default is reached only as the independent tip-check peer, and
-    // only once the user opts in - never as "the" light client
+    // the old default is then one of the other zcash servers, off until asked -
+    // never "the" light client
     const decision = decide(inputs, 'https://zcash.rotko.net/zidecar.v1.Zidecar/GetTip');
-    expect(decision).toMatchObject({ allow: false, destination: 'zcash-tip-check' });
+    expect(decision).toMatchObject({ allow: false, destination: 'zcash-servers' });
   });
 
   it('a non-default port is its own destination', () => {
@@ -299,7 +298,6 @@ describe('describeEgress', () => {
       'near-swap': 'you-blocked',
       'zcash-servers': 'default-off',
       'custom-networks': 'configured',
-      'zcash-tip-check': 'default-off',
     });
     expect(view.find(d => d.id === 'zcash')?.hosts).toEqual(['zcash.rotko.net']);
     expect(view.find(d => d.id === 'chat-relay')?.hosts).toContain('relay.zafu.pro/ws');
@@ -311,53 +309,23 @@ describe('describeEgress', () => {
     // only one preset ships, and it is already owned by the required `zcash`
     // destination, so "other zcash servers" has nothing left to list
     expect(byId['zcash-servers']!.hosts).toEqual([]);
-    // and no independent peer exists to cross-check the primary against
-    expect(byId['zcash-tip-check']!.hosts).toEqual([]);
     expect(byId['zcash']).toMatchObject({ needed: true, networks: ['zcash'] });
-    expect(byId['zcash-tip-check']).toMatchObject({ needed: false });
     expect(byId['penumbra']).toMatchObject({ needed: false, networks: [] });
     expect(view.filter(d => d.needed).map(d => d.id)).toEqual(['zcash']);
   });
 });
 
-describe('the zcash tip cross-check', () => {
-  it('is off until the user opts in: zafu talks to no node the user did not choose', () => {
-    const view = describeEgress(ZCASH_ONLY);
-    const check = view.find(d => d.id === 'zcash-tip-check');
-    expect(check).toMatchObject({ on: false, why: 'default-off', needed: false });
-  });
-
-  it('has no peer while the primary is the only preset zafu ships: it stays unavailable even opted in', () => {
-    const inputs = {
-      ...ZCASH_ONLY,
-      netEgress: { optIns: { 'zcash-tip-check': 'allowed' as const } },
-    };
-    // no host to allow, so the settings row has nothing to show - this is
-    // "hides itself", not an error
-    expect(describeEgress(inputs).find(d => d.id === 'zcash-tip-check')?.hosts).toEqual([]);
-  });
-
-  it('moves with the configured zcash endpoint, same helper the worker calls', () => {
-    const inputs = {
+describe('the removed zcash tip cross-check', () => {
+  it('ignores a stored opt-in for it: no row, no host, nothing allowed', () => {
+    const inputs: EgressInputs = {
       ...ZCASH_ONLY,
       networkEndpoints: { zcash: 'https://zidecar.example.org' },
-      zcashBackend: 'zidecar',
-      netEgress: { optIns: { 'zcash-tip-check': 'allowed' as const } },
+      netEgress: { optIns: { 'zcash-tip-check': 'allowed' } },
     };
-    // the configured endpoint is no longer the primary's own domain, so the
-    // default rotko preset becomes the independent peer
-    expect(outcome(inputs, 'https://zcash.rotko.net/zidecar.v1.Zidecar/GetTip')).toBe('allow');
-  });
-
-  it('is a zidecar extra: behind a standard lightwalletd there is nothing to allow', () => {
-    const inputs = {
-      ...ZCASH_ONLY,
-      networkEndpoints: { zcash: 'https://zec.rocks:443' },
-      zcashBackend: 'lightwalletd',
-      netEgress: { optIns: { 'zcash-tip-check': 'allowed' as const } },
-    };
-    expect(describeEgress(inputs).find(d => d.id === 'zcash-tip-check')?.hosts).toEqual([]);
-    expect(outcome(inputs, 'https://zcash.rotko.net/x')).not.toBe('allow');
+    expect(describeEgress(inputs).some(d => d.id === 'zcash-tip-check')).toBe(false);
+    const decision = decide(inputs, 'https://zcash.rotko.net/zidecar.v1.Zidecar/GetTip');
+    expect(decision).toMatchObject({ allow: false, destination: 'zcash-servers' });
+    expect(outcome(inputs, 'https://zidecar.example.org/x')).toBe('allow');
   });
 });
 

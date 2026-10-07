@@ -35,7 +35,6 @@ import {
 import { PENUMBRA_MAINNET_ENDPOINTS, defaultPenumbraEndpoint } from '../config/penumbra-endpoints';
 import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../config/zcash-endpoints';
 import { BUNDLED_SERVICE_CONFIG } from '../services/voting/bundled-config';
-import { pickIndependentPeer } from '../workers/cross-verify';
 import { BASE_RPC, PEER_HOSTS } from '../config/ramps';
 import { PAY_APPS } from '../buy/apps';
 import { hostOf } from './destination';
@@ -63,7 +62,6 @@ export const EGRESS_INPUT_KEYS: string[] = [
   'zcashMeConfig',
   'keplrCompat',
   'zcashWallets',
-  'zcashBackend',
   PEOPLE_RELAY_KEY,
   ...Object.keys(COSMOS_CHAINS).map(rpcPoolKey),
 ];
@@ -84,8 +82,6 @@ export interface EgressInputs {
   keplrCompat?: boolean;
   /** only `multisig.relayUrl` is read: each multisig wallet's own relay */
   zcashWallets?: { multisig?: { relayUrl?: unknown } }[];
-  /** what the current zcash node said it is (or the guess until it has); absent: zidecar, the shipped default */
-  zcashBackend?: string;
   /** the people relay's default and the other relays the person allowed */
   peopleRelay?: PeopleRelaySetting;
 }
@@ -177,23 +173,6 @@ export const DESTINATIONS: DestinationSpec[] = [
     purpose: 'chain-rpc',
     gate: { kind: 'network', networks: ['zcash'] },
     urls: i => [zcashEndpoint(i)],
-  },
-  {
-    id: 'zcash-tip-check',
-    // opt-in: zafu talks to no node the user did not choose. Turning this on
-    // asks one independent operator for the tip as a "right network" check.
-    // Same helper the worker calls (workers/cross-verify.ts), so the peer
-    // the policy allows is always the one the sync actually asks.
-    label: 'zcash tip cross-check',
-    purpose: 'indexer',
-    gate: { kind: 'optional' },
-    // a zidecar extra (ZCASH_BACKENDS): nothing to allow behind a standard
-    // lightwalletd. Also nothing to allow while the primary IS the only
-    // browser-reachable preset zafu ships - pickIndependentPeer returns
-    // undefined, hosts comes back empty, and the settings row hides itself
-    // (it is filtered out wherever hosts.length is checked).
-    urls: i =>
-      i.zcashBackend === 'lightwalletd' ? [] : [pickIndependentPeer(zcashEndpoint(i))?.url],
   },
   {
     id: 'penumbra',

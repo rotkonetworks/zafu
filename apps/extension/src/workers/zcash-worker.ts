@@ -62,9 +62,7 @@ import {
   type Trees,
   type TreeWrite,
 } from './note-trees';
-import { crossCheckTip, pickIndependentPeer } from './cross-verify';
 import { ironwoodBranchRefusal } from './branch-ids';
-import { checkEgress } from '../net/egress';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 import { BlockPrefetcher } from './block-prefetcher';
 import { once } from './once';
@@ -2471,7 +2469,7 @@ const syncLoop = async (
   let restart = false;
 
   const client = makeZcashClient(serverUrl, backend);
-  // proofs, the actions commitment, mempool watch and the tip cross-check are
+  // proofs, the actions commitment and mempool watch are
   // zidecar's; on a standard lightwalletd this is undefined and none of them run
   const zidecar = zidecarExtras(serverUrl, backend);
 
@@ -2683,19 +2681,14 @@ const syncLoop = async (
       : undefined;
   };
   /**
-   * A second answer before a tree that differs is replaced: the opted-in
-   * independent operator when there is one, else the same node a moment later
-   * (a node behind a balancer that answered from a lagging backend, most often).
+   * A second answer before a tree that differs is replaced: the same node a
+   * moment later (a node behind a balancer that answered from a lagging
+   * backend, most often). FlyClient chain verification is to replace this.
    */
   const secondAnswer = (pool: TreePool, height: number) => async () => {
-    const peer = zidecar ? pickIndependentPeer(serverUrl) : undefined;
-    const second =
-      peer && checkEgress(peer.url).allow ? zcashClient(peer.url, peer.backend) : undefined;
-    if (!second) {
-      await sleepUnlessAborted(signal, SECOND_ANSWER_DELAY_MS);
-    }
+    await sleepUnlessAborted(signal, SECOND_ANSWER_DELAY_MS);
     signal.throwIfAborted();
-    return serverTree(pool, await (second ?? client).getTreeState(height));
+    return serverTree(pool, await client.getTreeState(height));
   };
   /** compare both trees with the server's tree state at `height`; true when one was reseeded */
   const checkTrees = async (
@@ -2843,9 +2836,6 @@ const syncLoop = async (
     })();
   }
 
-  // one cross-endpoint check per sync run - it is a sanity check, not a poll
-  let crossCheckedThisRun = false;
-
   // ── fetch pipeline ──
   //
   // Look-ahead compact-block fetch. Hands batches back in strict ascending
@@ -2900,49 +2890,6 @@ const syncLoop = async (
         networkChecked = true;
       }
       const chainHeight = await getChainTip();
-
-      // Cross-check the tip against an INDEPENDENT operator, once per
-      // catch-up. The node is trusted for chain data: nothing it reports is
-      // bound to consensus by anything we can verify locally, so a second
-      // operator is the only check there is. Advisory, not fatal: a lagging
-      // or unreachable peer is far more common than an attack.
-      //
-      // Gated on the user's own "zcash tip cross-check" opt-in BEFORE the
-      // attempt, not just left to the egress guard to refuse: egress still
-      // refuses it either way, but a refused call is still a call the user
-      // never asked for, and it still logs. pickIndependentPeer is pure (no
-      // network), so checking its result against the compiled table costs
-      // nothing extra. The "once per catch-up" flag is still set when the
-      // opt-in is off, so a disabled check doesn't re-evaluate every tick.
-      if (zidecar && currentHeight >= chainHeight && !crossCheckedThisRun) {
-        crossCheckedThisRun = true;
-        const crossCheckPeer = pickIndependentPeer(serverUrl);
-        if (crossCheckPeer && checkEgress(crossCheckPeer.url).allow) {
-          void crossCheckTip(serverUrl, chainHeight, async (peerUrl, timeoutMs) => {
-            const peer = zcashClient(peerUrl, crossCheckPeer.backend);
-            return await Promise.race([
-              peer.getTip(),
-              new Promise<never>((_, rej) =>
-                setTimeout(() => rej(new Error('peer tip timeout')), timeoutMs),
-              ),
-            ]);
-          })
-            .then(res => {
-              if (res.disagreed) {
-                console.error(`[zcash-worker] CROSS-CHECK DISAGREEMENT: ${res.detail}`);
-                workerSelf.postMessage({
-                  type: 'cross-check-warning',
-                  network: 'zcash',
-                  walletId,
-                  payload: { detail: res.detail, peerUrl: res.peerUrl },
-                });
-              } else {
-                console.log(`[zcash-worker] cross-check: ${res.detail}`);
-              }
-            })
-            .catch(e => console.warn(`[zcash-worker] cross-check failed: ${errText(e)}`));
-        }
-      }
 
       if (currentHeight >= chainHeight) {
         // caught up: compare the note trees with the server's tree state here
