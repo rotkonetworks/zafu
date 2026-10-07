@@ -1,60 +1,57 @@
 /**
- * The records a group speaks in, and its door (groups design 3.2).
+ * The records a group speaks in, and its door: a code, the magic wormhole way.
  *
  * A group is a sealed zirc room (`zafu-group-v1`, 4 KiB entries) whose roster
  * is a zirc channel log the founder writes: genesis, `+v` per member. The
- * room secret never goes into a code or a link. The code (`673-chaos-mail-kite`)
- * opens a DOOR: a second sealed room, `zafu-door-v1`, keyed by
- * scrypt(code, "zafu-group-door-v2"), where
+ * room secret never goes into a code or a link. The code (`7-fern-dusk`) is a
+ * number and two words:
  *
- *   founder  -> `card`   the group's name, its genesis id G and the founder's key
- *   joiner   -> `ask`    their room key for G, their name, their X-Wing key
- *   founder  -> `invite` the room secret, X-Wing sealed to that one joiner
+ *   - the NUMBER is a nameplate. It is all the relay learns: it picks the
+ *     door's mailbox, `zafu-door-v1` at shard HKDF(H(domain, N), window), a
+ *     public box anyone with the number can read, kept an hour;
+ *   - the WORDS never leave the device. Whoever made the code and whoever
+ *     types it run SPAKE2 over them (RustCrypto spake2 in zafu-wasm, see
+ *     people/door-run), so the relay, which sees every message, cannot test a
+ *     guess offline. A guesser must take part, one guess per run, and the
+ *     founder answers at most {@link ANSWERS_PER_CODE} runs per code.
  *
- * and nothing else. The relay keeps a door an hour.
+ * In the mailbox:
  *
- * The code: three digits and three words, about 43 bits. The last word is
- * not random: it is 11 bits of SHA-256 over the first three parts and the
- * founder's key, so the code names who made the door.
+ *   founder -> `wh` hello   a version and a random salt: two codes that share a
+ *                           number (another zafu, the same hour) tell apart by
+ *                           it, and a joiner tries each; the wrong one fails
+ *   joiner  -> `wj` join    its SPAKE2 message for (salt, its own jid)
+ *   founder -> `wa` answer  its own message for that run, a tag over it (a
+ *                           wrong word is seen at once), and the invite
+ *                           sealed under the run's key: the room secret, the
+ *                           relay, the group, and a shared wallet's k of n
  *
- * What the door protects, plainly:
- *
- *   - Whoever holds the code reads the card and the asks (names and public
- *     keys). They cannot open an invite: it is sealed to the joiner's own
- *     X-Wing key, derived per room. A holder can post a fake ask; the
- *     founder's "allow" is the defence, and it shows the seal and short XID of
- *     who is asking.
- *   - The relay sees the door's shard on every read and write, so it could try
- *     every code offline. The code is stretched with scrypt (N 2^16, r 8, p 1:
- *     64 MiB, a quarter to half a second in a popup), so that is about 2^43
- *     memory-hard evaluations per door within its hour: not a table lookup.
- *   - A joiner takes the card whose founder the code's last word names, signed
- *     by that founder's key (every zirc record is signed by its author). A
- *     self-chosen timestamp decides nothing. If two different founders both
- *     match - someone who holds the code ground a key to fit the 11 bits - the
- *     joiner refuses the door instead of guessing. The real founder's card is
- *     there from the moment the code exists, so a code holder can deny the
- *     door, not take it over.
- *
- * Doors from before the scrypt code (two words) open nothing here; a door
- * lives an hour, so the founder makes a new one.
+ * Knowing the words is what lets a person in; there is no second "allow".
+ * Both sides are shown two verify words from the run's key, passively, for
+ * anyone who wants to compare them out of band.
  *
  * Every body is `zg1:<kind>:<base64url(lp(field) || lp(field) ...)>`, the
  * length-prefixed shape zid signs with, so a second implementation can parse
  * it without guessing.
  */
 
-import { scryptAsync } from '@noble/hashes/scrypt';
+import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
-import { openXWing, sealXWing } from '@zafu/pq';
 import { wordlists } from 'bip39';
 import type { ChannelGenesis, ChannelRecord } from '@zafu/zirc';
+import type { Deal } from './frost-room';
 import { CODE_RE, normalizeCode } from './protocol';
 
 export const DOOR_SCOPE = 'zafu-door-v1';
-/** a door works for an hour (and the relay's default retention is an hour) */
+/** a door works for an hour (and the relay keeps a door an hour) */
 export const DOOR_MS = 60 * 60_000;
+/** the door protocol this zafu speaks; a hello with another is not answered */
+export const DOOR_VERSION = 1;
+/** runs a founder answers per code: the joiners a group may take, and a few wrong words */
+export const ANSWERS_PER_CODE = 12;
+/** hellos a joiner tries on one number: codes that collided within the hour */
+export const SALTS_TRIED = 4;
 
 export { CODE_RE, normalizeCode } from './protocol';
 
@@ -74,42 +71,107 @@ const pick = (n: number): number => {
 
 const WORDS = (): string[] => wordlists['english'] ?? [];
 
-/** the first three parts of a code, `673-chaos-mail` */
-const codeBase = (code: string): string => normalizeCode(code).split('-').slice(0, 3).join('-');
-
-/**
- * The code's last word: 11 bits of
- * SHA-256(lp("zafu-door-founder-v1") || lp(base) || founderKey).
- */
-export const founderWord = (base: string, founder: string): string => {
-  const h = sha256(lpAll(['zafu-door-founder-v1', base, hexToBytes(founder)]));
-  return WORDS()[((h[0]! << 3) | (h[1]! >> 5)) & 0x7ff]!;
-};
-
-/** a fresh code for a door this founder opens: three digits, two words, the founder's word */
-export const makeCode = (founder: string): string => {
+/** a fresh code: a number from 1 to 999 and two words */
+export const makeCode = (): string => {
   const words = WORDS();
-  const word = () => words[pick(words.length)]!;
-  const base = `${String(pick(1000)).padStart(3, '0')}-${word()}-${word()}`;
-  return `${base}-${founderWord(base, founder)}`;
+  return `${pick(999) + 1}-${words[pick(words.length)]}-${words[pick(words.length)]}`;
 };
 
-/** the code was made by this founder: its last word names their key */
-export const codeNames = (code: string, founder: string): boolean =>
-  normalizeCode(code).split('-')[3] === founderWord(codeBase(code), founder);
+/** the nameplate and the words of a code that reads as one */
+export const splitCode = (raw: string): { plate: number; words: string } | undefined => {
+  const code = normalizeCode(raw);
+  if (!CODE_RE.test(code)) {
+    return undefined;
+  }
+  const [n, ...words] = code.split('-');
+  return { plate: Number(n), words: words.join('-') };
+};
 
-/**
- * scrypt cost for the door secret: N 2^16, r 8, p 1, so 64 MiB and roughly a
- * quarter to half a second in a popup, paid once per code by the founder and
- * once by each joiner. The relay, which sees each door's shard, pays it for
- * every code it tries; at ~2^43 codes that keeps a door's code out of reach for
- * its hour, and the memory keeps GPUs from making it cheap.
- */
-export const DOOR_KDF = { N: 2 ** 16, r: 8, p: 1, dkLen: 32 } as const;
+/** the door's mailbox: a public secret, a function of the number alone */
+export const plateSecret = (plate: number): string =>
+  bytesToHex(sha256(lpAll(['zafu-door-plate-v1', String(plate)])));
 
-/** the door's room secret: scrypt(code, salt "zafu-group-door-v2") */
-export const doorSecret = (code: string): Promise<Uint8Array> =>
-  scryptAsync(enc.encode(normalizeCode(code)), enc.encode('zafu-group-door-v2'), DOOR_KDF);
+/** one run's session, hex: the founder's salt and the joiner's id */
+export const sessionOf = (salt: string, jid: string): string => salt + jid;
+
+// -- the invite, sealed under a run's key ---------------------------------------
+
+/** what an answer carries: the long-lived room, never the code */
+export interface InviteBody {
+  secret: string;
+  relay: string;
+  group: string;
+  G: string;
+  founder: string;
+  /** what the founder calls themselves there */
+  from: string;
+  /** a shared wallet: its seals and seats, fixed when the code was made */
+  want?: { k: number; n: number };
+  deal?: Deal;
+}
+
+const boxKey = (key: Uint8Array) =>
+  crypto.subtle.importKey(
+    'raw',
+    new Uint8Array(hkdf(sha256, key, undefined, 'zafu-door-box-v1', 32)),
+    'AES-GCM',
+    false,
+    ['encrypt', 'decrypt'],
+  );
+
+export const sealBox = async (key: Uint8Array, body: InviteBody): Promise<Uint8Array> => {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    await boxKey(key),
+    enc.encode(JSON.stringify({ v: DOOR_VERSION, ...body })),
+  );
+  const out = new Uint8Array(12 + ct.byteLength);
+  out.set(iv);
+  out.set(new Uint8Array(ct), 12);
+  return out;
+};
+
+const HEX64 = /^[0-9a-f]{64}$/;
+const G_RE = /^[0-9a-f]{32}$/;
+
+/** throws unless it opens with this key and reads as an invite */
+export const openBox = async (key: Uint8Array, box: Uint8Array): Promise<InviteBody> => {
+  const pt = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: new Uint8Array(box.slice(0, 12)) },
+    await boxKey(key),
+    new Uint8Array(box.slice(12)),
+  );
+  const v = JSON.parse(dec.decode(pt)) as Partial<InviteBody> & { v?: number };
+  const want = v.want;
+  if (
+    v.v !== DOOR_VERSION ||
+    !HEX64.test(v.secret ?? '') ||
+    !G_RE.test(v.G ?? '') ||
+    !HEX64.test(v.founder ?? '') ||
+    typeof v.relay !== 'string' ||
+    (want !== undefined &&
+      !(
+        Number.isInteger(want.k) &&
+        Number.isInteger(want.n) &&
+        want.k >= 2 &&
+        want.k <= want.n &&
+        want.n <= 32
+      ))
+  ) {
+    throw new Error('not an invite');
+  }
+  return {
+    secret: v.secret!,
+    relay: v.relay,
+    group: String(v.group ?? '').slice(0, 48),
+    G: v.G!,
+    founder: v.founder!,
+    from: String(v.from ?? '').slice(0, 32),
+    ...(want ? { want: { k: want.k, n: want.n } } : {}),
+    ...(v.deal ? { deal: v.deal } : {}),
+  };
+};
 
 // -- the record codec --------------------------------------------------------
 
@@ -151,35 +213,46 @@ const unLp = (b: Uint8Array): Uint8Array[] => {
   return out;
 };
 
+/** what the door's mailbox says; hex and base64 strings, so a room keeps them as they are */
+export type DoorWire =
+  | { kind: 'wh'; v: number; salt: string }
+  | { kind: 'wj'; v: number; salt: string; jid: string; y: string }
+  | { kind: 'wa'; v: number; salt: string; jid: string; x: string; tag: string; box: string };
+
 export type GroupWire =
-  | { kind: 'card'; G: string; founder: string; group: string; from: string; count: number }
+  | DoorWire
   | { kind: 'ask'; key: string; name: string; seal: string }
-  | { kind: 'invite'; to: string; sealed: Uint8Array }
   | { kind: 'log'; entry: ChannelGenesis | ChannelRecord }
   | { kind: 'names'; names: Record<string, string> }
   /** one piece of a FROST message (people/frost-room): `i` of `n`, all sharing `mid` */
   | { kind: 'kc'; mid: string; i: number; n: number; data: Uint8Array }
-  /** in a pair room: "join my deal group", its door code and name (people/deal) */
+  /** in a pair room: "join my deal group", its code and name (people/deal) */
   | { kind: 'dj'; code: string; group: string };
 
-const HEX64 = /^[0-9a-f]{64}$/;
-const G_RE = /^[0-9a-f]{32}$/;
+const SALT = /^[0-9a-f]{32}$/;
+const JID = /^[0-9a-f]{16}$/;
+/** a SPAKE2 message (33 bytes) and a tag (32), hex */
+const MSG = /^[0-9a-f]{66}$/;
+const TAG = HEX64;
+const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 export const encodeWire = (r: GroupWire): string => {
   const fields: (string | Uint8Array)[] =
-    r.kind === 'card'
-      ? [r.G, r.founder, r.group, r.from, String(r.count)]
-      : r.kind === 'ask'
-        ? [r.key, r.name, hexToBytes(r.seal)]
-        : r.kind === 'invite'
-          ? [r.to, r.sealed]
-          : r.kind === 'log'
-            ? [JSON.stringify(r.entry)]
-            : r.kind === 'kc'
-              ? [r.mid, String(r.i), String(r.n), r.data]
-              : r.kind === 'dj'
-                ? [r.code, r.group]
-                : [JSON.stringify(r.names)];
+    r.kind === 'wh'
+      ? [String(r.v), r.salt]
+      : r.kind === 'wj'
+        ? [String(r.v), r.salt, r.jid, r.y]
+        : r.kind === 'wa'
+          ? [String(r.v), r.salt, r.jid, r.x, r.tag, r.box]
+          : r.kind === 'ask'
+            ? [r.key, r.name, hexToBytes(r.seal)]
+            : r.kind === 'log'
+              ? [JSON.stringify(r.entry)]
+              : r.kind === 'kc'
+                ? [r.mid, String(r.i), String(r.n), r.data]
+                : r.kind === 'dj'
+                  ? [r.code, r.group]
+                  : [JSON.stringify(r.names)];
   return `zg1:${r.kind}:${b64url(lpAll(fields))}`;
 };
 
@@ -192,24 +265,29 @@ export const decodeWire = (body: string): GroupWire | undefined => {
   try {
     const f = unLp(fromB64url(m[2]!));
     const t = (i: number) => dec.decode(f[i] ?? new Uint8Array());
+    const v = Number.parseInt(t(0), 10);
     switch (m[1]) {
-      case 'card':
-        return G_RE.test(t(0)) && HEX64.test(t(1))
-          ? {
-              kind: 'card',
-              G: t(0),
-              founder: t(1),
-              group: t(2).slice(0, 48),
-              from: t(3).slice(0, 32),
-              count: Math.min(999, Number.parseInt(t(4), 10) || 1),
-            }
+      // a door record of another version still reads, so a joiner can say which side is older
+      case 'wh':
+        return Number.isInteger(v) && SALT.test(t(1)) ? { kind: 'wh', v, salt: t(1) } : undefined;
+      case 'wj':
+        return Number.isInteger(v) && SALT.test(t(1)) && JID.test(t(2)) && MSG.test(t(3))
+          ? { kind: 'wj', v, salt: t(1), jid: t(2), y: t(3) }
+          : undefined;
+      case 'wa':
+        return Number.isInteger(v) &&
+          SALT.test(t(1)) &&
+          JID.test(t(2)) &&
+          MSG.test(t(3)) &&
+          TAG.test(t(4)) &&
+          B64.test(t(5)) &&
+          t(5).length <= 3000
+          ? { kind: 'wa', v, salt: t(1), jid: t(2), x: t(3), tag: t(4), box: t(5) }
           : undefined;
       case 'ask':
         return HEX64.test(t(0)) && f[2]?.length === 1216
           ? { kind: 'ask', key: t(0), name: t(1).slice(0, 32), seal: bytesToHex(f[2]) }
           : undefined;
-      case 'invite':
-        return HEX64.test(t(0)) && f[1] ? { kind: 'invite', to: t(0), sealed: f[1] } : undefined;
       case 'log':
         return { kind: 'log', entry: JSON.parse(t(0)) as ChannelGenesis | ChannelRecord };
       case 'kc': {
@@ -242,25 +320,5 @@ export const decodeWire = (body: string): GroupWire | undefined => {
   }
 };
 
-// -- the invite ----------------------------------------------------------------
-
-/** what an invite carries: the long-lived room, never the code */
-export interface InviteBody {
-  secret: string;
-  relay: string;
-  group: string;
-}
-
-export const sealInviteBody = (sealKeyHex: string, body: InviteBody): Uint8Array =>
-  sealXWing(hexToBytes(sealKeyHex), enc.encode(JSON.stringify({ v: 1, ...body })));
-
-/** throws unless it opens with this seed and reads as an invite */
-export const openInviteBody = (xwingSeed: Uint8Array, sealed: Uint8Array): InviteBody => {
-  const v = JSON.parse(dec.decode(openXWing(xwingSeed, sealed))) as Partial<InviteBody> & {
-    v?: number;
-  };
-  if (v.v !== 1 || !/^[0-9a-f]{64}$/.test(v.secret ?? '') || typeof v.relay !== 'string') {
-    throw new Error('not an invite');
-  }
-  return { secret: v.secret!, relay: v.relay, group: String(v.group ?? '').slice(0, 48) };
-};
+export const b64 = (b: Uint8Array): string => btoa(String.fromCharCode(...b));
+export const unb64 = (s: string): Uint8Array => Uint8Array.from(atob(s), c => c.charCodeAt(0));

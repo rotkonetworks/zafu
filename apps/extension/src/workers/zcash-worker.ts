@@ -134,6 +134,7 @@ import { allowMismatchRewind, rewindPurge } from './rewind-purge';
 import { isWrongNetwork, walletIsMainnet } from './chain-network';
 import { storeFellBehind } from './store-reset';
 import { createBuildRegistry } from './build-abort';
+import { doorPake, type DoorPakeCall, type DoorPakeWasm } from './door-pake';
 
 export type { SentTxRecord } from './sent-tx-reconcile';
 
@@ -277,6 +278,7 @@ interface WorkerMessage {
     | 'get-history'
     | 'get-pending-sends'
     | 'sync-memos'
+    | 'door-pake'
     | 'frost-dkg-part1'
     | 'frost-dkg-part2'
     | 'frost-dkg-part3'
@@ -409,7 +411,7 @@ interface WalletState extends RunSlot {
   rewinds?: number;
 }
 
-interface WasmModule extends DepositWasm, FinalizeWasm {
+interface WasmModule extends DepositWasm, FinalizeWasm, DoorPakeWasm {
   /** a pool's note commitment tree as shards; absent on older blobs */
   NoteTree?: new (maxCheckpoints: number) => NoteTree;
   WalletKeys: PocketKeysCtor<WalletKeys>;
@@ -7239,6 +7241,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         });
         return;
       }
+
+      case 'door-pake':
+        await sealedFrost(id, payload, a => doorPake(wasmModule!, a as DoorPakeCall));
+        return;
 
       // ── FROST multisig ──
 

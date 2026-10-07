@@ -135,7 +135,6 @@ const groups = createGroups({
   generation: walletId => getZidIndex(walletId),
   relay: () => defaultRelay(),
   gate: relay => peopleDeps.gate(relay),
-  transport: (relay, size, signal) => peopleDeps.transport(relay, size, signal),
 });
 
 const cards = createCards({
@@ -148,13 +147,21 @@ const deals = createDeals({
   group: (svc, name) => groups.ops['group-create']({ name }, svc),
 });
 
-/** the asks waiting at your open doors, as counts (the tab's badge reads these) */
+/**
+ * People waiting at your open doors, as counts (the tab's badge reads these):
+ * they typed the code, and your zafu answers once people is open.
+ */
 export const askingOf = (rooms: PeopleRoom[]): PeopleAsking[] =>
-  rooms.flatMap(r =>
-    r.kind === 'door' && r.group?.mine && r.group.requests?.length && r.until
-      ? [{ walletId: r.walletId, n: r.group.requests.length, until: r.until }]
-      : [],
-  );
+  rooms.flatMap(r => {
+    const d = r.kind === 'door' && r.door?.role === 'host' ? r.door : undefined;
+    const done = new Set(d?.answered?.map(a => a.jid));
+    const n = new Set(
+      d?.heard.flatMap(h =>
+        h.wire.kind === 'wj' && h.wire.salt === d.salt && !done.has(h.wire.jid) ? [h.wire.jid] : [],
+      ),
+    ).size;
+    return n && r.until ? [{ walletId: r.walletId, n, until: r.until }] : [];
+  });
 
 export const peopleDeps: PeopleDeps = {
   readRooms,

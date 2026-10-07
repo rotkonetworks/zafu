@@ -15,6 +15,7 @@ import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { ChannelGenesis, ChannelRecord } from '@zafu/zirc';
 import type { MemoDoorRead } from './memo-door';
 import type { Deal, FrostRoom } from './frost-room';
+import type { DoorWire } from './door';
 import { readEncrypted, writeEncrypted } from '../state/encrypted-storage';
 
 export type PeopleRoomKind = 'group' | 'door' | 'pair' | 'card';
@@ -29,16 +30,41 @@ export interface GroupMember {
   at: number;
 }
 
-/** someone asking to join through a door, waiting for the founder's "allow" */
-export interface JoinRequest {
-  key: string;
-  name: string;
-  sealKey: string;
+/** one record a door's mailbox held (people/door), as this device read it */
+export interface DoorHeard {
+  from: string;
+  /** author clock, seconds */
   at: number;
+  wire: DoorWire;
+}
+
+/**
+ * A door (people/door): the founder's, answering whoever types its words, or
+ * a joiner's, waiting for an answer. Its mailbox is public; what is secret
+ * here is the code and the joiner's seed, sealed with the rest of the vault.
+ */
+export interface DoorState {
+  code: string;
+  role: 'host' | 'join';
+  /** the founder's salt for this code */
+  salt?: string;
+  /** a joiner: its run id and the seed its SPAKE2 runs are rebuilt from */
+  jid?: string;
+  seed?: string;
+  /** a joiner: the salts it has spoken to */
+  sent?: string[];
+  heard: DoorHeard[];
+  /** the founder: whom it answered, with the run's verify words */
+  answered?: { jid: string; words: string; at: number }[];
+  /** a joiner: the answer said the words differ */
+  wrong?: boolean;
+  /** a joiner: the group it opened, and the verify words */
+  G?: string;
+  words?: string;
 }
 
 export interface PeopleRoom {
-  /** `g:<G>` a group, `d:<G>` its door, `p:<personId>` a pair room, `c:<key>` a card's room */
+  /** `g:<G>` a group, `d:<G>` its door, `d:<jid>` a door you typed, `p:<personId>` a pair room, `c:<key>` a card's room */
   id: string;
   walletId: string;
   kind: PeopleRoomKind;
@@ -63,7 +89,9 @@ export interface PeopleRoom {
   createdAt: number;
   /** a door closes at this time (ms) */
   until?: number;
-  /** groups and doors */
+  /** a door's code and what its mailbox said */
+  door?: DoorState;
+  /** groups */
   group?: {
     G: string;
     /** the founder's room pubkey */
@@ -71,15 +99,8 @@ export interface PeopleRoom {
     /** true when this wallet founded it */
     mine: boolean;
     members: GroupMember[];
-    requests?: JoinRequest[];
-    /** asks the founder said no to: never shown again */
-    declined?: string[];
-    /** asks the founder let in from this door: never shown again either */
-    allowed?: string[];
-    /** a door: the group it opens, and its code (founder side only) */
-    code?: string;
-    /** joiner side: the invite was opened and the group joined */
-    opened?: boolean;
+    /** a shared wallet: its seals and seats, from the code; the founder starts its keys when all are in */
+    want?: { k: number; n: number; started?: string };
     /** the roster log as far as it verifies from genesis */
     log?: { genesis: ChannelGenesis; records: ChannelRecord[] };
     /** what members call themselves, as the founder last posted it */
@@ -337,8 +358,13 @@ export const readPeopleBackup = async (): Promise<PeopleBackup | undefined> => {
     return undefined;
   }
   return {
-    // a ceremony's round secrets stay on this device; its saved seat has its own backup
-    rooms: rooms.map(r => (r.frost?.mine ? { ...r, frost: { ...r.frost, mine: undefined } } : r)),
+    // a ceremony's round secrets stay on this device; its saved seat has its own backup.
+    // A door lives an hour and holds a code: it is never backed up.
+    rooms: rooms.flatMap(r =>
+      r.kind === 'door'
+        ? []
+        : [r.frost?.mine ? { ...r, frost: { ...r.frost, mine: undefined } } : r],
+    ),
     threads: Object.fromEntries(
       Object.entries(threads ?? {}).map(([id, t]) => [
         id,

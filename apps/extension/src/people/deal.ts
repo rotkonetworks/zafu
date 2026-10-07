@@ -3,8 +3,8 @@
  * wallet made in their pair room, 2 of 2 by default. With zafu court it is
  * 2 of 3 and the court's seat waits for the escrow service. With someone you
  * both trust deciding, the three need one room: zafu makes a small deal group
- * and hands its door code to both through their pair rooms, so neither types
- * a code; the founder still allows each person, as in any group.
+ * and hands its code to both through their pair rooms, so neither types it;
+ * the code opens the door as any group's does.
  */
 
 import { decodeWire, encodeWire } from './door';

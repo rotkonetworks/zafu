@@ -246,21 +246,20 @@ describe('contact and join', () => {
   });
 
   it('reads a group code, in both forms', () => {
+    expect(intent('zafu:join/7-fern-dusk')).toEqual({ kind: 'join', code: '7-fern-dusk' });
+    expect(intent('https://zafu.pro/j#7-fern-dusk')).toEqual({ kind: 'join', code: '7-fern-dusk' });
+    expect(intent('https://www.zafu.pro/j/#7-fern-dusk')).toEqual({
+      kind: 'join',
+      code: '7-fern-dusk',
+    });
+    expect(toUri({ kind: 'join', code: '7-fern-dusk' })).toBe('zafu:join/7-fern-dusk');
+  });
+
+  it("reads an older zafu's four-part code, so the join screen can say so", () => {
     expect(intent('zafu:join/673-chaos-mail-kite')).toEqual({
       kind: 'join',
       code: '673-chaos-mail-kite',
     });
-    expect(intent('https://zafu.pro/j#673-chaos-mail-kite')).toEqual({
-      kind: 'join',
-      code: '673-chaos-mail-kite',
-    });
-    expect(intent('https://www.zafu.pro/j/#673-chaos-mail-kite')).toEqual({
-      kind: 'join',
-      code: '673-chaos-mail-kite',
-    });
-    expect(toUri({ kind: 'join', code: '673-chaos-mail-kite' })).toBe(
-      'zafu:join/673-chaos-mail-kite',
-    );
   });
 
   it.each([
@@ -276,7 +275,7 @@ describe('contact and join', () => {
     'zafu:contact#has spaces in it here',
     `zafu:contact/x#${card}`,
     'zafu:join/673-chaos',
-    'zafu:join/673-chaos-mail',
+    'zafu:join/1000-chaos-mail',
     'zafu:join/../../settings',
     'zafu:join/673-CHAOS-MAIL',
     'https://zafu.pro/j?code=673-chaos-mail-kite',

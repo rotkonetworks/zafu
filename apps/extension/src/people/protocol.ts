@@ -11,7 +11,7 @@ export const PEOPLE_STATUS_KEY = 'peopleStatus';
 export const PEOPLE_ASKING_KEY = 'peopleAsking';
 export interface PeopleAsking {
   walletId: string;
-  /** asks waiting at this door */
+  /** people who typed the code and wait for your zafu to answer */
   n: number;
   /** ms: the door closes */
   until: number;
@@ -34,13 +34,14 @@ export const isRelayGated = (e: unknown): boolean =>
   e instanceof Error && (e.message.includes(RELAY_NOT_ON) || e.message.includes(RELAY_OFF));
 
 /**
- * `673-chaos-mail-kite`: three digits and three words, as the link router
- * reads it. The last word names the founder's key (see people/door.ts).
+ * `7-fern-dusk`: a number and two words, as the link router reads it. The
+ * number names the door's mailbox; the words never leave the device (see
+ * people/door.ts).
  */
-export const CODE_RE = /^\d{3}(?:-[a-z]{2,12}){3}$/;
+export const CODE_RE = /^\d{1,3}-[a-z]{2,12}-[a-z]{2,12}$/;
 
-/** the shorter code an older zafu made: it opens nothing here */
-export const OLD_CODE_RE = /^\d{3}-[a-z]{2,12}-[a-z]{2,12}$/;
+/** the four-part code an older zafu made (`673-chaos-mail-kite`): its maker needs a newer zafu */
+export const OLD_CODE_RE = /^\d{3}(?:-[a-z]{2,12}){3}$/;
 
 export const normalizeCode = (raw: string): string => raw.trim().toLowerCase().replace(/\s+/g, '-');
 

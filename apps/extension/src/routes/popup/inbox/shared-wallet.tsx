@@ -289,13 +289,23 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage, onSend }: CardProps) 
   );
 };
 
-/** "seals needed to send": a stepper, from 2 to everyone */
-export const Seals = ({ k, n, onK }: { k: number; n: number; onK: (k: number) => void }) => (
+/** "seals needed to send": a stepper, from 2 to everyone; with a label, a plain count up to `n` */
+export const Seals = ({
+  k,
+  n,
+  onK,
+  label,
+}: {
+  k: number;
+  n: number;
+  onK: (k: number) => void;
+  label?: string;
+}) => (
   <div className='flex h-14 items-center gap-3 border border-border-soft bg-elev-1 px-3.5'>
-    <span className='grow text-xs text-fg-muted'>seals needed to send</span>
+    <span className='grow text-xs text-fg-muted'>{label ?? 'seals needed to send'}</span>
     <button
       type='button'
-      aria-label='fewer'
+      aria-label={`fewer ${label ?? 'seals'}`}
       disabled={k <= 2}
       onClick={() => onK(k - 1)}
       className='grid size-10 place-items-center border border-border-soft text-fg-high disabled:text-fg-dim'
@@ -303,11 +313,11 @@ export const Seals = ({ k, n, onK }: { k: number; n: number; onK: (k: number) =>
       <span className='i-lucide-minus size-4' aria-hidden='true' />
     </button>
     <span className='w-16 text-center font-display text-lg text-fg-high'>
-      {k} of {n}
+      {label ? k : `${k} of ${n}`}
     </span>
     <button
       type='button'
-      aria-label='more'
+      aria-label={`more ${label ?? 'seals'}`}
       disabled={k >= n}
       onClick={() => onK(k + 1)}
       className='grid size-10 place-items-center border border-border-soft text-fg-high disabled:text-fg-dim'

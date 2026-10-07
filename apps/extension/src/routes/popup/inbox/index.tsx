@@ -42,7 +42,9 @@ import { usePairCards } from '../../../people/use-invites';
 import { useCardSync } from '../../../people/my-card';
 import { notePreview } from '../../../people/cards';
 import { WaitingCards } from './waiting-cards';
-import { asksOf } from './join-asks';
+import { useDoors } from '../../../people/use-door';
+import { doorView } from '../../../people/door-run';
+import { waitingLine } from './group';
 import { useMemberName } from './use-member-name';
 import { threadKey, unreadOf, type PeopleRoom } from '../../../people/vault';
 
@@ -141,7 +143,7 @@ const GroupRow = memo(({ wallet, balance }: { wallet: ZcashWalletJson; balance?:
 GroupRow.displayName = 'GroupRow';
 
 /** a group on the people relay: its last line, and how many you have not read */
-const RoomRow = memo(({ room, asking }: { room: PeopleRoom; asking: number }) => {
+const RoomRow = memo(({ room }: { room: PeopleRoom }) => {
   const navigate = useNavigate();
   const thread = useThread(room);
   const nameFor = useMemberName(room);
@@ -166,14 +168,9 @@ const RoomRow = memo(({ room, asking }: { room: PeopleRoom; asking: number }) =>
           </span>
         </span>
         <span className='truncate text-[11px] text-fg-muted'>
-          {last ? `${who}: ${last.body}` : 'no messages yet'}
+          {waitingLine(room) ?? (last ? `${who}: ${last.body}` : 'no messages yet')}
         </span>
       </span>
-      {asking > 0 && (
-        <span className='flex h-[18px] shrink-0 items-center border border-gold-line px-[5px] text-[11px] text-zigner-gold'>
-          {asking} asking
-        </span>
-      )}
       {unread > 0 && (
         <span className='flex h-[18px] min-w-[18px] shrink-0 items-center justify-center bg-hanko px-[5px] text-[11px] text-fg-high'>
           {unread}
@@ -184,7 +181,7 @@ const RoomRow = memo(({ room, asking }: { room: PeopleRoom; asking: number }) =>
 });
 RoomRow.displayName = 'RoomRow';
 
-/** an open door of yours, read every 4 s while people is on screen, so an ask shows at once */
+/** an open door, read every 4 s while people is on screen, so whoever typed its code is answered at once */
 const DoorWatch = ({ id }: { id: string }) => {
   useWatchRoom(id);
   return null;
@@ -197,10 +194,10 @@ const Groups = () => {
   const balances = useMultisigBalances(wallets, onZcash);
   const all = useMyRooms();
   const rooms = all.filter(r => r.kind === 'group' && r.joined);
-  const doors = rooms.flatMap(r => {
-    const { door, asks } = asksOf(all, r.group!.G);
-    return door ? [{ G: r.group!.G, id: door.id, asks: asks.length }] : [];
-  });
+  // open doors: yours answer whoever types the code, and codes you typed wait for an answer
+  const doors = all.filter(r => r.door && (r.until ?? 0) > Date.now());
+  const joining = doors.filter(r => doorView(r, Date.now()) === 'waiting');
+  useDoors();
   return (
     <section className='flex flex-col gap-1.5'>
       <div className='flex items-baseline justify-between'>
@@ -217,9 +214,20 @@ const Groups = () => {
       {doors.map(d => (
         <DoorWatch key={d.id} id={d.id} />
       ))}
+      {joining.map(d => (
+        <button
+          key={d.id}
+          type='button'
+          onClick={() => navigate(`${PopupPath.INBOX_JOIN}?code=${d.door!.code}&via=typed`)}
+          className='flex h-12 items-center gap-3 px-1 text-left text-[13px] text-fg-muted hover:bg-elev-2'
+        >
+          <span className='i-lucide-hourglass size-4 shrink-0' aria-hidden='true' />
+          <span className='grow truncate'>{d.door!.code} · waiting for them to open zafu</span>
+        </button>
+      ))}
       <div className='flex flex-col'>
         {rooms.map(r => (
-          <RoomRow key={r.id} room={r} asking={doors.find(d => d.G === r.group!.G)?.asks ?? 0} />
+          <RoomRow key={r.id} room={r} />
         ))}
         {wallets.map(w => (
           <GroupRow key={w.id} wallet={w} balance={balances[w.id]} />
