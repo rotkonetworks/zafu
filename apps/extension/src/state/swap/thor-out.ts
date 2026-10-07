@@ -12,7 +12,11 @@
 
 import { createStore } from 'zustand/vanilla';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
-import { SIGN_GRACE_MS, shouldPromptPassword } from '../../shared/tx-signing-security';
+import {
+  SIGN_GRACE_MS,
+  shouldPromptPassword,
+  type TxSigningSecurity,
+} from '../../shared/tx-signing-security';
 import type { DepositPlan, DepositRequest } from '../../workers/transparent-deposit';
 import { isZignerDeclined } from '../../signing/zigner-round';
 import type { OpenSwap } from './open-swaps';
@@ -206,17 +210,33 @@ export const isRunning = (id: string): boolean => live.has(id);
 // is the grace window's rule (shared/tx-signing-security) scoped to this one
 // swap: no longer than its price lives and never longer than grace, cleared
 // with the session key on lock, and dropped when the swap's last leg is sent
-// or the swap stops.
+// or the swap stops. Each leg that signs spends one of its `legs`; at
+// foilhat ("always ask") a password covers one leg, so the deposit asks again.
 
-export const openSwapUnlock = (id: string, expiresAt: number | undefined, now = Date.now()) =>
+/** how many legs one password signs at a security level */
+export const legsPerUnlock = (level: TxSigningSecurity): number => (level === 'foilhat' ? 1 : 2);
+
+export const openSwapUnlock = (
+  id: string,
+  expiresAt: number | undefined,
+  legs: number,
+  now = Date.now(),
+) =>
   sessionExtStorage.set('swapUnlock', {
     id,
     until: Math.min(expiresAt ?? Infinity, now + SIGN_GRACE_MS),
+    legs,
   });
 
-export const swapUnlocked = async (id: string, now = Date.now()): Promise<boolean> => {
+/** true, and one leg spent, when this swap's unlock still covers a leg */
+export const takeSwapUnlock = async (id: string, now = Date.now()): Promise<boolean> => {
   const w = await sessionExtStorage.get('swapUnlock');
-  return !shouldPromptPassword('grace', now, w?.id === id ? w.until : undefined);
+  const left = w?.id === id ? (w.legs ?? 0) : 0;
+  if (!left || shouldPromptPassword('grace', now, w!.until)) {
+    return false;
+  }
+  await sessionExtStorage.set('swapUnlock', { ...w!, legs: left - 1 });
+  return true;
 };
 
 const closeSwapUnlock = async (id: string) => {

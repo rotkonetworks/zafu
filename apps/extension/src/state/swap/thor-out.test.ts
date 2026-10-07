@@ -28,10 +28,11 @@ import {
   MOVED_POLL_MS,
   depositOf,
   nextLeg,
+  legsPerUnlock,
   openSwapUnlock,
   runThorOut,
   runs,
-  swapUnlocked,
+  takeSwapUnlock,
   type Legs,
   type RunDeps,
 } from './thor-out';
@@ -173,38 +174,65 @@ describe('one press runs both legs', () => {
 });
 
 describe('the swap unlock: once for both legs, dropped after', () => {
+  const take = (id: string, now = NOW) => takeSwapUnlock(id, now);
+
   it('covers the move and the deposit, then is gone', async () => {
     const s = swap();
-    await openSwapUnlock(s.id, s.expiresAt, NOW);
-    const l = legs(() => swapUnlocked(s.id, NOW));
+    await openSwapUnlock(s.id, s.expiresAt, legsPerUnlock('grace'), NOW);
+    const l = legs(() => take(s.id));
     await runThorOut(s, l, world('10012000', '0').deps, plan('10012000'));
     expect(l.calls).toEqual(['move 10012000', 'pay 10000000']);
-    expect(await swapUnlocked(s.id, NOW)).toBe(false);
+    expect(await take(s.id)).toBe(false);
     expect(await chrome.storage.session.get('swapUnlock')).toEqual({});
+  });
+
+  it.each(['grace', 'unlock-only'] as const)('%s: one password signs both legs', async level => {
+    expect(legsPerUnlock(level)).toBe(2);
+    const s = swap();
+    await openSwapUnlock(s.id, s.expiresAt, legsPerUnlock(level), NOW);
+    const l = legs(() => take(s.id));
+    await runThorOut(s, l, world('10012000', '0').deps, plan('10012000'));
+    expect(l.calls).toEqual(['move 10012000', 'pay 10000000']);
+  });
+
+  it('foilhat: the deposit asks for the password again before it signs', async () => {
+    expect(legsPerUnlock('foilhat')).toBe(1);
+    const s = swap();
+    await openSwapUnlock(s.id, s.expiresAt, legsPerUnlock('foilhat'), NOW);
+    const l = legs(() => take(s.id));
+    await runThorOut(s, l, world('10012000', '0').deps, plan('10012000'));
+    // the move went out under the confirm's password; the deposit holds for another
+    expect(l.calls).toEqual(['move 10012000']);
+    expect(runs.getState()[s.id]).toEqual({ at: 'held', moved: true });
+    // the second password opens one more leg: the deposit, and nothing after it
+    await openSwapUnlock(s.id, s.expiresAt, legsPerUnlock('foilhat'), NOW);
+    await runThorOut({ ...s, moveTxid: 'aa'.repeat(32) }, l, world('0').deps);
+    expect(l.calls).toEqual(['move 10012000', 'pay 10000000']);
+    expect(await take(s.id)).toBe(false);
   });
 
   it('is this swap only, and no longer than its price or the grace window', async () => {
     const s = swap({ expiresAt: NOW + 5 * 60_000 });
-    await openSwapUnlock(s.id, s.expiresAt, NOW);
-    expect(await swapUnlocked(s.id, NOW)).toBe(true);
-    expect(await swapUnlocked('another swap', NOW)).toBe(false);
-    expect(await swapUnlocked(s.id, NOW + 5 * 60_000)).toBe(false);
-    await openSwapUnlock(s.id, undefined, NOW);
-    expect(await swapUnlocked(s.id, NOW + 15 * 60_000)).toBe(false);
+    await openSwapUnlock(s.id, s.expiresAt, 2, NOW);
+    expect(await take('another swap')).toBe(false);
+    expect(await take(s.id, NOW + 5 * 60_000)).toBe(false);
+    expect(await take(s.id)).toBe(true);
+    await openSwapUnlock(s.id, undefined, 2, NOW);
+    expect(await take(s.id, NOW + 15 * 60_000)).toBe(false);
   });
 
   it('a stopped swap drops it too', async () => {
     const s = swap();
-    await openSwapUnlock(s.id, s.expiresAt, NOW);
-    const l = legs(() => swapUnlocked(s.id, NOW));
+    await openSwapUnlock(s.id, s.expiresAt, 2, NOW);
+    const l = legs(() => take(s.id));
     l.move = () => Promise.reject(new Error('the node is busy'));
     await runThorOut(s, l, world('10012000').deps, plan('10012000'));
-    expect(await swapUnlocked(s.id, NOW)).toBe(false);
+    expect(await chrome.storage.session.get('swapUnlock')).toEqual({});
   });
 
   it('without it the run holds for the person and signs nothing', async () => {
     const s = swap({ moveTxid: 'aa'.repeat(32) });
-    const l = legs(() => swapUnlocked(s.id, NOW));
+    const l = legs(() => take(s.id));
     await runThorOut(s, l, world('0').deps);
     expect(l.calls).toEqual([]);
     expect(runs.getState()[s.id]).toEqual({ at: 'held', moved: true });
@@ -217,6 +245,7 @@ const ctx = (patch: Partial<LegContext> = {}): LegContext => ({
   pocket: 1,
   zidecarUrl: 'https://z',
   cold: false,
+  legsPerUnlock: 2,
   getVaultUnlock: vi.fn(() => Promise.resolve({ sealTo: vi.fn() })),
   ...patch,
 });
@@ -230,7 +259,7 @@ const settle = async () => {
 describe('the second leg picks up after a reopened popup (funds path)', () => {
   it('a moved, funded swap pays the reviewed deposit from its own address, hot', async () => {
     const s = swap({ moveTxid: 'aa'.repeat(32) });
-    await openSwapUnlock(s.id, s.expiresAt);
+    await openSwapUnlock(s.id, s.expiresAt, 2);
     worker.plan.mockResolvedValue(plan('0'));
     worker.pay.mockResolvedValue({ txid: 'ee'.repeat(32), fee: '12000' });
     const c = ctx();
@@ -258,7 +287,7 @@ describe('the second leg picks up after a reopened popup (funds path)', () => {
 
   it('a fresh hot swap moves the shortfall from the chosen pocket to the swap address', async () => {
     const s = swap();
-    await openSwapUnlock(s.id, s.expiresAt);
+    await openSwapUnlock(s.id, s.expiresAt, 2);
     worker.plan.mockResolvedValue(plan('0'));
     worker.move.mockResolvedValue({ txid: 'aa'.repeat(32), fee: '15000' });
     worker.pay.mockResolvedValue({ txid: 'ee'.repeat(32), fee: '12000' });

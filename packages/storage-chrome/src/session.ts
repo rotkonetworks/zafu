@@ -12,10 +12,11 @@ export type SessionStorageState = {
    */
   signGraceUntil?: number;
   /**
-   * the one unlock a swap's legs share: the swap it was given for, and until
-   * when. removed with signGraceUntil, and when the swap's last leg is sent.
+   * the one unlock a swap's legs share: the swap it was given for, until
+   * when, and how many legs it still signs. removed with signGraceUntil, and
+   * when the swap's last leg is sent.
    */
-  swapUnlock?: { id: string; until: number };
+  swapUnlock?: { id: string; until: number; legs?: number };
   /**
    * The key a password change just replaced, for a minute: a context still
    * holding wallet records from before the change writes their old-key inner

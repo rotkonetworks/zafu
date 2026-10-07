@@ -8,6 +8,7 @@
 
 import type { AllSlices } from '..';
 import { selectEffectiveKeyInfo } from '../keyring';
+import { selectTxSigningSecurity } from '../privacy';
 import {
   applySignatureContributionsInWorker,
   buildColdDepositInWorker,
@@ -26,7 +27,7 @@ import { signAndBroadcast } from '../../signing/cold-send';
 import { createZignerRound, type ZignerRound } from '../../signing/zigner-round';
 import { checkVault, type DepositPlan } from '../../workers/transparent-deposit';
 import { patchOpenSwap, type OpenSwap } from './open-swaps';
-import { isRunning, startThorOut, swapUnlocked, type Legs } from './thor-out';
+import { isRunning, legsPerUnlock, startThorOut, takeSwapUnlock, type Legs } from './thor-out';
 
 /** what signing a swap's legs needs from the wallet, read once from the store */
 export interface LegContext {
@@ -37,6 +38,8 @@ export interface LegContext {
   /** set for a zigner wallet: it builds what the device signs */
   ufvk?: string;
   cold: boolean;
+  /** how many legs one password signs (one at foilhat) */
+  legsPerUnlock: number;
   getVaultUnlock: (walletId: string) => Promise<VaultUnlock>;
 }
 
@@ -53,12 +56,13 @@ export const legContextOf = (s: AllSlices): LegContext | undefined => {
     zidecarUrl: s.networks.networks.zcash.endpoint || 'https://zcash.rotko.net',
     ufvk: zw?.ufvk ?? (zw?.orchardFvk?.startsWith('uview') ? zw.orchardFvk : undefined),
     cold: walletKind(key, zw) === 'zigner',
+    legsPerUnlock: legsPerUnlock(selectTxSigningSecurity(s)),
     getVaultUnlock: s.keyRing.getVaultUnlock,
   };
 };
 
 const hotLegs = (c: LegContext, swap: OpenSwap): Legs => ({
-  ready: () => swapUnlocked(swap.id),
+  ready: () => takeSwapUnlock(swap.id),
   move: async short => {
     const sent = await buildSendTxInWorker(
       'zcash',

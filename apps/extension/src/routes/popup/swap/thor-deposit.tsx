@@ -29,11 +29,13 @@ const ON: Record<'moving' | 'funding' | 'paying', number> = { moving: 0, funding
 const heldLine = (run: Run, tAddress: string) =>
   run.at === 'stopped'
     ? run.error
-    : run.moved
-      ? `the zec sits on this swap's address, ${shortAddress(tAddress)} · nothing went to the vault`
-      : run.at === 'expired'
-        ? 'nothing was moved · a fresh price is a tap away'
-        : 'nothing was sent';
+    : run.at === 'held' && run.moved
+      ? 'the move is in · the deposit waits for your signature'
+      : run.moved
+        ? `the zec sits on this swap's address, ${shortAddress(tAddress)} · nothing went to the vault`
+        : run.at === 'expired'
+          ? 'nothing was moved · a fresh price is a tap away'
+          : 'nothing was sent';
 
 export const ThorOutTracker = ({
   id,

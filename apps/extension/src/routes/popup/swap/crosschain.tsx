@@ -1089,7 +1089,7 @@ export const CrosschainSwap = ({
       openId.current = o.id;
       await saveOpenSwap(o);
       if (!ctx.cold) {
-        await openSwapUnlock(o.id, d.expiresAt);
+        await openSwapUnlock(o.id, d.expiresAt, ctx.legsPerUnlock);
       }
       runSwapLegs(o, ctx, plan);
       setStep('thor-out');
@@ -1250,7 +1250,7 @@ export const CrosschainSwap = ({
       return;
     }
     if (!ctx.cold) {
-      await openSwapUnlock(o.id, o.expiresAt);
+      await openSwapUnlock(o.id, o.expiresAt, ctx.legsPerUnlock);
     }
     runSwapLegs(o, ctx);
   };
