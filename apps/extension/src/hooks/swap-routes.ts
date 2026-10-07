@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import type { RouteId } from '../state/swap/routes';
+import { knownRoutes, type RouteId } from '../state/swap/routes';
 import { lastQuery, saveLast, type SwapLast } from '../state/swap/live';
 
 const KEY = ['swapRoutes'];
@@ -11,7 +11,7 @@ export const useSwapRoutes = () => {
   const queryClient = useQueryClient();
   const { data: chosen = {} } = useQuery({
     queryKey: KEY,
-    queryFn: async (): Promise<Chosen> => (await localExtStorage.get('swapRoutes')) ?? {},
+    queryFn: async (): Promise<Chosen> => knownRoutes(await localExtStorage.get('swapRoutes')),
   });
   const choose = async (pair: string, route: RouteId | undefined) => {
     const { [pair]: _, ...rest } = chosen;

@@ -4,7 +4,6 @@
  * struck through; ZAFU_FEE_BPS is what this build charges (the beta price,
  * so the rate can rise later). On near intents it is a 1click app fee; on
  * thorchain it is an affiliate fee paid to the THORName `zafu` (in rune).
- * Maya carries none.
  */
 
 /** the normal rate, shown struck through beside the beta price */

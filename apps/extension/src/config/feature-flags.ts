@@ -138,14 +138,6 @@ export const HARDWARE_WALLET_ENABLED = (() => {
   }
 })();
 
-/**
- * MAYAChain as a swap route. Off: zafu takes no affiliate there, so it isn't
- * offered for now. The provider, its pools and tests stay; while off it is
- * never quoted, listed or asked for its egress, and an `xc=maya` link opens
- * the normal router with one calm line. Flip to offer it.
- */
-export const MAYA_ENABLED = false;
-
 /** the beta build, by its manifest name, as HARDWARE_WALLET_ENABLED reads it */
 export const IS_BETA_BUILD = HARDWARE_WALLET_ENABLED;
 

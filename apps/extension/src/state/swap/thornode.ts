@@ -1,7 +1,7 @@
 /**
- * A THORNode-protocol chain (THORChain, MAYAChain) as a swap route. Both speak
- * the same quote, inbound, memo and status shapes under their own path
- * prefix, so each is one config for `nodeProvider`.
+ * A THORNode-protocol chain (THORChain) as a swap route: its quote, inbound,
+ * memo and status shapes under its path prefix, as one config for
+ * `nodeProvider`.
  *
  * There is no deposit address per swap: the payer sends to the source chain's
  * current vault with the swap instruction as a memo, and the chain pays out
@@ -62,15 +62,13 @@ export const MAX_MEMO_BYTES = 80;
 export const PAYABLE_ZEC_VAULT = /^(t[13][1-9A-HJ-NP-Za-km-z]{33}|tex1[02-9ac-hj-np-z]{38})$/;
 
 /** source chains whose deposit memo rides in an OP_RETURN */
-export const OP_RETURN_CHAINS = new Set(['BTC', 'LTC', 'BCH', 'DOGE', 'DASH', 'ZEC']);
+export const OP_RETURN_CHAINS = new Set(['BTC', 'LTC', 'BCH', 'DOGE', 'ZEC']);
 
 export interface NodeChain {
   id: keyof typeof POOLS;
-  /** the api path prefix, `/thorchain` or `/mayachain` */
+  /** the api path prefix, `/thorchain` */
   prefix: string;
   urls: string[];
-  /** name the payer's refund address in the memo; else the chain refunds whoever paid */
-  refundInMemo: boolean;
   /** zafu's THORName on this chain: its fee rides in the memo the quote returns */
   affiliate?: string;
 }
@@ -79,7 +77,6 @@ export interface InboundAddress {
   chain: string;
   address: string;
   halted: boolean;
-  /** thornode only; mayanode lists `halted` alone */
   global_trading_paused?: boolean;
   chain_trading_paused?: boolean;
   dust_threshold?: string;
@@ -375,7 +372,7 @@ export const nodeProvider = (chain: NodeChain): SwapProvider => {
       const sourceChain = (into ? pool.asset : ZEC_ASSET).split('.')[0]!;
       // utxo deposits carry the memo in an 80-byte OP_RETURN, where dest/refund
       // does not fit (94 bytes for btc); the network refunds those to the sender
-      if (into && chain.refundInMemo && !OP_RETURN_CHAINS.has(sourceChain)) {
+      if (into && !OP_RETURN_CHAINS.has(sourceChain)) {
         query.set('refund_address', req.otherAddress);
       }
       // the affiliate rides even at 0 bps, so the volume is still zafu's THORName's

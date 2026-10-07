@@ -1,7 +1,6 @@
 /**
- * THORNode's HTTP API, one GET with failover across public nodes. MAYANode
- * serves the same API, so the nodes are a parameter. No egress ask here: each
- * caller wraps it with its own destination.
+ * THORNode's HTTP API, one GET with failover across public nodes. No egress
+ * ask here: each caller wraps it with its own destination.
  */
 
 // two operators that answer every path zafu reads (checked 2026-10-07);
@@ -37,7 +36,6 @@ export const thornodeGet = async <T>(
       if (resp.ok) {
         return body;
       }
-      // mayanode says `error` where thornode says `message`
       const message = body.message ?? body.error ?? `thornode ${resp.status}`;
       if (resp.status < 500) {
         throw new ThornodeRefusal(message, resp.status);

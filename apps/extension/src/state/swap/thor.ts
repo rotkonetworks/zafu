@@ -8,6 +8,5 @@ export const thorProvider = nodeProvider({
   id: 'thor',
   prefix: '/thorchain',
   urls: THORNODE_URLS,
-  refundInMemo: true,
   affiliate: THOR_AFFILIATE,
 });

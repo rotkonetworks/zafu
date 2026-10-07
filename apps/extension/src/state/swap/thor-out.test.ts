@@ -339,6 +339,5 @@ describe('custody is acknowledged once per provider', () => {
     expect(asksCustody('near', [])).toBe(true);
     expect(asksCustody('near', ['near'])).toBe(false);
     expect(asksCustody('thor', [])).toBe(false);
-    expect(asksCustody('maya', [])).toBe(false);
   });
 });

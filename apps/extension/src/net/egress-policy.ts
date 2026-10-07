@@ -36,7 +36,6 @@ import { PENUMBRA_MAINNET_ENDPOINTS, defaultPenumbraEndpoint } from '../config/p
 import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../config/zcash-endpoints';
 import { BUNDLED_SERVICE_CONFIG } from '../services/voting/bundled-config';
 import { pickIndependentPeer } from '../workers/cross-verify';
-import { MAYA_ENABLED } from '../config/feature-flags';
 import { BASE_RPC, PEER_HOSTS } from '../config/ramps';
 import { PAY_APPS } from '../buy/apps';
 import { hostOf } from './destination';
@@ -351,14 +350,6 @@ export const DESTINATIONS: DestinationSpec[] = [
     purpose: 'swap',
     gate: { kind: 'optional' },
     urls: () => [MIDGARD_URL],
-  },
-  {
-    id: 'mayachain',
-    label: 'maya swap',
-    purpose: 'swap',
-    gate: { kind: 'optional' },
-    urls: () => ['https://mayanode.mayachain.info'],
-    hidden: !MAYA_ENABLED,
   },
   {
     id: 'skip',

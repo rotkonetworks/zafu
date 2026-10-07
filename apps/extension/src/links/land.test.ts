@@ -23,13 +23,6 @@ describe('land', () => {
     });
   });
 
-  it('opens the normal router for a route zafu does not offer', () => {
-    expect(landOf('zafu:swap?from=btc&to=zec&xc=maya')).toEqual({
-      to: PopupPath.SWAP,
-      state: { link: { direction: 'into_zec', token: 'btc', route: 'maya' } },
-    });
-  });
-
   it('opens a whitelisted screen', () => {
     expect(landOf('zafu:open/settings/networks/penumbra')).toEqual({
       to: PopupPath.SETTINGS_PENUMBRA_NETWORK,
