@@ -36,9 +36,13 @@ import { PEOPLE_RELAY } from '../../../config/people-relay';
 import { useNow } from '../../../hooks/use-now';
 import { hhmm } from '../../../utils/when';
 import { SealCompare } from '../contacts/seal-compare';
+import { toUri, toWebUri } from '../../../links/router';
+import { ShareWays } from './share-ways';
 import { PopupPath, threadPath } from '../paths';
 
-export const cardUrl = (b64: string) => `https://zafu.pro/c#${b64}`;
+/** a card's two links: the zafu.pro one for anyone (and the QR, since a phone camera opens only https) */
+export const cardUrl = (b64: string) => toWebUri({ kind: 'contact', card: b64 });
+export const cardZafuUri = (b64: string) => toUri({ kind: 'contact', card: b64 });
 
 type Fresh = Awaited<ReturnType<ReturnType<typeof useMyCards>['fresh']>>;
 
@@ -274,7 +278,6 @@ export function AddPersonPage() {
   const roomId = params.get('room') ?? undefined;
   const [making, setMaking] = useState(false);
   const [failed, setFailed] = useState<'card' | 'relay'>();
-  const [copied, setCopied] = useState(false);
   const now = useNow(30_000);
   const room = useMyRooms().find(r => r.id === roomId);
   const card = room?.card;
@@ -329,24 +332,15 @@ export function AddPersonPage() {
   const link = bytes ? cardUrl(bytes) : undefined;
   const mark = (id: string, what: 'copied' | 'shared') =>
     void peopleCall('card-mark', { roomId: id, what }).catch(() => undefined);
-  const copy = async () => {
+  /** the card's link in one form, made and marked copied on the way */
+  const copied = (form: (b64: string) => string) => async () => {
     const c = await make();
-    if (!c) {
-      return;
+    if (c) {
+      mark(c.id, 'copied');
     }
-    await navigator.clipboard.writeText(cardUrl(c.b64)).then(
-      () => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-        mark(c.id, 'copied');
-      },
-      () => undefined,
-    );
+    return c && form(c.b64);
   };
   const share = async () => {
-    if (typeof navigator.share !== 'function') {
-      return copy();
-    }
     const c = await make();
     if (c) {
       await navigator.share({ url: cardUrl(c.b64) }).then(
@@ -390,33 +384,31 @@ export function AddPersonPage() {
                   </Button>
                 )}
               </div>
-              <div className='flex h-10 items-center overflow-hidden whitespace-nowrap border border-border-soft bg-elev-1 px-3 text-xs text-fg-muted'>
-                zafu.pro/c#
-                <span className='truncate text-fg-high'>{bytes ?? ''}</span>
-              </div>
-              <div className='flex gap-2'>
+              <ShareWays
+                disabled={making || !cards.ready}
+                ways={[
+                  {
+                    name: 'for zafu',
+                    meta: 'works offline · they paste it into zafu',
+                    text: copied(cardZafuUri),
+                  },
+                  {
+                    name: 'for anyone',
+                    meta: 'opens zafu.pro, which sees a visit, never the card',
+                    text: copied(cardUrl),
+                  },
+                ]}
+              />
+              {typeof navigator.share === 'function' && (
                 <Button
                   variant='secondary'
-                  className='flex-1'
-                  disabled={making || !cards.ready}
-                  onClick={() => void copy()}
-                >
-                  <span
-                    className={cn(copied ? 'i-lucide-check' : 'i-lucide-copy', 'size-4')}
-                    aria-hidden='true'
-                  />
-                  {copied ? 'copied' : 'copy link'}
-                </Button>
-                <Button
-                  variant='secondary'
-                  className='flex-1'
                   disabled={making || !cards.ready}
                   onClick={() => void share()}
                 >
                   <span className='i-lucide-share size-4' aria-hidden='true' />
                   share
                 </Button>
-              </div>
+              )}
             </>
           )
         )}

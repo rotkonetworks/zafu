@@ -6,11 +6,9 @@
 
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useCopy } from '@repo/ui/hooks/use-copy';
 import { Button } from '@repo/ui/components/ui/button';
-import { cn } from '@repo/ui/lib/utils';
 import { ScreenHeader } from '../../../components/screen-header';
-import { toUri } from '../../../links/router';
+import { toUri, toWebUri } from '../../../links/router';
 import { peopleAsk, useMyRooms, useWatchRoom } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import { PopupPath, groupPath } from '../paths';
@@ -21,47 +19,21 @@ import { DEFAULT_PEOPLE_RELAY } from '../../../config/people-relay';
 import { peopleCount } from './group';
 import { JoinAsks } from './join-asks';
 import { useMemberName } from './use-member-name';
+import { ShareWays, type ShareWay } from './share-ways';
 
-const Share = ({ code }: { code: string }) => {
-  const { copy } = useCopy();
-  const [copied, setCopied] = useState(-1);
-  const ways = [
-    { name: 'copy code', meta: 'they paste it into zafu · no link at all', text: code },
-    {
-      name: 'copy zafu: link',
-      meta: 'private · opens zafu directly',
-      text: toUri({ kind: 'join', code }),
-    },
-    {
-      name: 'copy web link',
-      meta: 'for people without zafu · zafu.pro sees a visit, never the code',
-      text: `https://zafu.pro/j#${code}`,
-    },
-  ];
-  return (
-    <div className='flex flex-col border border-border-soft bg-elev-1'>
-      {ways.map((w, i) => (
-        <button
-          key={w.name}
-          type='button'
-          onClick={() => {
-            copy(w.text);
-            setCopied(i);
-          }}
-          className='flex h-14 items-center gap-3 border-t border-border-soft px-3.5 text-left first:border-t-0 hover:bg-elev-2'
-        >
-          <span className='flex min-w-0 grow flex-col gap-[3px]'>
-            <span className='text-[13px] text-fg-high'>{w.name}</span>
-            <span className='truncate text-[11px] text-fg-muted'>{w.meta}</span>
-          </span>
-          <span className={cn('text-xs', copied === i ? 'text-success' : 'text-zigner-gold')}>
-            {copied === i ? 'copied' : 'copy'}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-};
+const shareWays = (code: string): ShareWay[] => [
+  { name: 'just the code', meta: 'they type it into zafu · no link at all', text: code },
+  {
+    name: 'for zafu',
+    meta: 'works offline · they paste it into zafu',
+    text: toUri({ kind: 'join', code }),
+  },
+  {
+    name: 'for anyone',
+    meta: 'opens zafu.pro, which sees a visit, never the code',
+    text: toWebUri({ kind: 'join', code }),
+  },
+];
 
 const Person = ({
   initial,
@@ -193,7 +165,7 @@ export function GroupInvitePage() {
               {open && door.group?.code ? (
                 <>
                   <span className='font-display text-[26px] text-fg-high'>{door.group.code}</span>
-                  <Share code={door.group.code} />
+                  <ShareWays ways={shareWays(door.group.code)} />
                   <span className='text-[11px] text-fg-muted'>
                     works for 1h · you allow each person
                   </span>
