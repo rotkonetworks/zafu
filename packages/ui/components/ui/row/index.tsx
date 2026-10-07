@@ -19,6 +19,8 @@ export interface RowBaseProps {
   label: string;
   description?: string;
   disabled?: boolean;
+  /** a destructive row ("remove wallet"): the label in the danger tone */
+  danger?: boolean;
   className?: string;
   /** opens a Sheet explaining this setting, via a small "?" after the label.
    *  called with the row's own label, so the sheet can title itself without
@@ -36,7 +38,8 @@ export type RowProps = RowBaseProps &
   );
 
 export function Row(props: RowProps) {
-  const { icon, media, label, description, disabled, className, onExplain, preload } = props;
+  const { icon, media, label, description, disabled, danger, className, onExplain, preload } =
+    props;
 
   const rowClass = cn(
     'flex min-h-[50px] w-full items-center gap-3 px-3.5 py-2 text-left transition-colors',
@@ -51,7 +54,11 @@ export function Row(props: RowProps) {
         (icon && <span className={cn(icon, 'size-5 shrink-0 text-fg-muted')} aria-hidden='true' />)}
       <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
         <span className='flex items-center gap-2'>
-          <span className='truncate text-sm text-fg-high lowercase'>{label}</span>
+          <span
+            className={cn('truncate text-sm lowercase', danger ? 'text-hanko' : 'text-fg-high')}
+          >
+            {label}
+          </span>
           {onExplain && (
             <button
               type='button'

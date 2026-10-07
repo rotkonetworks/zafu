@@ -1,28 +1,26 @@
 /**
- * settings > wallets & networks. One row per wallet (its custody and the
- * networks it holds), a sheet for everything about one wallet, then the ways
- * to add one, then the networks. Nothing expands in place: each step is a
- * sheet, so only one secret is ever on screen at a time.
+ * settings > wallets and devices > wallets. One row per wallet (its custody
+ * and the networks it holds), a sheet for everything about one wallet, then
+ * the ways to add one. Its phrase, start height and removal each have one
+ * home (security, zcash), and the sheet links there.
  *
- * Only zcash and penumbra are networks; penumbra's ibc chains live under
- * settings > networks > penumbra. A wallet's networks follow
- * keyInfoSupportsNetwork, so a 12-word vault reads penumbra only.
+ * A wallet's networks follow keyInfoSupportsNetwork, so a 12-word vault reads
+ * penumbra only.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
   keyRingSelector,
+  selectEffectiveKeyInfo,
   selectEnabledNetworks,
   type KeyInfo,
   type NetworkType,
 } from '../../../state/keyring';
 import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
 import { walletsSelector, type ZcashWalletJson } from '../../../state/wallets';
-import { passwordSelector } from '../../../state/password';
 import { Section, SettingsScreen } from './settings-screen';
-import { TintedRow } from './tinted-row';
 import { openPageInTab } from '../../../utils/popup-detection';
 import { PagePath } from '../../page/paths';
 import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
@@ -30,19 +28,9 @@ import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
-import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { CustodyBadge, custodyOf } from '../../../components/custody-badge';
-import { PhraseGrid } from './settings-passphrase';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
-import { useExplain } from './settings-explain';
-import { ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
-import {
-  describeZcashHeight,
-  dateToBlock,
-  blockToDate,
-  formatDateInput,
-} from '../../../utils/zcash-blocks';
 
 const NETWORKS = ['zcash', 'penumbra'] as const satisfies readonly NetworkType[];
 
@@ -61,14 +49,7 @@ const networksOf = (
       (v.type === 'mnemonic' || held[n] || (n === 'zcash' && v.type === 'frost-multisig')),
   );
 
-export const SettingsWallets = ({
-  title = 'wallets',
-  appendSlot,
-}: {
-  title?: string;
-  /** the networks section, composed into this screen (settings-wallets-networks) */
-  appendSlot?: React.ReactNode;
-} = {}) => {
+export const SettingsWallets = () => {
   const navigate = usePopupNav();
   const rawNavigate = useNavigate();
 
@@ -88,7 +69,7 @@ export const SettingsWallets = ({
 
   return (
     <>
-      <SettingsScreen title={title} backPath={PopupPath.INDEX}>
+      <SettingsScreen title='wallets' backPath={PopupPath.SETTINGS_DEVICES}>
         <div className='flex flex-col gap-5'>
           <Section title='wallets'>
             {keyInfos.length === 0 ? (
@@ -159,8 +140,6 @@ export const SettingsWallets = ({
               </a>
             </p>
           </section>
-
-          {appendSlot}
         </div>
       </SettingsScreen>
 
@@ -181,7 +160,7 @@ export const SettingsWallets = ({
   );
 };
 
-type Step = 'main' | 'rename' | 'birthday' | 'password' | 'phrase';
+type Step = 'main' | 'rename';
 
 /** everything about one wallet, one step at a time */
 const WalletSheet = ({
@@ -198,18 +177,12 @@ const WalletSheet = ({
   onRemove: () => void;
 }) => {
   const navigate = usePopupNav();
-  const { getMnemonic, renameKeyRing, setMultisigHidden } = useStore(keyRingSelector);
+  const { renameKeyRing, setMultisigHidden } = useStore(keyRingSelector);
   const { zcashWallets, updateMultisigWallet } = useStore(walletsSelector);
-  const { isPassword } = useStore(passwordSelector);
+  const inView = useStore(selectEffectiveKeyInfo)?.id === vault.id;
   const [step, setStep] = useState<Step>('main');
   const [draft, setDraft] = useState(vault.name);
-  const [password, setPassword] = useState('');
-  const [wrong, setWrong] = useState(false);
-  const [phrase, setPhrase] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const hasZcash = networks.includes('zcash');
-  const birthday = useBirthday(vault.id, hasZcash);
-  const { explainProps, sheet: explainSheet } = useExplain();
 
   const rename = async () => {
     const name = draft.trim();
@@ -224,257 +197,84 @@ const WalletSheet = ({
     setStep('main');
   };
 
-  const reveal = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!(await isPassword(password))) {
-      setWrong(true);
-      return;
-    }
-    try {
-      setPhrase((await getMnemonic(vault.id)).split(' '));
-      setPassword('');
-      setStep('phrase');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(
-        msg.includes('failed to decrypt vault')
-          ? "this wallet's recovery phrase can't be read here. please use the backup you made."
-          : msg,
-      );
-    }
-  };
-
-  const titles: Record<Step, string> = {
-    main: vault.name,
-    rename: 'rename',
-    birthday: 'zcash sync start',
-    password: 'recovery phrase',
-    phrase: 'recovery phrase',
-  };
-
   return (
-    <>
-      <Sheet
-        open
-        onOpenChange={o => {
-          if (!o) {
-            setPhrase([]);
-            onClose();
-          }
-        }}
-        title={titles[step]}
-      >
-        {step === 'main' && (
-          <>
-            <div className='flex items-center gap-2 text-[11px] text-fg-muted'>
-              <CustodyBadge vault={vault} />
-              {networks.join(' · ')}
-            </div>
-            <RowGroup>
-              <Row type='screen' label='rename' onPress={() => setStep('rename')} />
-              {hasZcash && (
-                <Row
-                  type='value'
-                  label='zcash sync start'
-                  value={birthday.valid ? formatDateInput(blockToDate(birthday.height)) : 'auto'}
-                  onPress={() => setStep('birthday')}
-                  {...explainProps('network.zcashStartsFrom')}
-                />
-              )}
-              {vault.type === 'zigner-zafu' && hasZcash && (
-                <Row
-                  type='screen'
-                  label='sync to zigner'
-                  description='check your notes on zigner'
-                  preload={PopupPath.NOTE_SYNC}
-                  onPress={() => navigate(PopupPath.NOTE_SYNC)}
-                />
-              )}
-              {multisig &&
-                (multisig.multisig?.hidden ? (
-                  // an app-managed table is hidden from the multisig tab: offer it back
-                  <Row
-                    type='screen'
-                    label='take control of this multisig'
-                    onPress={() => void setMultisigHidden(vault.id, false)}
-                  />
-                ) : (
-                  <Row
-                    type='screen'
-                    label='manage in multisig'
-                    preload={PopupPath.MULTISIG}
-                    onPress={() => navigate(PopupPath.MULTISIG)}
-                  />
-                ))}
-              {vault.type === 'mnemonic' && (
-                <Row
-                  type='screen'
-                  label='show recovery phrase'
-                  onPress={() => setStep('password')}
-                />
-              )}
-            </RowGroup>
-            <RowGroup>
-              <TintedRow label='remove wallet' onPress={onRemove} />
-            </RowGroup>
-          </>
-        )}
-
-        {step === 'rename' && (
-          <form
-            onSubmit={e => {
-              e.preventDefault();
-              void rename();
-            }}
-            className='flex flex-col gap-3'
-          >
-            <Input value={draft} autoFocus onChange={e => setDraft(e.target.value)} />
-            <Button type='submit' className='w-full' disabled={!draft.trim()}>
-              save
-            </Button>
-            <Button variant='quiet' className='w-full' onClick={() => setStep('main')}>
-              back
-            </Button>
-          </form>
-        )}
-
-        {step === 'birthday' && <BirthdayStep birthday={birthday} onDone={() => setStep('main')} />}
-
-        {step === 'password' && (
-          <form onSubmit={e => void reveal(e)} className='flex flex-col gap-3'>
-            <p className='text-xs text-fg-muted'>your password, to show this wallet's phrase.</p>
-            <Input
-              type='password'
-              autoFocus
-              value={password}
-              placeholder='password'
-              onChange={e => {
-                setPassword(e.target.value);
-                setWrong(false);
-              }}
-            />
-            {(wrong || error) && (
-              <StatusSlot tone='warn' icon='i-ph-warning'>
-                {wrong ? 'that password does not match. please try again.' : error}
-              </StatusSlot>
+    <Sheet open onOpenChange={o => !o && onClose()} title={step === 'main' ? vault.name : 'rename'}>
+      {step === 'main' && (
+        <>
+          <div className='flex items-center gap-2 text-[11px] text-fg-muted'>
+            <CustodyBadge vault={vault} />
+            {networks.join(' · ')}
+          </div>
+          <RowGroup>
+            <Row type='screen' label='rename' onPress={() => setStep('rename')} />
+            {/* the start height lives on the zcash screen, for the wallet in view */}
+            {hasZcash && inView && (
+              <Row
+                type='screen'
+                label='zcash sync start'
+                preload={PopupPath.SETTINGS_ZCASH_NETWORK}
+                onPress={() => navigate(PopupPath.SETTINGS_ZCASH_NETWORK)}
+              />
             )}
-            <Button type='submit' className='w-full' disabled={!password}>
-              show
-            </Button>
-            <Button variant='quiet' className='w-full' onClick={() => setStep('main')}>
-              back
-            </Button>
-          </form>
-        )}
-
-        {step === 'phrase' && (
-          <>
-            <p className='text-xs text-fg-muted'>
-              write it down and keep it offline. anyone with it controls this wallet.
-            </p>
-            <PhraseGrid words={phrase} revealed onReveal={() => undefined} />
-            <Button
-              className='w-full'
-              onClick={() => {
-                setPhrase([]);
-                setStep('main');
-              }}
-            >
-              done
-            </Button>
-          </>
-        )}
-      </Sheet>
-      {explainSheet}
-    </>
-  );
-};
-
-/** a wallet's zcash sync start, held as the height sync reads */
-const useBirthday = (vaultId: string, on: boolean) => {
-  const key = `zcashBirthday_${vaultId}`;
-  const [raw, setRaw] = useState('');
-  useEffect(() => {
-    if (on) {
-      void chrome.storage.local.get(key).then(r => r[key] !== undefined && setRaw(String(r[key])));
-    }
-  }, [on, key]);
-  const height = parseInt(raw, 10);
-  return {
-    raw,
-    setRaw,
-    height,
-    valid: !isNaN(height) && height >= ZCASH_ORCHARD_ACTIVATION,
-    save: (h: number | null) => {
-      if (h === null) {
-        setRaw('');
-        void chrome.storage.local.remove(key);
-        return;
-      }
-      const clamped = Math.max(ZCASH_ORCHARD_ACTIVATION, h);
-      setRaw(String(clamped));
-      void chrome.storage.local.set({ [key]: clamped });
-    },
-  };
-};
-
-/**
- * asked as a date, the thing a person knows; the block it resolves to sits
- * under it for whoever knows that instead. auto scans recent blocks, so an
- * old wallet left on auto misses its early notes.
- */
-const BirthdayStep = ({
-  birthday: b,
-  onDone,
-}: {
-  birthday: ReturnType<typeof useBirthday>;
-  onDone: () => void;
-}) => {
-  const hint = b.raw.trim() ? describeZcashHeight(b.height) : null;
-  const typed = () => (b.raw === '' ? b.save(null) : !isNaN(b.height) && b.save(b.height));
-  return (
-    <div className='flex flex-col gap-3'>
-      <p className='text-xs text-fg-muted'>
-        when this wallet was first used. zcash scans from here.
-      </p>
-      <Input
-        type='date'
-        aria-label='first used'
-        min={formatDateInput(blockToDate(ZCASH_ORCHARD_ACTIVATION))}
-        max={formatDateInput(new Date())}
-        value={b.valid ? formatDateInput(blockToDate(b.height)) : ''}
-        onChange={e =>
-          b.save(e.target.value ? dateToBlock(new Date(`${e.target.value}T00:00:00Z`)) : null)
-        }
-      />
-      <Input
-        type='number'
-        aria-label='block'
-        min={ZCASH_ORCHARD_ACTIVATION}
-        step='1000'
-        placeholder='or a block · auto'
-        value={b.raw}
-        onChange={e => b.setRaw(e.target.value)}
-        onBlur={typed}
-        className='font-mono'
-      />
-      <span className={hint && !hint.ok ? 'text-label text-hanko' : 'text-label text-fg-dim'}>
-        {hint ? hint.text : 'auto · scans recent blocks, set a date if older'}
-      </span>
-      <Button
-        className='w-full'
-        onClick={() => {
-          typed();
-          onDone();
-        }}
-      >
-        done
-      </Button>
-      {b.raw && (
-        <Button variant='quiet' className='w-full' onClick={() => b.save(null)}>
-          back to auto
-        </Button>
+            {vault.type === 'zigner-zafu' && hasZcash && (
+              <Row
+                type='screen'
+                label='sync to zigner'
+                description='check your notes on zigner'
+                preload={PopupPath.NOTE_SYNC}
+                onPress={() => navigate(PopupPath.NOTE_SYNC)}
+              />
+            )}
+            {multisig &&
+              (multisig.multisig?.hidden ? (
+                // an app-managed table is hidden from the multisig tab: offer it back
+                <Row
+                  type='screen'
+                  label='take control of this multisig'
+                  onPress={() => void setMultisigHidden(vault.id, false)}
+                />
+              ) : (
+                <Row
+                  type='screen'
+                  label='manage in multisig'
+                  preload={PopupPath.MULTISIG}
+                  onPress={() => navigate(PopupPath.MULTISIG)}
+                />
+              ))}
+            {vault.type === 'mnemonic' && (
+              <Row
+                type='screen'
+                label='show recovery phrase'
+                preload={PopupPath.SETTINGS_RECOVERY_PASSPHRASE}
+                onPress={() =>
+                  navigate(`${PopupPath.SETTINGS_RECOVERY_PASSPHRASE}?id=${vault.id}` as PopupPath)
+                }
+              />
+            )}
+          </RowGroup>
+          <RowGroup>
+            <Row type='screen' danger label='remove wallet' onPress={onRemove} />
+          </RowGroup>
+        </>
       )}
-    </div>
+
+      {step === 'rename' && (
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            void rename();
+          }}
+          className='flex flex-col gap-3'
+        >
+          <Input value={draft} autoFocus onChange={e => setDraft(e.target.value)} />
+          <Button type='submit' className='w-full' disabled={!draft.trim()}>
+            save
+          </Button>
+          <Button variant='quiet' className='w-full' onClick={() => setStep('main')}>
+            back
+          </Button>
+        </form>
+      )}
+    </Sheet>
   );
 };

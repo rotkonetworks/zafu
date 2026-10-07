@@ -61,10 +61,14 @@ export const isEgressBlockedCause = (e: unknown, depth = 0): boolean => {
     : false;
 };
 
+/** allowed contacts per destination id (or host), with the latest time: counts, never urls */
+export type ContactTally = Record<string, { n: number; at: number }>;
+
 type ChannelMessage =
   | { type: 'request' }
   | { type: 'table'; table: EgressTable }
-  | { type: 'blocked'; refusal: EgressRefusal; realm: EgressRealm };
+  | { type: 'blocked'; refusal: EgressRefusal; realm: EgressRealm }
+  | { type: 'contacted'; tally: ContactTally };
 
 export interface EgressHost {
   /** storage realms: compile the table from storage */
@@ -79,6 +83,10 @@ export interface EgressHost {
 }
 
 const CHANNEL = 'zafu-egress';
+/** a runtime message: the service worker drops its unwritten contact counts (./contacted) */
+export const CONTACTED_CLEAR = 'zafu_contacted_clear';
+/** how long a realm gathers its contacts before handing them on as one message */
+const TALLY_MS = 5000;
 /** how long a realm waits for its first table before failing closed */
 const READY_TIMEOUT_MS = 4000;
 
@@ -89,6 +97,9 @@ let ready: Promise<void> = Promise.resolve();
 let channel: BroadcastChannel | undefined;
 let reload: (() => Promise<void>) | undefined;
 const listeners = new Set<(refusal: EgressRefusal, from: EgressRealm) => void>();
+const contactListeners = new Set<(tally: ContactTally) => void>();
+let tally: ContactTally = {};
+let tallyTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Subscribe to refusals from this realm and every realm on the channel. */
 export const onEgressBlocked = (
@@ -103,6 +114,40 @@ const emit = (refusal: EgressRefusal, from: EgressRealm): void => {
     listener(refusal, from);
   }
 };
+
+/** Subscribe to batches of allowed contacts from this realm and every realm on the channel. */
+export const onEgressContacted = (listener: (tally: ContactTally) => void): (() => void) => {
+  contactListeners.add(listener);
+  return () => void contactListeners.delete(listener);
+};
+
+const sendTally = (): void => {
+  tallyTimer = undefined;
+  const batch = tally;
+  tally = {};
+  for (const listener of contactListeners) {
+    listener(batch);
+  }
+  channel?.postMessage({ type: 'contacted', tally: batch } satisfies ChannelMessage);
+};
+
+/**
+ * A filter on every allowed request: one count in memory, handed on in
+ * batches, so the hot path never waits and storage sees no write per request.
+ * A device on this computer and urls without a host are not counted.
+ */
+const tallyContact = (id: string | undefined): void => {
+  if (!id) {
+    return;
+  }
+  tally[id] = { n: (tally[id]?.n ?? 0) + 1, at: Date.now() };
+  tallyTimer ??= setTimeout(sendTally, TALLY_MS);
+};
+
+const contactIdOf = (d: EgressDecision): string | undefined =>
+  d.allow && d.host && (d.destination || table?.hosts[d.host] === 'allowed')
+    ? (d.destination ?? d.host)
+    : undefined;
 
 const urlOf = (input: string | URL | Request): string =>
   typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -126,6 +171,7 @@ const enforce = (input: string | URL | Request): void => {
   if (!decision.allow) {
     refuse(decision);
   }
+  tallyContact(contactIdOf(decision));
 };
 
 const publish = (next: EgressTable): void => {
@@ -180,6 +226,9 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
         if (!approved) {
           refuse(decision);
         }
+        tallyContact(decision.host);
+      } else {
+        tallyContact(contactIdOf(decision));
       }
       const response = await nativeFetch(input, init);
       // A followed redirect lands wherever the server says. The request itself
@@ -270,6 +319,10 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
       markReady?.();
     } else if (msg.type === 'blocked') {
       emit(msg.refusal, msg.realm);
+    } else if (msg.type === 'contacted') {
+      for (const listener of contactListeners) {
+        listener(msg.tally);
+      }
     }
   };
 

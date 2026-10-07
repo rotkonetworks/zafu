@@ -2,11 +2,13 @@ import { UserChoice } from '@repo/storage-chrome/records';
 import type { AllSlices } from '../../../state';
 import type { KeyInfo } from '../../../state/keyring';
 import type { ZcashWalletJson } from '../../../state/wallets';
-import { hasFeature, NETWORKS } from '../../../config/networks';
+import { NETWORKS } from '../../../config/networks';
 import { selectZcashBackend } from '../../../state/networks';
 import { ZCASH_BACKENDS } from '../../../state/keyring/zcash-backend';
+import { defaultZcashEndpoint } from '../../../config/zcash-endpoints';
+import { hostOf } from '../../../net/destination';
 
-/** live one-line status for each settings category, from local state only - nothing here asks a server */
+/** live one-line status for each settings group, from local state only - nothing here asks a server */
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
@@ -24,12 +26,16 @@ export const unbackedSeats = (wallets: readonly ZcashWalletJson[]) =>
 export const selectUnbackedSeatCount = (s: AllSlices) =>
   unbackedSeats(Array.isArray(s.wallets.zcashWallets) ? s.wallets.zcashWallets : []).length;
 
-export const securityStatus = (unbacked: number, autoLock: string) =>
-  unbacked > 0
-    ? `${plural(unbacked, 'group seat')} not backed up`
-    : autoLock === 'off'
-      ? 'auto-lock off'
-      : `auto-lock ${autoLock}`;
+/** a card's line: plain text, and an optional part in the warning tone */
+export interface Status {
+  text: string;
+  warn?: string;
+}
+
+export const securityStatus = (unbacked: number, autoLock: string): Status => ({
+  text: autoLock === 'off' ? 'auto-lock off' : `auto-lock ${autoLock}`,
+  warn: unbacked > 0 ? `${plural(unbacked, 'group seat')} not backed up` : undefined,
+});
 
 export const selectConnectedSiteCount = (s: AllSlices) =>
   (Array.isArray(s.connectedSites.knownSites) ? s.connectedSites.knownSites : []).filter(
@@ -37,39 +43,78 @@ export const selectConnectedSiteCount = (s: AllSlices) =>
   ).length;
 
 /**
- * the privacy settings switched to let more be seen, each counted only where
- * its network is on. zcash.me's live mode lives outside the store and is
- * added by the caller. contact discovery on is the chosen default, so it
- * does not count.
+ * the zcash settings switched to let a node or an explorer see more. local
+ * history is not counted: nobody else sees it.
  */
-export const selectOpenings = (s: AllSlices): number => {
+export const selectZcashOpenings = (s: AllSlices): number => {
   const p = s.privacy.settings;
-  const on = (f: 'zcash' | 'cosmos') => s.keyRing.enabledNetworks.some(n => hasFeature(n, f));
   const zcash = s.networks.networks.zcash;
   // memo decoys and instant pending exist only on a zidecar node
-  const wire = on('zcash') && !!ZCASH_BACKENDS[selectZcashBackend(s)].extras;
+  const wire = !!ZCASH_BACKENDS[selectZcashBackend(s)].extras;
   return [
-    p.enableTransactionHistory,
     p.explorerLinks === 'open',
-    on('cosmos') && p.enableTransparentBalances,
-    on('zcash') && p.zcashTransparentEachBlock,
+    p.zcashTransparentEachBlock,
     wire && zcash.memoSyncStrategy === 'fast',
     wire && zcash.mempoolWatch === 'on',
   ].filter(Boolean).length;
 };
 
-export const privacyStatus = (openings: number, sites: number) =>
-  `${openings ? `${plural(openings, 'setting')} less private` : 'private defaults'} · ${
-    sites ? `${plural(sites, 'site')} connected` : 'no sites connected'
-  }`;
+/** the host of the zcash node: the one who sees you sync */
+export const selectZcashNodeHost = (s: AllSlices): string =>
+  hostOf(s.networks.networks.zcash.endpoint || defaultZcashEndpoint().url) ?? 'auto';
 
-export const networksStatus = (enabled: readonly string[]) =>
-  enabled.map(n => NETWORKS[n]?.name.toLowerCase() ?? n).join(' · ') || 'no networks on';
+/** destinations on: undefined until the policy view is read */
+export const networkStatus = (destinations: number | undefined, sites: number): Status => ({
+  text: [
+    destinations !== undefined && plural(destinations, 'destination') + ' on',
+    sites ? `${plural(sites, 'site')} connected` : 'no sites connected',
+  ]
+    .filter(Boolean)
+    .join(' · '),
+});
+
+export const zcashStatus = (on: boolean, node: string, openings: number): Status =>
+  !on
+    ? { text: 'off · turn on under wallets and devices' }
+    : openings
+      ? { text: `${node} · `, warn: `${plural(openings, 'setting')} less private` }
+      : { text: `${node} · private defaults` };
+
+export const peopleStatus = (
+  identity: boolean,
+  discovery: boolean,
+  zcashMe: string | undefined,
+): Status => ({
+  text: identity
+    ? [`discovery ${discovery ? 'on' : 'off'}`, zcashMe && `zcash.me ${zcashMe}`]
+        .filter(Boolean)
+        .join(' · ')
+    : 'zid off',
+});
+
+export const displayStatus = (theme: string, hidden: boolean): Status => ({
+  text: `${theme} · balances ${hidden ? 'hidden' : 'shown'}`,
+});
+
+/** the enabled networks by name */
+export const networkNames = (enabled: readonly string[]) =>
+  enabled.map(n => NETWORKS[n]?.name.toLowerCase() ?? n);
 
 export const isZigner = (k: KeyInfo) =>
   k.type === 'zigner-zafu' && (k.insensitive['coldSignerType'] ?? 'zigner') === 'zigner';
 
 export const selectZignerPaired = (s: AllSlices) => s.keyRing.keyInfos.some(isZigner);
 
-export const devicesStatus = (zigner: boolean, theme: string) =>
-  `${zigner ? 'zigner paired' : 'no zigner yet'} · ${theme} theme`;
+export const devicesStatus = (
+  wallets: number,
+  zigner: boolean,
+  networks: readonly string[],
+): Status => ({
+  text: [
+    plural(wallets, 'wallet'),
+    zigner && 'zigner paired',
+    networks.length ? `${networks.join(', ')} on` : 'no networks on',
+  ]
+    .filter(Boolean)
+    .join(' · '),
+});

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Input } from '@repo/ui/components/ui/input';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { QrCode } from '../../../components/qr-code';
@@ -20,7 +21,10 @@ export const SettingsPassphrase = () => {
   const navigate = usePopupNav();
   const { isPassword } = useStore(passwordSelector);
   const getMnemonic = useStore(selectGetMnemonic);
-  const vault = useStore(selectEffectiveKeyInfo);
+  const [params] = useSearchParams();
+  const inView = useStore(selectEffectiveKeyInfo);
+  // ?id= is a wallet's own sheet (settings > wallets); no id means the wallet in view
+  const vault = useStore(s => s.keyRing.keyInfos.find(k => k.id === params.get('id'))) ?? inView;
 
   const [password, setPassword] = useState('');
   const [wrong, setWrong] = useState(false);

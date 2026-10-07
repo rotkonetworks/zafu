@@ -72,6 +72,25 @@ const install = async (
 };
 
 describe('installEgress', () => {
+  it('tallies allowed contacts by destination, in one batch, with no url', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    try {
+      const egress = await install(ALLOW_ZCASH);
+      const batches: unknown[] = [];
+      egress.onEgressContacted(t => batches.push(t));
+      await fetch('https://zcash.rotko.net/zidecar.v1.Zidecar/GetTip?x=1');
+      await fetch('https://zcash.rotko.net/zidecar.v1.Zidecar/GetBlock');
+      await fetch('https://api.coingecko.com/x').catch(() => undefined);
+      new WebSocket('wss://zcash.rotko.net/ws');
+      expect(batches).toEqual([]);
+      vi.advanceTimersByTime(5000);
+      expect(batches).toEqual([{ zcash: { n: 3, at: expect.any(Number) } }]);
+      expect(JSON.stringify(batches)).not.toMatch(/rotko|zidecar|coingecko/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('lets a required destination through and refuses the rest with a typed error', async () => {
     const { isEgressBlocked } = await install(ALLOW_ZCASH);
     await fetch('https://zcash.rotko.net/zidecar.v1.Zidecar/GetTip');

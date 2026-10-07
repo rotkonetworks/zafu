@@ -9,7 +9,7 @@
  * trail so settings can show what zafu declined to contact.
  */
 
-import { installEgress, onEgressBlocked } from './egress';
+import { CONTACTED_CLEAR, installEgress, onEgressBlocked, onEgressContacted } from './egress';
 import { EGRESS_INPUT_KEYS, compileEgress, type EgressInputs } from './egress-policy';
 import type { EgressRealm } from './egress-table';
 
@@ -45,5 +45,22 @@ installEgress(realm, {
 if (isServiceWorker) {
   onEgressBlocked(refusal => {
     void import('./ledger').then(m => m.recordRefusal(refusal));
+  });
+  // and the one writer of what zafu contacted lately (./contacted)
+  onEgressContacted(tally => {
+    void import('./contacted').then(m => m.noteContacted(tally));
+  });
+  // "clear this list": what this worker holds unwritten goes with the stored log
+  chrome.runtime.onMessage.addListener((msg: unknown, _sender, respond) => {
+    if ((msg as { type?: unknown } | null)?.type !== CONTACTED_CLEAR) {
+      return false;
+    }
+    void import('./contacted')
+      .then(m => m.clearContacted())
+      .then(
+        () => respond(true),
+        () => respond(false),
+      );
+    return true;
   });
 }

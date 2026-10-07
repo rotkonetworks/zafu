@@ -100,7 +100,7 @@ export const SettingsConnections = () => {
 
   if (!data) {
     return (
-      <SettingsScreen title='everything zafu talks to' backPath={PopupPath.SETTINGS_PRIVACY}>
+      <SettingsScreen title='everything zafu talks to' backPath={PopupPath.SETTINGS_NETWORK}>
         {null}
       </SettingsScreen>
     );
@@ -125,7 +125,7 @@ export const SettingsConnections = () => {
   };
 
   return (
-    <SettingsScreen title='everything zafu talks to' backPath={PopupPath.SETTINGS_PRIVACY}>
+    <SettingsScreen title='everything zafu talks to' backPath={PopupPath.SETTINGS_NETWORK}>
       <div className='flex flex-col gap-5'>
         <section>
           <p className='kicker mb-2'>in use</p>

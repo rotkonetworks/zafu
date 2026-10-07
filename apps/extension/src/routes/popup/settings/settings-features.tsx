@@ -46,7 +46,7 @@ export const SettingsFeatures = () => {
   };
 
   return (
-    <SettingsScreen title='features' backPath={PopupPath.SETTINGS}>
+    <SettingsScreen title='what sites may ask' backPath={PopupPath.SETTINGS_NETWORK}>
       <div className='flex flex-col gap-2 px-4 pb-4'>
         <p className='text-xs text-fg-muted'>
           what zafu offers sites at all. every site still gets its own permission request the first

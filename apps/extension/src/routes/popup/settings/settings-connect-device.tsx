@@ -11,7 +11,7 @@ import { PopupPath } from '../paths';
 export const SettingsConnectDevice = () => {
   const navigate = usePopupNav();
   return (
-    <SettingsScreen title='connect device' backPath={PopupPath.SETTINGS_WALLETS}>
+    <SettingsScreen title='connect device' backPath={PopupPath.SETTINGS_DEVICES}>
       <DeviceScanner
         onDone={() => navigate(PopupPath.SETTINGS_WALLETS)}
         onCancel={() => navigate(PopupPath.SETTINGS_WALLETS)}

@@ -18,6 +18,7 @@
 
 import { useEffect, useState } from 'react';
 import { SettingsScreen } from './settings-screen';
+import { PopupPath } from '../paths';
 import {
   DEFAULT_LIVE_DECOYS,
   DEFAULT_ZCASHME_CONFIG,
@@ -122,7 +123,7 @@ export function SettingsZcashMe() {
 
   if (!loaded) {
     return (
-      <SettingsScreen title='zcash.me directory'>
+      <SettingsScreen title='zcash.me names' backPath={PopupPath.SETTINGS_PEOPLE}>
         <p className='text-label text-fg-muted'>loading...</p>
       </SettingsScreen>
     );
@@ -131,7 +132,7 @@ export function SettingsZcashMe() {
   const verifiedCount = index ? index.snapshot.profiles.filter(p => p.addressVerified).length : 0;
 
   return (
-    <SettingsScreen title='zcash.me directory'>
+    <SettingsScreen title='zcash.me names' backPath={PopupPath.SETTINGS_PEOPLE}>
       <div className='flex flex-col gap-5'>
         <p className='text-label text-fg-muted'>
           zcash.me maps usernames and verified social handles (x, github, telegram...) to zcash
