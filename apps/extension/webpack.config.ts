@@ -162,7 +162,11 @@ export default ({
   const NEAR_1CLICK_JWT = process.env['NEAR_1CLICK_JWT'] ?? dotEnvLocal['NEAR_1CLICK_JWT'] ?? '';
 
   const DefinePlugin = new webpack.DefinePlugin({
-    'globalThis.__DEV__': JSON.stringify(process.env['NODE_ENV'] !== 'production'),
+    // nothing sets NODE_ENV=production for a release build, so keying on it left
+    // every dev-only log (txids, fees, rpc requests) on in the shipped extension
+    'globalThis.__DEV__': JSON.stringify(
+      WEBPACK_WATCH || process.env['NODE_ENV'] === 'development',
+    ),
     'globalThis.__ASSERT_ROOT__': JSON.stringify(false),
     BUILD_COMMIT: JSON.stringify(gitCommit),
     BUILD_DATE: JSON.stringify(gitDate),

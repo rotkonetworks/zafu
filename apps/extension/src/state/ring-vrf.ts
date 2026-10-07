@@ -128,7 +128,8 @@ export const createRingVrfSlice = (): SliceCreator<RingVrfSlice> => (set, get) =
         state.ringVrf.sessionContext = null;
       });
 
-      console.log('[ring-vrf] in pro ring at index', myIndex, 'epoch', ring.epoch);
+      // the ring index alone singles a member out of the ring: never logged
+      console.log('[ring-vrf] in pro ring');
     } catch (e) {
       if (!wasmFailed) {
         console.warn('[ring-vrf] refresh failed:', e);
