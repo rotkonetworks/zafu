@@ -1360,11 +1360,11 @@ export const externalMessageListener = (
               publicKey: bytesToHex(result.publicKey),
               prfEnabled: true,
             });
-          } catch (e) {
+          } catch {
             // `failed`: the person already said yes, so this is zafu's own
             // failure; the page reports it rather than falling back to the
             // platform authenticator
-            sendResponse({ success: false, error: String(e), code: 'failed' });
+            sendResponse({ success: false, code: 'failed' });
           }
         } catch {
           sendResponse({ success: false, error: 'denied' });
@@ -1517,10 +1517,10 @@ export const externalMessageListener = (
                 }
               : undefined,
           });
-        } catch (e) {
+        } catch {
           // `failed`: zafu holds this credential, so a signing error must be
           // reported rather than rerouted to the platform authenticator
-          sendResponse({ success: false, error: String(e), code: 'failed' });
+          sendResponse({ success: false, code: 'failed' });
         }
       })();
       return true;

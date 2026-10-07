@@ -5,7 +5,7 @@
  * that the bridge sets `type` itself and forwards only the fields each kind uses.
  */
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { passkeyMessage, promptCooldown } from './passkey-wire';
+import { passkeyMessage, passkeyPageResult, promptCooldown } from './passkey-wire';
 
 const sendMessage = chrome.runtime.sendMessage as unknown as ReturnType<typeof vi.fn>;
 
@@ -71,6 +71,32 @@ describe('passkey bridge', () => {
     pagePosts({ ...hostile('get'), kind: 'ZafuKeplr' });
     pagePosts({ ...hostile('get'), kind: 'toString' });
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('passkeyPageResult', () => {
+  it("gives the page a fixed refusal, never the worker's own words", () => {
+    expect(
+      passkeyPageResult({ success: false, error: 'failed to decrypt vault', code: 'failed' }),
+    ).toEqual({ success: false, code: 'failed' });
+    expect(passkeyPageResult({ success: false, error: 'rpId does not match origin' })).toEqual({
+      success: false,
+    });
+    expect(passkeyPageResult({ success: false, error: 'x', code: 'no-wallet' })).toEqual({
+      success: false,
+    });
+    // the window-closed sweep's shape
+    expect(passkeyPageResult({ success: false, error: 'cancelled', cancelled: true })).toEqual({
+      success: false,
+      code: 'cancelled',
+    });
+    expect(passkeyPageResult(undefined)).toBeUndefined();
+  });
+
+  it('passes only the credential fields on success', () => {
+    expect(
+      passkeyPageResult({ success: true, credentialId: 'ab', signature: 'cd', secret: 'x' }),
+    ).toEqual({ success: true, credentialId: 'ab', signature: 'cd' });
   });
 });
 

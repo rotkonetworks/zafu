@@ -111,6 +111,41 @@ export const passkeyMessage = (
   };
 };
 
+/** the refusal codes a page may see; anything else becomes a bare refusal */
+const PAGE_CODES = new Set(['failed', 'cancelled', 'denied', 'exists']);
+
+/**
+ * What the page gets back: on success only the credential fields, on refusal
+ * only `{ success: false }` and one fixed code - never the worker's own words.
+ */
+export const passkeyPageResult = (res: unknown): Record<string, unknown> | undefined => {
+  if (typeof res !== 'object' || res === null) {
+    return undefined;
+  }
+  const r = res as Record<string, unknown>;
+  if (r['success'] === true) {
+    const { credentialId, authenticatorData, publicKey, signature, userHandle } = r;
+    const { prfEnabled, prfResults } = r;
+    return {
+      success: true,
+      credentialId,
+      authenticatorData,
+      publicKey,
+      signature,
+      userHandle,
+      prfEnabled,
+      prfResults,
+    };
+  }
+  const code =
+    typeof r['code'] === 'string' && PAGE_CODES.has(r['code'])
+      ? r['code']
+      : r['cancelled'] === true
+        ? 'cancelled'
+        : undefined;
+  return code ? { success: false, code } : { success: false };
+};
+
 /**
  * After "not now" or a closed window a page waits before zafu shows it another
  * passkey screen: 30 s, then twice as long each time, back to 30 s after a

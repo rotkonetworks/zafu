@@ -16,7 +16,7 @@
 // egress guard first: nothing may capture fetch or open a socket before it
 import '../net/egress-install-lite';
 
-import { passkeyMessage, promptCooldown } from './passkey-wire';
+import { passkeyMessage, passkeyPageResult, promptCooldown } from './passkey-wire';
 
 const CHANNEL = 'zafu-passkey';
 
@@ -64,8 +64,9 @@ window.addEventListener('message', (ev: MessageEvent) => {
   chrome.runtime
     .sendMessage(message)
     .then((res: unknown) => {
-      cooldown.after(res, Date.now());
-      respond(res);
+      const result = passkeyPageResult(res);
+      cooldown.after(result, Date.now());
+      respond(result);
     })
     .catch(() => respond(undefined));
 });
