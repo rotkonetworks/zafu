@@ -173,7 +173,6 @@ describe('swap', () => {
       'zafu:swap?from=zec&to=sol',
       'zafu:swap?from=btc&to=zec&chain=btc&amount=0.1&refund=bc1qexampleaddr&xc=thor',
       'zafu:swap?from=zec&to=usdc&xc=near',
-      'zafu:swap?from=zec&to=dash&chain=dash&amount=1&dest=XuCBuAK9H5SDfXCR97XWk55yxHF6UovqSR&xc=maya',
     ]) {
       expect(toUri(intent(uri))).toBe(uri);
     }
@@ -202,12 +201,8 @@ describe('swap', () => {
     expect(later('zafu:swap?from=usdc&to=zec&xc=thor')).toMatch(/contract call/);
     expect(later('zafu:swap?from=btc&to=zec&xc=thor')).toBeUndefined();
     expect(later('zafu:swap?from=zec&to=sol&xc=near')).toBeUndefined();
-    // maya is off: its links still open the router, which says so in one line
-    expect(intent('zafu:swap?from=btc&to=zec&xc=maya')).toEqual({
-      kind: 'swap',
-      swap: { direction: 'into_zec', token: 'btc', route: 'maya' },
-    });
-    expect(later('zafu:swap?from=zec&to=doge&xc=maya')).toBeUndefined();
+    // maya was removed: an old link naming it is a route zafu doesn't know
+    expect(reason('zafu:swap?from=btc&to=zec&xc=maya')).toMatch(/route zafu doesn't know/);
   });
 });
 

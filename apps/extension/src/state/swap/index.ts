@@ -2,7 +2,6 @@
 
 import { nearProvider } from './near';
 import { thorProvider } from './thor';
-import { mayaProvider } from './maya';
 import type { SwapProvider, SwapToken } from './provider';
 import type { RouteId } from './routes';
 
@@ -10,7 +9,6 @@ import type { RouteId } from './routes';
 export const PROVIDERS: Partial<Record<RouteId, SwapProvider>> = {
   near: nearProvider,
   thor: thorProvider,
-  maya: mayaProvider,
 };
 
 /** the picker's tokens across routes, one per symbol and chain, near's first */

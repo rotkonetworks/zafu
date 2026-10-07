@@ -183,6 +183,18 @@ describe('optional services', () => {
     expect(outcome(inputs, 'https://license.zafu.pro/license')).toBe('opt-in');
     expect(describeEgress(inputs).some(d => d.id === 'license')).toBe(false);
   });
+
+  it('ignore an opt-in for a destination since removed (maya)', () => {
+    const inputs: EgressInputs = {
+      ...ZCASH_ONLY,
+      netEgress: { optIns: { mayachain: 'allowed', 'near-swap': 'allowed' } },
+    };
+    expect(outcome(inputs, 'https://mayanode.mayachain.info/mayachain/inbound_addresses')).toBe(
+      'unknown',
+    );
+    expect(outcome(inputs, 'https://1click.chaindefuser.com/v0/tokens')).toBe('allow');
+    expect(describeEgress(inputs).some(d => d.id === 'mayachain')).toBe(false);
+  });
 });
 
 describe('the user always has the last word', () => {

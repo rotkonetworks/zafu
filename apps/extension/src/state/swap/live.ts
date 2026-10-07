@@ -14,7 +14,7 @@ import { NEAR_QUOTE_WAIT_MS } from '../near-swap';
 import { PROVIDERS } from '.';
 import { quoteRoute } from './market';
 import { fromUnits, toUnits, type Quote, type QuoteRequest, type SwapToken } from './provider';
-import { OFFERED, ROUTES, type RouteId, type SwapPair } from './routes';
+import { ROUTE_IDS, ROUTES, type RouteId, type SwapPair } from './routes';
 
 export const DEBOUNCE_MS = 400;
 
@@ -22,7 +22,6 @@ export const DEBOUNCE_MS = 400;
 export const WAIT: Partial<Record<RouteId, { after: number; over: number }>> = {
   near: { after: 0, over: NEAR_QUOTE_WAIT_MS },
   thor: { after: 300, over: 1_700 },
-  maya: { after: 300, over: 1_700 },
 };
 
 /** the header's one quiet line as answers come in: who is asked, who answered, how many to choose from */
@@ -44,8 +43,8 @@ export const quoteStatus = (
 export const REFRESH_MS = 30_000;
 const LEAD_MS = 15_000;
 
-/** the routes zafu offers that have an implementation */
-export const QUOTABLE = OFFERED.filter(id => PROVIDERS[id]);
+/** the routes that have an implementation */
+export const QUOTABLE = ROUTE_IDS.filter(id => PROVIDERS[id]);
 
 /** everything a swap talks to: asked together, once, when the swap first opens */
 export const SWAP_EGRESS = QUOTABLE.map(id => ROUTES[id].egress);
@@ -75,7 +74,7 @@ export const gates = (
   views: readonly DestinationView[],
   pinned?: RouteId,
 ): Gate[] =>
-  (pinned && !ROUTES[pinned].off ? [pinned] : QUOTABLE).map(route => {
+  (pinned ? [pinned] : QUOTABLE).map(route => {
     const refused = ROUTES[route].refuses(pair);
     const view = views.find(d => d.id === ROUTES[route].egress);
     return refused

@@ -99,6 +99,7 @@ import {
 import { NeedsRefundAddress } from '../../../state/swap/near';
 import {
   asksCustody,
+  isRouteId,
   pairKey,
   ROUTES,
   routeLabel,
@@ -198,11 +199,6 @@ const NOTE: Record<RouteId, Record<SwapPair['direction'], string>> = {
   thor: {
     into_zec:
       "thorchain pays transparent addresses only. the zec lands at this swap's own t-address, ready to shield.",
-    from_zec: 'leaves the shielded pool through your transparent address. that step is public.',
-  },
-  maya: {
-    into_zec:
-      "maya can't pay zafu's shielded address yet, so the zec lands at this swap's own t-address.",
     from_zec: 'leaves the shielded pool through your transparent address. that step is public.',
   },
   penumbra: { into_zec: '', from_zec: '' },
@@ -523,7 +519,8 @@ const zecOf = (zat: string | bigint) => fromUnits(BigInt(zat), 8);
 /** the custodial routes the person acknowledged, each once */
 const custodyAckQuery = queryOptions({
   queryKey: ['swapCustodyAck'],
-  queryFn: async (): Promise<RouteId[]> => (await localExtStorage.get('swapCustodyAck')) ?? [],
+  queryFn: async (): Promise<RouteId[]> =>
+    ((await localExtStorage.get('swapCustodyAck')) ?? []).filter(isRouteId),
 });
 
 /** where a remembered swap reopens */
@@ -579,9 +576,7 @@ export const CrosschainSwap = ({
     }
   }, []);
 
-  // a link to a route zafu doesn't offer opens the normal router, with that one line
-  const off = link?.link.route && ROUTES[link.link.route].off;
-  const pinned = off ? undefined : link?.link.route;
+  const pinned = link?.link.route;
   const [step, setStep] = useState<Step>('input');
   // what the user chose; anything left undefined is derived from defaults below
   const [pickedDirection, setDirection] = useState(link?.link.direction);
@@ -1297,8 +1292,7 @@ export const CrosschainSwap = ({
       error ??
       pinnedRefusal ??
       (overMax ? `${fromUnits(maxZat, 8)} zec can be sent` : undefined) ??
-      (quote ? undefined : below?.message) ??
-      (off || undefined);
+      (quote ? undefined : below?.message);
     return (
       <div
         className='flex h-full flex-col bg-canvas'
@@ -1336,7 +1330,7 @@ export const CrosschainSwap = ({
               onUnit={isFromZec ? undefined : () => setPickerOpen(true)}
               available={isFromZec ? balanceZec : undefined}
               helper={helper}
-              warn={!!helper && helper !== off}
+              warn={!!helper}
             />
             {quick.length > 0 && (
               <div className='-mt-1 flex justify-end gap-1.5'>
