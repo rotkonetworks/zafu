@@ -258,18 +258,19 @@ describe('edges', () => {
     expect(outcome({}, 'http://localhost:8787/zafu/ota/v1/stream')).toBe('allow');
   });
 
-  it('nothing is on with nothing enabled, but private contact discovery', () => {
+  // nym is on, but only the nym worker reaches it, and only when a send needs it
+  it('nothing is on with nothing enabled, but private contact discovery and nym', () => {
     expect(outcome({}, 'https://zcash.rotko.net/x')).toBe('network-off');
     expect(
       describeEgress({})
         .filter(d => d.on)
         .map(d => d.id),
-    ).toEqual(['custom-networks', 'contact-discovery']);
+    ).toEqual(['custom-networks', 'contact-discovery', 'nym']);
     expect(
       describeEgress({ zidDiscovery: { enabled: false } })
         .filter(d => d.on)
         .map(d => d.id),
-    ).toEqual(['custom-networks']);
+    ).toEqual(['custom-networks', 'nym']);
   });
 
   it('names the destination on a refusal, so the ui can offer to allow it', () => {
@@ -421,5 +422,77 @@ describe('two optional services on one url', () => {
     const zcash = describeEgress(i).find(d => d.id === 'zcash-servers');
     const light = describeEgress(i).find(d => d.id === 'zcash');
     expect(light?.hosts.every(h => !zcash?.hosts.includes(h))).toBe(true);
+  });
+});
+
+describe('send over nym: the transport is chosen per request class', () => {
+  const nymOf = (inputs: EgressInputs, url: string, realm: EgressRealm = 'worker') => {
+    const d = decide(inputs, url, realm);
+    return d.allow ? (d.nym ?? 'direct') : d.reason;
+  };
+  const NYM_OFF: EgressInputs = { ...ZCASH_ONLY, netEgress: { optIns: { nym: 'blocked' } } };
+
+  it('sends and looks up your own transactions over nym, and syncs directly', () => {
+    const rows: [string, string][] = [
+      ['https://zcash.rotko.net/zidecar.v1.Zidecar/SendTransaction', 'broadcast'],
+      [
+        'https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/SendTransaction',
+        'broadcast',
+      ],
+      ['https://zcash.rotko.net/zidecar.v1.Zidecar/GetTransaction', 'own-tx'],
+      ['https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetTransaction', 'own-tx'],
+      ['https://zcash.rotko.net/zidecar.v1.Zidecar/GetCompactBlocks', 'direct'],
+      ['https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetBlockRange', 'direct'],
+      ['https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetLightdInfo', 'direct'],
+      // a sibling method is not the class
+      ['https://zcash.rotko.net/zidecar.v1.Zidecar/GetBlockTransactions', 'direct'],
+    ];
+    for (const [url, expected] of rows) {
+      expect([url, nymOf(ZCASH_ONLY, url)]).toEqual([url, expected]);
+    }
+  });
+
+  it('is on by default and off when the person turns it off', () => {
+    expect(compileEgress(ZCASH_ONLY).nym).toBe(true);
+    expect(compileEgress(NYM_OFF).nym).toBe(false);
+    expect(nymOf(NYM_OFF, 'https://zcash.rotko.net/zidecar.v1.Zidecar/SendTransaction')).toBe(
+      'direct',
+    );
+  });
+
+  it('follows the configured endpoint and its path', () => {
+    const inputs = { ...ZCASH_ONLY, networkEndpoints: { zcash: 'https://node.example/lwd' } };
+    expect(
+      nymOf(
+        inputs,
+        'https://node.example/lwd/cash.z.wallet.sdk.rpc.CompactTxStreamer/SendTransaction',
+      ),
+    ).toBe('broadcast');
+  });
+
+  it('keeps a node on a port nym cannot exit to direct, rather than unreachable', () => {
+    const inputs = { ...ZCASH_ONLY, networkEndpoints: { zcash: 'https://node.example:9067' } };
+    expect(
+      nymOf(
+        inputs,
+        'https://node.example:9067/cash.z.wallet.sdk.rpc.CompactTxStreamer/SendTransaction',
+      ),
+    ).toBe('direct');
+  });
+
+  it("gives nym's directory and gateways to the nym worker only, and nothing else to it", () => {
+    for (const url of ['https://validator.nymtech.net/api/v1/x', 'wss://gw.example.org:9001/']) {
+      expect(outcome(ZCASH_ONLY, url, 'nym')).toBe('allow');
+      expect(outcome(ZCASH_ONLY, url, 'worker')).toBe('unknown');
+      expect(outcome(ZCASH_ONLY, url, 'popup')).toBe('unknown');
+    }
+    // its hardcoded fallbacks, and every other destination, are refused there
+    expect(outcome(ZCASH_ONLY, 'https://nymvpn.com/api/x', 'nym')).toBe('unknown');
+    expect(outcome(ZCASH_ONLY, 'wss://gw.example.org:9000/', 'nym')).toBe('unknown');
+    expect(outcome(ZCASH_ONLY, 'https://zcash.rotko.net/zidecar.v1.Zidecar/GetTip', 'nym')).toBe(
+      'unknown',
+    );
+    // turned off, the nym worker reaches nothing
+    expect(outcome(NYM_OFF, 'https://validator.nymtech.net/api/v1/x', 'nym')).toBe('blocked');
   });
 });
