@@ -10,6 +10,7 @@
  */
 import { sha256 } from '@noble/hashes/sha2';
 import { keccak_256 } from '@noble/hashes/sha3';
+import { orchardReceiverOf } from '@repo/wallet/networks/zcash/unified-address';
 import type { ContactAddress, ContactNetwork } from '../state/contacts';
 
 export type AddressChain = ContactNetwork;
@@ -242,6 +243,83 @@ const ZCASH_SHIELDED = new RegExp(`^(u1${BECH32}{60,}|zs1${BECH32}{70,})$`);
 const ZCASH_TRANSPARENT = /^t[13][1-9A-HJ-NP-Za-km-z]{33}$/;
 const ZCASH_TEX = new RegExp(`^tex1${BECH32}{30,}$`);
 const PENUMBRA = new RegExp(`^penumbra(compat)?1${BECH32}{50,}$`);
+
+// --- zcash, decoded: checksum, receivers and network ---
+
+export interface ZcashAddress {
+  pool: 'shielded' | 'transparent' | 'tex';
+  mainnet: boolean;
+}
+
+/** base58check t-address version bytes: true mainnet, false testnet */
+const T_VERSION: Record<number, boolean> = {
+  0x1cb8: true,
+  0x1cbd: true,
+  0x1d25: false,
+  0x1cba: false,
+};
+
+/** a unified address zafu can pay: it must carry an orchard receiver */
+const unifiedAddress = (s: string): ZcashAddress | undefined => {
+  const hrp = s.slice(0, s.lastIndexOf('1')).toLowerCase();
+  return /^u(test|regtest)?$/.test(hrp) && orchardReceiverOf(s)
+    ? { pool: 'shielded', mainnet: hrp === 'u' }
+    : undefined;
+};
+
+/** ZIP 320: bech32m over a 20-byte key hash */
+const texAddress = (s: string): ZcashAddress | undefined => {
+  const d = bech32(s);
+  return d?.spec === 'bech32m' &&
+    (d.hrp === 'tex' || d.hrp === 'textest') &&
+    fromWords(d.words)?.length === 20
+    ? { pool: 'tex', mainnet: d.hrp === 'tex' }
+    : undefined;
+};
+
+/** 2 version bytes, a 20-byte hash and a 4-byte double-sha256 checksum */
+const transparentAddress = (s: string): ZcashAddress | undefined => {
+  const b = base58(s);
+  if (b?.length !== 26) {
+    return undefined;
+  }
+  const sum = sha256(sha256(b.subarray(0, 22)));
+  const mainnet = T_VERSION[(b[0]! << 8) | b[1]!];
+  return mainnet !== undefined && sum.subarray(0, 4).every((v, i) => v === b[22 + i])
+    ? { pool: 'transparent', mainnet }
+    : undefined;
+};
+
+/** a zcash address zafu can pay, decoded for real; undefined for anything else */
+export const zcashAddressOf = (raw: string): ZcashAddress | undefined => {
+  const s = raw.trim();
+  return unifiedAddress(s) ?? texAddress(s) ?? transparentAddress(s);
+};
+
+/**
+ * Why the zcash send cannot pay `raw`, said calmly; undefined when it can.
+ * A tex address takes transparent inputs only (ZIP 320), so it is payable
+ * only from a transparent account.
+ */
+export const zcashPayRefusal = (
+  raw: string,
+  mainnet: boolean,
+  fromTransparent: boolean,
+): string | undefined => {
+  const a = zcashAddressOf(raw);
+  if (!a) {
+    return "that address doesn't look right · please check it";
+  }
+  if (a.mainnet !== mainnet) {
+    return a.mainnet
+      ? "that's a mainnet address · this wallet is on testnet"
+      : "that's a testnet address · this wallet is on mainnet";
+  }
+  if (a.pool === 'tex' && !fromTransparent) {
+    return 'a tex address takes public zec only · please ask for a u1 or t1 address';
+  }
+  return undefined;
+};
 
 /**
  * What `raw` is. With a `chain`, an address on another chain is still named

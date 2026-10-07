@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { sha256 } from '@noble/hashes/sha2';
+import { deriveZcashTransparentAddress } from '@repo/wallet/networks/zcash/derive';
+import { encodeUnifiedItems, fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import {
   addressKind,
   addressLabel,
@@ -7,6 +12,8 @@ import {
   isAddressOn,
   isRealAddress,
   refusalOf,
+  zcashAddressOf,
+  zcashPayRefusal,
 } from './kind';
 
 const UA = 'u1' + 'q'.repeat(100);
@@ -167,5 +174,108 @@ describe('saved contact addresses', () => {
   it('keep a near implicit account saved under near', () => {
     expect(effectiveNetwork({ network: 'near', address: ZID })).toBe('near');
     expect(effectiveNetwork({ network: 'zcash', address: ZID })).toBeUndefined();
+  });
+});
+
+describe('the zcash send recipient, decoded for real', () => {
+  const SEED =
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+  const TEX = 'tex1zclnr35llscdedzrwdmemm70es05ngg9m2d3lv';
+  const BAD = "that address doesn't look right · please check it";
+  const TESTNET_ON_MAIN = "that's a testnet address · this wallet is on mainnet";
+  const MAIN_ON_TESTNET = "that's a mainnet address · this wallet is on testnet";
+  let u1 = '';
+  let utest1 = '';
+
+  beforeAll(async () => {
+    const wasm = (await import('@repo/zcash-wasm')) as unknown as {
+      initSync(opts: { module: Uint8Array }): void;
+      WalletKeys: new (seed: string) => {
+        get_receiving_address(mainnet: boolean): string;
+        free(): void;
+      };
+    };
+    // vitest runs from apps/extension
+    wasm.initSync({
+      module: readFileSync(resolve(process.cwd(), '../../packages/zcash-wasm/zafu_wasm_bg.wasm')),
+    });
+    const keys = new wasm.WalletKeys(SEED);
+    u1 = fixOrchardAddress(keys.get_receiving_address(true), true);
+    utest1 = fixOrchardAddress(keys.get_receiving_address(false), false);
+    keys.free();
+  });
+
+  /** a base58check t-address with these version bytes over a fixed hash */
+  const tAddress = (version: [number, number]) => {
+    const body = Uint8Array.from([...version, ...new Array<number>(20).fill(7)]);
+    const full = Uint8Array.from([...body, ...sha256(sha256(body)).slice(0, 4)]);
+    let n = full.reduce((acc, b) => acc * 256n + BigInt(b), 0n);
+    let out = '';
+    for (; n > 0n; n /= 58n) {
+      out = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'[Number(n % 58n)] + out;
+    }
+    return out;
+  };
+  const flipLast = (s: string) => s.slice(0, -1) + (s.endsWith('q') ? 'p' : 'q');
+  const t1 = deriveZcashTransparentAddress(SEED, 0, 0, true);
+  const tm = deriveZcashTransparentAddress(SEED, 0, 0, false);
+  const t3 = tAddress([0x1c, 0xbd]);
+
+  it('pays good u1, t1, t3 and tex addresses on mainnet', () => {
+    expect(u1).toMatch(/^u1/);
+    expect(t1).toMatch(/^t1/);
+    expect(t3).toMatch(/^t3/);
+    expect(zcashAddressOf(u1)).toEqual({ pool: 'shielded', mainnet: true });
+    expect(zcashAddressOf(t1)).toEqual({ pool: 'transparent', mainnet: true });
+    expect(zcashAddressOf(t3)).toEqual({ pool: 'transparent', mainnet: true });
+    expect(zcashAddressOf(TEX)).toEqual({ pool: 'tex', mainnet: true });
+    for (const a of [u1, t1, t3]) {
+      expect(zcashPayRefusal(a, true, false)).toBeUndefined();
+    }
+  });
+
+  it('refuses a bad checksum, though the prefix looks right', () => {
+    for (const a of [flipLast(u1), flipLast(t1), flipLast(t3), flipLast(TEX)]) {
+      expect(zcashAddressOf(a)).toBeUndefined();
+      expect(zcashPayRefusal(a, true, true)).toBe(BAD);
+    }
+    expect(zcashPayRefusal('t1' + 'a'.repeat(33), true, false)).toBe(BAD);
+    expect(zcashPayRefusal('u1' + 'q'.repeat(100), true, false)).toBe(BAD);
+  });
+
+  it('refuses a unified address with no orchard receiver to pay', () => {
+    // sapling + p2pkh: well formed, nothing zafu pays
+    const noOrchard = encodeUnifiedItems(
+      [
+        { typecode: 0x00, bytes: new Uint8Array(20).fill(7) },
+        { typecode: 0x02, bytes: new Uint8Array(43).fill(9) },
+      ],
+      'u',
+    );
+    expect(noOrchard).toMatch(/^u1/);
+    expect(zcashPayRefusal(noOrchard, true, false)).toBe(BAD);
+  });
+
+  it('a testnet address on mainnet says so', () => {
+    expect(utest1).toMatch(/^utest1/);
+    expect(tm).toMatch(/^tm/);
+    expect(zcashPayRefusal(utest1, true, false)).toBe(TESTNET_ON_MAIN);
+    expect(zcashPayRefusal(tm, true, false)).toBe(TESTNET_ON_MAIN);
+    expect(zcashPayRefusal(tAddress([0x1c, 0xba]), true, false)).toBe(TESTNET_ON_MAIN);
+  });
+
+  it('a mainnet address on testnet says so', () => {
+    for (const a of [u1, t1, t3, TEX]) {
+      expect(zcashPayRefusal(a, false, true)).toBe(MAIN_ON_TESTNET);
+    }
+    expect(zcashPayRefusal(utest1, false, false)).toBeUndefined();
+    expect(zcashPayRefusal(tm, false, false)).toBeUndefined();
+  });
+
+  it('pays a tex address only from transparent funds (ZIP 320)', () => {
+    expect(zcashPayRefusal(TEX, true, true)).toBeUndefined();
+    expect(zcashPayRefusal(TEX, true, false)).toBe(
+      'a tex address takes public zec only · please ask for a u1 or t1 address',
+    );
   });
 });

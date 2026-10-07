@@ -84,6 +84,7 @@ import { PopupPath } from '../paths';
 import { formatZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import { looksLikeLink, notYet, parseLink } from '../../../links/router';
 import { viaLine } from '../../../links/land';
+import { zcashAddressOf, zcashPayRefusal } from '../../../addresses/kind';
 import {
   Done,
   Footer,
@@ -93,7 +94,6 @@ import {
   Sending,
   Stopped,
   Strip,
-  isTransparentAddress,
   shortAddress,
   stepMeta,
   type SendingNote,
@@ -522,7 +522,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     }
   }, [step, recipient, findByAddress, markAddressUsed, pickedContact]);
 
-  const recipientIsTransparent = isTransparentAddress(recipient);
+  const recipientPool = zcashAddressOf(recipient)?.pool;
+  const recipientIsTransparent = recipientPool === 'transparent' || recipientPool === 'tex';
   // The real max: spends every note in the pool, priced with the ZIP-317 fee
   // that transaction would actually pay. Recomputed when the recipient type
   // changes, because a transparent output is priced differently.
@@ -548,19 +549,19 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     });
   }, [amount, spendableNotes, recipientIsTransparent, notesLoaded]);
 
-  // What the form says about the recipient and the amount, derived as typed.
-  // `tm`/`t2` are the testnet transparent prefixes; `utest1` the testnet
-  // unified one. Sapling (zs) is not a supported recipient.
+  // What the form says about the recipient and the amount, derived as typed:
+  // decoded for this wallet's network before review, never by its prefix
   const to = recipient.trim();
-  const toValid = /^(u1|utest1|t1|t3|tm|t2)/.test(to);
+  const toRefusal = zcashPayRefusal(to, mainnet, kind === 'ledger-transparent');
+  const toValid = !!to && !toRefusal;
   const toName =
     recipientContact?.contact.name ??
     (resolvedProfile?.address === to ? zcashMeLabel(resolvedProfile) : undefined);
   const toLabel = toName ?? shortAddress(to);
   const toHelper: [warn: boolean, text: string] = requestError
     ? [true, requestError]
-    : to && !toValid && !parseZcashMeHandle(to)
-      ? [true, 'please check the address · zafu pays u1 and t1 addresses']
+    : to && toRefusal && !parseZcashMeHandle(to)
+      ? [true, toRefusal]
       : toValid
         ? [
             false,
