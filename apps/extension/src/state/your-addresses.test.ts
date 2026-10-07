@@ -68,7 +68,7 @@ describe('yours: your own addresses on other chains', () => {
     await rememberYourAddress({ owner: 'zid-a', chain: 'base', address: ETH });
     const before = await readYourAddresses();
     const backup = await useStore.getState().contacts.exportPersonalData('backup-pass');
-    await clearPersonalData({ notes: false, sent: false });
+    await clearPersonalData({ notes: false, sent: false, logins: false, addresses: true });
     expect(localMock.has('yourAddresses')).toBe(false);
 
     await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');

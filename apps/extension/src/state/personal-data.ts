@@ -126,10 +126,15 @@ export interface ClearPersonalDataOptions {
   notes: boolean;
   /** wipe local send history */
   sent: boolean;
+  /** wipe the passwords tool's saved logins (never passwords, only what fills the
+   *  form) and which wallet made which passkey */
+  logins: boolean;
+  /** wipe your own addresses on other chains */
+  addresses: boolean;
 }
 
 /**
- * Clear the notes + send-history parts of personal data. Contacts are cleared
+ * Clear the parts of personal data `opts` names, and only those. Contacts are cleared
  * separately by the caller (contactsSlice.clearAll) since they live in their
  * own store. This never touches the sync cache.
  */
@@ -140,10 +145,12 @@ export const clearPersonalData = async (opts: ClearPersonalDataOptions): Promise
   if (opts.sent) {
     await clearSentStore();
   }
-  // saved logins (never passwords, only what fills the form), which wallet
-  // made which passkey, and your own addresses on other chains are personal
-  // data too
-  await chrome.storage.local.remove(['passwordLogins', 'passkeyGrants', 'yourAddresses']);
+  if (opts.logins) {
+    await chrome.storage.local.remove(['passwordLogins', 'passkeyGrants']);
+  }
+  if (opts.addresses) {
+    await chrome.storage.local.remove('yourAddresses');
+  }
 };
 
 /** Read all per-tx notes (for backup/export). */

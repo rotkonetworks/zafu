@@ -5,8 +5,7 @@ import {
 } from '../../../message/services';
 import { useStore } from '../../../state';
 import { selectEnabledNetworks, selectKeyInfos } from '../../../state/keyring';
-import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
-import { selectZcashWallets, selectPenumbraWallets } from '../../../state/wallets';
+import { selectPenumbraWallets } from '../../../state/wallets';
 import { clearPersonalData } from '../../../state/personal-data';
 import { useState, useEffect } from 'react';
 import { SettingsScreen } from './settings-screen';
@@ -29,7 +28,6 @@ const TYPE_ORDER = ['mnemonic', 'zigner-zafu', 'frost-multisig'] as const;
 
 export const SettingsClearCache = () => {
   const keyInfos = useStore(selectKeyInfos);
-  const zcashWallets = useStore(selectZcashWallets);
   const penumbraWallets = useStore(selectPenumbraWallets);
   const enabledNetworks = useStore(selectEnabledNetworks);
   const clearContacts = useStore(s => s.contacts.clearAll);
@@ -40,7 +38,7 @@ export const SettingsClearCache = () => {
   const handleClearPersonal = async () => {
     setPersonalStep('clearing');
     try {
-      await clearPersonalData({ notes: true, sent: true });
+      await clearPersonalData({ notes: true, sent: true, logins: true, addresses: true });
       await clearContacts();
       setPersonalStep('done');
     } catch (e) {
@@ -92,7 +90,13 @@ export const SettingsClearCache = () => {
   const grouped = TYPE_ORDER.map(type => ({
     type,
     label: TYPE_LABELS[type] ?? type,
-    vaults: keyInfos.filter(k => k.type === type),
+    // zcash resyncs from settings - networks - zcash; only penumbra resyncs here
+    vaults: keyInfos.filter(
+      k =>
+        k.type === type &&
+        enabledNetworks.includes('penumbra') &&
+        (penumbraWallets.some(w => w.vaultId === k.id) || k.type === 'mnemonic'),
+    ),
   })).filter(g => g.vaults.length > 0);
 
   return (
@@ -129,41 +133,21 @@ export const SettingsClearCache = () => {
               <div key={g.type}>
                 <p className='kicker mb-2'>{g.label}</p>
                 <div className='flex flex-col divide-y divide-border/40 border border-border-soft bg-elev-1'>
-                  {g.vaults.map(v => {
-                    const hasZcash =
-                      enabledNetworks.includes('zcash') &&
-                      (zcashWallets.some(w => w.vaultId === v.id) ||
-                        (v.type === 'mnemonic' && keyInfoSupportsNetwork(v, 'zcash')));
-                    const hasPenumbra =
-                      enabledNetworks.includes('penumbra') &&
-                      (penumbraWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic');
-                    if (!hasZcash && !hasPenumbra) {
-                      return null;
-                    }
-
-                    return (
-                      <div key={v.id} className='px-3 py-2.5'>
-                        <p className='text-sm truncate'>{v.name}</p>
-                        {hasZcash && (
-                          <p className='text-label text-fg-dim mt-1'>
-                            zcash resync moved to settings - networks - zcash
-                          </p>
-                        )}
-                        {hasPenumbra && (
-                          <div className='flex gap-2 mt-1.5'>
-                            <button
-                              disabled={clearingState.inProgress}
-                              onClick={() => handleClearPenumbra(v)}
-                              className='border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
-                              title='reloads the extension when done'
-                            >
-                              resync penumbra - reloads the extension
-                            </button>
-                          </div>
-                        )}
+                  {g.vaults.map(v => (
+                    <div key={v.id} className='px-3 py-2.5'>
+                      <p className='text-sm truncate'>{v.name}</p>
+                      <div className='flex gap-2 mt-1.5'>
+                        <button
+                          disabled={clearingState.inProgress}
+                          onClick={() => handleClearPenumbra(v)}
+                          className='border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
+                          title='reloads the extension when done'
+                        >
+                          resync penumbra - reloads the extension
+                        </button>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
