@@ -13,6 +13,7 @@ import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-er
 import { noteContextInvalidated } from '../utils/reload-notice';
 import { AppErrorBoundary, reportRenderError } from '../components/error-boundary';
 import { EgressAskSheet } from '../net/egress-ask-sheet';
+import { NymHeldSheet } from '../net/nym-held-sheet';
 import { installRegistryIcons } from '../shared/components/registry-icons';
 import { announceUiOpenPresence } from '../state/ui-open-presence';
 import { trackActivity } from '../state/idle-activity';
@@ -77,6 +78,7 @@ const MainPage = () => {
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={pageRouter} />
         <EgressAskSheet />
+        <NymHeldSheet />
       </QueryClientProvider>
     </StrictMode>
   );
