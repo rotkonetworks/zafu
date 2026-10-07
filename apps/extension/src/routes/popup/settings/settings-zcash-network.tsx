@@ -13,6 +13,7 @@ import {
 } from '../../../components/zcash/sync-status';
 import { ZCASH_MAINNET_ENDPOINTS, findPresetByUrl } from '../../../config/zcash-endpoints';
 import { measurePresetLatencies } from '../../../state/keyring/endpoint-latency';
+import { nodeLabel } from '../../../state/keyring/node-info';
 import { hostOf } from '../../../net/destination';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
@@ -31,6 +32,14 @@ import { BUNDLED_SERVICE_CONFIG } from '../../../services/voting/bundled-config'
 import { usePopupNav } from '../../../utils/navigate';
 
 type Explain = (id: ExplainId) => { onExplain?: (label: string) => void };
+
+/** why the chain is not verified, in words (fly-verify.ts ChainCheck reasons) */
+const UNVERIFIED_REASON: Record<string, string> = {
+  testnet: 'testnet · chain proofs are mainnet only',
+  lightwalletd: "chain not verified · this node can't prove it",
+  unreachable: "chain not verified · the node's proof didn't arrive",
+  clock: "this computer's clock looks off",
+};
 
 /** the wallet's stored birthday (an external system, read once per wallet) */
 const useBirthday = (vaultId: string | undefined) => {
@@ -236,6 +245,7 @@ const ZcashOn = () => {
   const [birthday, setBirthday] = useBirthday(vaultId);
   const chain = useZcashChainCheck();
   const paused = chain?.status === 'failed';
+  const node = chain?.node;
 
   const [params] = useSearchParams();
   const [sheet, setSheet] = useState<'start' | 'date' | 'node' | null>(() =>
@@ -245,6 +255,9 @@ const ZcashOn = () => {
   const [resyncing, setResyncing] = useState(false);
   const fromDate = rescanHeightOf(date);
   const { explainProps, sheet: explainSheet } = useExplain();
+  // a row whose tap has nothing else to open shows its explanation
+  const openExplain = (id: Parameters<typeof explainProps>[0], label: string) =>
+    (explainProps(id) as { onExplain?: (l: string) => void }).onExplain?.(label);
 
   const rescan = async (h: number) => {
     setSheet(null);
@@ -319,15 +332,52 @@ const ZcashOn = () => {
           <Row
             type='value'
             label='node'
-            description={
-              !preset && endpoint
-                ? 'your own node · it sees your ip and what you sync'
-                : 'it sees your ip and what you sync'
-            }
+            description={[
+              !preset && endpoint && 'your own node',
+              chain?.status === 'checked'
+                ? `chain checked against zcash's proof of work${chain.tip ? ` to block ${chain.tip.toLocaleString()}` : ''}`
+                : chain?.status === 'failed'
+                  ? "this server's chain didn't check out"
+                  : (chain?.reason && UNVERIFIED_REASON[chain.reason]) || 'chain not verified',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
             value={preset?.label ?? ((endpoint && hostOf(endpoint)) || 'auto')}
             onPress={() => setSheet('node')}
             {...explainProps('network.zcashNode')}
           />
+          {node && (
+            <Row
+              type='value'
+              label='server'
+              description={[node.fullNode && `on ${node.fullNode}`, node.codeUrl && 'tap to read its code']
+                .filter(Boolean)
+                .join(' · ')}
+              value={nodeLabel(node)}
+              onPress={() =>
+                node.codeUrl
+                  ? void chrome.tabs.create({ url: node.codeUrl })
+                  : openExplain('network.zcashServer', 'server')
+              }
+              {...explainProps('network.zcashServer')}
+            />
+          )}
+          {node && (
+            <Row
+              type='value'
+              label='connection'
+              description={
+                node.protocol === 'HTTP/3'
+                  ? 'quic · every packet encrypted · forward secret'
+                  : node.protocol
+                    ? 'tls · forward secret'
+                    : 'measured on the next sync'
+              }
+              value={node.protocol ?? '-'}
+              onPress={() => openExplain('network.zcashConnection', 'connection')}
+              {...explainProps('network.zcashConnection')}
+            />
+          )}
           <Row
             type='value'
             label='starts from'

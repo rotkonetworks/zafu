@@ -63,6 +63,7 @@ import {
   type TreeWrite,
 } from './note-trees';
 import { ironwoodBranchRefusal } from './branch-ids';
+import { describeNode, measuredProtocol, type NodeInfo } from '../state/keyring/node-info';
 import type { ZcashChainCheck } from '../state/keyring/network-worker';
 import {
   checkChain,
@@ -2816,6 +2817,8 @@ const syncLoop = async (
   let proofThisRun = false;
   /** the run's last chain check, as the page stores it */
   let chainRecord: ZcashChainCheck | undefined;
+  /** what the node said it is in this run's GetLightdInfo, shown beside the chain check */
+  let nodeInfo: NodeInfo | undefined;
   /** proven roots not yet compared with the trees */
   let proven: ProvenChain | undefined;
   let readBlocks = false;
@@ -2837,6 +2840,7 @@ const syncLoop = async (
     chainRecord = {
       serverUrl,
       status: check.status,
+      ...(nodeInfo && { node: nodeInfo }),
       ...(check.status === 'unverified' && { reason: check.reason }),
       ...(check.status === 'failed' && check.downgrade && { reason: 'downgrade' }),
       ...(check.status === 'checked' && {
@@ -3013,6 +3017,8 @@ const syncLoop = async (
           );
         }
         networkChecked = true;
+        // the answer above, plus the protocol this worker's own requests used
+        nodeInfo = describeNode(info, measuredProtocol(serverUrl));
         await checkNodeChain();
       }
       const chainHeight = await getChainTip();
