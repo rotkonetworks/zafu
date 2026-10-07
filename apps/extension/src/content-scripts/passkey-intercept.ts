@@ -226,7 +226,9 @@ navigator.credentials.get = async function (
   options?: CredentialRequestOptions,
 ): Promise<Credential | null> {
   const pk = options?.publicKey;
-  if (!pk) {
+  // autofill (conditional) sign-in runs on page load with no click; zafu only
+  // answers a sign-in the person started
+  if (!pk || options?.mediation === 'conditional') {
     return originalGet(options);
   }
 

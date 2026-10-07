@@ -84,6 +84,8 @@ const validSender = (origin: string): chrome.runtime.MessageSender => ({
   documentLifecycle: 'active',
   origin,
   url: `${origin}/index.html`,
+  // zafu's content scripts carry its id: passkeys arrive through the bridge
+  id: chrome.runtime.id,
 });
 
 /** drives an INTERNAL popup->worker result message (must come from the extension) */
@@ -522,6 +524,16 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
     expect(res).toEqual({ success: false, error: 'not connected' });
     expect(popupUrlFor(origin)).toBeUndefined();
     expect(signAssertionMock).not.toHaveBeenCalled();
+  });
+
+  it('the externally_connectable door, which has no click to check, gets no passkeys', async () => {
+    const origin = 'https://passkey-door.example';
+    await grantCapability(origin, 'passkey');
+    const page = { ...validSender(origin), id: undefined };
+
+    expect(await call(create('passkey-door.example'), page)).toMatchObject({ success: false });
+    expect(await call(getReq('passkey-door.example'), page)).toMatchObject({ success: false });
+    expect(popupUrlFor(origin)).toBeUndefined();
   });
 
   it('a second sign-in while one is waiting opens no second window', async () => {

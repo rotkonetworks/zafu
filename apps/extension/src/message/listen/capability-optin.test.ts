@@ -24,6 +24,8 @@ const validSender = (origin: string): chrome.runtime.MessageSender =>
     documentLifecycle: 'active',
     origin,
     url: `${origin}/index.html`,
+    // zafu's content scripts carry its id: passkeys arrive through the bridge
+    id: chrome.runtime.id,
   }) as chrome.runtime.MessageSender;
 
 // zafu's own page: the extension id AND the extension origin (a content script

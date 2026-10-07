@@ -5,7 +5,7 @@
  * that the bridge sets `type` itself and forwards only the fields each kind uses.
  */
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { passkeyMessage } from './passkey-wire';
+import { passkeyMessage, promptCooldown } from './passkey-wire';
 
 const sendMessage = chrome.runtime.sendMessage as unknown as ReturnType<typeof vi.fn>;
 
@@ -13,8 +13,12 @@ beforeAll(async () => {
   await import('./passkey-bridge');
 });
 
+const clicked = (isActive: boolean) =>
+  Object.defineProperty(navigator, 'userActivation', { value: { isActive }, configurable: true });
+
 beforeEach(() => {
   sendMessage.mockClear();
+  clicked(true);
 });
 
 /** what a hostile page posts: a valid passkey kind wrapping a Keplr request */
@@ -56,10 +60,41 @@ describe('passkey bridge', () => {
     },
   );
 
+  it('asks nothing without a click on the page', () => {
+    clicked(false);
+    pagePosts(hostile('get'));
+    pagePosts(hostile('create'));
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
   it('drops a kind it does not relay', () => {
     pagePosts({ ...hostile('get'), kind: 'ZafuKeplr' });
     pagePosts({ ...hostile('get'), kind: 'toString' });
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('promptCooldown', () => {
+  it('waits 30 s after not now, then twice as long, and resets after a sign-in', () => {
+    const c = promptCooldown();
+    expect(c.quiet(0)).toBe(false);
+    c.after({ success: false, code: 'denied' }, 0);
+    expect(c.quiet(29_999)).toBe(true);
+    expect(c.quiet(30_000)).toBe(false);
+    c.after({ success: false, code: 'cancelled' }, 30_000);
+    expect(c.quiet(89_999)).toBe(true);
+    expect(c.quiet(90_000)).toBe(false);
+    c.after({ success: true }, 90_000);
+    c.after({ success: false, code: 'denied' }, 100_000);
+    expect(c.quiet(130_000)).toBe(false);
+  });
+
+  it('does not wait after a refusal the person never saw', () => {
+    const c = promptCooldown();
+    c.after({ success: false }, 0);
+    c.after(undefined, 0);
+    c.after({ success: false, code: 'failed' }, 0);
+    expect(c.quiet(1)).toBe(false);
   });
 });
 

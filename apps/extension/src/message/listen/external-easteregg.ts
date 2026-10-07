@@ -47,7 +47,7 @@ import {
 } from '@repo/storage-chrome/cosmos-chain-counters';
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { isPro } from '../../state/license';
-import { isValidExternalSender } from '../../senders/external';
+import { isValidExternalSender, type ValidExternalSender } from '../../senders/external';
 import { isValidInternalSender } from '../../senders/internal';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { rpIdMatchesOrigin } from '../../state/public-suffix';
@@ -465,6 +465,14 @@ interface PasskeyRefusal {
   error?: string;
   code?: string;
 }
+
+/**
+ * A passkey request comes only through zafu's own content-script bridge, which
+ * asks only after a click and backs off after "not now". The
+ * externally_connectable door has no click to check, so it gets no passkeys.
+ */
+const passkeySender = (sender: chrome.runtime.MessageSender): sender is ValidExternalSender =>
+  sender.id === chrome.runtime.id && isValidExternalSender(sender);
 
 /** a tap the person did not give: `denied` said not now, `cancelled` never answered */
 const declined = (outcome: 'denied' | 'cancelled'): PasskeyRefusal => ({
@@ -1268,7 +1276,7 @@ export const externalMessageListener = (
     case 'zafu_passkey_create': {
       const { rpId } = msg as { rpId: string };
       // origin is the browser-attested sender, never a caller-supplied field
-      if (!isValidExternalSender(sender)) {
+      if (!passkeySender(sender)) {
         sendResponse({ success: false, error: 'not connected' });
         return true;
       }
@@ -1345,7 +1353,7 @@ export const externalMessageListener = (
       };
       // origin is the browser-attested sender, never a caller-supplied field -
       // otherwise any site could forge assertions for an arbitrary rpId
-      if (!isValidExternalSender(sender)) {
+      if (!passkeySender(sender)) {
         sendResponse({ success: false, error: 'not connected' });
         return true;
       }

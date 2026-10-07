@@ -108,6 +108,28 @@ export const passkeyMessage = (
   };
 };
 
+/**
+ * After "not now" or a closed window a page waits before zafu shows it another
+ * passkey screen: 30 s, then twice as long each time, back to 30 s after a
+ * sign-in goes through. Kept in memory by the bridge, per page.
+ */
+export const promptCooldown = (base = 30_000) => {
+  let until = 0;
+  let wait = base;
+  return {
+    quiet: (now: number) => now < until,
+    after: (res: unknown, now: number) => {
+      const r = res as { success?: unknown; code?: unknown } | undefined;
+      if (r?.code === 'denied' || r?.code === 'cancelled') {
+        until = now + wait;
+        wait *= 2;
+      } else if (r?.success === true) {
+        wait = base;
+      }
+    },
+  };
+};
+
 const b64url = (bytes: Uint8Array): string =>
   btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, '-')
