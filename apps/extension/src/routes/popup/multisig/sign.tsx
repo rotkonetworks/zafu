@@ -24,6 +24,7 @@ import {
   getOrCreateRelayIdentity,
 } from '../../../state/keyring/relay-identity';
 import { resolveRoomCode } from '../../../state/keyring/rendezvous-client';
+import { requestEgressOptIn } from '../../../net/egress-opt-in';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { usePasswordGate } from '../../../hooks/password-gate';
@@ -34,6 +35,9 @@ import { Sensitive } from '../../../components/sensitive';
 import { DEFAULT_RELAY_URL } from './dkg-helpers';
 import { Button } from '@repo/ui/components/ui/button';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+
+/** the person kept the relay off: said calmly, nothing was signed */
+const RELAY_OFF = 'the multisig relay stays off · nothing was signed';
 
 type Step = 'input' | 'joining' | 'review' | 'signing' | 'complete' | 'error';
 
@@ -99,6 +103,12 @@ export const MultisigSign = () => {
 
   const handleJoin = async () => {
     if (!roomCode.trim() || !ms) {
+      return;
+    }
+    // the relay is asked for here, when it is needed, not refused later
+    if (!(await requestEgressOptIn('multisig-relay'))) {
+      setError(RELAY_OFF);
+      setStep('error');
       return;
     }
 
@@ -721,6 +731,11 @@ const AirgapJoinerWrapper = ({
           className='w-full border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
           onClick={() => {
             void (async () => {
+              if (!(await requestEgressOptIn('multisig-relay'))) {
+                setError(RELAY_OFF);
+                setPhase('active');
+                return;
+              }
               try {
                 let code = room.trim();
                 if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)) {

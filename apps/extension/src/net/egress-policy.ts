@@ -62,6 +62,7 @@ export const EGRESS_INPUT_KEYS: string[] = [
   'zcashMeConfig',
   'keplrCompat',
   'zcashWallets',
+  'vaults',
   PEOPLE_RELAY_KEY,
   ...Object.keys(COSMOS_CHAINS).map(rpcPoolKey),
 ];
@@ -80,8 +81,10 @@ export interface EgressInputs {
   zidDiscovery?: { enabled?: boolean; relayEndpoint?: string };
   zcashMeConfig?: { mode?: string; mirrorUrl?: string };
   keplrCompat?: boolean;
-  /** only `multisig.relayUrl` is read: each multisig wallet's own relay */
+  /** a pre-seal plaintext list; only `multisig.relayUrl` is read */
   zcashWallets?: { multisig?: { relayUrl?: unknown } }[];
+  /** only a frost-multisig vault's plaintext `insensitive.relayUrl` is read */
+  vaults?: { type?: unknown; insensitive?: { relayUrl?: unknown } }[];
   /** the people relay's default and the other relays the person allowed */
   peopleRelay?: PeopleRelaySetting;
 }
@@ -139,12 +142,25 @@ const OTHER_NETWORKS: Record<string, string[]> = {
   bitcoin: [],
 };
 
-// zcashWallets is sealed at rest ({ encrypted }) once a session key exists:
-// the policy cannot read it then, so only a plaintext list contributes
+const list = <T>(v: T[] | undefined): T[] => (Array.isArray(v) ? v : []);
+
+// zcashWallets is sealed at rest ({ encrypted }) and unreadable here; each
+// multisig wallet's frost vault keeps its relay in plaintext `insensitive`,
+// so the vaults are what tell the policy which relays a wallet uses
+const multisigs = (i: EgressInputs): unknown[] => [
+  ...list(i.vaults)
+    .filter(v => v?.type === 'frost-multisig')
+    .map(v => v.insensitive?.relayUrl),
+  ...list(i.zcashWallets)
+    .filter(w => w?.multisig)
+    .map(w => w.multisig!.relayUrl),
+];
+
+/** the person has a multisig wallet, read without unsealing anything */
+export const hasMultisig = (i: EgressInputs): boolean => multisigs(i).length > 0;
+
 const multisigRelays = (i: EgressInputs): string[] =>
-  (Array.isArray(i.zcashWallets) ? i.zcashWallets : []).flatMap(w =>
-    typeof w?.multisig?.relayUrl === 'string' && w.multisig.relayUrl ? [w.multisig.relayUrl] : [],
-  );
+  multisigs(i).filter((u): u is string => typeof u === 'string' && !!u);
 
 /**
  * The table. Order matters only on an exact tie (same host, same path
