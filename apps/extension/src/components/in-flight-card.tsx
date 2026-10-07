@@ -4,6 +4,7 @@
  * Renders nothing when there is nothing to show.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import type { ReactNode } from 'react';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { discardTxOp, isTerminal, removeTxOps, writeTxOp, type TxOp } from '../tx-ops';
@@ -37,8 +38,8 @@ export const PendingLine = ({
   action?: { label: string; onClick: () => void };
 }) => (
   <StatusSlot tone={tone} icon={icon} action={action}>
-    <span className='truncate text-[13px] text-fg-high normal-case'>{title}</span>
-    <span className='truncate text-[11px] text-fg-muted'>{status}</span>
+    <Clipped className='text-[13px] text-fg-high normal-case'>{title}</Clipped>
+    <Clipped className='text-[11px] text-fg-muted'>{status}</Clipped>
   </StatusSlot>
 );
 

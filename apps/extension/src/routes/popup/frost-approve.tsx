@@ -30,6 +30,7 @@ import { buildRelayIdentity, getOrCreateRelayIdentity } from '../../state/keyrin
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../state/frost-session';
 import { usePasswordGate } from '../../hooks/password-gate';
 import { Sensitive } from '../../components/sensitive';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 interface PokerPayoutOutput {
   address: string;
@@ -866,7 +867,10 @@ export const FrostApprove = () => {
               <>
                 <p>co-sign a transaction with your share.</p>
                 <p className='text-fg-muted tabular break-all'>
-                  sighash: {sighashHex.slice(0, 16)}...{sighashHex.slice(-16)}
+                  sighash:{' '}
+                  <Clipped head={16} label='sighash'>
+                    {sighashHex}
+                  </Clipped>
                 </p>
               </>
             )}
@@ -876,7 +880,10 @@ export const FrostApprove = () => {
                 <div className='mt-1 space-y-1'>
                   {plan.map((o, i) => (
                     <p key={i} className='text-fg-muted tabular break-all'>
-                      → {o.address.slice(0, 14)}…{o.address.slice(-8)}
+                      →{' '}
+                      <Clipped head={14} tail={8} label='address'>
+                        {o.address}
+                      </Clipped>
                       <span className='text-zigner-gold'>
                         {' '}
                         <Sensitive>{(o.amount_zat / 1e8).toFixed(8)} ZEC</Sensitive>
@@ -931,7 +938,10 @@ export const FrostApprove = () => {
               {reviewOutputs.map((o, i) => (
                 <div key={i} className='flex items-baseline justify-between gap-2'>
                   <span className='text-fg-muted tabular break-all'>
-                    → {o.recipientUa.slice(0, 14)}…{o.recipientUa.slice(-8)}
+                    →{' '}
+                    <Clipped head={14} tail={8} label='address'>
+                      {o.recipientUa}
+                    </Clipped>
                   </span>
                   <Sensitive className='text-zigner-gold tabular shrink-0'>
                     {(Number(o.amountZat) / 1e8).toFixed(8)} ZEC
@@ -963,7 +973,9 @@ export const FrostApprove = () => {
               <span>sighash your share signs matches the PCZT</span>
             </div>
             <p className='tabular break-all text-fg-dim pl-[18px]'>
-              {reviewSighash.slice(0, 24)}…{reviewSighash.slice(-24)}
+              <Clipped head={24} label='sighash'>
+                {reviewSighash}
+              </Clipped>
             </p>
           </div>
 
@@ -984,7 +996,9 @@ export const FrostApprove = () => {
           <p className='text-data text-fg-high lowercase'>done</p>
           {typeof result?.['address'] === 'string' && (
             <p className='text-xs tabular text-fg-muted break-all px-4'>
-              {result['address'].slice(0, 20)}...
+              <Clipped head={20} tail={0} label='address'>
+                {result['address']}
+              </Clipped>
             </p>
           )}
           <Button variant='secondary' onClick={() => window.close()}>

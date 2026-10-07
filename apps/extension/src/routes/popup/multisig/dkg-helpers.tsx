@@ -32,6 +32,7 @@ import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanne
  * contents, which are end-to-end encrypted before they leave the device.
  */
 import { DEFAULT_RELAY_URL } from '../../../config/multisig-relay';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 export { DEFAULT_RELAY_URL };
 
 /** Running your own: ZF's frostd, which is what this speaks. */
@@ -56,7 +57,9 @@ export const RelayTransportField = ({
         <div className='flex min-w-0 items-center gap-2'>
           <span className='i-ph-broadcast size-3.5 shrink-0 text-fg-muted' />
           <span className='shrink-0 text-xs text-fg-muted'>relay</span>
-          <span className='truncate font-mono text-xs'>{value || DEFAULT_RELAY_URL}</span>
+          <Clipped className='font-mono text-xs' label='relay'>
+            {value || DEFAULT_RELAY_URL}
+          </Clipped>
         </div>
         <Button
           variant='quiet'

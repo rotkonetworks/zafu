@@ -35,6 +35,7 @@ import { Sensitive } from '../../../components/sensitive';
 import { DEFAULT_RELAY_URL } from './dkg-helpers';
 import { Button } from '@repo/ui/components/ui/button';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 /** the person kept the relay off: said calmly, nothing was signed */
 const RELAY_OFF = 'the multisig relay stays off · nothing was signed';
@@ -400,10 +401,15 @@ export const MultisigSign = () => {
       {PasswordModal}
       <div className='mb-4 border border-border-soft bg-elev-1 p-3'>
         <p className='text-label text-fg-muted'>signing as</p>
-        <p className='mt-0.5 text-sm truncate'>{activeWallet.label}</p>
-        <p className='text-label font-mono text-fg-muted truncate'>
-          {activeWallet.address.slice(0, 16)}...{activeWallet.address.slice(-8)}
-        </p>
+        <Clipped className='mt-0.5 block text-sm'>{activeWallet.label}</Clipped>
+        <Clipped
+          head={16}
+          tail={8}
+          label='address'
+          className='block text-label font-mono text-fg-muted'
+        >
+          {activeWallet.address}
+        </Clipped>
         <span className='mt-1 inline-block bg-primary/10 px-2 py-0.5 text-label text-zigner-gold'>
           {ms.threshold}/{ms.maxSigners}
         </span>
@@ -531,7 +537,13 @@ export const MultisigSign = () => {
                       <div key={a.index} className='break-all'>
                         action {a.index}:{' '}
                         <Sensitive>{formatZec(String(a.amount_zat))} ZEC</Sensitive> →{' '}
-                        {a.recipient_raw_hex ? `${a.recipient_raw_hex.slice(0, 16)}…` : 'unknown'}
+                        {a.recipient_raw_hex ? (
+                          <Clipped head={16} tail={0} label='recipient'>
+                            {a.recipient_raw_hex}
+                          </Clipped>
+                        ) : (
+                          'unknown'
+                        )}
                       </div>
                     ))}
                 </div>
@@ -577,9 +589,9 @@ export const MultisigSign = () => {
               <p className='text-label tracking-wider text-yellow-400'>signing</p>
               <p className='mt-0.5 text-sm text-yellow-300'>
                 <Sensitive>{formatZec(amountZat)} ZEC</Sensitive> →{' '}
-                <span className='font-mono text-label'>
-                  {recipient.slice(0, 16)}…{recipient.slice(-6)}
-                </span>
+                <Clipped head={16} tail={6} label='address' className='font-mono text-label'>
+                  {recipient}
+                </Clipped>
               </p>
             </div>
           )}
@@ -653,10 +665,15 @@ const AirgapJoinerWrapper = ({
   const WalletCard = () => (
     <div className='mb-4 border border-border-soft bg-elev-1 p-3'>
       <p className='text-label text-fg-muted'>signing as</p>
-      <p className='mt-0.5 text-sm truncate'>{walletLabel}</p>
-      <p className='text-label font-mono text-fg-muted truncate'>
-        {walletAddress.slice(0, 16)}...{walletAddress.slice(-8)}
-      </p>
+      <Clipped className='mt-0.5 block text-sm'>{walletLabel}</Clipped>
+      <Clipped
+        head={16}
+        tail={8}
+        label='address'
+        className='block text-label font-mono text-fg-muted'
+      >
+        {walletAddress}
+      </Clipped>
       <span className='mt-1 inline-block bg-primary/10 px-2 py-0.5 text-label text-zigner-gold'>
         {ms.threshold}/{ms.maxSigners} · airgap
       </span>

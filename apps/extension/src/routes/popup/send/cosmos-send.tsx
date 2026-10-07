@@ -34,7 +34,8 @@ import { keyRingSelector, selectEffectiveKeyInfo } from '../../../state/keyring'
 import { useGasSponsor } from '../../../transparent/sponsor';
 import { formatBaseUnits, fullDecimalString } from '../../../transparent/assets';
 import { penumbraRouteStatus, usePenumbraRoutes } from '../../../transparent/penumbra-routes';
-import { shortAddress } from '../../../transparent/hd';
+import { Clipped } from '@repo/ui/components/ui/clipped';
+import { shorten } from '@repo/ui/lib/utils';
 import { isAddress as isPenumbraAddress } from '@penumbra-zone/bech32m/penumbra';
 import {
   parseInjectiveRecipient,
@@ -689,7 +690,13 @@ export function CosmosSend({
     : (skipChains.find(c => c.chainId === effectiveDestChainId)?.chainName ?? effectiveDestChainId);
   const toName = recipient ? findByAddress(recipient)?.contact.name : undefined;
   const toLabel =
-    isPenumbraDest && !toName ? 'your penumbra wallet' : (toName ?? shortAddress(toAddress));
+    isPenumbraDest && !toName
+      ? 'your penumbra wallet'
+      : (toName ?? (
+          <Clipped head={8} tail={4} label='address'>
+            {toAddress}
+          </Clipped>
+        ));
   const verb = isPenumbraDest ? 'shield' : 'send';
   const sending = (
     <>
@@ -702,7 +709,7 @@ export function CosmosSend({
       ? ETHERMINT_RECIPIENT_PROBLEM[ethermintRecipient.problem](ethermintRecipient.prefix)
       : `that is not a ${isPenumbraDest ? 'penumbra' : 'cosmos'} address · please check it`
     : ethermintRecipient?.ok && ethermintRecipient.fromHex
-      ? `sends to ${shortAddress(toAddress)}`
+      ? `sends to ${shorten(toAddress, 8, 4)}`
       : !isSameChain && detectedChain && !destChainId
         ? `on ${detectedChain.name}`
         : toName;
@@ -737,7 +744,7 @@ export function CosmosSend({
                 <Row
                   type='value'
                   label='from'
-                  description={shortAddress(assetsData.address)}
+                  description={shorten(assetsData.address, 8, 4)}
                   value={
                     fromOptions.find(w => w.index === accountIndex)?.summary ?? sourceChain.name
                   }
@@ -820,7 +827,11 @@ export function CosmosSend({
           )}
           {topUp && (
             <Helper>
-              moving {gas.gasAsset.symbol.toLowerCase()} to {shortAddress(topUp.to)} for gas
+              moving {gas.gasAsset.symbol.toLowerCase()} to{' '}
+              <Clipped head={8} tail={4} label='address'>
+                {topUp.to}
+              </Clipped>{' '}
+              for gas
             </Helper>
           )}
           {/* exchanges often credit a deposit only with a memo; penumbra can't carry one */}
@@ -881,7 +892,7 @@ export function CosmosSend({
           onOpenChange={o => setPick(o ? 'from' : undefined)}
           picks={fromOptions.map(w => ({
             key: w.index,
-            label: `#${w.index} ${shortAddress(w.address)}`,
+            label: `#${w.index} ${shorten(w.address, 8, 4)}`,
             value: w.summary,
           }))}
           onPick={setAccountIndex}
@@ -917,11 +928,24 @@ export function CosmosSend({
         rows={[
           [
             'from',
-            `${sourceChain.name.toLowerCase()} · ${shortAddress(assetsData?.address ?? '')}`,
+            <>
+              {sourceChain.name.toLowerCase()} ·{' '}
+              <Clipped head={8} tail={4} label='address'>
+                {assetsData?.address ?? ''}
+              </Clipped>
+            </>,
           ],
           isPenumbraDest
             ? ['into', 'penumbra · shielded']
-            : ['to', toName ? `${toName} · ${shortAddress(toAddress)}` : shortAddress(toAddress)],
+            : [
+                'to',
+                <>
+                  {toName && `${toName} · `}
+                  <Clipped head={8} tail={4} label='address'>
+                    {toAddress}
+                  </Clipped>
+                </>,
+              ],
           ...(isSameChain || isPenumbraDest ? [] : [['network', destName] as const]),
           ['fee', fee],
         ]}

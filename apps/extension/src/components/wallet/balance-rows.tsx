@@ -1,3 +1,4 @@
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import type { ReactNode } from 'react';
 import { cn } from '@repo/ui/lib/utils';
 import { Sensitive } from '../sensitive';
@@ -72,9 +73,9 @@ export const BalanceRow = ({
     >
       {tile}
       <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
-        <span className='truncate text-sm text-fg-high lowercase'>{label}</span>
+        <Clipped className='text-sm text-fg-high lowercase'>{label}</Clipped>
         {typeof tag === 'string' ? (
-          <span className='truncate text-[11px] text-fg-muted'>{tag}</span>
+          <Clipped className='text-[11px] text-fg-muted'>{tag}</Clipped>
         ) : (
           tag
         )}
@@ -133,9 +134,7 @@ export const UnshieldedLine = ({
   actions: LineAction[];
 }) => (
   <div className='flex min-h-8 items-center gap-2 border-t border-border-soft pr-1.5 pl-3.5 text-[11px] first:border-t-0'>
-    <span className={cn('min-w-0 flex-1 truncate', found ? 'text-fg-high' : 'text-fg-muted')}>
-      {children}
-    </span>
+    <Clipped className={cn('flex-1', found ? 'text-fg-high' : 'text-fg-muted')}>{children}</Clipped>
     <LineActions actions={actions} />
   </div>
 );

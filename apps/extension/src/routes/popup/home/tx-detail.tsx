@@ -8,7 +8,7 @@ import { zcashMeLabel } from '../../../services/zcashme/label';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { useTxNote } from '../../../hooks/use-tx-note';
 import { Sensitive } from '../../../components/sensitive';
-import { cn } from '@repo/ui/lib/utils';
+import { cn, shorten } from '@repo/ui/lib/utils';
 import { PopupPath, contactPath } from '../paths';
 import { ScreenHeader } from '../../../components/screen-header';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
@@ -18,6 +18,7 @@ import type { NetworkType } from '../../../state/keyring';
 import { fmtTime, fmtZecHero } from './format';
 import { isIncoming, type ParsedTransaction } from './tx-parse';
 import { penumbraRefs } from '../../../history/penumbra-describe';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 interface TxLook {
   explorer?: (txid: string) => string;
@@ -109,7 +110,7 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
   const [noteDraft, setNoteDraft] = useState('');
   // an expired send charged no fee, so it has no breakdown to give
   const hasBreakdown = !isFailed && !!tx.recipientAmount && !!tx.feeAmount;
-  const shortRecipient = tx.recipient && `${tx.recipient.slice(0, 8)}…${tx.recipient.slice(-4)}`;
+  const shortRecipient = tx.recipient && shorten(tx.recipient, 8, 4);
   const recipientName = contactMatch?.contact.name ?? directoryName ?? shortRecipient;
   const title = isIn
     ? 'received'
@@ -200,10 +201,11 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
             {tx.recipient && (
               <div className='flex h-[46px] items-center justify-between gap-3 px-3.5'>
                 <span className='text-xs text-fg-muted'>to</span>
-                <span className='truncate text-[13px] text-fg-high'>
-                  {recipientName && recipientName !== shortRecipient
-                    ? `${recipientName} · ${shortRecipient}`
-                    : shortRecipient}
+                <span className='flex min-w-0 items-center gap-1 text-[13px] text-fg-high'>
+                  {recipientName !== shortRecipient && <Clipped>{`${recipientName} ·`}</Clipped>}
+                  <Clipped head={8} tail={4} label='address' className='shrink-0'>
+                    {tx.recipient}
+                  </Clipped>
                 </span>
               </div>
             )}
@@ -227,12 +229,7 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
                   <Row
                     type='screen'
                     icon='i-ph-arrow-up-right'
-                    label={
-                      directoryName ??
-                      (tx.recipient.length > 20
-                        ? `${tx.recipient.slice(0, 10)}…${tx.recipient.slice(-6)}`
-                        : tx.recipient)
-                    }
+                    label={directoryName ?? shorten(tx.recipient, 10, 6)}
                     description={directoryName ? 'zcash.me' : 'to'}
                     className='flex-1 min-w-0'
                     onPress={() => setShowSave(true)}
@@ -296,7 +293,9 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
             ))}
             <div className='flex min-h-[52px] items-center gap-3 px-3.5 py-2'>
               <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
-                <span className='truncate text-data text-fg-high font-mono'>{tx.id}</span>
+                <Clipped className='text-data text-fg-high font-mono' label='transaction id'>
+                  {tx.id}
+                </Clipped>
                 <span className='text-label text-fg-muted lowercase'>transaction</span>
               </span>
               <CopyButton text={tx.id} />
@@ -304,7 +303,9 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
             {explorer && (
               <div className='flex min-h-[52px] items-center gap-3 px-3.5 py-2'>
                 <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
-                  <span className='truncate text-data text-fg-high font-mono'>{explorer}</span>
+                  <Clipped className='text-data text-fg-high font-mono' label='explorer link'>
+                    {explorer}
+                  </Clipped>
                   <span className='text-label text-fg-muted lowercase'>
                     {explorerLinks === 'open'
                       ? 'the explorer sees your ip and this transaction'

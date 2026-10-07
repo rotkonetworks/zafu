@@ -9,9 +9,10 @@
  * active rounds carry one honest line instead of dead buttons.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { cn } from '@repo/ui/lib/utils';
+import { cn, shorten } from '@repo/ui/lib/utils';
 import { Segmented } from '@repo/ui/components/ui/segmented';
 import {
   Tooltip,
@@ -70,8 +71,6 @@ const formatZec = (zec: number): string =>
   zec.toLocaleString(undefined, { maximumFractionDigits: 8 });
 
 const formatBallots = (ballots: number): string => ballots.toLocaleString();
-
-const shortRoundId = (id: string): string => `${id.slice(0, 10)}…`;
 
 export const ZcashVotePage = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -228,7 +227,9 @@ const RoundCard = ({
               </span>
             )}
           </div>
-          <p className='mt-0.5 truncate text-body text-fg'>{round.title || 'untitled round'}</p>
+          <Clipped className='mt-0.5 block text-body text-fg'>
+            {round.title || 'untitled round'}
+          </Clipped>
         </div>
         <span
           className={cn(
@@ -284,9 +285,9 @@ const RoundCard = ({
                   const pct = total > 0 ? (weight / total) * 100 : 0;
                   return (
                     <div key={opt.id} className='flex items-center gap-2'>
-                      <span className='w-24 shrink-0 truncate text-label text-fg-muted lowercase'>
+                      <Clipped className='w-24 shrink-0 text-label text-fg-muted lowercase'>
                         {opt.label}
-                      </span>
+                      </Clipped>
                       {showTally ? (
                         <TallyBar
                           pct={pct}
@@ -404,7 +405,7 @@ const TallyBar = ({
             {formatZec(ballotsToZec(totalBallots))} zec tallied total
           </span>
           <span className='text-fg-dim'>
-            proposal {proposal.id} · option {optionId} · round {shortRoundId(round.id)}
+            proposal {proposal.id} · option {optionId} · round {shorten(round.id, 10, 0)}
           </span>
         </TooltipContent>
       </Tooltip>

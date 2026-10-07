@@ -21,7 +21,6 @@ import {
   Done,
   Sending,
   Stopped,
-  shortAddress,
   isTransparentAddress,
   type Fact,
 } from '../send/send-ui';
@@ -34,6 +33,7 @@ import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
 import { buildMultiSendTxInWorker, stopBuildInWorker } from '../../../state/keyring/network-worker';
 import { isBuildStopped } from '../../../workers/build-abort';
 import type { SendingNote } from '../send/send-ui';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 interface Output {
   address: string;
@@ -273,7 +273,12 @@ export function ZcashSendApproval() {
   const rows: Fact[] =
     outputs.length === 1
       ? [
-          ['to', shortAddress(outputs[0]!.address)],
+          [
+            'to',
+            <Clipped key='to' head={6} tail={5} label='address'>
+              {outputs[0]!.address}
+            </Clipped>,
+          ],
           ...(outputs[0]!.memo ? ([['memo', outputs[0]!.memo]] as Fact[]) : []),
           ['network fee', <Sensitive key='fee'>{fmtZec(totalFeeZat)} zec</Sensitive>],
         ]
@@ -287,7 +292,9 @@ export function ZcashSendApproval() {
       <ScreenHeader title='review' backPath={false} meta='zcash' />
       <div className='flex shrink-0 items-center gap-2 border-b border-border-soft px-4 py-3'>
         <OriginIcon origin={app} size={28} />
-        <span className='truncate text-sm text-fg-high'>{host}</span>
+        <Clipped className='text-sm text-fg-high' label='site'>
+          {host}
+        </Clipped>
       </div>
       <Main className='gap-[22px] pt-6'>
         <p className='text-xs text-fg-muted'>
@@ -319,9 +326,9 @@ export function ZcashSendApproval() {
                     <Sensitive>{fmtZec(o.amount)} zec</Sensitive>
                   </span>
                 </div>
-                <span className='truncate text-[11px] text-fg-muted'>
-                  {shortAddress(o.address)}
-                </span>
+                <Clipped head={6} tail={5} label='address' className='text-[11px] text-fg-muted'>
+                  {o.address}
+                </Clipped>
               </div>
             ))}
           </RowGroup>

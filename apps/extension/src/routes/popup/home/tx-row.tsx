@@ -6,11 +6,12 @@ import { useZcashMeDirectoryLookup } from '../../../services/zcashme/config';
 import { zcashMeLabel } from '../../../services/zcashme/label';
 import { useTxNote } from '../../../hooks/use-tx-note';
 import { Sensitive } from '../../../components/sensitive';
-import { cn } from '@repo/ui/lib/utils';
+import { cn, shorten } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
 import type { NetworkType } from '../../../state/keyring';
 import { fmtTime, fmtZecHero } from './format';
 import { isIncoming, type ParsedTransaction } from './tx-parse';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 /** summary row - tapping it opens the TxDetail screen with the already-
  *  fetched record, never a refetch. The sheet this used to open now lives
@@ -29,9 +30,7 @@ export function TxRow({ tx, network }: { tx: ParsedTransaction; network: Network
   const directoryName = zcashMeLabel(directoryProfile);
   const { note: fromNote } = useTxNote(tx.id);
   const recipientName =
-    contactMatch?.contact.name ??
-    directoryName ??
-    (tx.recipient && `${tx.recipient.slice(0, 8)}…${tx.recipient.slice(-4)}`);
+    contactMatch?.contact.name ?? directoryName ?? (tx.recipient && shorten(tx.recipient, 8, 4));
   const counterparty = isIn
     ? fromNote && `from ${fromNote}`
     : recipientName && `to ${recipientName}`;
@@ -66,9 +65,9 @@ export function TxRow({ tx, network }: { tx: ParsedTransaction; network: Network
         />
       </span>
       <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
-        <span className={cn('truncate text-[13px] text-fg-high', isFailed && 'text-hanko')}>
+        <Clipped className={cn('text-[13px] text-fg-high', isFailed && 'text-hanko')}>
           {tx.description}
-        </span>
+        </Clipped>
         <span className='truncate text-[11px] text-fg-muted' title={detail?.raw}>
           {[
             counterparty,

@@ -2,6 +2,7 @@
 // share locally; joins an existing relay room, awaits the host's SIGN: tx
 // context, then mediates QR round-trips with zigner to publish C: + S: shares.
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { AnimatedQrDisplay } from '../../../../shared/components/animated-qr-display';
@@ -466,7 +467,13 @@ export function FrostAirgapJoinerSignFlow({
                       <div key={a.index} className='break-all'>
                         action {a.index}:{' '}
                         <Sensitive>{formatZec(String(a.amount_zat))} ZEC</Sensitive> →{' '}
-                        {a.recipient_raw_hex ? `${a.recipient_raw_hex.slice(0, 16)}…` : 'unknown'}
+                        {a.recipient_raw_hex ? (
+                          <Clipped head={16} tail={0} label='recipient'>
+                            {a.recipient_raw_hex}
+                          </Clipped>
+                        ) : (
+                          'unknown'
+                        )}
                       </div>
                     ))}
                 </div>

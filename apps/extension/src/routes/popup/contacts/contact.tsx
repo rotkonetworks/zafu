@@ -5,6 +5,7 @@
  * actions: every action goes through the address row's own send gate.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
@@ -163,7 +164,7 @@ const ContactView = ({ contact }: { contact: Contact }) => {
       <div className='flex items-center gap-4'>
         <ZidSeal hex={contact.zid} size={66} />
         <span className='flex min-w-0 flex-col gap-1'>
-          <span className='truncate font-display text-[22px] text-fg-high'>{contact.name}</span>
+          <Clipped className='font-display text-[22px] text-fg-high'>{contact.name}</Clipped>
           <span className={`text-[11px] ${status.warn ? 'text-warn' : 'text-fg-muted'}`}>
             {status.line}
           </span>

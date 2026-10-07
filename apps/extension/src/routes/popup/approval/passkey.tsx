@@ -13,6 +13,7 @@ import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
 import { Mark } from '@repo/ui/components/ui/mark';
 import { RowGroup } from '@repo/ui/components/ui/row';
 import { useStore } from '../../../state';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 const COPY = {
   create: {
@@ -76,9 +77,9 @@ export const PasskeyApprove = () => {
           {origin && (
             <div className='flex w-full items-center gap-2'>
               <OriginIcon origin={origin} size={32} />
-              <span className='truncate text-xs text-fg-muted'>
+              <Clipped className='text-xs text-fg-muted' label='site'>
                 <SafeOriginURL origin={origin} />
-              </span>
+              </Clipped>
             </div>
           )}
           <Mark variant='seal' size={40} />
@@ -101,7 +102,9 @@ export const PasskeyApprove = () => {
           {rpId && (
             <div className='flex h-12 items-center justify-between gap-3 px-3.5 text-sm'>
               <span className='text-fg-muted'>signs in to</span>
-              <span className='truncate text-fg-high'>{rpId}</span>
+              <Clipped className='text-fg-high' label='site'>
+                {rpId}
+              </Clipped>
             </div>
           )}
           {keyInfo && (

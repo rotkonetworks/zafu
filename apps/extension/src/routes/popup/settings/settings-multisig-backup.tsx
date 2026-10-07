@@ -22,6 +22,7 @@ import { BackupModal } from '../multisig/backup/backup-modal';
 import { ImportModal } from '../multisig/backup/import-modal';
 import { AirgapQrImportModal } from '../multisig/backup/airgap-qr-import-modal';
 import { exportSingleBackup } from '../multisig/backup/export-helpers';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
@@ -61,10 +62,8 @@ const Line = ({
   <div className='flex min-h-[58px] items-center gap-3 px-3.5 py-2'>
     <span className={cn('grid w-4 shrink-0 place-items-center', mark)} aria-hidden='true' />
     <span className='flex min-w-0 grow flex-col gap-[3px]'>
-      <span className='truncate text-sm text-fg-high lowercase'>{name}</span>
-      <span className={cn('truncate text-[11px]', warn ? 'text-warn' : 'text-fg-muted')}>
-        {meta}
-      </span>
+      <Clipped className='text-sm text-fg-high lowercase'>{name}</Clipped>
+      <Clipped className={cn('text-[11px]', warn ? 'text-warn' : 'text-fg-muted')}>{meta}</Clipped>
     </span>
     {children}
   </div>

@@ -23,6 +23,7 @@ import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanne
 import { STREAM_UR_TYPE, RESULT_UR_TYPE, STATUS_UR_TYPE } from '../../../ota/ur';
 import { SessionPhase } from '../../../ota/types';
 import { toHex } from '../../../ota/util';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 type ScanMode = 'none' | 'result' | 'status';
 
@@ -124,7 +125,10 @@ export const SettingsOta = () => {
     <SettingsScreen title='device update' backPath={PopupPath.SETTINGS}>
       <div className='flex flex-col gap-4'>
         <p className='text-label text-fg-muted'>
-          devices: <span className='font-mono'>{targetZid.slice(0, 10)}…</span>
+          devices:{' '}
+          <Clipped head={10} tail={0} label='device id' className='font-mono'>
+            {targetZid}
+          </Clipped>
         </p>
 
         {recordInfo}

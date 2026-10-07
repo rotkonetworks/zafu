@@ -16,6 +16,7 @@ import type { NoteSyncEncoded } from '../../state/keyring/network-worker';
 import { AnimatedQrDisplay } from '../../shared/components/animated-qr-display';
 import { SettingsScreen } from './settings/settings-screen';
 import { PopupPath } from './paths';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 type Step = 'loading' | 'building' | 'display' | 'error';
 
@@ -76,7 +77,7 @@ export const NoteSyncPage = () => {
         <div className='flex flex-col gap-4'>
           <div className='border border-border-soft bg-elev-1 p-3'>
             <p className='text-label text-fg-muted'>wallet</p>
-            <p className='text-sm truncate'>{activeWallet.label}</p>
+            <Clipped className='block text-sm'>{activeWallet.label}</Clipped>
             <div className='mt-1 flex items-center gap-2'>
               <span className='text-lg font-mono'>
                 <Sensitive>{balanceDisplay}</Sensitive>

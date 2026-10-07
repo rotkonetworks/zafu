@@ -17,7 +17,7 @@ import { ZignerRoundAction, ZignerRoundView } from '../../../components/zigner-r
 import { runs, type Run } from '../../../state/swap/thor-out';
 import { swapRound } from '../../../state/swap/thor-legs';
 import { fromUnits } from '../../../state/swap/provider';
-import { Footer, Main, Mark, Strip, shortAddress } from '../send/send-ui';
+import { Addr, Footer, Main, Mark, Strip } from '../send/send-ui';
 
 const zec = (zat: bigint) => fromUnits(zat, 8);
 
@@ -27,17 +27,21 @@ const ON: Record<'moving' | 'funding' | 'paying', number> = { moving: 0, funding
 
 /** what a held-up swap says: the person's money is always placed for them */
 const heldLine = (run: Run, tAddress: string) =>
-  run.at === 'stopped'
-    ? run.error
-    : run.at === 'held' && run.late
-      ? "the move didn't reach a block in time · nothing left your wallet"
-      : run.at === 'held' && run.moved
-        ? 'the move is in · the deposit waits for your signature'
-        : run.moved
-          ? `the zec sits on this swap's address, ${shortAddress(tAddress)} · nothing went to the vault`
-          : run.at === 'expired'
-            ? 'nothing was moved · a fresh price is a tap away'
-            : 'nothing was sent';
+  run.at === 'stopped' ? (
+    run.error
+  ) : run.at === 'held' && run.late ? (
+    "the move didn't reach a block in time · nothing left your wallet"
+  ) : run.at === 'held' && run.moved ? (
+    'the move is in · the deposit waits for your signature'
+  ) : run.moved ? (
+    <>
+      the zec sits on this swap's address, <Addr>{tAddress}</Addr> · nothing went to the vault
+    </>
+  ) : run.at === 'expired' ? (
+    'nothing was moved · a fresh price is a tap away'
+  ) : (
+    'nothing was sent'
+  );
 
 export const ThorOutTracker = ({
   id,

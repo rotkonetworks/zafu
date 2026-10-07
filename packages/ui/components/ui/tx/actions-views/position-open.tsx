@@ -1,5 +1,6 @@
 import { ViewBox } from '../viewbox';
 import { ActionDetails } from './action-details';
+import { Clipped } from '../../clipped';
 import {
   PositionOpen,
   PositionState_PositionStateEnum,
@@ -26,17 +27,13 @@ export const PositionOpenComponent = ({ value }: { value: PositionOpen }) => {
 
           {!!value.position?.phi?.pair?.asset1 && (
             <ActionDetails.Row label='Asset 1'>
-              <ActionDetails.TruncatedText>
-                {bech32mAssetId(value.position.phi.pair.asset1)}
-              </ActionDetails.TruncatedText>
+              <Clipped>{bech32mAssetId(value.position.phi.pair.asset1)}</Clipped>
             </ActionDetails.Row>
           )}
 
           {!!value.position?.phi?.pair?.asset2 && (
             <ActionDetails.Row label='Asset 2'>
-              <ActionDetails.TruncatedText>
-                {bech32mAssetId(value.position.phi.pair.asset2)}
-              </ActionDetails.TruncatedText>
+              <Clipped>{bech32mAssetId(value.position.phi.pair.asset2)}</Clipped>
             </ActionDetails.Row>
           )}
 
@@ -46,9 +43,7 @@ export const PositionOpenComponent = ({ value }: { value: PositionOpen }) => {
 
           {value.position?.nonce && (
             <ActionDetails.Row label='Nonce'>
-              <ActionDetails.TruncatedText>
-                {uint8ArrayToBase64(value.position.nonce)}
-              </ActionDetails.TruncatedText>
+              <Clipped>{uint8ArrayToBase64(value.position.nonce)}</Clipped>
             </ActionDetails.Row>
           )}
 

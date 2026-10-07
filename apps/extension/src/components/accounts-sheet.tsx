@@ -3,6 +3,7 @@
  * wallets and cold signers, add wallet, then lock and open in window.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
@@ -140,8 +141,8 @@ const PocketRow = ({
         {active && <span className='size-2 bg-zigner-gold' />}
       </span>
       <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
-        <span className='truncate text-sm text-fg-high lowercase'>{name}</span>
-        <span className='truncate text-[11px] text-fg-muted lowercase'>account {account}</span>
+        <Clipped className='text-sm text-fg-high lowercase'>{name}</Clipped>
+        <Clipped className='text-[11px] text-fg-muted lowercase'>account {account}</Clipped>
       </span>
       {active && balanceZat !== undefined && (
         <Sensitive className='shrink-0 tabular-nums text-sm text-fg-high'>
@@ -268,9 +269,9 @@ export const AccountsSheet = ({
               aria-label={`rename ${selectedKeyInfo.name}`}
               className='flex min-h-11 min-w-0 flex-1 items-center gap-1.5 text-left transition-colors hover:text-zigner-gold'
             >
-              <span className='truncate text-[13px] text-fg-high lowercase'>
+              <Clipped className='text-[13px] text-fg-high lowercase'>
                 {selectedKeyInfo.name}
-              </span>
+              </Clipped>
               <span
                 className='i-ph-pencil-simple size-3 shrink-0 text-fg-muted'
                 aria-hidden='true'
@@ -342,8 +343,8 @@ export const AccountsSheet = ({
                 aria-hidden='true'
               />
               <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
-                <span className='truncate text-sm text-fg-high lowercase'>{k.name}</span>
-                <span className='truncate text-[11px] text-fg-muted'>{CUSTODY_META[custody]}</span>
+                <Clipped className='text-sm text-fg-high lowercase'>{k.name}</Clipped>
+                <Clipped className='text-[11px] text-fg-muted'>{CUSTODY_META[custody]}</Clipped>
               </span>
             </button>
           );

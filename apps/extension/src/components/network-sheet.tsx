@@ -4,6 +4,7 @@
  * network still shows up with a "turn on" row instead of being invisible.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
 import { Sheet } from '@repo/ui/components/ui/sheet';
@@ -80,9 +81,9 @@ export const NetworkSheet = ({
               </span>
               <span className={cn('size-2.5 shrink-0', info.color)} aria-hidden='true' />
               <span className='flex min-w-0 flex-col gap-[3px]'>
-                <span className='truncate text-[15px] text-fg-high lowercase'>{info.name}</span>
+                <Clipped className='text-[15px] text-fg-high lowercase'>{info.name}</Clipped>
                 {NETWORK_BLURB[n] && (
-                  <span className='truncate text-[11px] text-fg-muted'>{NETWORK_BLURB[n]}</span>
+                  <Clipped className='text-[11px] text-fg-muted'>{NETWORK_BLURB[n]}</Clipped>
                 )}
               </span>
             </button>

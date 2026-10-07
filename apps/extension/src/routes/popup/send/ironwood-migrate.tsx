@@ -12,6 +12,7 @@
  * a banner on the zcash home surface whenever orchard balance > 0.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { OverlayPortal } from '../../../components/overlay-portal';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VaultUnlock } from '../../../state/keyring/types';
@@ -83,10 +84,6 @@ function ironwoodDestinationFromSummary(summary: unknown): {
     s.fee_zat === null || s.fee_zat === undefined ? null : BigInt(Math.trunc(Number(s.fee_zat)));
   return { destinationLabel, ironwoodZat, feeZat };
 }
-
-/** truncate a long hex/address for display: first 10 + last 8 with an ellipsis. */
-const shortenDest = (dest: string): string =>
-  dest.length > 22 ? `${dest.slice(0, 10)}...${dest.slice(-8)}` : dest;
 
 /**
  * A fail-closed pre-activation error (worker's activation guard) means NU6.3
@@ -520,7 +517,13 @@ export function IronwoodMigrate({
                 <div className='flex justify-between'>
                   <span>ironwood destination</span>
                   <span className='font-mono text-fg-high'>
-                    {destinationLabel ? shortenDest(destinationLabel) : 'your wallet'}
+                    {destinationLabel ? (
+                      <Clipped head={10} tail={8} label='address'>
+                        {destinationLabel}
+                      </Clipped>
+                    ) : (
+                      'your wallet'
+                    )}
                   </span>
                 </div>
                 <div className='mt-1 flex items-center gap-1.5 text-label'>

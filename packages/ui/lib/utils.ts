@@ -32,5 +32,6 @@ export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
-export const shorten = (str: string, endsLength = 4) =>
-  str.length <= endsLength * 2 ? str : str.slice(0, endsLength) + '…' + str.slice(-endsLength);
+/** head…tail, unless that would hardly be shorter */
+export const shorten = (str: string, head = 4, tail = head) =>
+  str.length <= head + tail + 3 ? str : `${str.slice(0, head)}…${str.slice(str.length - tail)}`;

@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { cn } from '../../../lib/utils';
 import { Toggle } from '../toggle';
+import { Clipped } from '../clipped';
 
 /**
  * Row - the three settings row shapes, and nothing else:
@@ -54,11 +55,9 @@ export function Row(props: RowProps) {
         (icon && <span className={cn(icon, 'size-5 shrink-0 text-fg-muted')} aria-hidden='true' />)}
       <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
         <span className='flex items-center gap-2'>
-          <span
-            className={cn('truncate text-sm lowercase', danger ? 'text-hanko' : 'text-fg-high')}
-          >
+          <Clipped className={cn('text-sm lowercase', danger ? 'text-hanko' : 'text-fg-high')}>
             {label}
-          </span>
+          </Clipped>
           {onExplain && (
             <button
               type='button'
@@ -74,7 +73,7 @@ export function Row(props: RowProps) {
           )}
         </span>
         {description && (
-          <span className='truncate text-[11px] text-fg-muted lowercase'>{description}</span>
+          <Clipped className='text-[11px] text-fg-muted lowercase'>{description}</Clipped>
         )}
       </span>
       {props.type === 'value' && props.value != null && (

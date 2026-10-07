@@ -21,7 +21,7 @@ import { SaveContactModal } from '../../../components/save-contact-modal';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { useActiveAddress } from '../../../hooks/use-address';
 import { EMPTY_BALANCES } from './shared';
-import { Footer, Main, shortAddress } from './send-ui';
+import { Addr, Footer, Main } from './send-ui';
 import { AmountField, AddressSheet, ToField } from './send-fields';
 import { BalanceSheet, balanceLook } from './balance-sheet';
 import { PenumbraFlow } from './penumbra-flow';
@@ -93,7 +93,7 @@ export function PenumbraSend({
   const canReview = !!asset && addressValid && !!to && parseFloat(sendState.amount) > 0;
   const sending = (
     <>
-      send <Sensitive>{`${sendState.amount} ${unit}`}</Sensitive> to {toName ?? shortAddress(to)}
+      send <Sensitive>{`${sendState.amount} ${unit}`}</Sensitive> to {toName ?? <Addr>{to}</Addr>}
     </>
   );
 
@@ -113,7 +113,16 @@ export function PenumbraSend({
           amount: sendState.amount,
           unit,
           rows: [
-            ['to', toName ? `${toName} · ${shortAddress(to)}` : shortAddress(to)],
+            [
+              'to',
+              toName ? (
+                <>
+                  {toName} · <Addr>{to}</Addr>
+                </>
+              ) : (
+                <Addr>{to}</Addr>
+              ),
+            ],
             ['fee', 'shown before you approve'],
           ],
           privacy: 'shielded · amount and memo stay private',

@@ -20,6 +20,7 @@ import { NodeSheet } from './node-sheet';
 import { Row } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { cn } from '@repo/ui/lib/utils';
 import { useExplain, type ExplainId } from './settings-explain';
 import { OptionsRow } from './sheet-options';
@@ -293,8 +294,8 @@ const ZcashOn = () => {
               )}
             />
             <span className='flex min-w-0 grow flex-col gap-[3px]'>
-              <span className='truncate text-sm text-fg-high'>{status}</span>
-              <span className='truncate text-[11px] text-fg-muted'>
+              <Clipped className='text-sm text-fg-high'>{status}</Clipped>
+              <Clipped className='text-[11px] text-fg-muted'>
                 {[
                   workerSyncHeight > 0 && `block ${workerSyncHeight.toLocaleString()}`,
                   chain?.status === 'checked'
@@ -305,7 +306,7 @@ const ZcashOn = () => {
                 ]
                   .filter(Boolean)
                   .join(' · ')}
-              </span>
+              </Clipped>
             </span>
             {pct != null && <span className='text-label text-fg-muted'>{pct}%</span>}
             {pct != null && (

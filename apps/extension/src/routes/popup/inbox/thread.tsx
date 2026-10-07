@@ -10,6 +10,7 @@
  * field is the transport; one tap sends the next message as a memo instead.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
@@ -66,7 +67,7 @@ import { PaymentCard, ProposeSheet } from './payments';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { RequestSheet } from '../send/send-fields';
 import { dayOf } from '../../../utils/when';
-import { cardOf, counterparty, shortAddress, threadIdOf, whenOf } from './threads';
+import { cardOf, counterparty, threadIdOf, whenOf } from './threads';
 import { SendState } from './send-state';
 
 const ZCASH_LINK = /zcash:[^\s]+/i;
@@ -127,7 +128,9 @@ const CardItem = ({ m }: { m: Message }) => {
     <article className='flex w-[78%] flex-col gap-1.5 self-start border border-border-hard bg-elev-1 px-3.5 py-3'>
       <span className='text-[11px] text-fg-muted'>a card · not checked yet</span>
       <span className='text-sm text-fg-high'>{card.name || 'someone'}</span>
-      <span className='font-mono text-[11px] text-fg-muted'>{shortAddress(card.address)}</span>
+      <Clipped head={8} tail={6} label='address' className='font-mono text-[11px] text-fg-muted'>
+        {card.address}
+      </Clipped>
       {saved ? (
         <span className='text-[11px] text-fg-muted'>in your contacts</span>
       ) : (
@@ -429,7 +432,9 @@ const Answers = ({ contactId, answers }: { contactId: string; answers: PairCard[
       {answers.map(a => (
         <div key={a.zid} className='flex items-center gap-3'>
           <ZidSeal hex={a.zid} size={32} />
-          <span className='grow truncate text-xs text-fg'>{a.name || shortAddress(a.address)}</span>
+          <Clipped head={a.name ? undefined : 8} tail={6} className='grow text-xs text-fg'>
+            {a.name || a.address}
+          </Clipped>
           <button
             type='button'
             disabled={busy}
@@ -616,8 +621,8 @@ export function ThreadPage() {
           onClick={() => (contact ? navigate(contactPath(contact.id)) : setSaving(true))}
           className='flex min-w-0 grow flex-col gap-[3px] pl-1 text-left'
         >
-          <span className='truncate text-[15px] text-fg-high'>{name}</span>
-          <span className='truncate text-[11px] text-fg-muted'>
+          <Clipped className='text-[15px] text-fg-high'>{name}</Clipped>
+          <Clipped className='text-[11px] text-fg-muted'>
             {contact
               ? contact.zid
                 ? (sourceLine(contact) ?? 'from a card')
@@ -625,7 +630,7 @@ export function ThreadPage() {
               : address
                 ? 'tap to save'
                 : 'left no address'}
-          </span>
+          </Clipped>
         </button>
       </header>
 
@@ -683,9 +688,9 @@ export function ThreadPage() {
       {contact && answers.length > 0 && <Answers contactId={contact.id} answers={answers} />}
       {dealAsk && (
         <div className='flex h-11 shrink-0 items-center justify-between gap-3 border-t border-border-soft px-4 text-xs text-fg'>
-          <span className='truncate'>
+          <Clipped>
             {name} asks you into a deal · {dealAsk.group}
-          </span>
+          </Clipped>
           <button
             type='button'
             onClick={() => navigate(`${PopupPath.INBOX_JOIN}?code=${dealAsk.code}&via=pasted`)}
@@ -697,11 +702,11 @@ export function ThreadPage() {
       )}
       {canSend && (invites || waiting) && (
         <div className='flex h-8 shrink-0 items-center justify-between gap-3 border-t border-border-soft px-4 text-[11px] text-fg-muted'>
-          <span className='truncate'>
+          <Clipped>
             {waiting
               ? `waiting for ${name} to answer your invite`
               : `invites ${name} to chat · on ${relayHost(contact?.relay || defaultRelay)}`}
-          </span>
+          </Clipped>
           {invites && (
             <button
               type='button'

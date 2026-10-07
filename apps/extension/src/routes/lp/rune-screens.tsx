@@ -31,7 +31,7 @@ import {
   swapGuessOf,
   type LpState,
 } from './store';
-import { blocksToMin, pct, Row, short, Table, useLp } from './screens';
+import { blocksToMin, pct, Row, Short, Table, useLp } from './screens';
 
 const CopyAddress = ({ address }: { address: string }) => {
   const [copied, setCopied] = useState(false);
@@ -134,7 +134,9 @@ export const RuneScreen = ({ onSwap }: { onSwap: () => void }) => {
               {fresh ? `${runeText(s.q!.atLeast)} rune` : 'n/a'}
             </Row>
             <Row k='to' w='w-[110px]' h='h-[52px]' side='your rune address'>
-              <span className='font-mono'>{short(s.address)}</span>
+              <span className='font-mono'>
+                <Short>{s.address}</Short>
+              </span>
             </Row>
             {s.read && (
               <Row k='holds now' w='w-[110px]' h='h-[52px]'>
@@ -262,7 +264,9 @@ export const Withdraw2Screen = ({ onOut }: { onOut: () => void }) => {
           {zecFees > 0n && ` + ${zecText(zecFees)} zec`}
         </Row>
         <Row k='asks with' w='w-[150px]' h='h-[52px]' side={memo}>
-          <span className='text-[13px]'>0 rune from {short(s.read.address)}</span>
+          <span className='text-[13px]'>
+            0 rune from <Short>{s.read.address}</Short>
+          </span>
         </Row>
       </Table>
       {(s.err ??

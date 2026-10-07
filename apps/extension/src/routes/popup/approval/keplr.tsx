@@ -23,6 +23,7 @@ import {
   type KeplrApprovalRequest,
   type KeplrWireKey,
 } from '../../../message/keplr';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 /** prefix for a keplr chain id, from our config or a bech32 signer address */
 const prefixFor = (chainId: string, signerAddress?: string): string => {
@@ -156,8 +157,10 @@ export const KeplrApproval = () => {
         <div className='flex items-center gap-2 bg-canvas p-3'>
           {!!req.origin && <OriginIcon origin={req.origin} size={32} />}
           <div className='flex flex-col overflow-hidden'>
-            {req.title && <span className='truncate text-sm'>{req.title}</span>}
-            <span className='truncate text-xs text-fg-muted'>{req.origin ?? ''}</span>
+            {req.title && <Clipped className='text-sm'>{req.title}</Clipped>}
+            <Clipped className='text-xs text-fg-muted' label='site'>
+              {req.origin ?? ''}
+            </Clipped>
           </div>
         </div>
 

@@ -7,6 +7,7 @@
  * zafu tries again the next time people opens.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
@@ -78,7 +79,7 @@ export const WaitingCards = () => {
                 onClick={() => navigate(`${PopupPath.INBOX_ADD}?room=${encodeURIComponent(r.id)}`)}
                 className='flex min-w-0 grow flex-col gap-0.5 text-left'
               >
-                <span className='truncate text-[13px] text-fg-high'>{what}</span>
+                <Clipped className='text-[13px] text-fg-high'>{what}</Clipped>
                 <span className='text-[11px] text-fg-muted'>
                   {dayAt(at)} · {cancelling ? 'zafu tries again when people opens' : 'watching'}
                 </span>

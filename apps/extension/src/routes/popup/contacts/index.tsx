@@ -3,6 +3,7 @@
  * Favourites sort first. A row opens that person; "add" is a sheet.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
@@ -189,12 +190,12 @@ export function ContactsPage() {
                 >
                   <ZidSeal hex={c.zid} size={c.zid ? 26 : 30} />
                   <span className='flex min-w-0 grow flex-col gap-[3px]'>
-                    <span className='truncate text-sm text-fg-high'>{c.name}</span>
-                    <span
-                      className={`truncate text-[11px] ${status.warn ? 'text-warn' : 'text-fg-muted'}`}
+                    <Clipped className='text-sm text-fg-high'>{c.name}</Clipped>
+                    <Clipped
+                      className={`text-[11px] ${status.warn ? 'text-warn' : 'text-fg-muted'}`}
                     >
                       {status.line}
-                    </span>
+                    </Clipped>
                   </span>
                 </button>
               );

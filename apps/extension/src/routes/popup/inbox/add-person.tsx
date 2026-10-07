@@ -11,6 +11,7 @@
  * compares the seal before they are saved.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
@@ -66,7 +67,7 @@ const Cue = ({
       )}
       aria-hidden='true'
     />
-    <span className='grow truncate text-xs text-fg'>{text}</span>
+    <Clipped className='grow text-xs text-fg'>{text}</Clipped>
     {meta && <span className='shrink-0 text-[11px] text-fg-muted'>{meta}</span>}
   </div>
 );
@@ -161,7 +162,7 @@ const AnswerRow = ({ a, onPick }: { a: CardAnswer; onPick: () => void }) => {
       className='flex h-14 items-center gap-3 border-b border-border-soft px-3.5 text-left last:border-0 hover:bg-elev-2'
     >
       <span className='flex min-w-0 grow flex-col gap-0.5'>
-        <span className='truncate text-[13px] text-fg-high'>{c?.name || 'someone'}</span>
+        <Clipped className='text-[13px] text-fg-high'>{c?.name || 'someone'}</Clipped>
         <span className='text-[11px] text-fg-muted'>
           {a.via === 'memo' ? 'by memo' : a.sealed ? 'sealed' : 'not sealed'} · {hhmm(a.at)}
         </span>

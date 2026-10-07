@@ -37,6 +37,7 @@ import type { Utxo } from '../../state/keyring/zidecar-client';
 import { SettingsScreen } from './settings/settings-screen';
 import { PopupPath } from './paths';
 import { cn } from '@repo/ui/lib/utils';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 
 /** Shielded pool a note lives in. Records persisted pre-ironwood default to orchard. */
 type NotePool = 'orchard' | 'ironwood';
@@ -218,10 +219,6 @@ const POOL_TABS: { key: PoolFilter; icon: string; badge?: string }[] = [
 
 /** single transparent UTXO row: value, address, block height - public framing. */
 function UtxoRow({ utxo }: { utxo: Utxo }) {
-  const addr =
-    utxo.address.length > 20
-      ? `${utxo.address.slice(0, 12)}...${utxo.address.slice(-6)}`
-      : utxo.address;
   return (
     <div className='flex items-center gap-3 border border-border-soft bg-elev-1 p-3'>
       <div className='flex h-9 w-9 shrink-0 items-center justify-center bg-elev-2'>
@@ -237,9 +234,9 @@ function UtxoRow({ utxo }: { utxo: Utxo }) {
           </span>
         </div>
         <div className='mt-0.5 flex items-center gap-2'>
-          <span className='font-mono text-xs text-fg-muted' title={utxo.address}>
-            {addr}
-          </span>
+          <Clipped head={12} tail={6} label='address' className='font-mono text-xs text-fg-muted'>
+            {utxo.address}
+          </Clipped>
           <span className='text-xs text-fg-muted'>
             {utxo.height > 0 ? `block ${utxo.height.toLocaleString()}` : 'unconfirmed'}
           </span>

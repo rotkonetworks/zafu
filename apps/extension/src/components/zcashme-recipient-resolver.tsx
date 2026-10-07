@@ -14,6 +14,7 @@
  * unverified name can point at anyone's address.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useEffect, useState } from 'react';
 import { ZcashMeOptIn } from './zcashme-opt-in';
 import {
@@ -25,7 +26,7 @@ import {
 import { pickDecoys } from '../services/zcashme/decoys';
 import { useZcashMe } from '../services/zcashme/config';
 import { zcashMeLabel, zcashMeUsername } from '../services/zcashme/label';
-import { cn } from '@repo/ui/lib/utils';
+import { cn, shorten } from '@repo/ui/lib/utils';
 
 interface Props {
   input: string;
@@ -48,17 +49,14 @@ function ProfileCard({ profile, onPick }: { profile: ZcashMeProfile; onPick: () 
         {Array.from(name)[0]}
       </span>
       <span className='flex min-w-0 flex-col gap-0.5'>
-        <span className='truncate text-[13px] text-fg-high'>{name} on zcash.me</span>
-        <span
-          className={cn(
-            'truncate text-[11px]',
-            profile.addressVerified ? 'text-green' : 'text-warn',
-          )}
+        <Clipped className='text-[13px] text-fg-high'>{name} on zcash.me</Clipped>
+        <Clipped
+          className={cn('text-[11px]', profile.addressVerified ? 'text-green' : 'text-warn')}
         >
           {profile.addressVerified
-            ? `verified ${links || 'address'} · ${a.slice(0, 6)}…${a.slice(-5)}`
+            ? `verified ${links || 'address'} · ${shorten(a, 6, 5)}`
             : 'not proven to be theirs · please confirm with them first'}
-        </span>
+        </Clipped>
       </span>
     </button>
   );

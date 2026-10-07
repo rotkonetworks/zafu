@@ -4,6 +4,7 @@
  * (for anyone; the page tells them how to get zafu).
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useState } from 'react';
 import { useCopy } from '@repo/ui/hooks/use-copy';
 import { cn } from '@repo/ui/lib/utils';
@@ -39,7 +40,7 @@ export const ShareWays = ({ ways, disabled }: { ways: ShareWay[]; disabled?: boo
           >
             <span className='flex min-w-0 grow flex-col gap-[3px]'>
               <span className='text-[13px] text-fg-high'>{w.name}</span>
-              <span className='truncate text-[11px] text-fg-muted'>{w.meta}</span>
+              <Clipped className='text-[11px] text-fg-muted'>{w.meta}</Clipped>
             </span>
             <span className={cn('text-xs', done ? 'text-success' : 'text-zigner-gold')}>
               {done ? 'copied' : 'copy'}

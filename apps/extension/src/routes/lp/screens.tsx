@@ -5,11 +5,12 @@
  * THORNode's own formulas (lp/math.ts); nothing here asks the network.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import type { ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@repo/ui/components/ui/button';
-import { cn } from '@repo/ui/lib/utils';
+import { cn, shorten } from '@repo/ui/lib/utils';
 import { AskOnce, Column, StepLines, useNow, type Host } from '../../components/scroll-page';
 import { clock } from '../../buy/machine';
 import { Sensitive } from '../../components/sensitive';
@@ -66,7 +67,14 @@ import {
 
 export const useLp = <T,>(sel: (s: LpState) => T): T => useStore(lpStore, sel);
 
-export const short = (a?: string) => (a ? `${a.slice(0, 5)}…${a.slice(-4)}` : '');
+export const short = (a?: string) => (a ? shorten(a, 5, 4) : '');
+/** an address in its short form, whole on demand */
+export const Short = ({ children }: { children?: string }) =>
+  children ? (
+    <Clipped head={5} tail={4} label='address'>
+      {children}
+    </Clipped>
+  ) : null;
 export const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const pct = (n: number, d = 1) => `${n.toFixed(d)}%`;
@@ -117,7 +125,9 @@ export const LpAddressRow = ({ w }: { w?: string }) => {
       className='flex min-h-[50px] items-center gap-3.5 bg-elev-1 px-[18px] text-left transition-colors hover:bg-elev-2'
     >
       <span className={cn('shrink-0 text-xs text-fg-muted', w ?? 'w-[128px]')}>lp address</span>
-      <span className='flex-1 font-mono text-sm text-fg-high'>{short(address) || '…'}</span>
+      <span className='flex-1 font-mono text-sm text-fg-high'>
+        {address ? <Short>{address}</Short> : '…'}
+      </span>
       <span className='text-xs text-warn'>public</span>
       <EyeIcon />
     </button>
@@ -764,7 +774,13 @@ export const WithdrawScreen = ({ onOut }: { onOut: () => void }) => {
       <Table>
         <Row k='asks with' w='w-[110px]' h='h-[52px]' side={withdrawMemo(bps)}>
           <span className='text-[13px] text-fg'>
-            {s.ask ? `${zecText(s.ask)} zec from ${short(s.address)}` : 'n/a'}
+            {s.ask ? (
+              <>
+                {zecText(s.ask)} zec from <Short>{s.address}</Short>
+              </>
+            ) : (
+              'n/a'
+            )}
           </span>
         </Row>
       </Table>
@@ -968,8 +984,17 @@ export const TrackScreen = ({
           <span className='text-xs text-fg'>
             your position stays yours until it pays. this page keeps watching; a payout that comes
             later lands at your lp address and shows in your wallet. you may look up the ask
-            {f.sendTxid && ` (tx ${f.sendTxid.slice(0, 4)}…${f.sendTxid.slice(-4)})`} on a thorchain
-            explorer, or stop watching and ask again from your position.
+            {f.sendTxid && (
+              <>
+                {' '}
+                (tx{' '}
+                <Clipped head={4} tail={4} label='transaction id'>
+                  {f.sendTxid}
+                </Clipped>
+                )
+              </>
+            )}{' '}
+            on a thorchain explorer, or stop watching and ask again from your position.
           </span>
         </div>
       ) : lost ? null : (
@@ -1201,7 +1226,9 @@ export const RuneAddressRow = ({ w }: { w?: string }) => {
       className='flex min-h-[50px] items-center gap-3.5 bg-elev-1 px-[18px] text-left transition-colors hover:bg-elev-2'
     >
       <span className={cn('shrink-0 text-xs text-fg-muted', w ?? 'w-[128px]')}>rune address</span>
-      <span className='flex-1 font-mono text-sm text-fg-high'>{short(address) || '…'}</span>
+      <span className='flex-1 font-mono text-sm text-fg-high'>
+        {address ? <Short>{address}</Short> : '…'}
+      </span>
       <span className='text-xs text-warn'>public</span>
       <EyeIcon />
     </button>

@@ -1,7 +1,6 @@
-import { KeyboardEventHandler, ReactNode, useState } from 'react';
+import { ReactNode } from 'react';
 import { IncognitoIcon } from '../../icons/incognito';
 import { Separator } from '../../separator';
-import { cn } from '../../../../lib/utils';
 
 /**
  * Render key/value pairs inside a `<ViewBox />`.
@@ -22,33 +21,6 @@ export const ActionDetails = ({ children, label }: { children: ReactNode; label?
 
       {children}
     </div>
-  );
-};
-
-/**
- * Renders an accessible truncated text that can be expanded by clicking or pressing on it
- */
-const ActionDetailsTruncatedText = ({ children }: { children?: ReactNode }) => {
-  const [isTruncated, setIsTruncated] = useState(true);
-
-  const toggleTruncate = () => setIsTruncated(prev => !prev);
-  const toggleTruncateEnter: KeyboardEventHandler<HTMLButtonElement> = event => {
-    if (event.key === 'Enter') {
-      toggleTruncate();
-    }
-  };
-
-  return (
-    <span
-      className={cn('hover:underline', { truncate: isTruncated })}
-      title={isTruncated && typeof children === 'string' ? children : undefined}
-      role='button'
-      tabIndex={0}
-      onClick={toggleTruncate}
-      onKeyDown={toggleTruncateEnter}
-    >
-      {children}
-    </span>
   );
 };
 
@@ -85,4 +57,3 @@ const ActionDetailsRow = ({
 };
 
 ActionDetails.Row = ActionDetailsRow;
-ActionDetails.TruncatedText = ActionDetailsTruncatedText;

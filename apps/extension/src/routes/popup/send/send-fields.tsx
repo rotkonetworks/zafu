@@ -5,7 +5,8 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import { cn } from '@repo/ui/lib/utils';
+import { cn, shorten } from '@repo/ui/lib/utils';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
@@ -21,7 +22,7 @@ import {
   type AddressChain,
 } from '../../../addresses/kind';
 import { Sensitive } from '../../../components/sensitive';
-import { Helper, shortAddress } from './send-ui';
+import { Helper } from './send-ui';
 
 export interface BookRow {
   label: string;
@@ -85,7 +86,7 @@ export const pickerRows = ({
       ),
       ...recent
         .filter(r => r.network === chain && isAddressOn(r.address, chain))
-        .map(r => ({ label: shortAddress(r.address), address: r.address })),
+        .map(r => ({ label: shorten(r.address, 6, 5), address: r.address })),
     ].filter(keep),
   };
 };
@@ -108,7 +109,7 @@ const Rows = ({
             key={row.address}
             type='screen'
             label={row.label}
-            description={shortAddress(row.address)}
+            description={shorten(row.address, 6, 5)}
             onPress={() => onPick(row)}
           />
         ))}
@@ -350,7 +351,7 @@ export const AmountField = ({
             aria-label='choose asset'
             className='flex h-8 max-w-[76px] items-center gap-1 px-1.5 text-[13px] text-fg-muted transition-colors hover:text-fg-high'
           >
-            <span className='truncate lowercase'>{unit}</span>
+            <Clipped className='lowercase'>{unit}</Clipped>
             <span className='i-lucide-chevron-down size-3 shrink-0' />
           </button>
         ) : (

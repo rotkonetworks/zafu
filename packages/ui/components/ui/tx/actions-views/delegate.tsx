@@ -3,6 +3,7 @@ import { ViewBox } from '../viewbox';
 import { joinLoHiAmount } from '@penumbrafi/types/amount';
 import { bech32mIdentityKey } from '@penumbra-zone/bech32m/penumbravalid';
 import { ActionDetails } from './action-details';
+import { Clipped } from '../../clipped';
 
 /**
  * Render a `Delegate` action.
@@ -30,9 +31,7 @@ export const DelegateComponent = ({ value }: { value: Delegate }) => {
           {/** @todo: Render validator name/etc. after fetching? */}
           {!!value.validatorIdentity && (
             <ActionDetails.Row label='Validator identity'>
-              <ActionDetails.TruncatedText>
-                {bech32mIdentityKey(value.validatorIdentity)}
-              </ActionDetails.TruncatedText>
+              <Clipped>{bech32mIdentityKey(value.validatorIdentity)}</Clipped>
             </ActionDetails.Row>
           )}
         </ActionDetails>

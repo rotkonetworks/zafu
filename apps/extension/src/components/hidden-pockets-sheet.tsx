@@ -4,6 +4,7 @@
  * balance), so the only action here is bringing it back into view.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useStore } from '../state';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import type { Pocket } from '../state/pockets';
@@ -27,10 +28,8 @@ export const HiddenPocketsSheet = ({
         {pockets.map(p => (
           <div key={p.account} className='flex h-[54px] items-center gap-3 px-2'>
             <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
-              <span className='truncate text-sm text-fg-muted lowercase'>{p.name}</span>
-              <span className='truncate text-[11px] text-fg-muted lowercase'>
-                account {p.account}
-              </span>
+              <Clipped className='text-sm text-fg-muted lowercase'>{p.name}</Clipped>
+              <Clipped className='text-[11px] text-fg-muted lowercase'>account {p.account}</Clipped>
             </span>
             <button
               type='button'
