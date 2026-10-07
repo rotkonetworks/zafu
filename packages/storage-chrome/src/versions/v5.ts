@@ -324,6 +324,18 @@ type LOCAL = {
   }[];
 
   /**
+   * which wallet made a passkey for which relying party, from which origin:
+   * a site may only ask to sign in to an rpId it created a passkey for.
+   * sealed at rest (ENCRYPTED_KEYS); `owner` is the wallet's zid or vault id.
+   */
+  passkeyGrants?: {
+    origin: string;
+    rpId: string;
+    owner: string;
+    at: number;
+  }[];
+
+  /**
    * your own addresses on other chains, per wallet (owner = zid or vault id),
    * offered again in swap fields. sealed at rest (ENCRYPTED_KEYS).
    */

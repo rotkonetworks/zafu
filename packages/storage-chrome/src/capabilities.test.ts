@@ -32,7 +32,7 @@ describe('hasCapability - non time-limited capabilities', () => {
   });
 });
 
-describe('hasCapability - time-limited capabilities (encrypt, passkey)', () => {
+describe('hasCapability - time-limited capabilities (encrypt)', () => {
   test.each([...TIME_LIMITED_CAPABILITIES])('%s: granted with future expiry -> true', cap => {
     const now = 1_000_000;
     const perms = basePerms({ granted: [cap], expires: { [cap]: now + 1 } });
@@ -56,11 +56,11 @@ describe('hasCapability - time-limited capabilities (encrypt, passkey)', () => {
   test('expiry on one capability does not affect another capability on the same origin', () => {
     const now = 1_000_000;
     const perms = basePerms({
-      granted: ['encrypt', 'passkey'],
-      expires: { encrypt: now + 1, passkey: now - 1 },
+      granted: ['encrypt', 'connect'],
+      expires: { encrypt: now - 1 },
     });
-    expect(hasCapability(perms, 'encrypt', now)).toBe(true);
-    expect(hasCapability(perms, 'passkey', now)).toBe(false);
+    expect(hasCapability(perms, 'encrypt', now)).toBe(false);
+    expect(hasCapability(perms, 'connect', now)).toBe(true);
   });
 
   test('GRANT_TTL_MS is 30 days', () => {

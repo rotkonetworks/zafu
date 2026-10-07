@@ -179,6 +179,7 @@ const ENCRYPTED_KEYS = new Set<string>([
   'groupChats',
   'frostRelayIdentities',
   'passwordLogins',
+  'passkeyGrants',
   'yourAddresses',
   'peopleRooms',
   'peopleThreads',
