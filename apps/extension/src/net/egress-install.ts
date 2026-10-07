@@ -9,7 +9,7 @@
  * trail so settings can show what zafu declined to contact.
  */
 
-import { installEgress, onEgressBlocked } from './egress';
+import { installEgress, onEgressBlocked, onEgressContacted } from './egress';
 import { EGRESS_INPUT_KEYS, compileEgress, type EgressInputs } from './egress-policy';
 import type { EgressRealm } from './egress-table';
 
@@ -45,5 +45,9 @@ installEgress(realm, {
 if (isServiceWorker) {
   onEgressBlocked(refusal => {
     void import('./ledger').then(m => m.recordRefusal(refusal));
+  });
+  // and the one writer of what zafu contacted lately (./contacted)
+  onEgressContacted(tally => {
+    void import('./contacted').then(m => m.noteContacted(tally));
   });
 }

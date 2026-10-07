@@ -42,7 +42,8 @@ export const isEncryptedWrapper = (v: unknown): v is EncryptedWrapper => {
   );
 };
 
-async function getKey(session: ExtensionStorage<SessionStorageState>): Promise<Key | null> {
+/** the session's password key, or null while locked */
+export async function getKey(session: ExtensionStorage<SessionStorageState>): Promise<Key | null> {
   const keyJson = await session.get('passwordKey');
   if (!keyJson) {
     return null;
@@ -190,6 +191,8 @@ const ENCRYPTED_KEYS = new Set<string>([
   'openSwaps',
   // zec liquidity: each pocket's lp address index, its last read, an add or take-out in flight
   'zecLp',
+  // what zafu contacted lately: destinations and when, kept on this computer only
+  'netContacted',
 ]);
 
 /** should this storage key be encrypted? */
