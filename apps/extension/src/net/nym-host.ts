@@ -21,7 +21,8 @@ const say = (m: NymMessage): void => channel.postMessage(m);
 let worker: Worker | undefined;
 let tunnel: Promise<Remote<IMixTunnelWorker>> | undefined;
 let ready = false;
-/** smolmix keeps its client key in IndexedDB under the client id: forgotten at stop */
+/** smolmix keeps its client key in IndexedDB under this prefix and the id: forgotten at stop */
+const NYM_DB = 'wasm-client-storage-';
 let clientId: string | undefined;
 
 const spawn = (): Promise<Remote<IMixTunnelWorker>> =>
@@ -56,6 +57,15 @@ export const startNymTunnel = async (): Promise<void> => {
   const t0 = performance.now();
   clientId = `zafu-${randomHex().slice(0, 16)}`;
   const id = clientId;
+  // an identity a closed browser never got to forget
+  void indexedDB
+    .databases?.()
+    .then(dbs =>
+      dbs.forEach(
+        ({ name }) =>
+          name?.startsWith(NYM_DB) && name !== NYM_DB + id && indexedDB.deleteDatabase(name),
+      ),
+    );
   tunnel = spawn().then(async t => {
     await t.setupMixTunnel({
       clientId: id,
@@ -93,7 +103,7 @@ export const stopNymTunnel = (): void => {
   tunnel = undefined;
   ready = false;
   if (clientId) {
-    indexedDB.deleteDatabase(clientId);
+    indexedDB.deleteDatabase(NYM_DB + clientId);
     clientId = undefined;
   }
   say({ type: 'state', ready });
