@@ -611,6 +611,22 @@ export function create_sign_request(account_index: number, sighash_hex: string, 
 
 export function describe_pczt_for_ledger(pczt_hex: string, mainnet: boolean): string;
 
+export function door_pake_check(key: Uint8Array, peer_msg: Uint8Array, tag: Uint8Array): boolean;
+
+export function door_pake_confirm(key: Uint8Array, own_msg: Uint8Array): Uint8Array;
+
+/**
+ * The run's 32-byte key; throws when the peer's message is not one.
+ */
+export function door_pake_finish(host: boolean, code: string, session: Uint8Array, entropy: Uint8Array, peer: Uint8Array): Uint8Array;
+
+/**
+ * `host`: this side made the code. Returns this side's 33-byte message.
+ */
+export function door_pake_message(host: boolean, code: string, session: Uint8Array, entropy: Uint8Array): Uint8Array;
+
+export function door_pake_verify_words(key: Uint8Array): string;
+
 /**
  * Encode notes + merkle paths into CBOR bytes for ur:zcash-notes.
  *
@@ -1208,6 +1224,11 @@ export interface InitOutput {
     readonly compute_txid: (a: number, b: number) => [number, number, number, number];
     readonly create_sign_request: (a: number, b: number, c: number, d: any, e: number, f: number) => [number, number, number, number];
     readonly describe_pczt_for_ledger: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly door_pake_check: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
+    readonly door_pake_confirm: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly door_pake_finish: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number, number];
+    readonly door_pake_message: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
+    readonly door_pake_verify_words: (a: number, b: number) => [number, number, number, number];
     readonly encode_notes_bundle: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
     readonly estimate_compact_savings: (a: number, b: number) => [number, number, number, number];
     readonly extract_signed_tx_from_pczt: (a: number, b: number) => [number, number, number, number];

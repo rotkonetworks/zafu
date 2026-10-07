@@ -177,6 +177,34 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
   `voting-wasm` `local_chain_e2e` ran these bindings against a local svoted
   v1.6.1-rc.5 (37 proposals, votes on 37 and 17, tally finalized).
 
+## 2026-10-07 rebuild (3) - door codes: SPAKE2 over a code's words
+
+- source repo: zcli, branch `master`, rev `be520f3` (the merge of zcli PR
+  #30, `feat/wormhole-pake` 98e1a28). Rebuilt from a fresh worktree of
+  `be520f3` with the recipe above: all four vendored files are byte-identical
+  to the `98e1a28` branch build they replace (same sha256 below; master's
+  other changes since are under `bin/` only), so the shipped blob is a master
+  build.
+- new exports (`crates/zcash-wasm/src/pake.rs`): `door_pake_message`,
+  `door_pake_finish`, `door_pake_confirm`, `door_pake_check`,
+  `door_pake_verify_words`. SPAKE2 (RustCrypto `spake2` 0.4, Ed25519) over a
+  code's words, stateless: a run is rebuilt from 32 bytes of entropy the door
+  keeps. Nothing removed; the `.d.ts` diff is those five functions.
+- `cargo test -p zafu-wasm --lib --tests --release` at `98e1a28` (same crate tree as `be520f3`): 171 passed
+  (162 + 9 new in `pake`).
+- toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
+  wasm-bindgen CLI 0.2.126, binaryen 130; recipe above.
+- rayon snippet hash unchanged (`wasm-bindgen-rayon-38edf6e439f6d70d`), the
+  patched `workerHelpers.js` kept in both trees.
+- size: pre `wasm-opt` 28,744,775 bytes (post-bindgen); post `-Oz`
+  13,456,876 bytes (+86,581: spake2, its hash-to-scalar and ChaCha20).
+- sha256(parallel zafu_wasm_bg.wasm) =
+  ae900e514070a6dd2762c1624b12845cbb10a83c52500b05d13d2c1c22baa0cf
+- sha256(zafu_wasm.js) =
+  374db5edef65e565693f8671fbbd34ab6dfff6d767a1cadebb291950b9c417b3
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 59 32768 shared)`.
+
 ## 2026-10-07 rebuild (2) - the deposit's expiry follows the branch, or the move
 
 - source repo: zcli, branch `master`, rev `565027d` (merge of zcli PR #29,
