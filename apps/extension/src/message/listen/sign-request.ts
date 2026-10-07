@@ -26,6 +26,7 @@ import { hasCapability } from '@repo/storage-chrome/capabilities';
 import { UserChoice } from '@repo/storage-chrome/records';
 import { PopupType } from '../popup';
 import { popup } from '../../popup';
+import { openPanelOnGesture } from '../../side-panel-pref';
 import { isValidExternalSender } from '../../senders/external';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { EncryptedVault } from '../../state/keyring/types';
@@ -113,6 +114,9 @@ const handleSignRequest = async (
       code: 'invalid_request',
     };
   }
+
+  // before the first await, so the sign-in click still counts
+  openPanelOnGesture(sender);
 
   try {
     // who holds the key: a phrase signs here, a zigner answers a QR, and a

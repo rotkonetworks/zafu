@@ -24,11 +24,11 @@ export const getApprovalSurface = async (): Promise<ApprovalSurface> =>
   );
 
 /**
- * In-memory mirror of the preference, so the connect listener can decide
+ * In-memory mirror of the preference, so an approval listener can decide
  * whether to open the side panel WITHOUT an awaited storage read.
  *
  * Why this exists: `chrome.sidePanel.open()` only works when called with no
- * `await` before it in the user-gesture task (see content-script-connect). An
+ * `await` before it in the user-gesture task (see openPanelOnGesture). An
  * awaited `localExtStorage.get(...)` right before the open is exactly what loses
  * the gesture and forces the popup fallback. Reading a cached value is
  * synchronous, so the open stays inside the gesture.
@@ -67,12 +67,8 @@ export const initSidePanelPref = (): void => {
   }
 };
 
-/** Synchronous read of the cached preference. Never awaits. */
-export const approvalSurfaceSync = (): ApprovalSurface => cached;
-export const wantsSidePanelSync = (): boolean => cached !== 'popup';
-
 /**
- * The side panel open the connect gesture just asked Chrome for.
+ * The side panel open a dapp's gesture just asked Chrome for.
  *
  * `sidePanel.open()` resolving means Chrome accepted it and the panel IS
  * coming, it just may take seconds to load the bundle and show up in
@@ -84,7 +80,20 @@ export const wantsSidePanelSync = (): boolean => cached !== 'popup';
 let pendingOpen: { at: number; accepted: Promise<boolean> } | undefined;
 const PENDING_OPEN_FRESH_MS = 5_000;
 
-export const notePanelOpen = (open: Promise<unknown>): void => {
+/**
+ * Open the side panel for an approval a dapp's click just asked for.
+ *
+ * Call it with nothing awaited before it in the message's task: the click's
+ * transient activation rides the message, and `chrome.sidePanel.open()` only
+ * counts as gesture-driven inside that same task. After an await Chrome
+ * refuses it, and the approval waits 2s for a panel before falling back to a
+ * window. Best-effort; with the `popup` surface it does nothing.
+ */
+export const openPanelOnGesture = (sender: chrome.runtime.MessageSender): void => {
+  if (cached === 'popup' || sender.tab?.id == null || !chrome.sidePanel) {
+    return;
+  }
+  const open = chrome.sidePanel.open({ tabId: sender.tab.id });
   pendingOpen = {
     at: Date.now(),
     accepted: open.then(

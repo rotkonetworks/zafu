@@ -8,7 +8,7 @@ import { isValidExternalSender, ValidExternalSender } from '../../senders/extern
 import { PopupAlreadyOpenError } from '../../popup';
 import { throwIfNeedsLogin } from '../../needs-login';
 import { sendTab } from '../send/tab';
-import { notePanelOpen, wantsSidePanelSync } from '../../side-panel-pref';
+import { openPanelOnGesture } from '../../side-panel-pref';
 
 // listen for page requests for approval
 export const contentScriptConnectListener = (
@@ -25,22 +25,10 @@ export const contentScriptConnectListener = (
     return false;
   }
 
-  // Open the side panel HERE, synchronously, before any await. This connect
-  // message rides the dapp's "Connect wallet" click, and transient user
-  // activation is a frame-level state that Chrome propagates through the
-  // content script's message - so `chrome.sidePanel.open()` counts as
-  // gesture-driven ONLY if we call it with nothing awaited before it (both
-  // guards above are synchronous). The old path lost the gesture by awaiting
-  // window/storage lookups in spawnDetachedPopup first, which is why sidebar
-  // mode kept falling back to popups. Opening on connect means the panel is up
-  // for the rest of the session (approvals then deliver into it and it stays
-  // open via exitApprovalSurface). Best-effort: on failure the popup path still
-  // runs. Only in side-panel mode - popup mode stays popup.
-  if (wantsSidePanelSync() && sender.tab?.id != null && chrome.sidePanel) {
-    const open = chrome.sidePanel.open({ tabId: sender.tab.id });
-    notePanelOpen(open);
-    void open.catch(() => undefined);
-  }
+  // Opened HERE, before any await, while the dapp's "connect wallet" click
+  // still counts; the panel then stays up for the rest of the session and
+  // approvals deliver into it.
+  openPanelOnGesture(sender);
 
   void handle(sender).then(respond);
   return true;
