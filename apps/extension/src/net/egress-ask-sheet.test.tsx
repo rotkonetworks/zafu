@@ -130,4 +130,48 @@ describe('the ask sheet', () => {
     await fetch('https://1click.chaindefuser.com/v0/tokens');
     expect(nativeFetch).toHaveBeenCalledTimes(1);
   });
+
+  it('asks several destinations in one sheet, and records every one on one allow', async () => {
+    const asked = optIn.requestEgressOptIn(['near-swap', 'thorchain']);
+    await flush();
+
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(document.body.textContent).toContain('1click.chaindefuser.com');
+    expect(document.body.textContent).toContain('thornode');
+    act(() => allowButton().click());
+
+    expect(await asked).toBe(true);
+    const view = await optIn.readEgressView();
+    expect(view.find(d => d.id === 'near-swap')?.why).toBe('you-allowed');
+    expect(view.find(d => d.id === 'thorchain')?.why).toBe('you-allowed');
+    // allowed once: never asked again
+    expect(await optIn.requestEgressOptIn(['near-swap', 'thorchain'])).toBe(true);
+    expect(sheetOpen()).toBe(false);
+  });
+
+  it('leaves a blocked destination out of the ask, and off', async () => {
+    const { setDestinationOptIn } = await import('./ledger');
+    await setDestinationOptIn('thorchain', 'blocked');
+    const asked = optIn.requestEgressOptIn(['near-swap', 'thorchain']);
+    await flush();
+
+    expect(document.body.textContent).not.toContain('thornode');
+    act(() => allowButton().click());
+
+    expect(await asked).toBe(false);
+    const view = await optIn.readEgressView();
+    expect(view.find(d => d.id === 'thorchain')?.why).toBe('you-blocked');
+    expect(view.find(d => d.id === 'near-swap')?.on).toBe(true);
+  });
+
+  it('a second ask waits for the open sheet, then goes through on its answer', async () => {
+    const first = optIn.requestEgressOptIn(['near-swap', 'thorchain']);
+    const second = optIn.requestEgressOptIn('near-swap');
+    await flush();
+    act(() => allowButton().click());
+
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
+    expect(sheetOpen()).toBe(false);
+  });
 });
