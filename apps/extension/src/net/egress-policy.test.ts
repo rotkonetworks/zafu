@@ -488,3 +488,72 @@ describe('send over nym: the transport is chosen per request class', () => {
     expect(outcome(NYM_OFF, 'https://validator.nymtech.net/api/v1/x', 'nym')).toBe('blocked');
   });
 });
+
+describe('send over nym: everything that ties you to a transaction or an address', () => {
+  const inputs: EgressInputs = {
+    enabledNetworks: ['zcash', 'penumbra', 'noble'],
+    netEgress: {
+      optIns: {
+        thorchain: 'allowed',
+        midgard: 'allowed',
+        'near-swap': 'allowed',
+        'zcash-me': 'allowed',
+        peer: 'allowed',
+        sponsor: 'allowed',
+        voting: 'allowed',
+      },
+    },
+  };
+  const table = compileEgress(inputs);
+  const nymOf = (url: string) => {
+    const d = decideEgress(url, 'popup', table);
+    return d.allow ? (d.nym ?? (d.nymBody ? 'body' : 'direct')) : d.reason;
+  };
+
+  it('routes what names you over nym, and leaves the public reads direct', () => {
+    const thor = 'https://gateway.liquify.com/chain/thorchain_api';
+    const rows: [string, string][] = [
+      ['https://zcash.rotko.net/zidecar.v1.Zidecar/GetTaddressTxids', 'names-you'],
+      ['https://zcash.rotko.net/zidecar.v1.Zidecar/GetAddressUtxos', 'names-you'],
+      [
+        'https://penumbra.rotko.net/penumbra.util.tendermint_proxy.v1.TendermintProxyService/BroadcastTxSync',
+        'broadcast',
+      ],
+      ['https://penumbra.rotko.net/penumbra.core.app.v1.QueryService/AppParameters', 'direct'],
+      [`${thor}/thorchain/tx/status/ABCD`, 'own-tx'],
+      [`${thor}/thorchain/quote/swap?destination=0x1`, 'names-you'],
+      [`${thor}/cosmos/auth/v1beta1/accounts/thor1x`, 'names-you'],
+      [`${thor}/thorchain/pool/ZEC.ZEC/liquidity_provider/thor1x`, 'names-you'],
+      [`${thor}/cosmos/tx/v1beta1/txs`, 'broadcast'],
+      [`${thor}/cosmos/tx/v1beta1/txs/ABCD`, 'own-tx'],
+      [`${thor}/thorchain/inbound_addresses`, 'direct'],
+      [`${thor}/thorchain/mimir`, 'direct'],
+      [`${thor}/thorchain/pool/ZEC.ZEC`, 'direct'],
+      ['https://thorchain-thornode-lb-1.thorwallet.org/thorchain/tx/status/ABCD', 'own-tx'],
+      ['https://gateway.liquify.com/chain/thorchain_midgard/v2/actions?address=x', 'names-you'],
+      ['https://gateway.liquify.com/chain/thorchain_midgard/v2/pools', 'direct'],
+      ['https://1click.chaindefuser.com/v0/quote', 'names-you'],
+      ['https://1click.chaindefuser.com/v0/status?depositAddress=x', 'names-you'],
+      ['https://1click.chaindefuser.com/v0/tokens', 'direct'],
+      ['https://zcash.me/api/lookup/alice', 'names-you'],
+      ['https://sponsor.zafu.pro/base/gas', 'names-you'],
+    ];
+    for (const [url, expected] of rows) {
+      expect([url, nymOf(url)]).toEqual([url, expected]);
+    }
+  });
+
+  it('reads a cometbft broadcast off its JSON-RPC body', () => {
+    const d = decideEgress('https://noble-rpc.polkachu.com/', 'popup', table);
+    expect(
+      d.allow &&
+        d.nymBody?.map(([p, c]) => [
+          new RegExp(p).test('{"jsonrpc":"2.0","method":"broadcast_tx_sync"}'),
+          c,
+        ]),
+    ).toContainEqual([true, 'broadcast']);
+    expect(d.allow && d.nymBody?.some(([p]) => new RegExp(p).test('{"method":"status"}'))).toBe(
+      false,
+    );
+  });
+});

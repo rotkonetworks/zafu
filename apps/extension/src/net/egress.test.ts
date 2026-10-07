@@ -256,6 +256,41 @@ describe('send over nym', () => {
   });
 });
 
+describe('send over nym, by JSON-RPC body', () => {
+  it('sends a cometbft status directly and holds a broadcast for nym', async () => {
+    const { isEgressBlocked } = await install({
+      rules: [
+        {
+          host: 'rpc.example',
+          path: '',
+          destination: 'noble',
+          allow: true,
+          nymBody: [['"method"\\s*:\\s*"broadcast_tx_', 'broadcast']],
+        },
+      ],
+      hosts: {},
+      adhoc: false,
+      nym: true,
+    });
+    await fetch('https://rpc.example/', { method: 'POST', body: '{"method":"status"}' });
+    expect(nativeFetch).toHaveBeenCalledTimes(1);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const done = fetch('https://rpc.example/', {
+        method: 'POST',
+        body: '{"jsonrpc":"2.0","method": "broadcast_tx_sync","params":{}}',
+      }).catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      const err = await done;
+      expect(isEgressBlocked(err)).toBe(true);
+      expect((err as { refusal: { nym: string } }).refusal.nym).toBe('broadcast');
+      expect(nativeFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('table relay', () => {
   it('serves its table to a worker even when the storage realm is asleep', async () => {
     const egress = await import('./egress');

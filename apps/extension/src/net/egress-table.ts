@@ -62,14 +62,17 @@ export interface EgressRule {
   realm?: EgressRealm;
   /** this request class goes over nym, never directly */
   nym?: RequestClass;
+  /** the class read off the body (a JSON-RPC method): `[pattern, class]`, first match wins */
+  nymBody?: [pattern: string, cls: RequestClass][];
 }
 
 /**
- * Requests that name you or your transaction. Over nym when it is on:
- *  - `broadcast`: a transaction you send
+ * Requests that tie you to a transaction or an address. Over nym when it is on:
+ *  - `broadcast`: a transaction you send (held and asked about when nym is down)
  *  - `own-tx`: a lookup of a transaction that is yours
+ *  - `names-you`: a third party asked about your address (a quote, a status, a balance)
  */
-export type RequestClass = 'broadcast' | 'own-tx';
+export type RequestClass = 'broadcast' | 'own-tx' | 'names-you';
 
 export interface EgressTable {
   rules: EgressRule[];
@@ -82,8 +85,14 @@ export interface EgressTable {
 }
 
 export type EgressDecision =
-  | { allow: true; host?: string; destination?: string; nym?: RequestClass }
-  | { allow: false; host: string; destination?: string; reason: EgressReason };
+  | {
+      allow: true;
+      host?: string;
+      destination?: string;
+      nym?: RequestClass;
+      nymBody?: EgressRule['nymBody'];
+    }
+  | { allow: false; host: string; destination?: string; reason: EgressReason; nym?: RequestClass };
 
 const pathOf = (url: string): string => {
   try {
@@ -170,7 +179,8 @@ export const decideEgress = (
     return { allow: false, host, destination, reason: 'blocked' };
   }
   if (override === 'allowed' || rule?.allow) {
-    return { allow: true, host, destination, ...(rule?.nym ? { nym: rule.nym } : {}) };
+    const { nym, nymBody } = rule ?? {};
+    return { allow: true, host, destination, ...(nym && { nym }), ...(nymBody && { nymBody }) };
   }
   return { allow: false, host, destination, reason: rule?.reason ?? 'unknown' };
 };
