@@ -64,6 +64,35 @@ export interface LicenseInfo {
   totalPaidZat: number;
 }
 
+/** the response body, read no further than `maxBytes` */
+const readCapped = async (resp: Response, method: string, maxBytes: number) => {
+  if (maxBytes === Infinity || !resp.body) {
+    return new Uint8Array(await resp.arrayBuffer());
+  }
+  const reader = resp.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    size += value.length;
+    if (size > maxBytes) {
+      void reader.cancel();
+      throw new Error(`gRPC ${method}: response over ${maxBytes} bytes`);
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out;
+};
+
 export class ZidecarClient {
   private serverUrl: string;
 
@@ -111,9 +140,24 @@ export class ZidecarClient {
       'cash.z.wallet.sdk.rpc.CompactTxStreamer',
       'GetLightdInfo',
       new Uint8Array(0),
-      bare,
+      { bare },
     );
     return this.parseLightdInfo(resp);
+  }
+
+  /**
+   * FlyClient proof of this node's chain (zidecar --flyclient), the raw
+   * FlyClientProofResponse that `verify_flyclient` reads. lambda and tail stay
+   * 0 (the defaults the verifier assumes); burial (field 3) asks for the note
+   * tree roots `burial` blocks under the tip. It names nothing about the wallet.
+   */
+  async getFlyClientProof(burial: number, maxBytes: number): Promise<Uint8Array> {
+    return this.grpcCallService(
+      'zidecar.v1.Zidecar',
+      'GetFlyClientProof',
+      new Uint8Array([0x18, ...this.varint(burial)]),
+      { maxBytes },
+    );
   }
 
   /** get current pro ring for anonymous membership proofs */
@@ -332,8 +376,15 @@ export class ZidecarClient {
     service: string,
     method: string,
     msg: Uint8Array,
-    /** only the grpc-web headers: for a node not yet known to be a zidecar */
-    bare = false,
+    {
+      bare = false,
+      maxBytes = Infinity,
+    }: {
+      /** only the grpc-web headers: for a node not yet known to be a zidecar */
+      bare?: boolean;
+      /** refuse a response body past this size, before it is all read */
+      maxBytes?: number;
+    } = {},
   ): Promise<Uint8Array> {
     const path = `${this.serverUrl}/${service}/${method}`;
 
@@ -359,7 +410,7 @@ export class ZidecarClient {
       throw new Error(`gRPC ${method}: HTTP ${resp.status}`);
     }
 
-    const buf = new Uint8Array(await resp.arrayBuffer());
+    const buf = await readCapped(resp, method, maxBytes);
 
     if (buf.length < 5) {
       // check HTTP headers for grpc-status (trailer-only response)
