@@ -330,6 +330,25 @@ describe('the removed zcash tip cross-check', () => {
 });
 
 describe('wallets sealed at rest', () => {
+  it("follows each multisig vault's own relay while the wallets list is sealed", () => {
+    const inputs = {
+      ...ZCASH_ONLY,
+      zcashWallets: { encrypted: { nonce: 'bm9uY2U=', cipherText: 'c2VhbGVk' } },
+      vaults: [
+        { type: 'mnemonic', insensitive: {} },
+        { type: 'frost-multisig', insensitive: { relayUrl: 'https://frost.example' } },
+        { type: 'frost-multisig', insensitive: {} },
+      ],
+    } as unknown as EgressInputs;
+    expect(outcome(inputs, 'https://frost.example/rendezvous/x')).toBe('opt-in');
+    const on = { ...inputs, netEgress: { optIns: { 'multisig-relay': 'allowed' as const } } };
+    expect(outcome(on, 'https://frost.example/rendezvous/x')).toBe('allow');
+    expect(describeEgress(on).find(d => d.id === 'multisig-relay')?.hosts).toEqual([
+      'relay.zafu.pro',
+      'frost.example',
+    ]);
+  });
+
   it('still allows the zcash node while the wallets list is sealed at rest', () => {
     const t = compileEgress({
       enabledNetworks: ['zcash'],

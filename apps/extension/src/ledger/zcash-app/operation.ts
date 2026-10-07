@@ -185,7 +185,7 @@ export async function settleBroadcast(
     }
   }
   if (acceptedTxid !== op.txid) {
-    console.warn(`[ledger] backend txid ${acceptedTxid} differs from computed ${op.txid}`);
+    console.warn('[ledger] the backend txid differs from the computed one');
   }
   try {
     await store.transition(op.operationId, from, 'broadcast', { txid: op.txid });

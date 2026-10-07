@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { legacyEnabledNetworks, migrateNetEgress } from './egress-migrate';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { legacyEnabledNetworks, migrateNetEgress, runNetEgressMigration } from './egress-migrate';
 import { compileEgress, type EgressInputs } from './egress-policy';
 import { decideEgress } from './egress-table';
 
@@ -35,6 +35,44 @@ describe('migrateNetEgress', () => {
     expect(next.destinations['sponsor.zafu.pro']!.state).toBe('blocked');
     // the worker had really talked to noble: keep the chain reachable
     expect(next.optIns).toEqual({ noble: 'allowed' });
+  });
+
+  // what storage really holds once a password exists: the wallet list sealed,
+  // each multisig's frost vault plaintext
+  const SEALED = { encrypted: { nonce: 'bm9uY2U=', cipherText: 'c2VhbGVk' } };
+  const FROST_VAULT = {
+    id: 'v1',
+    type: 'frost-multisig',
+    encryptedData: '{}',
+    insensitive: { threshold: 2, maxSigners: 3, relayUrl: 'https://frost.example' },
+  };
+
+  it('keeps the multisig relay when the wallet list is sealed', () => {
+    const next = migrateNetEgress({
+      netEgress: V1,
+      zcashWallets: SEALED,
+      vaults: [{ id: 'm', type: 'mnemonic', insensitive: {} }, FROST_VAULT],
+    }) as { optIns: Record<string, string> };
+    expect(next.optIns['multisig-relay']).toBe('allowed');
+  });
+
+  it('turns on no relay for a sealed list with no multisig vault', () => {
+    const next = migrateNetEgress({
+      zcashWallets: SEALED,
+      vaults: [{ id: 'm', type: 'mnemonic', insensitive: {} }],
+    }) as { optIns: Record<string, string> };
+    expect(next.optIns).toEqual({});
+  });
+
+  it("allows the multisig wallet's own relay after the upgrade, sealed list and all", () => {
+    const storage = { netEgress: V1, zcashWallets: SEALED, vaults: [FROST_VAULT] };
+    const table = compileEgress({
+      ...storage,
+      enabledNetworks: ['zcash'],
+      netEgress: migrateNetEgress(storage),
+    } as unknown as EgressInputs);
+    expect(decideEgress('https://frost.example/rendezvous/poll', 'popup', table).allow).toBe(true);
+    expect(decideEgress('https://relay.zafu.pro/rendezvous/poll', 'popup', table).allow).toBe(true);
   });
 
   it('keeps the relays of features the user actually uses', () => {
@@ -100,5 +138,25 @@ describe('legacyEnabledNetworks', () => {
   it('writes nothing for a fresh install', () => {
     expect(legacyEnabledNetworks({})).toBeUndefined();
     expect(legacyEnabledNetworks({ vaults: [] })).toBeUndefined();
+  });
+});
+
+describe('runNetEgressMigration', () => {
+  beforeEach(async () => {
+    await chrome.storage.local.clear();
+  });
+
+  it('carries the multisig relay over from storage as it really is, sealed', async () => {
+    await chrome.storage.local.set({
+      netEgress: V1,
+      enabledNetworks: ['zcash'],
+      zcashWallets: { encrypted: { nonce: 'bm9uY2U=', cipherText: 'c2VhbGVk' } },
+      vaults: [
+        { id: 'v1', type: 'frost-multisig', insensitive: { relayUrl: 'https://frost.example' } },
+      ],
+    });
+    await runNetEgressMigration();
+    const { netEgress } = await chrome.storage.local.get('netEgress');
+    expect(netEgress).toMatchObject({ v: 2, optIns: { 'multisig-relay': 'allowed' } });
   });
 });

@@ -26,7 +26,6 @@ import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { StepList } from '@repo/ui/components/ui/step-list';
-import { QrCode } from '../../../components/qr-code';
 import { Sensitive } from '../../../components/sensitive';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useStore } from '../../../state';
@@ -124,6 +123,7 @@ import { looksLikeLink, toUri } from '../../../links/router';
 import { viaLine, type SwapLinkState } from '../../../links/land';
 import { Footer, Main, shortAddress } from '../send/send-ui';
 import { ThorOutTracker } from './thor-deposit';
+import { DepositCard, untilLabel } from './deposit-card';
 import { AmountField, AddressSheet, ToField } from '../send/send-fields';
 import { chainLabel, chainOfSwap, isAddressOn } from '../../../addresses/kind';
 import { useYourAddresses } from '../../../hooks/use-your-addresses';
@@ -211,16 +211,6 @@ const MEMO_HOW: Record<MemoCarrier, string> = {
   op_return: 'add it to the payment as an op_return output, exactly as shown',
   memo: "put it in the payment's memo field, exactly as shown",
 };
-
-const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-
-/** a deposit deadline can be days out: tick under an hour, round above it */
-export const untilLabel = (s: number) =>
-  s < 3600
-    ? mmss(s)
-    : s < 48 * 3600
-      ? `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`
-      : `${Math.floor(s / 86400)} days`;
 
 function LiveTimer({ startMs }: { startMs: number }) {
   const [elapsed, setElapsed] = useState(0);
@@ -1741,44 +1731,13 @@ export const CrosschainSwap = ({
         {(step === 'deposit' || step === 'polling') && deal && (
           <>
             {step === 'deposit' && !isFromZec && (
-              <>
-                {deal.memo && (
-                  <div className='flex flex-col gap-2 border border-zigner-gold bg-zigner-gold/10 p-3'>
-                    <span className='flex items-center justify-between'>
-                      <span className='text-xs text-fg-high'>memo · please include it</span>
-                      <CopyButton text={deal.memo} label='copy memo' />
-                    </span>
-                    <span className='break-all font-mono text-sm text-fg-high'>{deal.memo}</span>
-                    {carrier && (
-                      <span className='text-[11px] text-fg-muted'>{MEMO_HOW[carrier]}</span>
-                    )}
-                  </div>
-                )}
-                <div className='flex flex-col items-center gap-3 border border-border-soft bg-elev-1 p-3'>
-                  <p className='text-xs text-fg-muted'>
-                    send exactly <Sensitive>{`${deal.amountInText} ${inUnit}`}</Sensitive> on{' '}
-                    {token && chainName(token.chain)} to
-                  </p>
-                  <QrCode value={deal.depositAddress} size={160} label='deposit address' />
-                  {deal.expiresAt && (
-                    <p className={cn('text-xs', left ? 'text-zigner-gold' : 'text-fg-muted')}>
-                      {left
-                        ? `pay within ${untilLabel(left)}`
-                        : "the deposit window has closed · please don't send to it now"}
-                    </p>
-                  )}
-                  {deal.gasLine && <p className='text-xs text-fg-muted'>{deal.gasLine}</p>}
-                  {pair && refundsToPayer(deal.route, pair) && (
-                    <p className='text-xs text-warn'>{PAYER_REFUNDS}</p>
-                  )}
-                  <div className='flex w-full items-center gap-2'>
-                    <span className='min-w-0 flex-1 break-all font-mono text-xs'>
-                      {deal.depositAddress}
-                    </span>
-                    <CopyButton text={deal.depositAddress} label='copy' />
-                  </div>
-                </div>
-              </>
+              <DepositCard
+                deal={deal}
+                unit={inUnit}
+                chain={token && chainName(token.chain)}
+                memoHow={carrier ? MEMO_HOW[carrier] : undefined}
+                refunds={pair && refundsToPayer(deal.route, pair) ? PAYER_REFUNDS : undefined}
+              />
             )}
             {watchable ? (
               <StatusSlot tone='info' icon='i-ph-arrows-clockwise'>

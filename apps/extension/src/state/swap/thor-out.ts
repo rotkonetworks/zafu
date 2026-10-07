@@ -21,6 +21,7 @@ import {
 import type { DepositPlan, DepositRequest } from '../../workers/transparent-deposit';
 import { isZignerDeclined } from '../../signing/zigner-round';
 import { heldNext, type Held } from '../../signing/move-and-deposit';
+import type { ZecInbound } from '../../lp/thor';
 import type { OpenSwap } from './open-swaps';
 import { toUnits } from './provider';
 
@@ -107,7 +108,29 @@ export interface RunDeps {
   save: (patch: Partial<OpenSwap>) => Promise<unknown>;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
+  /** the zec vault as every thornode operator reads it now; throws when they disagree */
+  vault: () => Promise<{ inbound: Pick<ZecInbound, 'address' | 'halted' | 'tradingPaused'> }>;
 }
+
+const NOT_SENT = { move: 'nothing was sent', pay: 'nothing went to the vault' } as const;
+
+/**
+ * Throws unless the vault the quote named is still the one to pay and zec
+ * trades: asked before each leg signs, since a vault can churn or a chain
+ * halt between the quote and the deposit.
+ */
+export const stillPayable = (
+  { inbound }: Awaited<ReturnType<RunDeps['vault']>>,
+  to: string,
+  leg: keyof typeof NOT_SENT,
+): void => {
+  if (inbound.halted || inbound.tradingPaused) {
+    throw new Error(`thorchain isn't taking zec right now · ${NOT_SENT[leg]}`);
+  }
+  if (inbound.address !== to) {
+    throw new Error(`the swap's vault changed · please get a new quote, ${NOT_SENT[leg]}`);
+  }
+};
 
 /** a step's own line for money that isn't there yet, over the worker's arithmetic */
 const SHORT = {
@@ -184,8 +207,10 @@ export const runThorOut = async (
         report(swap.id, { at: 'held', moved });
         return;
       }
+      // a zigner move signs the deposit with it, so the vault is read again before either leg
+      leg = next;
+      stillPayable(await deps.vault(), req.to, leg);
       if (next === 'move') {
-        leg = 'move';
         report(swap.id, { at: 'moving', moved });
         const moveTxid = await legs.move(plan.short, hold);
         moved = true;
@@ -195,7 +220,6 @@ export const runThorOut = async (
         plan = undefined;
         continue;
       }
-      leg = 'pay';
       report(swap.id, { at: 'paying', moved });
       const txid = await legs.pay(req, held);
       await deps.save({ stage: 'sent', depositTxid: txid, held: undefined });

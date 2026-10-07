@@ -239,6 +239,13 @@ function lookupBackend(serverUrl: string): ZcashBackend {
   return backendRegistry.get(backendKey(serverUrl)) ?? backendOfEndpoint(serverUrl);
 }
 
+/** a node's FlyClient standing here: it proved its chain, or its downgrade was accepted */
+type FlyTrust = true | 'accepted';
+
+/** the meta row (and key) of a node's FlyTrust on a network */
+const flyTrustKey = (serverUrl: string, mainnet: boolean) =>
+  [`chain:${mainnet ? 'main' : 'test'}`, `proved:${backendKey(serverUrl)}`] as const;
+
 /** the sync client for an endpoint; call sites without a backend in scope use the registry */
 const makeZcashClient = (serverUrl: string, backend?: ZcashBackend): ZcashClient =>
   zcashClient(serverUrl, backend ?? lookupBackend(serverUrl));
@@ -270,6 +277,7 @@ interface WorkerMessage {
     | 'transparent-deposit-complete'
     | 'transparent-deposit'
     | 'chain-tip'
+    | 'fly-accept-unverified'
     | 'list-wallets'
     | 'delete-wallet'
     | 'get-notes'
@@ -1277,9 +1285,7 @@ const markNotesSpentLocally = async (
     console.error(`[zcash-worker] failed to persist local spend marks: ${errText(e)}`);
     return;
   }
-  console.log(
-    `[zcash-worker] marked ${nullifiers.length} note(s) spent locally by ${txid.slice(0, 16)}`,
-  );
+  console.log(`[zcash-worker] marked ${nullifiers.length} note(s) spent locally`);
 };
 
 /**
@@ -2060,7 +2066,7 @@ const finalizeColdBroadcast = async (
     const ctx = await takeColdSend(walletId, coldSendId);
     if (!ctx) {
       console.warn(
-        `[zcash-worker] cold broadcast ${txid.slice(0, 16)} has no build context ` +
+        '[zcash-worker] a cold broadcast has no build context ' +
           `(id=${coldSendId ?? 'absent'}); spend marks and the local send record are ` +
           'left to the block scan',
       );
@@ -2073,7 +2079,7 @@ const finalizeColdBroadcast = async (
       // A rescan between build and broadcast can empty the note store. Say so
       // rather than silently marking a subset.
       console.warn(
-        `[zcash-worker] cold broadcast ${txid.slice(0, 16)}: ${notes.length}/${ctx.nullifiers.length} ` +
+        `[zcash-worker] cold broadcast: ${notes.length}/${ctx.nullifiers.length} ` +
           'input notes still present locally',
       );
     }
@@ -2816,21 +2822,23 @@ const syncLoop = async (
   let checkedAtCatchUp = false;
   const checkNodeChain = async (): Promise<void> => {
     const lastTip = (await idbGet<{ value: number }>('meta', flyTipKey))?.value ?? 0;
-    // a node that proved its chain once must keep proving it (no quiet downgrade)
-    const provedKey = `proved:${backendKey(serverUrl)}`;
-    const provedBefore = !!(await idbGet<{ value: boolean }>('meta', [flyTipKey[0]!, provedKey]))
-      ?.value;
+    // a node that proved its chain once must keep proving it (no quiet
+    // downgrade), unless the person accepted it unverified
+    const [trustRow, trustKey] = flyTrustKey(serverUrl, mainnet);
+    const trust = (await idbGet<{ value: FlyTrust }>('meta', [trustRow, trustKey]))?.value;
     const check = await checkChain({
       mainnet,
       fetchProof: zidecar && (() => zidecar.getFlyClientProof(FLY_BURIAL, FLY_PROOF_MAX_BYTES)),
       verify: (...a) => wasmModule!.verify_flyclient(...a),
       lastTip,
-      provedBefore,
+      provedBefore: trust === true,
+      accepted: trust === 'accepted',
     });
     chainRecord = {
       serverUrl,
       status: check.status,
       ...(check.status === 'unverified' && { reason: check.reason }),
+      ...(check.status === 'failed' && check.downgrade && { reason: 'downgrade' }),
       ...(check.status === 'checked' && {
         tip: check.chain.tip_height,
         depth: check.chain.tip_height - check.chain.roots_height,
@@ -2858,8 +2866,9 @@ const syncLoop = async (
     }
     proofThisRun = true;
     proven = check.chain;
-    if (!provedBefore) {
-      await idbPutMeta(flyTipKey[0]!, provedKey, true);
+    // proving itself again also ends an accepted downgrade
+    if (trust !== true) {
+      await idbPutMeta(trustRow, trustKey, true);
     }
     if (check.chain.tip_height > lastTip) {
       await idbPutMeta(flyTipKey[0]!, flyTipKey[1]!, check.chain.tip_height);
@@ -3182,9 +3191,6 @@ const syncLoop = async (
             txid: cmxToTxid.get(note.cmx) ?? '',
             height: cmxToHeight.get(note.cmx) ?? 0,
           };
-          console.log(
-            `[zcash-worker] found note: value=${note.value}, pos=${position}, hasRseed=${!!note.rseed}, hasRho=${!!note.rho}, hasRecipient=${!!(note as unknown as { recipient?: string }).recipient}`,
-          );
           newNotes.push(full);
           state.notes.push(full);
         }
@@ -3305,16 +3311,6 @@ const syncLoop = async (
               txid: iwCmxToTxid.get(note.cmx) ?? '',
               height: iwCmxToHeight.get(note.cmx) ?? 0,
             };
-            // Diagnostic (mirrors the orchard scan log): build_signed_ironwood_send
-            // reconstructs each spend from recipient_hex/rho/rseed. If
-            // hasRecipient is false here the wasm ironwood scanner is not
-            // capturing the diversified recipient and reconstruction falls back
-            // to diversifier 0 - a real gap to fix in scan_actions_ironwood_parallel.
-            console.log(
-              `[zcash-worker] found ironwood note: value=${note.value}, pos=${position}, ` +
-                `hasRseed=${!!note.rseed}, hasRho=${!!note.rho}, ` +
-                `hasRecipient=${!!(note as unknown as { recipient?: string }).recipient}`,
-            );
             newIronwoodNotes.push(full);
             state.notes.push(full);
           }
@@ -5002,7 +4998,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const sendStart = performance.now();
         const emitProgress = (step: string, detail?: string) => {
           const elapsed = ((performance.now() - sendStart) / 1000).toFixed(1);
-          console.log(`[zcash-worker] send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`);
+          // the detail carries txids and fees: dev builds only
+          if (globalThis.__DEV__) {
+            console.log(`[zcash-worker] send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`);
+          }
           workerSelf.postMessage({
             type: 'send-progress',
             id: '',
@@ -5585,9 +5584,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const sendStart = performance.now();
         const emitProgress = (step: string, detail?: string) => {
-          console.log(
-            `[zcash-worker] send-pczt [${((performance.now() - sendStart) / 1000).toFixed(1)}s] ${step}${detail ? ': ' + detail : ''}`,
-          );
+          if (globalThis.__DEV__) {
+            console.log(
+              `[zcash-worker] send-pczt [${((performance.now() - sendStart) / 1000).toFixed(1)}s] ${step}${detail ? ': ' + detail : ''}`,
+            );
+          }
           workerSelf.postMessage({
             type: 'send-progress',
             id: '',
@@ -6089,9 +6090,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const migrateStart = performance.now();
         const emitProgress = (step: string, detail?: string) => {
-          console.log(
-            `[zcash-worker] turnstile [${((performance.now() - migrateStart) / 1000).toFixed(1)}s] ${step}${detail ? ': ' + detail : ''}`,
-          );
+          if (globalThis.__DEV__) {
+            console.log(
+              `[zcash-worker] turnstile [${((performance.now() - migrateStart) / 1000).toFixed(1)}s] ${step}${detail ? ': ' + detail : ''}`,
+            );
+          }
           workerSelf.postMessage({
             type: 'send-progress',
             id: '',
@@ -6484,9 +6487,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const multiStart = performance.now();
         const emitMultiProgress = (step: string, detail?: string) => {
           const elapsed = ((performance.now() - multiStart) / 1000).toFixed(1);
-          console.log(
-            `[zcash-worker] multi-send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`,
-          );
+          if (globalThis.__DEV__) {
+            console.log(
+              `[zcash-worker] multi-send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`,
+            );
+          }
           workerSelf.postMessage({
             type: 'send-progress',
             id: '',
@@ -6754,9 +6759,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             const groupZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
             const fee = computeShieldFee(utxos.length);
             if (groupZat <= fee) {
-              console.warn(
-                `[zcash-worker] skipping index ${addrIndex}: ${groupZat} zat <= ${fee} fee`,
-              );
+              console.warn(`[zcash-worker] skipping index ${addrIndex}: it does not cover the fee`);
               continue;
             }
 
@@ -7227,6 +7230,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           walletId,
           payload: { txid: sent.txid, fee: sent.fee },
         });
+        return;
+      }
+
+      case 'fly-accept-unverified': {
+        const { serverUrl, mainnet } = payload as { serverUrl: string; mainnet: boolean };
+        const [row, key] = flyTrustKey(serverUrl, mainnet);
+        await idbPutMeta(row, key, 'accepted' satisfies FlyTrust);
+        workerSelf.postMessage({ type: 'result', id, network: 'zcash', walletId, payload: null });
         return;
       }
 

@@ -23,6 +23,7 @@
 
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { hostOf } from './destination';
+import { hasMultisig, type EgressInputs } from './egress-policy';
 
 type Raw = Record<string, unknown>;
 
@@ -43,8 +44,8 @@ export const migrateNetEgress = (storage: Raw): Raw | undefined => {
   }
 
   const optIns: Record<string, 'allowed'> = {};
-  const wallets = Array.isArray(storage['zcashWallets']) ? storage['zcashWallets'] : [];
-  if (wallets.some(w => obj(w)['multisig'] !== undefined)) {
+  // zcashWallets is sealed here; the frost vaults are plaintext and say the same
+  if (hasMultisig(storage as EgressInputs)) {
     optIns['multisig-relay'] = 'allowed';
   }
   if (Object.keys(storage).some(k => k === 'zitadelRelayUrl' || k.startsWith('zidNick:'))) {

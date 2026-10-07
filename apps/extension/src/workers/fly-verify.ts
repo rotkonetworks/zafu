@@ -27,11 +27,15 @@ export type ChainCheck =
   | { status: 'checked'; chain: ProvenChain; ms: number }
   | {
       status: 'unverified';
-      /** clock: the proof holds by the node's clock, so this computer's is off */
-      reason: 'testnet' | 'lightwalletd' | 'unreachable' | 'clock';
+      /**
+       * clock: the proof holds by the node's clock, so this computer's is off.
+       * accepted: the person chose to keep using this node without its proof.
+       */
+      reason: 'testnet' | 'lightwalletd' | 'unreachable' | 'clock' | 'accepted';
       detail?: string;
     }
-  | { status: 'failed'; detail: string };
+  /** downgrade: a node that proved itself before offers no proof now */
+  | { status: 'failed'; detail: string; downgrade?: true };
 
 /**
  * Note tree roots under this many blocks: a one-block reorg cannot move them.
@@ -69,6 +73,11 @@ export interface FlyDeps {
   lastTip: number;
   /** this node proved its chain before: a refusal now is a downgrade, not "no proof" */
   provedBefore?: boolean;
+  /**
+   * the person chose to keep using this node unverified after it stopped
+   * proving: no proof is no longer a downgrade, until it proves itself again
+   */
+  accepted?: boolean;
   now?: () => number;
 }
 
@@ -85,11 +94,18 @@ const FRESHNESS = /older than 90 minutes|hours ahead/;
 
 const DOWNGRADE = 'this node proved its chain before and no longer offers a proof';
 
+const downgrade = (detail = DOWNGRADE): ChainCheck => ({
+  status: 'failed',
+  detail,
+  downgrade: true,
+});
+
 /**
  * Fetch and check the node's proof. A proof that arrived and did not check
- * out is `failed`, and so is a node that proved itself before and now refuses.
- * Not getting a proof otherwise is `unverified`, as is a proof that holds by
- * the node's own clock when this computer's is the odd one out.
+ * out is `failed`, and so is a node that proved itself before and now refuses
+ * (a downgrade, unless the person accepted it). Not getting a proof otherwise
+ * is `unverified`, as is a proof that holds by the node's own clock when this
+ * computer's is the odd one out.
  */
 export const checkChain = async ({
   mainnet,
@@ -97,6 +113,7 @@ export const checkChain = async ({
   verify,
   lastTip,
   provedBefore = false,
+  accepted = false,
   now = Date.now,
 }: FlyDeps): Promise<ChainCheck> => {
   if (!mainnet) {
@@ -104,16 +121,16 @@ export const checkChain = async ({
   }
   if (!fetchProof) {
     return provedBefore
-      ? { status: 'failed', detail: DOWNGRADE }
-      : { status: 'unverified', reason: 'lightwalletd' };
+      ? downgrade()
+      : { status: 'unverified', reason: accepted ? 'accepted' : 'lightwalletd' };
   }
   let answer: FlyProof;
   try {
     answer = await fetchProof();
   } catch (e) {
     return provedBefore && refused(e)
-      ? { status: 'failed', detail: `${DOWNGRADE}: ${text(e)}` }
-      : { status: 'unverified', reason: 'unreachable', detail: text(e) };
+      ? downgrade(`${DOWNGRADE}: ${text(e)}`)
+      : { status: 'unverified', reason: accepted ? 'accepted' : 'unreachable', detail: text(e) };
   }
   const minHeight = flyMinHeight(lastTip);
   const at = (ms: number) => () =>

@@ -13,11 +13,17 @@ import { cn } from '../../../lib/utils';
  * boxes: one shape, four tones, an optional action and an optional progress
  * bar.
  */
+interface StatusAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface StatusSlotProps {
   tone?: 'info' | 'warn' | 'danger' | 'gold';
   icon?: string;
   children: React.ReactNode;
-  action?: { label: string; onClick: () => void };
+  /** one action, or a few side by side (a calm choice between ways on) */
+  action?: StatusAction | StatusAction[];
   /** 0-100; renders a thin bar under the content when set */
   progress?: number;
   className?: string;
@@ -52,15 +58,16 @@ export function StatusSlot({
           {icon && <span className={cn(icon, 'mt-0.5 size-3.5 shrink-0')} aria-hidden='true' />}
           <div className='flex flex-col gap-1 lowercase'>{children}</div>
         </div>
-        {action && (
+        {(action ? [action].flat() : []).map(a => (
           <button
+            key={a.label}
             type='button'
-            onClick={action.onClick}
+            onClick={a.onClick}
             className='shrink-0 text-label underline-offset-2 hover:underline'
           >
-            {action.label}
+            {a.label}
           </button>
-        )}
+        ))}
       </div>
       {progress != null && (
         <div className='h-[3px] w-full overflow-hidden bg-surface-border-soft'>
