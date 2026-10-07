@@ -1,5 +1,6 @@
 // zidecar (verified) vs standard lightwalletd, detected from the node itself.
 
+import type { LightdInfo } from './lightd-info';
 import { ZidecarClient } from './zidecar-client';
 import { LightwalletdClient } from './lightwalletd-client';
 import type { ChainTip, CompactBlock, Utxo } from './zidecar-client';
@@ -79,14 +80,8 @@ export interface ZcashClient {
    * NU6.3 turnstile builder fails closed unless this matches the real NU6.3
    * value (0x37a5165b) and is not the placeholder 0xffffffff.
    */
-  getLightdInfo(): Promise<{
-    /** free-form server name; zidecar answers "zidecar/rotkonetworks" */
-    vendor: string;
-    consensusBranchId: string;
-    chainName: string;
-    blockHeight: number;
-    saplingActivationHeight: number;
-  }>;
+  /** vendor is free-form; zidecar answers "zidecar/rotkonetworks" */
+  getLightdInfo(): Promise<LightdInfo>;
   sendTransaction(
     txData: Uint8Array,
   ): Promise<{ txid: Uint8Array; errorCode: number; errorMessage: string }>;

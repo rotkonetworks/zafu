@@ -25,6 +25,7 @@
  * host, many clients, keeps exactly one zcash/penumbra worker alive.
  */
 
+import type { NodeInfo } from './node-info';
 import { errText } from '@penumbra-zone/query/error-text';
 import type { NetworkType, VaultUnlock } from './types';
 import type { ThorDepositRequest } from '../../workers/thor-sign';
@@ -82,6 +83,8 @@ export interface ZcashChainCheck {
   depth?: number;
   /** how long the proof took to check, in ms */
   ms?: number;
+  /** what the node says it is, and how this wallet reached it (node-info.ts) */
+  node?: NodeInfo;
 }
 
 export interface NetworkWorkerMessage {
