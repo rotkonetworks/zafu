@@ -826,8 +826,9 @@ export const CrosschainSwap = ({
         stale: !!a?.isPlaceholderData || !!a?.isFetching,
         onPress: q
           ? () => setRoutesOpen(true)
-          : g.ask
-            ? () => void askFor([g.route])
+          : // a route turned down at the first ask is asked again only on its own tap
+            g.ask
+            ? () => void requestEgressOptIn(ROUTES[g.route].egress)
             : // near wants a refund address: choosing it brings the field back
               a?.error instanceof NeedsRefundAddress
               ? () => setPicked(g.route)
@@ -851,13 +852,6 @@ export const CrosschainSwap = ({
       priced: !!answers[i]?.data,
     })),
   );
-
-  // a route not yet allowed asks once, on a tap; then its price is asked like the rest
-  const askFor = async (routes: RouteId[]) => {
-    for (const r of routes) {
-      await requestEgressOptIn(ROUTES[r].egress);
-    }
-  };
 
   // the prices shown are kept for a reopened popup, and put back as this one opens
   useEffect(() => {
