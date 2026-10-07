@@ -67,6 +67,8 @@ export interface DepositWasm {
     expected_branch_id: number,
     mainnet: boolean,
     null_data_hex?: string | null,
+    /** omitted: the branch default, as the move gets */
+    expiry_delta?: number | null,
   ): string;
 }
 
@@ -226,13 +228,16 @@ export interface BuiltDeposit {
  * Build the reviewed deposit from public data: the address's coins and the
  * pubkey of the key that signs (`pubkeyHex`, the swap's own t-branch index).
  * Refuses an unpayable vault, and a fee that moved since the review. Hot and
- * cold build the same bytes; only who signs them differs.
+ * cold build the same bytes; only who signs them differs. `expiresAfter`: the
+ * last height the deposit can be mined at, for one held for its move;
+ * otherwise it gets the branch's default window.
  */
 export const buildDeposit = async (
   wasm: DepositWasm,
   chain: DepositChain,
   pubkeyHex: string,
   req: DepositRequest & { reviewedFee: string },
+  expiresAfter?: number,
 ): Promise<BuiltDeposit> => {
   await checkVault(req.to, req.mainnet);
   // a tex vault is paid as its P2PKH twin: the same output bytes, from transparent inputs only
@@ -253,6 +258,7 @@ export const buildDeposit = async (
       branchId,
       req.mainnet,
       data,
+      expiresAfter === undefined ? undefined : expiresAfter - (height + 1),
     ),
   ) as { fee: number; sighashes: string[]; unsigned_tx_hex: string };
   if (String(built.fee) !== req.reviewedFee) {

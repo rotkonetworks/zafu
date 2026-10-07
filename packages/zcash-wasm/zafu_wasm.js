@@ -1512,8 +1512,12 @@ export function build_unsigned_transaction(ufvk_str, notes_json, recipient, amou
  * address and its 33-byte compressed `pubkey_hex`. Outputs are
  * [recipient, OP_RETURN(`null_data_hex`, at most 80 bytes), change to the same
  * address]. Returns JSON
- * `{sighashes, unsigned_tx_hex, inputs, total_in, fee, change, short}`, where
- * `unsigned_tx_hex` is a PCZT for `SpendKeys.sign_shielding`.
+ * `{sighashes, unsigned_tx_hex, expiry_height, inputs, total_in, fee, change, short}`,
+ * where `unsigned_tx_hex` is a PCZT for `SpendKeys.sign_shielding`.
+ *
+ * `expiry_delta` (optional, last): blocks after `target_height` at which the
+ * deposit expires. Omitted is the branch default (40, or 120 on NU7), the
+ * same rule as `build_ironwood_send_pczt`.
  * @param {string} utxos_json
  * @param {string} pubkey_hex
  * @param {string} recipient
@@ -1522,9 +1526,10 @@ export function build_unsigned_transaction(ufvk_str, notes_json, recipient, amou
  * @param {number} expected_branch_id
  * @param {boolean} mainnet
  * @param {string | null} [null_data_hex]
+ * @param {number | null} [expiry_delta]
  * @returns {string}
  */
-export function build_unsigned_transparent_transaction(utxos_json, pubkey_hex, recipient, amount, target_height, expected_branch_id, mainnet, null_data_hex) {
+export function build_unsigned_transparent_transaction(utxos_json, pubkey_hex, recipient, amount, target_height, expected_branch_id, mainnet, null_data_hex, expiry_delta) {
     let deferred6_0;
     let deferred6_1;
     try {
@@ -1536,7 +1541,7 @@ export function build_unsigned_transparent_transaction(utxos_json, pubkey_hex, r
         const len2 = WASM_VECTOR_LEN;
         var ptr3 = isLikeNone(null_data_hex) ? 0 : passStringToWasm0(null_data_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         var len3 = WASM_VECTOR_LEN;
-        const ret = wasm.build_unsigned_transparent_transaction(ptr0, len0, ptr1, len1, ptr2, len2, amount, target_height, expected_branch_id, mainnet, ptr3, len3);
+        const ret = wasm.build_unsigned_transparent_transaction(ptr0, len0, ptr1, len1, ptr2, len2, amount, target_height, expected_branch_id, mainnet, ptr3, len3, isLikeNone(expiry_delta) ? Number.MAX_SAFE_INTEGER : (expiry_delta) >>> 0);
         var ptr5 = ret[0];
         var len5 = ret[1];
         if (ret[3]) {

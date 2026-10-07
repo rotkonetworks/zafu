@@ -463,10 +463,14 @@ export function build_unsigned_transaction(ufvk_str: string, notes_json: any, re
  * address and its 33-byte compressed `pubkey_hex`. Outputs are
  * [recipient, OP_RETURN(`null_data_hex`, at most 80 bytes), change to the same
  * address]. Returns JSON
- * `{sighashes, unsigned_tx_hex, inputs, total_in, fee, change, short}`, where
- * `unsigned_tx_hex` is a PCZT for `SpendKeys.sign_shielding`.
+ * `{sighashes, unsigned_tx_hex, expiry_height, inputs, total_in, fee, change, short}`,
+ * where `unsigned_tx_hex` is a PCZT for `SpendKeys.sign_shielding`.
+ *
+ * `expiry_delta` (optional, last): blocks after `target_height` at which the
+ * deposit expires. Omitted is the branch default (40, or 120 on NU7), the
+ * same rule as `build_ironwood_send_pczt`.
  */
-export function build_unsigned_transparent_transaction(utxos_json: string, pubkey_hex: string, recipient: string, amount: bigint, target_height: number, expected_branch_id: number, mainnet: boolean, null_data_hex?: string | null): string;
+export function build_unsigned_transparent_transaction(utxos_json: string, pubkey_hex: string, recipient: string, amount: bigint, target_height: number, expected_branch_id: number, mainnet: boolean, null_data_hex?: string | null, expiry_delta?: number | null): string;
 
 /**
  * Build the `POST /cast-vote` body ([`VoteCommitmentWire`]) for one HOT vote.
@@ -1191,7 +1195,7 @@ export interface InitOutput {
     readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly build_unsigned_shielding_transaction_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number, number];
     readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number];
-    readonly build_unsigned_transparent_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
+    readonly build_unsigned_transparent_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
     readonly build_vote_commitment_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
     readonly build_vote_shares_from_recovery: (a: number, b: number, c: bigint, d: bigint) => [number, number, number, number];
     readonly build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];

@@ -25,7 +25,7 @@ import {
   type MoveInspected,
 } from './transparent-deposit';
 import { parseExpiryHeight } from './sent-tx-reconcile';
-import { moveAndDeposit, type Held } from '../signing/move-and-deposit';
+import { DEPOSIT_OUTLIVES_MOVE, moveAndDeposit, type Held } from '../signing/move-and-deposit';
 import { signedPcztsOfBatchAnswer } from '../signing/zigner-answer';
 import { cborWrapPczt, zignerBatchEnvelope } from '../routes/popup/send/zcash-send-cbor-helpers';
 
@@ -144,6 +144,16 @@ describe('one zigner round for the move and the swap', () => {
     expect(change).toEqual([]); // the move funds it exactly
     // it outlives the move: a move mined in time leaves a block for the deposit
     expect(parseExpiryHeight(txHex)).toBeGreaterThanOrEqual(coin.expiry);
+  });
+
+  test('the deposit zafu holds for the move outlives it by DEPOSIT_OUTLIVES_MOVE', async () => {
+    const coin = moveCoin(inspected, tAddress, SHORT);
+    const at = coin.expiry + DEPOSIT_OUTLIVES_MOVE;
+    const built = await buildDeposit(wasm, withCoin(emptyChain, coin), pubkey, req, at);
+    const deposit = JSON.parse(
+      wasm.frost_inspect_pczt_outputs(built.pcztHex, ufvk),
+    ) as MoveInspected;
+    expect(deposit.expiry_height).toBe(at);
   });
 
   test('the device answer must be whole and in order', () => {

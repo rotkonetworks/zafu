@@ -177,6 +177,34 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
   `voting-wasm` `local_chain_e2e` ran these bindings against a local svoted
   v1.6.1-rc.5 (37 proposals, votes on 37 and 17, tally finalized).
 
+## 2026-10-07 rebuild (2) - the deposit's expiry follows the branch, or the move
+
+- source repo: zcli, branch `fix/deposit-expiry-follows-node`, rev `cbd2d7d`
+  (zcli PR #29, one commit on master `0886e6d`, the rev of the blob it
+  replaces). NOT a master build: rebuild from master once #29 merges and
+  replace this entry.
+- `build_unsigned_transparent_transaction` takes an optional trailing
+  `expiry_delta`: omitted is the branch default (target + 40, or + 120 on
+  NU7, as the move gets), given is validated by `resolve_pczt_expiry_height`.
+  The result JSON gains `expiry_height`. Previously the deposit always got
+  - 40.
+- `.d.ts` diff against the previous blob: that one signature (one optional
+  arg) and its doc; nothing removed. The glue differs only in that function.
+- `cargo test -p zafu-wasm --lib --tests --release` at `cbd2d7d`: 162 passed
+  (160 + 2 new in `tests/transparent_op_return.rs`).
+- toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
+  wasm-bindgen CLI 0.2.126, binaryen 130; recipe above.
+- rayon snippet hash unchanged (`wasm-bindgen-rayon-38edf6e439f6d70d`), the
+  patched `workerHelpers.js` kept in both trees.
+- size: pre `wasm-opt` 28,653,828 bytes (post-bindgen); post `-Oz`
+  13,370,295 bytes (+295).
+- sha256(parallel zafu_wasm_bg.wasm) =
+  ad3f125937c33ad59bc6232abcee8251fe91b8053c25f59bf678b1a1f7b00be0
+- sha256(zafu_wasm.js) =
+  7510cd7af67d88a922cc7b00665d9fed9b7a63fdc588a8f56bbaa6d4156218f6
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 58 32768 shared)` (unchanged).
+
 ## 2026-10-07 rebuild - verify_flyclient (single-server chain check)
 
 - source repo: zcli, branch `master`, rev `0886e6d` (merge of zcli PR #28,

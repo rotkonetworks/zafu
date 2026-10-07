@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { heldNext, moveAndDeposit, type Held, type PairDeps } from './move-and-deposit';
+import {
+  DEPOSIT_OUTLIVES_MOVE,
+  heldNext,
+  LOST_AFTER,
+  moveAndDeposit,
+  type Held,
+  type PairDeps,
+} from './move-and-deposit';
 import { MOVE_MISMATCH } from '../workers/transparent-deposit';
 
 const T = 't1SwapOwnAddressxxxxxxxxxxxxxxxxx';
@@ -122,6 +129,10 @@ describe('a held deposit, from the chain alone', () => {
     expect(heldNext(held, 130, 135)).toBe('pay');
     expect(heldNext(held, 140, 140)).toBe('pay');
     expect(heldNext(held, 140, 141)).toBe('drop');
+  });
+  it('a deposit built to outlive its move pays even for a move mined in its last block', () => {
+    const outlives = { ...held, expiry: held.moveExpiry + DEPOSIT_OUTLIVES_MOVE };
+    expect(heldNext(outlives, 140, 140 + LOST_AFTER)).toBe('pay');
   });
   it('waits for an unmined move until the move itself can no longer land', () => {
     expect(heldNext(held, undefined, 139)).toBe('wait');
