@@ -4,9 +4,11 @@
  * caller wraps it with its own destination.
  */
 
+// two operators that answer every path zafu reads (checked 2026-10-07);
+// thornode.ninerealms.com no longer resolves
 export const THORNODE_URLS = [
-  'https://thornode.ninerealms.com',
   'https://gateway.liquify.com/chain/thorchain_api',
+  'https://thorchain-thornode-lb-1.thorwallet.org',
 ];
 
 /** a 4xx: the chain answered, so asking the next node changes nothing */

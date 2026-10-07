@@ -26,9 +26,6 @@ import {
 } from '../state/swap/thornode';
 import { lpEgress, NotAllowed, THORNODE_DEST } from './thor';
 
-/** liquify first: it answers the cosmos REST; the other node is only failover */
-const NODES = [...THORNODE_URLS].reverse();
-
 /** THORChain's native fee per tx, rune 1e8 (/thorchain/network native_tx_fee_rune), when unread */
 export const RUNE_FEE = 2_000_000n;
 /** kept back after an add: one take-out and one recovery, each a native fee */
@@ -102,26 +99,30 @@ export const readRune = async (thor1: string, signal?: AbortSignal): Promise<Run
   const [bal, acct, lp, network] = await Promise.all([
     thornodeGet<{ balance?: { amount?: string } }>(
       `/cosmos/bank/v1beta1/balances/${thor1}/by_denom?denom=rune`,
-      NODES,
+      THORNODE_URLS,
       signal,
     ),
-    thornodeGet<{ account?: Raw }>(`/cosmos/auth/v1beta1/accounts/${thor1}`, NODES, signal).catch(
-      (e: unknown): { account?: Raw } => {
-        if (notFound(e)) {
-          return {};
-        }
-        throw e;
-      },
-    ),
-    thornodeGet<Raw>(`/thorchain/pool/${LP_POOL}/liquidity_provider/${thor1}`, NODES, signal).catch(
-      (e: unknown) => {
-        if (notFound(e)) {
-          return undefined;
-        }
-        throw e;
-      },
-    ),
-    thornodeGet<Raw>('/thorchain/network', NODES, signal).catch(() => ({}) as Raw),
+    thornodeGet<{ account?: Raw }>(
+      `/cosmos/auth/v1beta1/accounts/${thor1}`,
+      THORNODE_URLS,
+      signal,
+    ).catch((e: unknown): { account?: Raw } => {
+      if (notFound(e)) {
+        return {};
+      }
+      throw e;
+    }),
+    thornodeGet<Raw>(
+      `/thorchain/pool/${LP_POOL}/liquidity_provider/${thor1}`,
+      THORNODE_URLS,
+      signal,
+    ).catch((e: unknown) => {
+      if (notFound(e)) {
+        return undefined;
+      }
+      throw e;
+    }),
+    thornodeGet<Raw>('/thorchain/network', THORNODE_URLS, signal).catch(() => ({}) as Raw),
   ]);
   const a = acct.account;
   const fee = big(network['native_tx_fee_rune']);
@@ -154,7 +155,7 @@ export const sendRuneTx = async (
   const sim = await thornodePost<{ gas_info?: { gas_used?: string } }>(
     '/cosmos/tx/v1beta1/simulate',
     { tx_bytes: txBytes },
-    NODES.slice(0, 1),
+    THORNODE_URLS.slice(0, 1),
     opts.signal,
   ).catch((e: unknown) => {
     throw new Error(
@@ -170,7 +171,7 @@ export const sendRuneTx = async (
   }>(
     '/cosmos/tx/v1beta1/txs',
     { tx_bytes: txBytes, mode: 'BROADCAST_MODE_SYNC' },
-    NODES.slice(0, 1),
+    THORNODE_URLS.slice(0, 1),
     opts.signal,
   );
   const t = r.tx_response;
@@ -222,8 +223,8 @@ export const quoteRune = async (
     affiliate_bps: String(zafuFeeBps('thor')),
   });
   const [q, inbound] = await Promise.all([
-    thornodeGet<NodeQuote>(`/thorchain/quote/swap?${query}`, NODES, signal),
-    thornodeGet<InboundAddress[]>('/thorchain/inbound_addresses', NODES, signal),
+    thornodeGet<NodeQuote>(`/thorchain/quote/swap?${query}`, THORNODE_URLS, signal),
+    thornodeGet<InboundAddress[]>('/thorchain/inbound_addresses', THORNODE_URLS, signal),
   ]).catch((e: unknown) => {
     throw nodeRefusal(name, e, amountZat, 'zec');
   });
@@ -247,7 +248,7 @@ export const readSwapped = async (txid: string, signal?: AbortSignal): Promise<b
   await allowed();
   const s = await thornodeGet<{
     stages?: Record<string, { completed?: boolean; pending?: boolean }>;
-  }>(`/thorchain/tx/status/${txid.toUpperCase()}`, NODES, signal).catch(
+  }>(`/thorchain/tx/status/${txid.toUpperCase()}`, THORNODE_URLS, signal).catch(
     () => ({}) as { stages?: undefined },
   );
   const st = s.stages;
@@ -267,7 +268,7 @@ export const readRuneTx = async (
   try {
     const r = await thornodeGet<{ tx_response?: { code?: number; raw_log?: string } }>(
       `/cosmos/tx/v1beta1/txs/${hash.toUpperCase()}`,
-      NODES,
+      THORNODE_URLS,
       signal,
     );
     const code = r.tx_response?.code ?? 0;
