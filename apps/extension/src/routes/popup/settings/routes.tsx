@@ -1,6 +1,7 @@
 import { Navigate, type RouteObject } from 'react-router-dom';
 import { PopupPath } from '../paths';
 import { screen } from '../route-modules';
+import { IS_BETA_BUILD } from '../../../config/feature-flags';
 
 // every settings screen is route-level lazy (see route-modules.ts): the router
 // loads the chunk before committing, so the previous screen stays up meanwhile
@@ -83,8 +84,11 @@ export const settingsRoutes: RouteObject[] = [
     ...screen('settingsMultisigBackup'),
   },
   {
+    // device update fetches from a local dev stub (ota/keys.ts): beta only
     path: PopupPath.SETTINGS_OTA,
-    ...screen('settingsOta'),
+    ...(IS_BETA_BUILD
+      ? screen('settingsOta')
+      : { element: <Navigate replace to={PopupPath.SETTINGS_DEVICES} /> }),
   },
   {
     path: PopupPath.SETTINGS_VOTING,
