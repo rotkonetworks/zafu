@@ -125,7 +125,9 @@ beforeEach(() => {
   root = createRoot(host);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // let a preload still in flight finish here, not inside the next test
+  await settle();
   act(() => root.unmount());
   host.remove();
   vi.unstubAllGlobals();
@@ -143,8 +145,9 @@ describe('intent preloading', () => {
   it('the same press reads history once the server is allowed (the test is not vacuous)', async () => {
     allowed.add('zcash.rotko.net');
     press(renderNav(`/activity${seq}`));
-    await settle();
-    expect(getHistory).toHaveBeenCalledTimes(1);
+    // wait for the read itself: under load it can land after a fixed settle,
+    // and then inside the next test, where "nothing runs" would fail instead
+    await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
     expect(askOptIn).not.toHaveBeenCalled();
   });
 
