@@ -50,7 +50,7 @@ export const selectOpenings = (s: AllSlices): number => {
   const wire = on('zcash') && !!ZCASH_BACKENDS[selectZcashBackend(s)].extras;
   return [
     p.enableTransactionHistory,
-    p.enableExplorerLinks,
+    p.explorerLinks === 'open',
     on('cosmos') && p.enableTransparentBalances,
     on('zcash') && p.zcashTransparentEachBlock,
     wire && zcash.memoSyncStrategy === 'fast',

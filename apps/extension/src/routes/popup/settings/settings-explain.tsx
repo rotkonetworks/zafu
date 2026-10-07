@@ -46,10 +46,16 @@ export const SETTINGS_EXPLAIN = {
     off: 'zafu asks only when you tap check now or open the transparent view or the shield step',
   },
   'privacy.explorerLinks': {
-    blurb: 'adds a link from each transaction to a public block explorer.',
-    on: 'handy for checking a transaction landed',
-    off: 'the explorer never learns which transactions you look at',
-    footer: 'off by default · zafu also asks the first time you tap a transaction id',
+    blurb: 'what a transaction shows of its page on a public block explorer.',
+    states: [
+      { label: 'off', text: 'nothing explorer-related; the transaction id can still be copied' },
+      { label: 'copy', text: 'a link to copy; zafu opens nothing, you choose where to paste it' },
+      {
+        label: 'open',
+        text: 'a link that opens the explorer, which sees your ip and which transaction you looked up',
+      },
+    ],
+    footer: 'off by default',
   },
   'privacy.zcashLinks': {
     blurb: 'lets zafu open zcash: payment links from other pages.',

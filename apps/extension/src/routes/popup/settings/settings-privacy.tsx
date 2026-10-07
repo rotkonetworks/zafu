@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../state';
 import { selectZcashBackend } from '../../../state/networks';
-import { privacySelector, type PrivacySettings } from '../../../state/privacy';
+import { privacySelector, type ExplorerLinks, type PrivacySettings } from '../../../state/privacy';
+import { OptionsRow } from './sheet-options';
 import { selectEnabledNetworks } from '../../../state/keyring';
 import { Section, SettingsScreen } from './settings-screen';
 import { Row } from '@repo/ui/components/ui/row';
@@ -84,6 +85,27 @@ function ZcashWireRows({
   );
 }
 
+const EXPLORER_OPTIONS: readonly { value: ExplorerLinks; label: string; desc: string }[] = [
+  { value: 'off', label: 'off', desc: 'nothing leaves zafu' },
+  { value: 'copy', label: 'copy', desc: 'you choose where to paste it' },
+  { value: 'open', label: 'open', desc: 'the explorer sees your ip and the transaction' },
+];
+
+/** what a transaction shows of its block explorer page: nothing, a link to copy, or one to open */
+export const ExplorerLinksRow = ({ onExplain }: { onExplain?: (label: string) => void }) => {
+  const value = useStore(s => s.privacy.settings.explorerLinks);
+  const setSetting = useStore(s => s.privacy.setSetting);
+  return (
+    <OptionsRow
+      label='explorer links'
+      value={value}
+      options={EXPLORER_OPTIONS}
+      onPick={v => void setSetting('explorerLinks', v)}
+      onExplain={onExplain}
+    />
+  );
+};
+
 type Group = 'on screen' | 'network' | 'people';
 
 /** the boolean privacy settings, in board order. `visible` hides a row no enabled network has a use for. */
@@ -121,13 +143,6 @@ const PRIVACY_ROWS: readonly {
     explainId: 'privacy.zcashTransparentEachBlock',
     group: 'network',
     note: 'the node sees them checked together',
-    visible: n => hasFeature(n, 'zcash'),
-  },
-  {
-    key: 'enableExplorerLinks',
-    label: 'explorer links',
-    explainId: 'privacy.explorerLinks',
-    group: 'network',
     visible: n => hasFeature(n, 'zcash'),
   },
   {
@@ -335,6 +350,7 @@ export function SettingsPrivacy() {
         <Section title='on screen'>{rows('on screen')}</Section>
         <Section title='network'>
           {rows('network')}
+          {zcashOn && <ExplorerLinksRow {...explainProps('privacy.explorerLinks')} />}
           {zcashOn && <ZcashWireRows explainProps={explainProps} />}
           <Row
             type='screen'

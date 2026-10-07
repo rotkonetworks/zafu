@@ -56,7 +56,8 @@ describe('settings status lines', () => {
 
   it('counts what really lets more be seen, only where its network is on', () => {
     expect(selectOpenings(state({}, ['zcash']))).toBe(0);
-    expect(selectOpenings(state({ enableExplorerLinks: true }, ['zcash']))).toBe(1);
+    expect(selectOpenings(state({ explorerLinks: 'open' }, ['zcash']))).toBe(1);
+    expect(selectOpenings(state({ explorerLinks: 'copy' }, ['zcash']))).toBe(0);
     expect(
       selectOpenings(
         state({ zcashTransparentEachBlock: true }, ['zcash'], {

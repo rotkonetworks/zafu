@@ -46,13 +46,13 @@ describe('settings backup', () => {
       hideBalances: true,
       historyAsked: true,
       txSigningSecurity: 'foilhat',
-      enableExplorerLinks: 'yes' as never,
+      explorerLinks: 'yes' as never,
       proxy: { enabled: true, host: 'x', port: 1 },
     });
     expect(next.hideBalances).toBe(true);
     expect(next.historyAsked).toBe(true);
     expect(next.txSigningSecurity).toBe('foilhat');
-    expect(next.enableExplorerLinks).toBe(false);
+    expect(next.explorerLinks).toBe('off');
     expect(next).not.toHaveProperty('proxy');
   });
 
@@ -66,6 +66,24 @@ describe('settings backup', () => {
     expect(back.zcashTransparentEachBlock).toBe(true);
     // an older backup without the field leaves it off
     expect(restoredPrivacy(DEFAULT_PRIVACY_SETTINGS, {}).zcashTransparentEachBlock).toBe(false);
+  });
+
+  it('an older backup with explorer links on restores them as open, and drops the old key', () => {
+    const on = restoredPrivacy(DEFAULT_PRIVACY_SETTINGS, { enableExplorerLinks: true } as never);
+    expect(on.explorerLinks).toBe('open');
+    expect(on).not.toHaveProperty('enableExplorerLinks');
+    const off = restoredPrivacy(DEFAULT_PRIVACY_SETTINGS, { enableExplorerLinks: false } as never);
+    expect(off.explorerLinks).toBe('off');
+    expect(off).not.toHaveProperty('enableExplorerLinks');
+    // a backup with neither key leaves the current choice alone; an old false replaces it
+    const copy = { ...DEFAULT_PRIVACY_SETTINGS, explorerLinks: 'copy' as const };
+    expect(restoredPrivacy(copy, { enableExplorerLinks: false } as never).explorerLinks).toBe(
+      'off',
+    );
+    expect(restoredPrivacy(copy, {}).explorerLinks).toBe('copy');
+    expect(restoredPrivacy(DEFAULT_PRIVACY_SETTINGS, { explorerLinks: 'copy' }).explorerLinks).toBe(
+      'copy',
+    );
   });
 
   it("a backup from before v5 restores penumbra's keep-syncing from the old shared name", () => {

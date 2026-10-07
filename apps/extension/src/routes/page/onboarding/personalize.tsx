@@ -16,7 +16,7 @@ import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Segmented } from '@repo/ui/components/ui/segmented';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { useStore } from '../../../state';
-import { privacySelector } from '../../../state/privacy';
+import { privacySelector, type ExplorerLinks } from '../../../state/privacy';
 import { usePageNav } from '../../../utils/navigate';
 import { hostOf } from '../../../net/destination';
 import { PagePath } from '../paths';
@@ -27,7 +27,7 @@ import {
   FontRow,
   ApprovalsRow,
 } from '../../popup/settings/settings-appearance';
-import { ContactDiscoverySection } from '../../popup/settings/settings-privacy';
+import { ContactDiscoverySection, ExplorerLinksRow } from '../../popup/settings/settings-privacy';
 import { ZcashNodeSheet } from '../../popup/settings/settings-zcash-network';
 import { useAutoLock, AUTO_LOCK_OPTIONS } from '../../popup/settings/use-auto-lock';
 
@@ -47,7 +47,7 @@ interface Snapshot {
   hideBalances: boolean;
   minutes: number;
   zcashEndpoint: string | undefined;
-  enableExplorerLinks: boolean;
+  explorerLinks: ExplorerLinks;
   openZcashLinks: boolean;
   openZafuLinks: boolean;
   keepPenumbraSyncing: boolean;
@@ -85,7 +85,7 @@ export const Personalize = () => {
       hideBalances: settings.hideBalances,
       minutes,
       zcashEndpoint,
-      enableExplorerLinks: settings.enableExplorerLinks,
+      explorerLinks: settings.explorerLinks,
       openZcashLinks: settings.openZcashLinks,
       openZafuLinks: settings.openZafuLinks,
       keepPenumbraSyncing: settings.keepPenumbraSyncing,
@@ -113,7 +113,7 @@ export const Personalize = () => {
       void setSetting('hideBalances', s.hideBalances);
       setAutoLock(s.minutes);
       void setNetworkEndpoint('zcash', s.zcashEndpoint ?? '');
-      void setSetting('enableExplorerLinks', s.enableExplorerLinks);
+      void setSetting('explorerLinks', s.explorerLinks);
       void setSetting('openZcashLinks', s.openZcashLinks);
       void setSetting('openZafuLinks', s.openZafuLinks);
       void setSetting('keepPenumbraSyncing', s.keepPenumbraSyncing);
@@ -230,12 +230,7 @@ export const Personalize = () => {
               value={(zcashEndpoint && hostOf(zcashEndpoint)) || 'auto'}
               onPress={() => setNodeOpen(true)}
             />
-            <Row
-              type='toggle'
-              label='explorer links'
-              checked={settings.enableExplorerLinks}
-              onChange={v => void setSetting('enableExplorerLinks', v)}
-            />
+            <ExplorerLinksRow />
             <Row
               type='toggle'
               label='zcash: links'

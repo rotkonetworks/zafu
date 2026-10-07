@@ -9,7 +9,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { rpcPoolKey } from '../net/egress-policy';
 import { NETWORKS } from '../config/networks';
-import { DEFAULT_PRIVACY_SETTINGS, type PrivacySettings } from './privacy';
+import { DEFAULT_PRIVACY_SETTINGS, fromStoredPrivacy, type PrivacySettings } from './privacy';
 
 type Parse = (v: unknown) => unknown;
 
@@ -139,7 +139,7 @@ export const restoredPrivacy = (
   if (typeof legacy === 'boolean' && incoming?.keepPenumbraSyncing === undefined) {
     next.keepPenumbraSyncing = legacy;
   }
-  for (const [k, v] of Object.entries(incoming ?? {})) {
+  for (const [k, v] of Object.entries(fromStoredPrivacy(incoming))) {
     const key = k as keyof PrivacySettings;
     if (key in DEFAULT_PRIVACY_SETTINGS && typeof v === typeof DEFAULT_PRIVACY_SETTINGS[key]) {
       (next as Record<string, unknown>)[key] = v;
