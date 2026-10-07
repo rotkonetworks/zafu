@@ -126,7 +126,7 @@ export const PeopleRelayRow = ({ onExplain }: Explained) => {
       <Row
         type='value'
         label='people relay'
-        description='it sees your ip and when, never what you say'
+        description='it sees your ip and when'
         value={relayHost(current)}
         onPress={() => setOpen(true)}
         onExplain={onExplain}
@@ -163,7 +163,7 @@ export const DiscoveryRelayRow = ({ onExplain }: Explained) => {
       <Row
         type='value'
         label='discovery relay'
-        description='it sees a sealed sign, your ip and when'
+        description='it sees a sealed sign and your ip'
         value={relayHost(endpoint)}
         onPress={() => setOpen(true)}
         onExplain={onExplain}

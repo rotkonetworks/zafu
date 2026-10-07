@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { RowGroup } from '@repo/ui/components/ui/row';
 import { Button } from '@repo/ui/components/ui/button';
 import { clearContacted, dayOf, KEEP_DAYS, readContacted } from '../../../net/contacted';
 import { readEgressView } from '../../../net/egress-opt-in';
@@ -99,12 +98,17 @@ export const SettingsContacted = () => {
             ))}
           </Section>
         )}
-        <RowGroup className='mt-auto flex-row items-center gap-2.5 px-3 py-2'>
+        <div className='mt-auto flex items-center gap-2.5 border-t border-border-soft pt-3'>
           <span className='grow text-[11px] text-fg-muted'>nothing here leaves this computer</span>
-          <Button variant='secondary' size='sm' onClick={() => void clear()}>
+          <Button
+            variant='secondary'
+            size='sm'
+            className='shrink-0 whitespace-nowrap'
+            onClick={() => void clear()}
+          >
             clear this list
           </Button>
-        </RowGroup>
+        </div>
       </div>
     </SettingsScreen>
   );

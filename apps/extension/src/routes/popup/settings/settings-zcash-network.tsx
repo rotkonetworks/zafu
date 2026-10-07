@@ -294,11 +294,18 @@ const ZcashOn = () => {
             />
             <span className='flex min-w-0 grow flex-col gap-[3px]'>
               <span className='truncate text-sm text-fg-high'>{status}</span>
-              {workerSyncHeight > 0 && (
-                <span className='text-[11px] text-fg-muted'>
-                  block {workerSyncHeight.toLocaleString()}
-                </span>
-              )}
+              <span className='truncate text-[11px] text-fg-muted'>
+                {[
+                  workerSyncHeight > 0 && `block ${workerSyncHeight.toLocaleString()}`,
+                  chain?.status === 'checked'
+                    ? 'chain checked'
+                    : chain?.reason === 'clock'
+                      ? "this computer's clock looks off"
+                      : 'chain not verified',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
             </span>
             {pct != null && <span className='text-label text-fg-muted'>{pct}%</span>}
             {pct != null && (
@@ -311,17 +318,11 @@ const ZcashOn = () => {
           <Row
             type='value'
             label='node'
-            description={[
-              'it sees your ip and what you sync',
-              !preset && endpoint && 'your own node',
-              chain?.status === 'checked'
-                ? 'chain checked'
-                : chain?.reason === 'clock'
-                  ? "this computer's clock looks off"
-                  : 'chain not verified',
-            ]
-              .filter(Boolean)
-              .join(' · ')}
+            description={
+              !preset && endpoint
+                ? 'your own node · it sees your ip and what you sync'
+                : 'it sees your ip and what you sync'
+            }
             value={preset?.label ?? ((endpoint && hostOf(endpoint)) || 'auto')}
             onPress={() => setSheet('node')}
             {...explainProps('network.zcashNode')}
