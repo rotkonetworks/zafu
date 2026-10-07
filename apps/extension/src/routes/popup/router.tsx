@@ -13,6 +13,7 @@ import { routePreloads } from './route-preloads';
 import { registerRoutePreload } from './preload';
 import { BUY_PRELOAD, preloadBuyPage } from '../../buy/open';
 import { LP_PRELOAD, preloadLpPage } from '../../lp/open';
+import { startNym } from '../../net/nym-bridge';
 
 /**
  * Skeleton placeholder while the first screen hydrates (its loaders and its
@@ -279,5 +280,9 @@ registerRoutePreload('sheet:wallets', routePreloads.wallets);
 registerRoutePreload(BUY_PRELOAD, preloadBuyPage);
 // lp.html likewise: its code, never a read of the pool
 registerRoutePreload(LP_PRELOAD, preloadLpPage);
+// a send is coming: start nym on intent, so its cold start overlaps the form
+for (const target of [PopupPath.SEND, PopupPath.SWAP, LP_PRELOAD]) {
+  registerRoutePreload(target, startNym);
+}
 
 export const popupRouter = createHashRouter(popupRoutes);
