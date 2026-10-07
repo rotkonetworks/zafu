@@ -67,6 +67,7 @@ import { usePasswordGate } from '../../../hooks/password-gate';
 import { RequestSheet } from '../send/send-fields';
 import { dayOf } from '../../../utils/when';
 import { cardOf, counterparty, shortAddress, threadIdOf, whenOf } from './threads';
+import { SendState } from './send-state';
 
 const ZCASH_LINK = /zcash:[^\s]+/i;
 
@@ -200,7 +201,13 @@ const Item = ({ m, from }: { m: Message; from: string }) => {
 };
 
 /** a line on the pair room: a hairline, no fill */
-const RelayLine = ({ item, onRetry }: { item: ThreadItem; onRetry: () => void }) => (
+const RelayLine = ({
+  item,
+  say,
+}: {
+  item: ThreadItem;
+  say: (text: string, retry: string) => void;
+}) => (
   <>
     <div
       className={cn(
@@ -212,27 +219,7 @@ const RelayLine = ({ item, onRetry }: { item: ThreadItem; onRetry: () => void })
         <MessageText text={item.body} />
       </p>
     </div>
-    {item.mine && (
-      <span
-        className={cn(
-          'self-end text-[11px]',
-          item.status === 'failed' ? 'text-hanko-light' : 'text-fg-muted',
-        )}
-      >
-        {item.status === 'sending' ? (
-          'sending'
-        ) : item.status === 'failed' ? (
-          <>
-            this did not reach the relay ·{' '}
-            <button type='button' onClick={onRetry} className='text-zigner-gold hover:underline'>
-              try again
-            </button>
-          </>
-        ) : (
-          'on the relay'
-        )}
-      </span>
-    )}
+    {item.mine && <SendState item={item} say={say} sent='on the relay' />}
   </>
 );
 
@@ -687,7 +674,7 @@ export function ThreadPage() {
                 pending={room?.pair?.v2?.pending}
               />
             ) : (
-              <RelayLine item={r.it} onRetry={() => say(r.it.body, r.it.local)} />
+              <RelayLine item={r.it} say={say} />
             )}
           </div>
         ))}

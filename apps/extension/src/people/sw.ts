@@ -246,6 +246,13 @@ export const startPeopleRelay = (
     return true;
   });
 
+  // back online while people is open: what waited to leave goes now; closed, nothing runs
+  globalThis.addEventListener('online', () => {
+    if (service.active) {
+      void service.flush().catch(() => undefined);
+    }
+  });
+
   chrome.runtime.onConnect.addListener(port => {
     if (!port.name.startsWith(PEOPLE_WATCH_PORT) || port.sender?.id !== chrome.runtime.id) {
       return;

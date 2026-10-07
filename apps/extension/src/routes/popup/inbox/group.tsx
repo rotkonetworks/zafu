@@ -25,6 +25,7 @@ import { usePasswordGate } from '../../../hooks/password-gate';
 import { whenOf } from './threads';
 import { JoinAsks, asksOf } from './join-asks';
 import { useMemberName } from './use-member-name';
+import { SendState } from './send-state';
 
 const dayOf = (s: number) => {
   const w = whenOf(s * 1000);
@@ -38,12 +39,12 @@ const Line = ({
   item,
   name,
   showName,
-  onRetry,
+  say,
 }: {
   item: ThreadItem;
   name: string;
   showName: boolean;
-  onRetry: () => void;
+  say: (text: string, retry: string) => void;
 }) => (
   <div className={cn('flex max-w-[78%] flex-col gap-1', item.mine ? 'self-end' : 'self-start')}>
     {showName && !item.mine && <span className='text-[11px] text-fg-muted'>{name}</span>}
@@ -57,17 +58,7 @@ const Line = ({
       {item.kind === 'action' && `${name} `}
       <MessageText text={item.body} />
     </span>
-    {item.status === 'sending' && (
-      <span className='self-end text-[11px] text-fg-muted'>sending</span>
-    )}
-    {item.status === 'failed' && (
-      <span className='flex gap-2 self-end text-[11px] text-hanko-light'>
-        this did not reach the relay
-        <button type='button' className='text-zigner-gold hover:underline' onClick={onRetry}>
-          try again
-        </button>
-      </span>
-    )}
+    <SendState item={item} say={say} />
   </div>
 );
 
@@ -193,7 +184,7 @@ export function GroupPage() {
                 item={it}
                 name={nameOf(it)}
                 showName={prev?.author !== it.author || prev.mine !== it.mine}
-                onRetry={() => say(it.kind === 'action' ? `/me ${it.body}` : it.body, it.local)}
+                say={say}
               />
             </div>
           );

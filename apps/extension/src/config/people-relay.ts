@@ -3,7 +3,7 @@
  * all on one egress destination, `people-relay`, asked once at first use.
  *
  * The default is the same bucket relay contact discovery uses (minirelay on
- * relay.zafu.pro, rooms kept 25h). A room may name another relay (a memo invite carries the
+ * relay.zafu.pro, rooms kept `RETENTION_MS`, people/service). A room may name another relay (a memo invite carries the
  * one its sender chose); every relay beyond the default is listed in plain
  * storage under `peopleRelay.hosts` once the person allowed it, because the
  * egress policy compiles from plaintext settings only.

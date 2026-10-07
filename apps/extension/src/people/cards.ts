@@ -16,8 +16,8 @@
  *   cancelled card gets a signed `close` in its room.
  *
  * The card room lives under the pair scope (`zafu-pair-v1`), which the relay
- * keeps 25 hours like pair rooms; a scope of its own would get the 1 hour
- * default. Whoever holds the card link can read the room: an answer is
+ * keeps as long as pair rooms (`RETENTION_MS`, ./service); a scope of its own would
+ * get the 1 hour default. Whoever holds the card link can read the room: an answer is
  * sealed for that reason, and an unanswered card stops being watched after
  * {@link CARD_TTL_SHOWN} (only shown) or {@link CARD_TTL_SENT} (copied or shared).
  *
@@ -445,8 +445,8 @@ export const createCards = (deps: CardDeps) => {
     if (gate !== 'on') {
       throw new PeopleNeedsRelay(gate);
     }
-    await svc.api.addRoom(
-      cardRoom(
+    await svc.api.addRoom({
+      ...cardRoom(
         walletId,
         card,
         { gen, j },
@@ -459,7 +459,9 @@ export const createCards = (deps: CardDeps) => {
         },
         true,
       ),
-    );
+      // its room is born with the card: nothing older to read
+      since: presenceEpoch(card.created * 60),
+    });
     await expire(svc);
     return { id: cardRoomId(card.key) };
   };

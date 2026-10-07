@@ -42,7 +42,7 @@ import { ephemeralIdentity, identityOf, verify } from './keys';
 import type { Gate, PeopleApi, PeopleService, RecordHandler } from './service';
 import { PeopleNeedsRelay } from './service';
 import type { GroupMember, PeopleRoom } from './vault';
-import type { RelayTransport } from '@zafu/zid';
+import { presenceEpoch, type RelayTransport } from '@zafu/zid';
 
 export interface GroupDeps {
   walletId: () => Promise<string | undefined>;
@@ -142,6 +142,8 @@ export const createGroups = (deps: GroupDeps) => {
       size: GROUP_ROOM_PLAINTEXT_BYTES,
       signer: { gen, G },
       createdAt: at,
+      // a group is born here: nothing older to read
+      since: presenceEpoch(Math.floor(at / 1000)),
     };
     const room: PeopleRoom = {
       ...base,
@@ -181,6 +183,8 @@ export const createGroups = (deps: GroupDeps) => {
     signer: room.signer,
     joined: false,
     createdAt: at,
+    // a new code is a new room: nothing older to read
+    since: presenceEpoch(Math.floor(at / 1000)),
     until: at + DOOR_MS,
     group: { ...room.group!, code, requests: [], log: undefined, names: undefined },
   });
