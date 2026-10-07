@@ -256,7 +256,7 @@ describe('the vault, from more than one operator', () => {
     serve({});
     const v = await readVault();
     expect(v.inbound.address).toBe(zecInboundOf(rows as never)!.address);
-    expect(fetched.some(u => u.includes('ninerealms'))).toBe(true);
+    expect(fetched.some(u => u.includes('thorwallet'))).toBe(true);
     expect(fetched.some(u => u.includes('liquify'))).toBe(true);
   });
 
@@ -273,7 +273,7 @@ describe('the vault, from more than one operator', () => {
   it('refuses when the operators disagree on a pause', async () => {
     view.on.add('thorchain');
     serve({
-      'thornode.ninerealms.com': {
+      'thorchain-thornode-lb-1.thorwallet.org': {
         '/thorchain/mimir': { ...(LIVE['/thorchain/mimir'] as object), PAUSELPZEC: 1 },
       },
     });
@@ -282,14 +282,14 @@ describe('the vault, from more than one operator', () => {
 
   it('refuses when only one operator answers', async () => {
     view.on.add('thorchain');
-    serve({ 'thornode.ninerealms.com': 'down' });
+    serve({ 'thorchain-thornode-lb-1.thorwallet.org': 'down' });
     await expect(readVault()).rejects.toThrow(ONE_NODE_LINE);
   });
 
   it('takes the higher dust of the two', async () => {
     view.on.add('thorchain');
     serve({
-      'thornode.ninerealms.com': {
+      'thorchain-thornode-lb-1.thorwallet.org': {
         '/thorchain/inbound_addresses': withZec({ dust_threshold: '20000' }),
       },
     });

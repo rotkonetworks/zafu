@@ -175,7 +175,7 @@ export const EgressScreen = () => {
       // the vault and pauses are read from both and must agree before any zec moves
       host: on.thornode
         ? 'already allowed'
-        : 'gateway.liquify.com/thorchain_api\nthornode.ninerealms.com · checks the vault',
+        : 'gateway.liquify.com/thorchain_api\nthorchain-thornode-lb-1.thorwallet.org · checks the vault',
       c: on.thornode ? 'text-fg-muted' : 'text-zigner-gold',
     },
     {

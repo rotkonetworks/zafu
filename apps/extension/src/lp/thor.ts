@@ -184,7 +184,7 @@ const sameVault = (
 
 /**
  * A fresh look at the vault and the pauses, right before zec moves, from
- * every THORNode operator zafu knows (ninerealms and liquify, both under the
+ * every THORNode operator zafu knows (liquify and thorwallet, both under the
  * one thornode destination), each asked on its own. One that does not
  * answer, or two that disagree on the vault or a pause, refuse: no single
  * operator decides where the zec goes. The dust is the higher of the two.
