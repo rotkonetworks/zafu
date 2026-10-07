@@ -9,7 +9,7 @@ import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
 import { readEncrypted, writeEncrypted, markHydrated } from './encrypted-storage';
 import { backfillMissingMultisigMirrors } from './keyring/migration';
-import { DEFAULT_PRIVACY_SETTINGS } from './privacy';
+import { DEFAULT_PRIVACY_SETTINGS, fromStoredPrivacy } from './privacy';
 import { POCKETS_STORAGE_KEY } from './pockets';
 import type { WalletJson } from '@repo/wallet';
 import type { EncryptedVault } from './keyring/types';
@@ -104,7 +104,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
           // crash the privacy screen (proxy.host on undefined).
           state.privacy.settings = {
             ...DEFAULT_PRIVACY_SETTINGS,
-            ...(privacySettings as Partial<AllSlices['privacy']['settings']>),
+            ...fromStoredPrivacy(privacySettings),
           };
         }
       }),
@@ -338,7 +338,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
             produce((state: AllSlices) => {
               state.privacy.settings = {
                 ...DEFAULT_PRIVACY_SETTINGS,
-                ...(stored as Partial<AllSlices['privacy']['settings']>),
+                ...fromStoredPrivacy(stored),
               };
             }),
           );

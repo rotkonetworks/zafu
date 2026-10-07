@@ -91,9 +91,9 @@ export const TxDetailPage = () => {
 
 const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: NetworkType }) => {
   const navigate = useNavigate();
-  const explorerEnabled = useStore(s => s.privacy.settings.enableExplorerLinks);
+  const explorerLinks = useStore(s => s.privacy.settings.explorerLinks);
   const look = LOOK[network] ?? PLAIN;
-  const explorer = explorerEnabled ? look.explorer?.(tx.id) : undefined;
+  const explorer = explorerLinks === 'off' ? undefined : look.explorer?.(tx.id);
   const isIn = isIncoming(tx);
   const isSh = tx.type === 'shield' || tx.type === 'unshield';
   const isPending = tx.status === 'pending';
@@ -300,18 +300,32 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
                 <span className='text-label text-fg-muted lowercase'>transaction</span>
               </span>
               <CopyButton text={tx.id} />
-              {explorer && (
-                <a
-                  href={explorer}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                  className='mr-3.5 shrink-0 text-fg-muted transition-colors hover:text-fg-high'
-                  title='open in block explorer (reveals your ip)'
-                >
-                  <span className='i-ph-arrow-square-out h-3.5 w-3.5' />
-                </a>
-              )}
             </div>
+            {explorer && (
+              <div className='flex min-h-[52px] items-center gap-3 px-3.5 py-2'>
+                <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
+                  <span className='truncate text-data text-fg-high font-mono'>{explorer}</span>
+                  <span className='text-label text-fg-muted lowercase'>
+                    {explorerLinks === 'open'
+                      ? 'the explorer sees your ip and this transaction'
+                      : 'explorer link'}
+                  </span>
+                </span>
+                {explorerLinks === 'open' ? (
+                  <a
+                    href={explorer}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    aria-label='open in the block explorer'
+                    className='shrink-0 text-fg-muted transition-colors hover:text-fg-high'
+                  >
+                    <span className='i-ph-arrow-square-out block size-3.5' />
+                  </a>
+                ) : (
+                  <CopyButton text={explorer} />
+                )}
+              </div>
+            )}
             <div className='flex items-center justify-between px-3.5 py-2 text-sm'>
               <span className='text-fg-muted'>fee</span>
               <span>{tx.feeAmount ?? '—'}</span>

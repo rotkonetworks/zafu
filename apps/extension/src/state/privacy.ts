@@ -52,6 +52,9 @@ export const LIGHT_CLIENT_NETWORKS: NetworkType[] = [];
  */
 export const TRANSPARENT_NETWORKS: NetworkType[] = ['cosmos'];
 
+export const EXPLORER_LINKS = ['off', 'copy', 'open'] as const;
+export type ExplorerLinks = (typeof EXPLORER_LINKS)[number];
+
 export interface PrivacySettings {
   /**
    * enable balance fetching for transparent networks
@@ -98,12 +101,13 @@ export interface PrivacySettings {
   zcashTransparentEachBlock: boolean;
 
   /**
-   * show "open in block explorer" links on transactions.
-   * when false (default): copy-only, nothing leaves the wallet.
-   * when true: a link opens a third-party explorer, which sees your IP and
-   * that you looked up that specific tx. off by default for that reason.
+   * what a transaction shows of its public block explorer page.
+   * off (default): nothing; the transaction id can still be copied.
+   * copy: the explorer link to copy, opened nowhere by zafu.
+   * open: a link that opens the explorer, which sees your ip and that you
+   * looked up that transaction.
    */
-  enableExplorerLinks: boolean;
+  explorerLinks: ExplorerLinks;
 
   /**
    * `zcash:` payment links (ZIP 321) clicked on websites.
@@ -187,12 +191,32 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   keepPenumbraSyncing: false,
   autoCheckTransparent: false,
   zcashTransparentEachBlock: false,
-  enableExplorerLinks: false,
+  explorerLinks: 'off',
   openZcashLinks: true,
   openZafuLinks: true,
   enableIdentity: true,
   hideBalances: false,
   txSigningSecurity: DEFAULT_TX_SIGNING_SECURITY,
+};
+
+/**
+ * privacy settings as stored or backed up, ready to lay over defaults.
+ * before the three-way choice, explorer links were the boolean
+ * `enableExplorerLinks`: true becomes 'open', and the old key is dropped.
+ * a sealed box or anything not a plain object reads as nothing stored.
+ */
+export const fromStoredPrivacy = (raw: unknown): Partial<PrivacySettings> => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || 'encrypted' in raw) {
+    return {};
+  }
+  const { enableExplorerLinks, ...rest } = raw as Record<string, unknown>;
+  if (rest['explorerLinks'] === undefined && enableExplorerLinks === true) {
+    rest['explorerLinks'] = 'open';
+  }
+  if (!(EXPLORER_LINKS as readonly unknown[]).includes(rest['explorerLinks'])) {
+    delete rest['explorerLinks'];
+  }
+  return rest as Partial<PrivacySettings>;
 };
 
 // ============================================================================
