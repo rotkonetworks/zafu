@@ -36,7 +36,10 @@ import {
   type DepositPlan,
   type MoveInspected,
 } from '../../workers/transparent-deposit';
+import { readVault } from '../../lp/thor';
+import { requestEgressOptIn } from '../../net/egress-opt-in';
 import { patchOpenSwap, type OpenSwap } from './open-swaps';
+import { ROUTES } from './routes';
 import {
   depositOf,
   isRunning,
@@ -222,6 +225,8 @@ export const runSwapLegs = (swap: OpenSwap, c: LegContext, reviewed?: DepositPla
       tip: () => chainTipInWorker(c.zidecarUrl),
       sleep: ms => new Promise(r => setTimeout(r, ms)),
       now: Date.now,
+      // the lp's own check: both operators, read now, must agree
+      vault: () => requestEgressOptIn(ROUTES.thor.egress).then(() => readVault()),
     },
     reviewed,
   );

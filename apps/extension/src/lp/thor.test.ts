@@ -280,6 +280,16 @@ describe('the vault, from more than one operator', () => {
     await expect(readVault()).rejects.toThrow(DISAGREE_LINE);
   });
 
+  it('refuses when the operators disagree on zec trading', async () => {
+    view.on.add('thorchain');
+    serve({
+      'gateway.liquify.com': {
+        '/thorchain/inbound_addresses': withZec({ chain_trading_paused: true }),
+      },
+    });
+    await expect(readVault()).rejects.toThrow(DISAGREE_LINE);
+  });
+
   it('refuses when only one operator answers', async () => {
     view.on.add('thorchain');
     serve({ 'thorchain-thornode-lb-1.thorwallet.org': 'down' });
