@@ -20,6 +20,7 @@ import {
 } from 'react';
 import { queryOptions, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@repo/ui/lib/utils';
+import { localExtStorage } from '@repo/storage-chrome/local';
 import { Button } from '@repo/ui/components/ui/button';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Sheet } from '@repo/ui/components/ui/sheet';
@@ -97,6 +98,7 @@ import {
 } from '../../../state/swap/live';
 import { NeedsRefundAddress } from '../../../state/swap/near';
 import {
+  asksCustody,
   pairKey,
   ROUTES,
   routeLabel,
@@ -518,6 +520,12 @@ const samePlan = (a?: DepositPlan, b?: DepositPlan) => a?.fee === b?.fee && a?.s
 
 const zecOf = (zat: string | bigint) => fromUnits(BigInt(zat), 8);
 
+/** the custodial routes the person acknowledged, each once */
+const custodyAckQuery = queryOptions({
+  queryKey: ['swapCustodyAck'],
+  queryFn: async (): Promise<RouteId[]> => (await localExtStorage.get('swapCustodyAck')) ?? [],
+});
+
 /** where a remembered swap reopens */
 const stepOf = (s: OpenSwap): Step =>
   s.stage === 'thor-out'
@@ -871,6 +879,9 @@ export const CrosschainSwap = ({
   }, [wallet, req, typedAmount, typedAddress]);
 
   const deal = firm?.quote;
+  // a custodial route is acknowledged once, by the first confirm through it (board SwapU-Custody)
+  const custodyAcked = useQuery(custodyAckQuery).data ?? [];
+  const askCustody = !!deal && asksCustody(deal.route, custodyAcked);
   // out of zec over thorchain the review shows both legs: the move to the swap's own address
   // (when it is short) and the deposit from it, priced before anything is signed
   const thorOut = !!deal?.memo && isFromZec;
@@ -993,6 +1004,12 @@ export const CrosschainSwap = ({
   const recheck = async () => {
     if (!firm) {
       return;
+    }
+    // the confirm that acknowledged a custodial route is remembered for it, for good
+    if (askCustody) {
+      const next = [...custodyAcked, firm.quote.route];
+      queryClient.setQueryData(custodyAckQuery.queryKey, next);
+      await localExtStorage.set('swapCustodyAck', next);
     }
     if (firm.checked) {
       return confirm(firm.quote, firm.req, swapT, reviewedPlan);
@@ -1556,6 +1573,7 @@ export const CrosschainSwap = ({
                     disabled={thorOut && !reviewedPlan}
                     loading={checking}
                   >
+                    {askCustody && 'understood · '}
                     {isFromZec
                       ? kind === 'zigner'
                         ? 'sign with zigner'
@@ -1625,7 +1643,9 @@ export const CrosschainSwap = ({
                 than the next route
               </p>
             )}
-            {note && <p className='text-xs text-fg-muted'>{note}</p>}
+            {note && (
+              <p className={cn('text-xs', askCustody ? 'text-warn' : 'text-fg-muted')}>{note}</p>
+            )}
             {deal.streamLine && <p className='text-xs text-fg-muted'>{deal.streamLine}</p>}
             {deal.refundLine && <p className='text-xs text-fg-muted'>{deal.refundLine}</p>}
             <p className='text-xs text-fg-muted'>

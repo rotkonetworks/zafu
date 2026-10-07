@@ -7,6 +7,7 @@ const store: Record<string, unknown> = {
   penumbraTotalIn: 'um',
   penumbraRowsInUsd: ['16ztCNRCyQZYu3cNN7DNMevUt0v2pERpUBflNfwP+wc='],
   swapRoutes: { 'into_zec:btc@btc': 'thor' },
+  swapCustodyAck: ['near'],
   peopleRelay: { endpoint: 'https://relay.example.org', hosts: ['https://relay.zafu.pro'] },
 };
 vi.mock('@repo/storage-chrome/local', () => ({
@@ -37,6 +38,7 @@ describe('settings backup', () => {
       penumbraTotalIn: 'um',
       penumbraRowsInUsd: ['16ztCNRCyQZYu3cNN7DNMevUt0v2pERpUBflNfwP+wc='],
       swapRoutes: { 'into_zec:btc@btc': 'thor' },
+      swapCustodyAck: ['near'],
       peopleRelay: { endpoint: 'https://relay.example.org', hosts: ['https://relay.zafu.pro'] },
     });
   });

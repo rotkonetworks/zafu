@@ -100,6 +100,8 @@ export interface RouteMeta {
   egress: string;
   /** one line, shown with every quote from this route */
   custody: string;
+  /** someone holds the funds in flight: the first swap through it is acknowledged once */
+  custodial?: true;
   /** undefined when the route can carry the pair, else why not */
   refuses: (pair: SwapPair) => string | undefined;
   /** set while zafu doesn't offer the route at all: the one line a link to it gets */
@@ -111,6 +113,7 @@ export const ROUTES: Record<RouteId, RouteMeta> = {
     label: 'near intents',
     egress: 'near-swap',
     custody: 'a solver holds funds briefly',
+    custodial: true,
     refuses: () => undefined,
   },
   thor: {
@@ -139,6 +142,10 @@ export const ROUTES: Record<RouteId, RouteMeta> = {
 /** a route as the router names it: the best is said to be the best */
 export const routeLabel = (id: RouteId, best: boolean): string =>
   best ? `best price · ${ROUTES[id].label}` : ROUTES[id].label;
+
+/** the first swap through a custodial route is acknowledged; a non-custodial one never asks */
+export const asksCustody = (route: RouteId, acked: readonly RouteId[]): boolean =>
+  !!ROUTES[route].custodial && !acked.includes(route);
 
 /** the routes zafu offers at all */
 export const OFFERED = ROUTE_IDS.filter(id => !ROUTES[id].off);

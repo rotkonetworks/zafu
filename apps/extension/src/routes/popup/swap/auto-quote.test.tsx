@@ -131,8 +131,6 @@ describe('the swap form asks once and prices as you type', () => {
     expect(thor.mock.lastCall?.[0]).toMatchObject({ amountIn: '0.2', dry: true });
     // nothing was tapped: no ask, no checkbox stands between typing and a price
     expect(el.querySelector('input[type=checkbox]')).toBeNull();
-    // the review is a tap away, with nothing to tick first
-    const review = [...el.querySelectorAll('button')].find(b => b.textContent === 'review swap');
     act(() => root.unmount());
   });
 });

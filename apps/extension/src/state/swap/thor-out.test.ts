@@ -37,6 +37,7 @@ import {
 } from './thor-out';
 import { resumeSwapLegs, runSwapLegs, swapRound, type LegContext } from './thor-legs';
 import type { OpenSwap } from './open-swaps';
+import { asksCustody } from './routes';
 import { ZignerDeclined } from '../../signing/zigner-round';
 
 const NOW = 1_800_000_000_000;
@@ -301,5 +302,14 @@ describe('the second leg picks up after a reopened popup (funds path)', () => {
     await settle();
     expect(runs.getState()[s.id]).toEqual({ at: 'held', moved: true });
     expect(worker.coldDone).not.toHaveBeenCalled();
+  });
+});
+
+describe('custody is acknowledged once per provider', () => {
+  it('near (a solver holds funds) asks on the first swap only; thorchain never asks', () => {
+    expect(asksCustody('near', [])).toBe(true);
+    expect(asksCustody('near', ['near'])).toBe(false);
+    expect(asksCustody('thor', [])).toBe(false);
+    expect(asksCustody('maya', [])).toBe(false);
   });
 });
