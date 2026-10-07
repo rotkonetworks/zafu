@@ -195,7 +195,7 @@ export const TransactionApproval = () => {
   if (isAirgap && airgapStep === 'show-qr') {
     return (
       <div className='flex h-full min-h-0 flex-col bg-canvas'>
-        <ScreenHeader title='sign on zigner' onBack={() => setAirgapStep('review')} meta='1 / 2' />
+        <ScreenHeader title='sign on zigner' onBack={() => setAirgapStep('review')} />
         <Main className='items-center gap-4 px-5 pt-6'>
           <QrDisplay data={qrHex} size={300} showCopy />
           <span className='text-[13px] text-fg-high'>scan this with zigner, approve there</span>
@@ -215,7 +215,7 @@ export const TransactionApproval = () => {
   if (isAirgap && airgapStep === 'scan-qr') {
     return scanError ? (
       <div className='flex h-full min-h-0 flex-col bg-canvas'>
-        <ScreenHeader title='sign on zigner' onBack={() => setScanError(null)} meta='2 / 2' />
+        <ScreenHeader title='sign on zigner' onBack={() => setScanError(null)} />
         <Main className='pt-5'>
           <StatusSlot tone='warn' icon='i-ph-warning'>
             {scanError}

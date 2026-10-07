@@ -15,7 +15,31 @@ import type { ZignerRound } from '../signing/zigner-round';
 const urTypeOf = (frames: string[]) =>
   frames[0]?.split('/')[0]?.replace(/^ur:/i, '') || 'zigner-module';
 
-export const ZignerRoundView = ({ round, size = 300 }: { round: ZignerRound; size?: number }) => {
+/** the round's one action: read zigner's answer, or back to the qr */
+export const ZignerRoundAction = ({ round }: { round: ZignerRound }) =>
+  useStore(round.store, s => s.scanning) ? (
+    <Button variant='secondary' onClick={() => round.scan(false)} className='w-full'>
+      show the qr again
+    </Button>
+  ) : (
+    <Button onClick={() => round.scan(true)} className='w-full'>
+      scan zigner's answer
+    </Button>
+  );
+
+/**
+ * The request, or the camera. `pinned` leaves the action out for the caller's
+ * footer, so the qr and its action fit a popup with the tab bar.
+ */
+export const ZignerRoundView = ({
+  round,
+  size = 300,
+  pinned,
+}: {
+  round: ZignerRound;
+  size?: number;
+  pinned?: boolean;
+}) => {
   const { shown, scanning } = useStore(round.store);
   // a camera that would not start, said under the qr it goes back to
   const [cameraError, setCameraError] = useState<string>();
@@ -54,21 +78,7 @@ export const ZignerRoundView = ({ round, size = 300 }: { round: ZignerRound; siz
           {cameraError && <span className='text-xs text-warn'>{cameraError}</span>}
         </>
       )}
-      {scanning ? (
-        <Button variant='secondary' onClick={() => round.scan(false)} className='w-full'>
-          show the qr again
-        </Button>
-      ) : (
-        <Button
-          onClick={() => {
-            setCameraError(undefined);
-            round.scan(true);
-          }}
-          className='w-full'
-        >
-          scan zigner's answer
-        </Button>
-      )}
+      {!pinned && <ZignerRoundAction round={round} />}
     </div>
   );
 };

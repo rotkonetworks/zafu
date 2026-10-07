@@ -95,6 +95,7 @@ import {
   Strip,
   isTransparentAddress,
   shortAddress,
+  stepMeta,
   type SendingNote,
 } from './send-ui';
 import { AmountField, AddressSheet, ToField } from './send-fields';
@@ -383,6 +384,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [showQrScanner, setShowQrScanner] = useState(false);
   // a zigner code for the other chain, seen while scanning for this send's
   const [wrongCode, setWrongCode] = useState<ZignerChain>();
+  // the camera wouldn't start: said under the qr it went back to
+  const [cameraLine, setCameraLine] = useState<string>();
   // The ledger sign round of the current build (connect, sign, broadcast). A
   // device that goes away mid-sign leaves it here, so "reconnect" signs the
   // same build again. Each run is numbered; an older run that settles late
@@ -1200,6 +1203,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
   const handleScanSignature = () => {
     setWrongCode(undefined);
+    setCameraLine(undefined);
     setStep('scan');
     startScanning();
   };
@@ -1373,6 +1377,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   };
 
   const device = (kind && DEVICE[kind]) ?? 'zigner';
+  // a qr device signs in one more step of its own
+  const qrRound = !!kind && !!DEVICE[kind] && device !== 'ledger';
   const sending = (
     <>
       send <Sensitive>{amount} zec</Sensitive> to {toLabel}
@@ -1385,7 +1391,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'form':
         return (
           <>
-            <ScreenHeader title='send zec' onBack={onClose} meta='1 / 2' />
+            <ScreenHeader title='send zec' onBack={onClose} meta={stepMeta('form', qrRound)} />
             <Main className='gap-[18px] pt-5'>
               <ToField
                 value={recipient}
@@ -1500,6 +1506,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'review':
         return (
           <Review
+            meta={stepMeta('review', qrRound)}
             amount={amount}
             unit='zec'
             rows={[
@@ -1592,7 +1599,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               onBack={step === 'sign' ? handleBack : () => setStep('sign')}
               meta={
                 <>
-                  {step === 'sign' ? '1 / 2' : '2 / 2'}
+                  {stepMeta('sign', true)}
                   <DontQuitIcon />
                 </>
               }
@@ -1611,9 +1618,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     onComplete={bytes => {
                       void handlePcztSignatureScanned(bytes);
                     }}
+                    // a camera that won't start goes back to the qr, saying so there
                     onError={err => {
-                      setError(err);
-                      setStep('error');
+                      setCameraLine(err);
+                      setStep('sign');
                     }}
                     onClose={() => setStep('sign')}
                     title={`${device}'s answer`}
@@ -1654,6 +1662,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   <span className='text-[13px] text-fg-high'>
                     scan this with {device}, approve there
                   </span>
+                  {cameraLine && <span className='text-xs text-warn'>{cameraLine}</span>}
                 </>
               )}
             </Main>

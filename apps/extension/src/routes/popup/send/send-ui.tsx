@@ -109,6 +109,13 @@ export const PrivacyLine = ({ children }: { children: ReactNode }) => (
   </div>
 );
 
+/**
+ * The header's step counter: the person's own steps through a send, so it only
+ * ever counts up. A device's qr and its answer are one step, the last.
+ */
+export const stepMeta = (step: 'form' | 'review' | 'sign', device: boolean): string =>
+  `${{ form: 1, review: 2, sign: 3 }[step]} / ${device ? 3 : 2}`;
+
 /** board Send, review: what leaves, to whom, at what cost, and who can see it */
 export const Review = ({
   title = 'review',
