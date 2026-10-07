@@ -133,7 +133,7 @@ describe('add a person', () => {
   it('with the relay declined, the link is never copied, and allow tries the same card again', async () => {
     relayOn = false;
     await render();
-    await act(async () => button(/copy link/).click());
+    await act(async () => button(/for anyone/).click());
     expect(writeText).not.toHaveBeenCalled();
     expect(container.querySelector('[data-qr]')).toBeNull();
     expect(text()).toContain('no one can answer until the relay is allowed');
@@ -143,12 +143,25 @@ describe('add a person', () => {
     expect(peopleAsk).toHaveBeenCalledTimes(2);
   });
 
+  it('copies the card as a zafu: link or a zafu.pro link, one card for both', async () => {
+    await render();
+    await act(async () => button(/for zafu/).click());
+    await render();
+    await act(async () => button(/for anyone/).click());
+    expect(writeText.mock.calls).toEqual([
+      [`zafu:contact#${mine.b64}`],
+      [`https://zafu.pro/c#${mine.b64}`],
+    ]);
+    expect(fresh).toHaveBeenCalledTimes(1);
+    expect(peopleCall).toHaveBeenCalledWith('card-mark', { roomId: 'c:room', what: 'copied' });
+  });
+
   it('a wallet with no recovery phrase here says so calmly, and makes nothing', async () => {
     cannot = true;
     await render();
     expect(text()).toContain('cards need a wallet whose recovery phrase is on this computer');
     expect(text()).not.toContain('making your card');
-    expect(button(/copy link/)).toBeUndefined();
+    expect(button(/for zafu/)).toBeUndefined();
     expect(fresh).not.toHaveBeenCalled();
   });
 
