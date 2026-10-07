@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../../../state';
 import { selectEnabledNetworks } from '../../../state/keyring';
@@ -7,10 +6,9 @@ import { PopupPath } from '../paths';
 import { CATEGORY_MARKS, SettingsScreen, type SettingsCategory } from './settings-screen';
 import { useAutoLock, AUTO_LOCK_OPTIONS } from './use-auto-lock';
 import { useZafuTheme } from './settings-appearance';
-import { useStored } from './use-stored';
+import { useDestinationsOn, useStored } from './use-stored';
 import { useZcashMeMode, ZCASHME_MODE_LABEL } from '../../../services/zcashme/config';
 import { discoveryOn } from '../../../config/contact-discovery-relay';
-import { readEgressView } from '../../../net/egress-opt-in';
 import {
   devicesStatus,
   displayStatus,
@@ -37,11 +35,7 @@ const useSecurityStatus = () => {
 };
 
 const useNetworkStatus = () => {
-  const [on, setOn] = useState<number>();
-  useEffect(() => {
-    void readEgressView().then(v => setOn(v.filter(d => d.on && d.hosts.length).length));
-  }, []);
-  return networkStatus(on, useStore(selectConnectedSiteCount));
+  return networkStatus(useDestinationsOn(), useStore(selectConnectedSiteCount));
 };
 
 const useZcashStatus = () =>

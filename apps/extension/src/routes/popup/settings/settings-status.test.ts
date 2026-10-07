@@ -54,7 +54,7 @@ describe('settings status lines', () => {
       warn: '2 settings less private',
     });
     expect(zcashStatus(false, 'zcash.rotko.net', 2).text).toBe(
-      'off · turned on in wallets and devices',
+      'off · turn on under wallets and devices',
     );
     expect(peopleStatus(true, true, 'off').text).toBe('discovery on · zcash.me off');
     expect(peopleStatus(true, false, undefined).text).toBe('discovery off');

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { localExtStorage, type LocalStorageState } from '@repo/storage-chrome/local';
+import { readEgressView } from '../../../net/egress-opt-in';
 
 /**
  * One plain storage key, read once and followed while mounted - for the
@@ -25,4 +26,13 @@ export const useStored = <K extends keyof LocalStorageState>(key: K) => {
     };
   }, [key]);
   return value;
+};
+
+/** how many destinations zafu may contact now; undefined until the policy view is read */
+export const useDestinationsOn = () => {
+  const [on, setOn] = useState<number>();
+  useEffect(() => {
+    void readEgressView().then(v => setOn(v.filter(d => d.on && d.hosts.length).length));
+  }, []);
+  return on;
 };

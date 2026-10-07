@@ -75,7 +75,7 @@ export const networkStatus = (destinations: number | undefined, sites: number): 
 
 export const zcashStatus = (on: boolean, node: string, openings: number): Status =>
   !on
-    ? { text: 'off · turned on in wallets and devices' }
+    ? { text: 'off · turn on under wallets and devices' }
     : openings
       ? { text: `${node} · `, warn: `${plural(openings, 'setting')} less private` }
       : { text: `${node} · private defaults` };

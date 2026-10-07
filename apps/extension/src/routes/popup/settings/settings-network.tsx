@@ -1,7 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Row } from '@repo/ui/components/ui/row';
 import { useStore } from '../../../state';
-import { readEgressView } from '../../../net/egress-opt-in';
+import { useDestinationsOn } from './use-stored';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
@@ -15,10 +15,7 @@ type NetworkRow = (p: { explainProps: Explain }) => ReactNode;
 
 const TalksToRow: NetworkRow = () => {
   const navigate = usePopupNav();
-  const [on, setOn] = useState<number>();
-  useEffect(() => {
-    void readEgressView().then(v => setOn(v.filter(d => d.on && d.hosts.length).length));
-  }, []);
+  const on = useDestinationsOn();
   return (
     <Row
       type='value'
