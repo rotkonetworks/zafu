@@ -3454,6 +3454,20 @@ const syncLoop = async (
       // batches is free; applying a batch fetched before a rewind is not.
       dropPipeline();
 
+      // a chain that did not check out: nothing more is read from this node
+      // until the person chooses (or the node proves itself on the next run)
+      if (syncErrorCodeOf(err) === 'chain-unproven') {
+        console.error(`[zcash-worker] sync paused: ${errText(err)}`);
+        workerSelf.postMessage({
+          type: 'sync-error',
+          id: '',
+          network: 'zcash',
+          walletId,
+          payload: { message: errText(err), stalled: true, code: 'chain-unproven' },
+        });
+        break;
+      }
+
       // Chain continuity broken: recover silently rather than telling the
       // user about a tree root. Rewind the scan cursor by an escalating
       // distance and read the range again. The user only ever learns about
@@ -3493,20 +3507,6 @@ const syncLoop = async (
             console.warn(`[zcash-worker] rewind failed: ${errText(rewindErr)}`);
           }
         }
-      }
-
-      // a chain that did not check out: nothing more is read from this node
-      // until the person chooses (or the node proves itself on the next run)
-      if (syncErrorCodeOf(err) === 'chain-unproven') {
-        console.error(`[zcash-worker] sync paused: ${errText(err)}`);
-        workerSelf.postMessage({
-          type: 'sync-error',
-          id: '',
-          network: 'zcash',
-          walletId,
-          payload: { message: errText(err), stalled: true, code: 'chain-unproven' },
-        });
-        break;
       }
 
       consecutiveErrors++;

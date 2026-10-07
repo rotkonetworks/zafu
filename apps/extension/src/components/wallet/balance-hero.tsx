@@ -15,9 +15,9 @@ import { useOnline } from '../../hooks/use-online';
 export type BalanceView = 'loading' | 'error' | 'unknown' | 'partial' | 'ready' | 'held' | 'paused';
 
 /** what stands where the figure would, for a view that has none */
-const NO_FIGURE: Partial<Record<BalanceView, string>> = {
-  error: 'balance unavailable',
-  paused: 'balances paused',
+const NO_FIGURE: Partial<Record<BalanceView, { text: string; tone: string }>> = {
+  error: { text: 'balance unavailable', tone: 'text-hanko' },
+  paused: { text: 'balances paused', tone: 'text-fg-muted' },
 };
 
 /** a dash where a number belongs reads as "gone", so not-yet is a skeleton */
@@ -34,7 +34,9 @@ const BalanceFigure = ({
     {view === 'loading' || view === 'unknown' ? (
       <span className='h-9 w-[170px] self-center bg-elev-2' aria-label='reading balance' />
     ) : NO_FIGURE[view] ? (
-      <span className='self-center text-xs text-hanko'>{NO_FIGURE[view]}</span>
+      <span className={cn('self-center text-xs', NO_FIGURE[view].tone)}>
+        {NO_FIGURE[view].text}
+      </span>
     ) : (
       <>
         <span

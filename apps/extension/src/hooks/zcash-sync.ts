@@ -21,6 +21,8 @@ import {
 import { classifySyncFailure, stalledFailure, type SyncFailure } from '../state/sync-failure';
 
 const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
+const CHAIN_FAILURE = classifySyncFailure('chain proof did not check out', 'chain-unproven');
+const CHAIN_ERROR = new Error(CHAIN_FAILURE.raw);
 const POLL_INTERVAL = 10_000;
 
 export interface ZcashSyncState {
@@ -181,10 +183,7 @@ export function useZcashSyncStatus(): ZcashSyncState {
   const { workerSyncHeight, workerChainHeight, workerError, workerFailure, notesPreparing } =
     useZcashWorkerSync();
   // a node whose chain did not check out stays paused across popup opens
-  const chainFailure =
-    useZcashChainCheck()?.status === 'failed'
-      ? classifySyncFailure('chain proof did not check out', 'chain-unproven')
-      : null;
+  const chainFailed = useZcashChainCheck()?.status === 'failed';
 
   const {
     data: chainTip,
@@ -212,9 +211,11 @@ export function useZcashSyncStatus(): ZcashSyncState {
     isLoading: tipLoading,
     // workerError (sync loop / auto-sync failures) takes precedence over the
     // tip query error - it's the one the user actually needs to act on.
-    error: chainFailure ? new Error(chainFailure.raw) : (workerError ?? tipError),
+    error: chainFailed ? CHAIN_ERROR : (workerError ?? tipError),
     // Query errors have no structured code (they come out of fetch), so they
     // are sniffed; worker failures were classified when they arrived.
-    failure: chainFailure ?? workerFailure ?? (tipError ? classifySyncFailure(tipError) : null),
+    failure: chainFailed
+      ? CHAIN_FAILURE
+      : (workerFailure ?? (tipError ? classifySyncFailure(tipError) : null)),
   };
 }

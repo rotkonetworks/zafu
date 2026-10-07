@@ -22,6 +22,7 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
 import { cn } from '@repo/ui/lib/utils';
 import { useExplain } from './settings-explain';
+import { syncFailureMessage } from '../../../state/sync-failure';
 
 /** the wallet's stored birthday (an external system, read once per wallet) */
 const useBirthday = (vaultId: string | undefined) => {
@@ -92,6 +93,7 @@ export const SettingsZcashNetwork = () => {
   const { workerSyncHeight, workerChainHeight: tip, workerFailure: failure } = useZcashWorkerSync();
   const [birthday, setBirthday] = useBirthday(vaultId);
   const chain = useZcashChainCheck();
+  const paused = chain?.status === 'failed';
 
   const [params] = useSearchParams();
   const [sheet, setSheet] = useState<'start' | 'date' | 'node' | null>(() =>
@@ -124,13 +126,15 @@ export const SettingsZcashNetwork = () => {
 
   const status = resyncing
     ? 'reading the chain again'
-    : failure
-      ? failure.message
-      : !workerSyncHeight
-        ? 'connecting'
-        : syncing
-          ? 'syncing'
-          : 'up to date';
+    : paused
+      ? syncFailureMessage('chainUnproven')
+      : failure
+        ? failure.message
+        : !workerSyncHeight
+          ? 'connecting'
+          : syncing
+            ? 'syncing'
+            : 'up to date';
 
   return (
     <SettingsScreen title='zcash' category='networks' backPath={PopupPath.SETTINGS_NETWORKS}>
@@ -140,7 +144,11 @@ export const SettingsZcashNetwork = () => {
             <span
               className={cn(
                 'size-2 shrink-0',
-                failure ? 'bg-hanko' : status === 'up to date' ? 'bg-success' : 'bg-zigner-gold',
+                failure || paused
+                  ? 'bg-hanko'
+                  : status === 'up to date'
+                    ? 'bg-success'
+                    : 'bg-zigner-gold',
               )}
             />
             <span className='flex min-w-0 grow flex-col gap-[3px]'>
