@@ -80,7 +80,7 @@ export const SettingsWallets = () => {
                   key={v.id}
                   type='screen'
                   label={v.name}
-                  description={[custodyOf(v.type), ...networksOf(v, held(v), enabledNetworks)].join(
+                  description={[custodyOf(v), ...networksOf(v, held(v), enabledNetworks)].join(
                     ' · ',
                   )}
                   onPress={() => setOpenId(v.id)}

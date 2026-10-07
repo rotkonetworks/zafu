@@ -77,7 +77,7 @@ import { keySwap, keyUse } from '../keyring-lock';
 import { migrateOrphanedMultisigs, hasOrphanedMultisigs } from './migration';
 
 // zigner same-device vault merging (one device = one wallet, even across networks)
-import { mergeZignerCapabilities } from './zigner-merge';
+import { mergeTargetFor, mergeZignerCapabilities } from './zigner-merge';
 
 export * from './types';
 export * from './network-loader';
@@ -506,33 +506,30 @@ export const createKeyRingSlice =
       },
 
       newZignerZafuKey: async (data: ZignerZafuImport, name: string) => {
-        // merge-by-ZID: if we already have a vault for this zigner device+account,
-        // add the new network capability to it instead of creating a separate vault.
-        if (data.zidPublicKey) {
-          const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-          const mergeTarget = existingVaults.find(
-            v =>
-              v.type === 'zigner-zafu' &&
-              v.insensitive['zid'] === data.zidPublicKey &&
-              v.insensitive['accountIndex'] === data.accountIndex,
+        // same device+account (by ZID), or a viewing key this signer holds:
+        // add to that wallet instead of creating a separate one
+        const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const mergeTarget = mergeTargetFor(
+          existingVaults,
+          data.viewingKey ? ((await local.get('zcashWallets')) ?? []) : [],
+          data,
+        );
+        if (mergeTarget) {
+          const mergedId = await mergeZignerCapabilities(mergeTarget, data, local, session);
+          const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+          const selectedId = (await local.get('selectedVaultId'))!;
+          const enabledNetworks = mergeEnabledNetworks(
+            (await local.get('enabledNetworks')) ?? [],
+            zignerSupportedNetworks(data),
           );
-          if (mergeTarget) {
-            const mergedId = await mergeZignerCapabilities(mergeTarget, data, local, session);
-            const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-            const selectedId = (await local.get('selectedVaultId'))!;
-            const enabledNetworks = mergeEnabledNetworks(
-              (await local.get('enabledNetworks')) ?? [],
-              zignerSupportedNetworks(data),
-            );
-            await local.set('enabledNetworks', enabledNetworks);
-            const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
-            set(state => {
-              state.keyRing.keyInfos = keyInfos;
-              state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-              state.keyRing.enabledNetworks = enabledNetworks;
-            });
-            return mergedId;
-          }
+          await local.set('enabledNetworks', enabledNetworks);
+          const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
+          set(state => {
+            state.keyRing.keyInfos = keyInfos;
+            state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+            state.keyRing.enabledNetworks = enabledNetworks;
+          });
+          return mergedId;
         }
 
         const vaultId = generateVaultId();
@@ -577,36 +574,32 @@ export const createKeyRingSlice =
       addZignerUnencrypted: async (data: ZignerZafuImport, name: string) => {
         const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
 
-        // ── merge-by-ZID: same zigner device importing a different network ──
-        // if incoming import carries a ZID and there's an existing zigner-zafu
-        // vault with the same ZID + accountIndex, merge the new viewing key(s)
-        // into it instead of creating a separate vault. keeps "one device = one
-        // wallet" invariant across network imports.
-        if (data.zidPublicKey) {
-          const mergeTarget = existingVaults.find(
-            v =>
-              v.type === 'zigner-zafu' &&
-              v.insensitive['zid'] === data.zidPublicKey &&
-              v.insensitive['accountIndex'] === data.accountIndex,
+        // ── merge: the same zigner device importing a different network (by
+        // ZID + accountIndex), or a signer for a viewing key already here,
+        // joins that wallet instead of creating a separate vault. keeps "one
+        // device = one wallet" across network imports.
+        const mergeTarget = mergeTargetFor(
+          existingVaults,
+          data.viewingKey ? ((await local.get('zcashWallets')) ?? []) : [],
+          data,
+        );
+        if (mergeTarget) {
+          const mergedVaultId = await mergeZignerCapabilities(mergeTarget, data, local, session);
+          const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+          const selectedId = (await local.get('selectedVaultId'))!;
+          const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
+          const enabledNetworks = mergeEnabledNetworks(
+            (await local.get('enabledNetworks')) ?? [],
+            zignerSupportedNetworks(data),
           );
-          if (mergeTarget) {
-            const mergedVaultId = await mergeZignerCapabilities(mergeTarget, data, local, session);
-            const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-            const selectedId = (await local.get('selectedVaultId'))!;
-            const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
-            const enabledNetworks = mergeEnabledNetworks(
-              (await local.get('enabledNetworks')) ?? [],
-              zignerSupportedNetworks(data),
-            );
-            await local.set('enabledNetworks', enabledNetworks);
-            set(state => {
-              state.keyRing.keyInfos = keyInfos;
-              state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-              state.keyRing.status = 'unlocked';
-              state.keyRing.enabledNetworks = enabledNetworks;
-            });
-            return mergedVaultId;
-          }
+          await local.set('enabledNetworks', enabledNetworks);
+          set(state => {
+            state.keyRing.keyInfos = keyInfos;
+            state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+            state.keyRing.status = 'unlocked';
+            state.keyRing.enabledNetworks = enabledNetworks;
+          });
+          return mergedVaultId;
         }
 
         // dedup: check if a vault with the same viewing key already exists

@@ -40,12 +40,14 @@ const CUSTODY_META: Record<Custody, string> = {
   hot: 'hot · this device',
   cold: 'cold · signs on its device',
   shared: 'shared · co-signers approve',
+  watching: 'watching · no signer',
 };
 
 const CUSTODY_ICON: Record<Custody, string> = {
   hot: 'i-zafu-hi text-zigner-gold',
   cold: 'i-zafu-kori text-device-blue',
   shared: 'i-zafu-torii text-fg-muted',
+  watching: 'i-ph-eye text-fg-muted',
 };
 
 /**
@@ -327,7 +329,7 @@ export const AccountsSheet = ({
 
       <div className='-mx-4 flex flex-col border-t border-border-soft px-3 pb-3.5 pt-2.5'>
         {otherKeyInfos.map(k => {
-          const custody = custodyOf(k.type);
+          const custody = custodyOf(k);
           return (
             <button
               key={k.id}

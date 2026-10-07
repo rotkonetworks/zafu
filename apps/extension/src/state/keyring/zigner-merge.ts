@@ -23,6 +23,32 @@ import { buildZignerVault, zignerSupportedNetworks } from './vault-ops';
 import { createZignerWalletEntries } from './wallet-entries';
 
 /**
+ * The vault a zigner import joins instead of becoming a second wallet: the
+ * same device and account (by ZID), or a watch-only vault holding the same
+ * zcash key, which a signer for that key turns into a signing wallet.
+ */
+export const mergeTargetFor = (
+  vaults: EncryptedVault[],
+  zcashWallets: readonly { vaultId?: string; orchardFvk?: string }[],
+  data: ZignerZafuImport,
+): EncryptedVault | undefined =>
+  (data.zidPublicKey
+    ? vaults.find(
+        v =>
+          v.type === 'zigner-zafu' &&
+          v.insensitive['zid'] === data.zidPublicKey &&
+          v.insensitive['accountIndex'] === data.accountIndex,
+      )
+    : undefined) ??
+  (data.viewingKey && data.coldSignerType !== 'viewing-key'
+    ? vaults.find(
+        v =>
+          v.insensitive['coldSignerType'] === 'viewing-key' &&
+          zcashWallets.some(w => w.vaultId === v.id && w.orchardFvk === data.viewingKey),
+      )
+    : undefined);
+
+/**
  * Merge `incoming` data into `existing` vault (must be the same zigner device).
  * Re-encrypts the vault with the current session key, updates the vaults list,
  * and creates any missing per-network wallet entries (penumbra / zcash).
@@ -58,6 +84,11 @@ export async function mergeZignerCapabilities(
     publicKey: incoming.publicKey ?? existingData.publicKey,
     cosmosAddresses: incoming.cosmosAddresses ?? existingData.cosmosAddresses,
     zidPublicKey: incoming.zidPublicKey ?? existingData.zidPublicKey,
+    // a signer beats a bare viewing key, never the reverse
+    coldSignerType:
+      existingData.coldSignerType === 'viewing-key'
+        ? (incoming.coldSignerType ?? 'zigner')
+        : existingData.coldSignerType,
     // accountIndex + deviceId stay as-is (they matched for us to be here)
   };
 
