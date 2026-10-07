@@ -579,10 +579,7 @@ export const ZcashContent = ({
           backend={zcashBackend}
           mainnet={isMainnet}
           accountIndex={pocketAccount}
-          ufvk={
-            watchOnly?.ufvk ??
-            (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined)
-          }
+          ufvk={zcashViewKey(watchOnly)}
           orchardZat={pools.orchard > 0n ? pools.orchard : shieldedZat}
           isHotWallet={kind === 'hot'}
           getVaultUnlock={

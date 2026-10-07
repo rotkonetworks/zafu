@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../state';
+import { zcashViewKey } from '../state/zcash-view-key';
 import {
   selectActiveNetwork,
   selectEffectiveKeyInfo,
@@ -308,10 +309,8 @@ export function useActiveAddress() {
 
         if (activeNetwork === 'zcash' && zcashWallet) {
           const mainnet = zcashWallet.mainnet ?? true;
-          // derive from UFVK string (stored in ufvk field or orchardFvk field)
-          const ufvkStr =
-            zcashWallet.ufvk ??
-            (zcashWallet.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
+          // an old zigner code's raw orchard key reads as its unified key too
+          const ufvkStr = zcashViewKey(zcashWallet);
           if (ufvkStr) {
             try {
               const addr = await deriveZcashAddressFromUfvk(ufvkStr, diversifier!);
@@ -324,32 +323,6 @@ export function useActiveAddress() {
               return;
             } catch (err) {
               console.error('failed to derive address from ufvk:', err);
-            }
-          }
-          // orchardFvk is base64 FVK bytes (from zigner QR binary) - derive via WatchOnlyWallet
-          if (zcashWallet.orchardFvk && !zcashWallet.orchardFvk.startsWith('uview')) {
-            try {
-              const zcashWasm = await loadZcashWasm();
-              const fvkBytes = Uint8Array.from(atob(zcashWallet.orchardFvk), c => c.charCodeAt(0));
-              const wallet = new zcashWasm.WatchOnlyWallet(
-                fvkBytes,
-                zcashWallet.accountIndex ?? 0,
-                mainnet,
-              );
-              try {
-                const raw = wallet.get_address_at_index(diversifier!);
-                if (!cancelled) {
-                  setAddress(fixOrchardAddress(raw, mainnet));
-                }
-                if (!cancelled) {
-                  setLoading(false);
-                }
-              } finally {
-                wallet.free();
-              }
-              return;
-            } catch (err) {
-              console.error('failed to derive address from base64 fvk:', err);
             }
           }
           // fallback: use stored address if available
