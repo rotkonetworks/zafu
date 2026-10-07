@@ -46,7 +46,8 @@ export function StatusSlot({
         className,
       )}
     >
-      <div className='flex items-start justify-between gap-2'>
+      {/* the action wraps under the text rather than squeezing it into a column */}
+      <div className='flex flex-wrap items-start justify-between gap-x-2 gap-y-1.5'>
         <div className='flex items-start gap-1.5'>
           {icon && <span className={cn(icon, 'mt-0.5 size-3.5 shrink-0')} aria-hidden='true' />}
           <div className='flex flex-col gap-1 lowercase'>{children}</div>
