@@ -52,6 +52,8 @@ const big = (v: unknown): bigint => {
 export interface ZecInbound {
   address: string;
   halted: boolean;
+  /** swaps in or out of zec refused right now */
+  tradingPaused: boolean;
   lpPaused: boolean;
   dust: bigint;
   outboundFee: bigint;
@@ -114,6 +116,7 @@ export const zecInboundOf = (rows: Raw[]): ZecInbound | undefined => {
     ? {
         address: String(z['address'] ?? ''),
         halted: !!z['halted'],
+        tradingPaused: !!z['global_trading_paused'] || !!z['chain_trading_paused'],
         lpPaused: !!z['chain_lp_actions_paused'],
         dust: big(z['dust_threshold']),
         outboundFee: big(z['outbound_fee']),
@@ -178,6 +181,7 @@ const sameVault = (
 ) =>
   a.inbound.address === b.inbound.address &&
   a.inbound.halted === b.inbound.halted &&
+  a.inbound.tradingPaused === b.inbound.tradingPaused &&
   a.inbound.lpPaused === b.inbound.lpPaused &&
   a.addPaused === b.addPaused &&
   a.outPaused === b.outPaused;

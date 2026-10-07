@@ -28,6 +28,12 @@ vi.mock('../../workers/transparent-deposit', async orig => ({
   ...(await orig<object>()),
   checkVault: () => Promise.resolve(),
 }));
+const thor = vi.hoisted(() => ({ read: vi.fn() }));
+vi.mock('../../lp/thor', async orig => ({ ...(await orig<object>()), readVault: thor.read }));
+vi.mock('../../net/egress-opt-in', async orig => ({
+  ...(await orig<object>()),
+  requestEgressOptIn: () => Promise.resolve(),
+}));
 const opens = vi.hoisted(() => ({ patch: vi.fn(() => Promise.resolve(true)) }));
 vi.mock('./open-swaps', async orig => ({ ...(await orig<object>()), patchOpenSwap: opens.patch }));
 
@@ -40,6 +46,7 @@ import {
   runThorOut,
   runs,
   stopThorOut,
+  stillPayable,
   takeSwapUnlock,
   type Legs,
   type RunDeps,
@@ -49,6 +56,7 @@ import type { OpenSwap } from './open-swaps';
 import { asksCustody } from './routes';
 import { ZignerDeclined } from '../../signing/zigner-round';
 import type { Held } from '../../signing/move-and-deposit';
+import { DISAGREE_LINE } from '../../lp/thor';
 
 const NOW = 1_800_000_000_000;
 const T = { index: 7, address: 't1SwapOwnAddressxxxxxxxxxxxxxxxxx' };
@@ -80,6 +88,11 @@ const swap = (patch: Partial<OpenSwap> = {}): OpenSwap => ({
 
 const plan = (short: string) => ({ fee: '12000', change: '0', short });
 
+/** the vault every operator agrees on */
+const open = (patch: { address?: string; halted?: boolean; tradingPaused?: boolean } = {}) => ({
+  inbound: { address: VAULT, halted: false, tradingPaused: false, ...patch },
+});
+
 /** a run's world: plans in order, saves recorded, no real waits */
 const world = (...plans: string[]) => {
   const saved: Partial<OpenSwap>[] = [];
@@ -91,6 +104,7 @@ const world = (...plans: string[]) => {
     tip: () => Promise.resolve(100),
     sleep: ms => (slept.push(ms), Promise.resolve()),
     now: () => NOW,
+    vault: vi.fn(() => Promise.resolve(open())),
   };
   return { deps, saved, slept };
 };
@@ -107,6 +121,7 @@ const legs = (ready = () => Promise.resolve(true)): Legs & { calls: string[] } =
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  thor.read.mockResolvedValue(open());
   await chrome.storage.session.clear();
 });
 
@@ -469,6 +484,107 @@ describe('a fresh zigner swap asks once', () => {
     await settle();
     expect(runs.getState()[s.id]).toEqual({ at: 'held', moved: false });
     expect(worker.coldDone).not.toHaveBeenCalled();
+  });
+});
+
+describe('the vault is read again before any leg signs', () => {
+  const stoppedWith = (id: string) => (runs.getState()[id] as { error?: string }).error;
+
+  it('reads it before the move and again before the deposit, and goes on when it holds', async () => {
+    const s = swap();
+    const { deps } = world('10012000', '0');
+    const l = legs();
+    await runThorOut(s, l, deps, plan('10012000'));
+    expect(l.calls).toEqual(['move 10012000', 'pay 10000000']);
+    expect(deps.vault).toHaveBeenCalledTimes(2);
+  });
+
+  it('a vault that changed since the quote: refused before anything signs', async () => {
+    const s = swap();
+    const { deps } = world('10012000');
+    deps.vault = () => Promise.resolve(open({ address: 't1AnotherVaultzzzzzzzzzzzzzzzzzzzz' }));
+    const l = legs();
+    await runThorOut(s, l, deps, plan('10012000'));
+    expect(l.calls).toEqual([]);
+    expect(runs.getState()[s.id]).toMatchObject({ at: 'stopped', moved: false });
+    expect(stoppedWith(s.id)).toBe(
+      "the swap's vault changed · please get a new quote, nothing was sent",
+    );
+  });
+
+  it('after the move, a changed vault stops the deposit and says the zec is still here', async () => {
+    const s = swap({ moveTxid: 'aa'.repeat(32) });
+    const { deps } = world('0');
+    deps.vault = () => Promise.resolve(open({ address: 't1AnotherVaultzzzzzzzzzzzzzzzzzzzz' }));
+    const l = legs();
+    await runThorOut(s, l, deps);
+    expect(l.calls).toEqual([]);
+    expect(stoppedWith(s.id)).toMatch(/vault changed .* nothing went to the vault/);
+  });
+
+  it.each([{ halted: true }, { tradingPaused: true }])('%o: refused', async patch => {
+    const s = swap({ moveTxid: 'aa'.repeat(32) });
+    const { deps } = world('0');
+    deps.vault = () => Promise.resolve(open(patch));
+    const l = legs();
+    await runThorOut(s, l, deps);
+    expect(l.calls).toEqual([]);
+    expect(stoppedWith(s.id)).toBe(
+      "thorchain isn't taking zec right now · nothing went to the vault",
+    );
+  });
+
+  it('operators that disagree: refused, nothing signed', async () => {
+    const s = swap();
+    const { deps } = world('10012000');
+    deps.vault = () => Promise.reject(new Error(DISAGREE_LINE));
+    const l = legs();
+    await runThorOut(s, l, deps, plan('10012000'));
+    expect(l.calls).toEqual([]);
+    expect(stoppedWith(s.id)).toBe(DISAGREE_LINE);
+  });
+
+  it('the vault the quote named, open and agreed, passes', () => {
+    expect(() => stillPayable(open(), VAULT, 'pay')).not.toThrow();
+  });
+
+  it('hot: the wired run asks every operator and pays nothing to a changed vault', async () => {
+    const s = swap({ moveTxid: 'aa'.repeat(32) });
+    await openSwapUnlock(s.id, s.expiresAt, 2);
+    worker.plan.mockResolvedValue(plan('0'));
+    thor.read.mockResolvedValue(open({ address: 't1AnotherVaultzzzzzzzzzzzzzzzzzzzz' }));
+    runSwapLegs(s, ctx());
+    await settle();
+    expect(thor.read).toHaveBeenCalled();
+    expect(worker.pay).not.toHaveBeenCalled();
+    expect(stoppedWith(s.id)).toMatch(/vault changed/);
+  });
+
+  it('zigner: the one round (move and deposit) is never built toward a changed vault', async () => {
+    const s = swap();
+    worker.plan.mockResolvedValue(plan('10012000'));
+    thor.read.mockResolvedValue(open({ address: 't1AnotherVaultzzzzzzzzzzzzzzzzzzzz' }));
+    runSwapLegs(s, ctx({ cold: true, ufvk: 'uview1x' }), plan('10012000'));
+    await settle();
+    expect(worker.coldMove).not.toHaveBeenCalled();
+    expect(worker.coldPay).not.toHaveBeenCalled();
+    expect(stoppedWith(s.id)).toBe(
+      "the swap's vault changed · please get a new quote, nothing was sent",
+    );
+  });
+
+  it('zigner: a held deposit is not broadcast when the operators disagree', async () => {
+    const H: Held = { txHex: 'signed', expiry: 141, moveTxid: 'aa'.repeat(32), moveExpiry: 140 };
+    const s = swap({ moveTxid: H.moveTxid, held: H });
+    worker.plan.mockResolvedValue(plan('0'));
+    const nw = await import('../keyring/network-worker');
+    vi.mocked(nw.lookupTxInWorker).mockResolvedValue({ height: 120 } as never);
+    vi.mocked(nw.chainTipInWorker).mockResolvedValue(121 as never);
+    thor.read.mockRejectedValue(new Error(DISAGREE_LINE));
+    runSwapLegs(s, ctx({ cold: true, ufvk: 'uview1x' }));
+    await settle();
+    expect(worker.coldDone).not.toHaveBeenCalled();
+    expect(stoppedWith(s.id)).toBe(DISAGREE_LINE);
   });
 });
 
