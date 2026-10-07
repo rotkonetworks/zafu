@@ -1,5 +1,5 @@
 import { Button } from '@repo/ui/components/ui/button';
-import { useWindowCountdown } from './use-window-countdown';
+import { useApproveGuard } from './use-approve-guard';
 
 export const ApproveDeny = ({
   approve,
@@ -16,10 +16,9 @@ export const ApproveDeny = ({
   approveLabel?: string;
   denyLabel?: string;
 }) => {
-  // when `wait` is provided, count whole seconds from it (approve disabled for
-  // `wait` seconds). when omitted, keep the historical 0.5s / 500ms fat-finger
-  // guard so unrelated approval screens are unchanged.
-  const count = useWindowCountdown(wait ?? 0.5, wait != null ? 1000 : 500);
+  // `wait` seconds is a deliberate pause (foilhat, zcash send); without it,
+  // half a second against a fat-fingered double click
+  const ready = useApproveGuard(wait ?? 0.5);
 
   return (
     <div className='flex shrink-0 flex-col gap-2 border-t border-border-soft bg-canvas px-4 py-4'>
@@ -32,7 +31,7 @@ export const ApproveDeny = ({
           className='w-1/2 py-3.5 text-base'
           size='md'
           onClick={approve}
-          disabled={!approve || count > 0}
+          disabled={!approve || !ready}
         >
           {approveLabel}
         </Button>
