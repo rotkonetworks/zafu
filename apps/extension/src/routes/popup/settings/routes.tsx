@@ -1,7 +1,7 @@
 import { Navigate, useLocation, useSearchParams, type RouteObject } from 'react-router-dom';
 import { PopupPath } from '../paths';
 import { screen } from '../route-modules';
-import { IS_BETA_BUILD } from '../../../config/feature-flags';
+import { IS_BETA_BUILD, SUBSCRIBE_ENABLED } from '../../../config/feature-flags';
 
 // every settings screen is route-level lazy (see route-modules.ts): the router
 // loads the chunk before committing, so the previous screen stays up meanwhile
@@ -37,7 +37,6 @@ const MOVED: Record<string, PopupPath> = {
 
 const SCREENS: [PopupPath, Parameters<typeof screen>[0]][] = [
   [PopupPath.SETTINGS, 'settingsMain'],
-  [PopupPath.SUBSCRIBE, 'subscribe'],
   [PopupPath.SETTINGS_SECURITY, 'settingsSecurityHome'],
   [PopupPath.SETTINGS_NETWORK, 'settingsNetwork'],
   [PopupPath.SETTINGS_ZCASH_NETWORK, 'settingsZcashNetwork'],
@@ -69,6 +68,13 @@ export const settingsRoutes: RouteObject[] = [
   ...SCREENS.map(([path, id]) => ({ path, ...screen(id) })),
   { path: PopupPath.SETTINGS_NETWORKS, element: <OldNetworks /> },
   ...Object.entries(MOVED).map(([path, to]) => ({ path, element: <Moved to={to} /> })),
+  {
+    // the license code and its screen stay, inactive until pro is back
+    path: PopupPath.SUBSCRIBE,
+    ...(SUBSCRIBE_ENABLED
+      ? screen('subscribe')
+      : { element: <Navigate replace to={PopupPath.SETTINGS} /> }),
+  },
   {
     // device update fetches from a local dev stub (ota/keys.ts): beta only
     path: PopupPath.SETTINGS_OTA,
