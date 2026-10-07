@@ -114,6 +114,17 @@ describe('viaNym', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it('lets the caller stop waiting: an abort rejects at once', async () => {
+    answerWith(() => undefined);
+    const stop = new AbortController();
+    const done = viaNym(URL_SEND, { signal: stop.signal }, 'names-you', next, refuse).catch(
+      (e: unknown) => e,
+    );
+    stop.abort();
+    expect((await done) as Error).toMatchObject({ name: 'AbortError' });
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it('never offers a lookup of your own transaction directly', async () => {
     answerWith(m => (m.type === 'held' ? { type: 'answer', id: m.id, direct: true } : undefined));
     const done = viaNym(URL_SEND, undefined, 'own-tx', next, refuse).catch((e: unknown) => e);
