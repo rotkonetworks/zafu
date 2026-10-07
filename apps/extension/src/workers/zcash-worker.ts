@@ -1277,9 +1277,7 @@ const markNotesSpentLocally = async (
     console.error(`[zcash-worker] failed to persist local spend marks: ${errText(e)}`);
     return;
   }
-  console.log(
-    `[zcash-worker] marked ${nullifiers.length} note(s) spent locally by ${txid.slice(0, 16)}`,
-  );
+  console.log(`[zcash-worker] marked ${nullifiers.length} note(s) spent locally`);
 };
 
 /**
@@ -2060,7 +2058,7 @@ const finalizeColdBroadcast = async (
     const ctx = await takeColdSend(walletId, coldSendId);
     if (!ctx) {
       console.warn(
-        `[zcash-worker] cold broadcast ${txid.slice(0, 16)} has no build context ` +
+        '[zcash-worker] a cold broadcast has no build context ' +
           `(id=${coldSendId ?? 'absent'}); spend marks and the local send record are ` +
           'left to the block scan',
       );
@@ -2073,7 +2071,7 @@ const finalizeColdBroadcast = async (
       // A rescan between build and broadcast can empty the note store. Say so
       // rather than silently marking a subset.
       console.warn(
-        `[zcash-worker] cold broadcast ${txid.slice(0, 16)}: ${notes.length}/${ctx.nullifiers.length} ` +
+        `[zcash-worker] cold broadcast: ${notes.length}/${ctx.nullifiers.length} ` +
           'input notes still present locally',
       );
     }
@@ -3182,9 +3180,6 @@ const syncLoop = async (
             txid: cmxToTxid.get(note.cmx) ?? '',
             height: cmxToHeight.get(note.cmx) ?? 0,
           };
-          console.log(
-            `[zcash-worker] found note: value=${note.value}, pos=${position}, hasRseed=${!!note.rseed}, hasRho=${!!note.rho}, hasRecipient=${!!(note as unknown as { recipient?: string }).recipient}`,
-          );
           newNotes.push(full);
           state.notes.push(full);
         }
@@ -3305,16 +3300,6 @@ const syncLoop = async (
               txid: iwCmxToTxid.get(note.cmx) ?? '',
               height: iwCmxToHeight.get(note.cmx) ?? 0,
             };
-            // Diagnostic (mirrors the orchard scan log): build_signed_ironwood_send
-            // reconstructs each spend from recipient_hex/rho/rseed. If
-            // hasRecipient is false here the wasm ironwood scanner is not
-            // capturing the diversified recipient and reconstruction falls back
-            // to diversifier 0 - a real gap to fix in scan_actions_ironwood_parallel.
-            console.log(
-              `[zcash-worker] found ironwood note: value=${note.value}, pos=${position}, ` +
-                `hasRseed=${!!note.rseed}, hasRho=${!!note.rho}, ` +
-                `hasRecipient=${!!(note as unknown as { recipient?: string }).recipient}`,
-            );
             newIronwoodNotes.push(full);
             state.notes.push(full);
           }
@@ -5002,7 +4987,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const sendStart = performance.now();
         const emitProgress = (step: string, detail?: string) => {
           const elapsed = ((performance.now() - sendStart) / 1000).toFixed(1);
-          console.log(`[zcash-worker] send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`);
+          // the detail carries txids and fees: dev builds only
+          if (globalThis.__DEV__) {
+            console.log(`[zcash-worker] send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`);
+          }
           workerSelf.postMessage({
             type: 'send-progress',
             id: '',
@@ -5585,9 +5573,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const sendStart = performance.now();
         const emitProgress = (step: string, detail?: string) => {
-          console.log(
-            `[zcash-worker] send-pczt [${((performance.now() - sendStart) / 1000).toFixed(1)}s] ${step}${detail ? ': ' + detail : ''}`,
-          );
+          if (globalThis.__DEV__) {
+            console.log(
+              `[zcash-worker] send-pczt [${((performance.now() - sendStart) / 1000).toFixed(1)}s] ${step}${detail ? ': ' + detail : ''}`,
+            );
+          }
           workerSelf.postMessage({
             type: 'send-progress',
             id: '',
@@ -6089,9 +6079,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const migrateStart = performance.now();
         const emitProgress = (step: string, detail?: string) => {
-          console.log(
-            `[zcash-worker] turnstile [${((performance.now() - migrateStart) / 1000).toFixed(1)}s] ${step}${detail ? ': ' + detail : ''}`,
-          );
+          if (globalThis.__DEV__) {
+            console.log(
+              `[zcash-worker] turnstile [${((performance.now() - migrateStart) / 1000).toFixed(1)}s] ${step}${detail ? ': ' + detail : ''}`,
+            );
+          }
           workerSelf.postMessage({
             type: 'send-progress',
             id: '',
@@ -6484,9 +6476,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const multiStart = performance.now();
         const emitMultiProgress = (step: string, detail?: string) => {
           const elapsed = ((performance.now() - multiStart) / 1000).toFixed(1);
-          console.log(
-            `[zcash-worker] multi-send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`,
-          );
+          if (globalThis.__DEV__) {
+            console.log(
+              `[zcash-worker] multi-send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`,
+            );
+          }
           workerSelf.postMessage({
             type: 'send-progress',
             id: '',
@@ -6754,9 +6748,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             const groupZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
             const fee = computeShieldFee(utxos.length);
             if (groupZat <= fee) {
-              console.warn(
-                `[zcash-worker] skipping index ${addrIndex}: ${groupZat} zat <= ${fee} fee`,
-              );
+              console.warn(`[zcash-worker] skipping index ${addrIndex}: it does not cover the fee`);
               continue;
             }
 
