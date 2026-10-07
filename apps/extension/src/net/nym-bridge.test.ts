@@ -5,6 +5,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NYM_ANSWER_MS, NYM_CHANNEL, NYM_READY_MS, viaNym, type NymMessage } from './nym-bridge';
+import { LocalChannel } from './local-channel.testkit';
+
+vi.stubGlobal('BroadcastChannel', LocalChannel);
 
 const URL_SEND = 'https://zcash.rotko.net/zidecar.v1.Zidecar/SendTransaction';
 
@@ -88,6 +91,19 @@ describe('viaNym', () => {
     expect(next).toHaveBeenCalledTimes(1);
     expect(refuse).not.toHaveBeenCalled();
     expect(await chrome.storage.local.get(null)).toEqual(before);
+  });
+
+  it('asks at once when the tunnel says its start failed', async () => {
+    answerWith(m =>
+      m.type === 'start'
+        ? { type: 'state', ready: false, down: true }
+        : m.type === 'held'
+          ? { type: 'answer', id: m.id, direct: true }
+          : undefined,
+    );
+    const done = viaNym(URL_SEND, undefined, 'broadcast', next, refuse);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await (await done).text()).toBe('direct');
   });
 
   it("refuses when the window answers don't send", async () => {
