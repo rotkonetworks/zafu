@@ -55,9 +55,11 @@ backends the helper returns false and no watcher is spawned.
   bytes from the wire, never key material.
 - **Action-buffer hardening.** Malformed actions are rejected, not zero-
   padded. A hostile zidecar can't desync the buffer. `MAX_MEMPOOL_ACTIONS`
-  caps allocation. Orchard compact-note version byte (`0x02`) is
-  checked; forward-compat plaintexts (e.g. Orchard-ZSA at NU7) are
-  refused until support lands.
+  caps allocation. The note version is NOT checked here: the compact
+  ciphertext is encrypted, so its version byte is only readable after
+  trial decryption, which enforces it per domain (orchard 0x02, ironwood
+  0x03). An earlier check read the encrypted first byte and dropped
+  ~255/256 actions, ironwood ones included.
 
 ## Joint-fingerprint note (cross-feature)
 

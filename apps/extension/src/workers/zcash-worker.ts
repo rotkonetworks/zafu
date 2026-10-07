@@ -2220,13 +2220,11 @@ const ACTION_NULLIFIER_LEN = 32;
 const ACTION_CMX_LEN = 32;
 const ACTION_EPHEMERAL_KEY_LEN = 32;
 /**
- * 52 bytes = compact note plaintext (ZIP-225 / NU5 Orchard):
- *   0x02 (version) || d (11) || v (8) || rseed (32)
- * The version byte is checked below - only 0x02 is supported until the
- * wallet learns about future variants (e.g. Orchard-ZSA at NU7).
+ * 52 bytes = the start of the ENCRYPTED note (ZIP-225 compact ciphertext). Its
+ * plaintext begins version (0x02 orchard / 0x03 ironwood) || d || v || rseed,
+ * but that is only readable after trial decryption, which checks the version.
  */
 const ACTION_COMPACT_CT_LEN = 52;
-const ORCHARD_NOTE_VERSION = 0x02;
 const ACTION_SIZE =
   ACTION_NULLIFIER_LEN + ACTION_CMX_LEN + ACTION_EPHEMERAL_KEY_LEN + ACTION_COMPACT_CT_LEN;
 
@@ -2270,12 +2268,10 @@ function handleMempoolSnapshot(
         a.nullifier.length === ACTION_NULLIFIER_LEN &&
         a.cmx.length === ACTION_CMX_LEN &&
         a.ephemeralKey.length === ACTION_EPHEMERAL_KEY_LEN &&
-        a.ciphertext.length >= ACTION_COMPACT_CT_LEN &&
-        // Orchard compact-note version byte - refuse forward-compat plaintexts
-        // (e.g. NU7/ZSA) until explicit support lands. Refusing is the safe
-        // default; misinterpreting a different format would silently produce
-        // bogus matches.
-        a.ciphertext[0] === ORCHARD_NOTE_VERSION;
+        // No note-version check here: these bytes are the start of the
+        // ENCRYPTED note, so a version byte is not readable before trial
+        // decryption, which checks it per domain (orchard 0x02, ironwood 0x03).
+        a.ciphertext.length >= ACTION_COMPACT_CT_LEN;
 
       if (!ok) {
         rejected += 1;
