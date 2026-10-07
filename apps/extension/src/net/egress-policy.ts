@@ -144,8 +144,17 @@ const tx = 'cosmos/tx/v1beta1/txs';
  * zcash: only zidecar's grpc-web paths. nym's http client speaks http/1.1 and
  * a lightwalletd answers native grpc only over http/2 (measured: 404 through
  * nym), so a lightwalletd node stays direct rather than unreachable.
+ *
+ * A `direct` row pins a path direct even if a broader row would take it over nym.
  */
-const NYM_CLASSES: { cls: RequestClass; destination: string; paths: string[]; body?: string }[] = [
+const NYM_CLASSES: {
+  cls: RequestClass | 'direct';
+  destination: string;
+  paths: string[];
+  body?: string;
+}[] = [
+  // the chain proof comes from your own node and names nothing about you
+  { cls: 'direct', destination: 'zcash', paths: ['/zidecar.v1.Zidecar/GetFlyClientProof'] },
   { cls: 'broadcast', destination: 'zcash', paths: ['/zidecar.v1.Zidecar/SendTransaction'] },
   { cls: 'own-tx', destination: 'zcash', paths: ['/zidecar.v1.Zidecar/GetTransaction'] },
   {
@@ -621,7 +630,14 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
         );
         for (const { cls, paths, body } of ours) {
           for (const p of paths) {
-            if (body) {
+            if (cls === 'direct') {
+              rules.push({
+                ...rule,
+                path: `${target.path}${p}`,
+                nym: undefined,
+                nymBody: undefined,
+              });
+            } else if (body) {
               (rule.nymBody ??= []).push([body, cls]);
             } else if (p === '') {
               rule.nym = cls;

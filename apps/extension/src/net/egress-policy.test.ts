@@ -450,6 +450,14 @@ describe('send over nym: the transport is chosen per request class', () => {
     }
   });
 
+  it('keeps the FlyClient proof direct: it comes from your own node and names nothing', () => {
+    const url = 'https://zcash.rotko.net/zidecar.v1.Zidecar/GetFlyClientProof';
+    expect(nymOf(ZCASH_ONLY, url)).toBe('direct');
+    // an explicit row, not an accident of no row matching
+    const rule = compileEgress(ZCASH_ONLY).rules.find(r => r.path.endsWith('/GetFlyClientProof'));
+    expect(rule).toMatchObject({ destination: 'zcash', allow: true, nym: undefined });
+  });
+
   it('is on by default and off when the person turns it off', () => {
     expect(compileEgress(ZCASH_ONLY).nym).toBe(true);
     expect(compileEgress(NYM_OFF).nym).toBe(false);
