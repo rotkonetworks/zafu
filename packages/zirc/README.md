@@ -125,7 +125,9 @@ needs `Room.syncSince(sinceEpoch, maxWindows = 288)` instead: it walks from
 back after a day of being offline pays a bounded number of requests once,
 rather than missing everything past the first hour. Persist the epoch you last
 synced to (a chat thread's own state, not something `Room` tracks for you) and
-pass it back in as `sinceEpoch` next time.
+pass it back in as `sinceEpoch` next time. A reader sharing a request budget
+across rooms passes `untilEpoch` as well, reads the oldest windows first and
+carries on from the next one later, instead of skipping what it had no budget for.
 
 **Nothing here connects by itself.** Constructing or restoring a `Room` - even
 with a persisted `head` or a room secret from storage - makes no network

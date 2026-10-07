@@ -1339,6 +1339,26 @@ describe('room: Room.syncSince (blocker 2 - catching up past historyWindows)', (
     expect(capped.messages.map(m => m.body)).toEqual(['recent']);
   });
 
+  it('stops at untilEpoch, so the windows after it are left for the next read', async () => {
+    const { transport } = fakeRelay();
+    let now = T0;
+    const room = openRoom(asIdentity(guest(1), 'alice'), {
+      relay: transport,
+      roomSecret: createRoomSecret(),
+      now: () => now,
+    });
+
+    const first = room.currentEpoch();
+    await room.send('old');
+    now += WINDOW * 50;
+    await room.send('new', { epoch: room.currentEpoch() });
+
+    const head = await room.syncSince(first, 288, first + 10);
+    expect(head.messages.map(m => m.body)).toEqual(['old']);
+    const rest = await room.syncSince(first + 11, 288);
+    expect(rest.messages.map(m => m.body)).toEqual(['new']);
+  });
+
   it('never runs on its own: constructing a Room makes no relay call until a method is invoked', async () => {
     let calls = 0;
     const counting: RelayTransport = {

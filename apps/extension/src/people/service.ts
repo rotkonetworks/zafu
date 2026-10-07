@@ -8,7 +8,14 @@
  *  - T2 `watch(id)` (a thread is on screen): that room every ROOM_POLL_MS.
  *  - T3 after T1, while a zafu window is open: the T1 pass every 5 minutes.
  *  - T4 `check()` ("check again"): the T1 pass, now.
- *  - sending: the write, now.
+ *  - sending: the write, now. A line that did not leave waits in its thread
+ *    (sealed, in the vault) and is tried again, a fresh seal each time, on
+ *    the next pass, the next tick of its thread, or when the device is back
+ *    online, never while people is closed. It gives up after {@link RETENTION_MS}.
+ * Catch-up reads oldest first, each room its share of {@link PASS_BUDGET},
+ * the rooms on screen first, the rest in turn, so one busy room never starves
+ * a quiet one. A relay sees one read per room per window: how long you were
+ * away, and how many rooms you read, never which rooms belong together.
  * `close()` runs when the last zafu window closes: every timer stops and every
  * request in flight is aborted. There is no alarm, nothing runs at install,
  * unlock, popup open or worker start, and a pass with no rooms makes no
@@ -27,10 +34,22 @@ import {
   type RoomIdentity,
   type RoomMessage,
 } from '@zafu/zirc/room';
-import { presenceEpoch, type RelayTransport } from '@zafu/zid';
+import {
+  JAM_SLOT_DURATION,
+  PRESENCE_EPOCH_SLOTS,
+  presenceEpoch,
+  type RelayTransport,
+} from '@zafu/zid';
 import { pairShard } from './shard';
 import { RELAY_NOT_ON, RELAY_OFF } from './protocol';
-import { mergeItems, threadKey, type PeopleRoom, type Thread, type ThreadItem } from './vault';
+import {
+  landed,
+  mergeItems,
+  threadKey,
+  type PeopleRoom,
+  type Thread,
+  type ThreadItem,
+} from './vault';
 
 /** what the slot under a title says (design-social 5.0) */
 export type PeopleSlot =
@@ -130,10 +149,46 @@ const unreadable = (e: unknown): 'unreachable' => {
 
 /** catch-up, every 5 minutes after the person opened people (T3) */
 export const T3_MS = 5 * 60_000;
+/**
+ * How long the relay keeps a room's records (pair, card and group scopes).
+ * Catch-up reads back this far and an unsent line is tried this long; change
+ * it here when the relay's retention changes.
+ */
+export const RETENTION_MS = 48 * 3600_000;
+const WINDOW_MS = PRESENCE_EPOCH_SLOTS * JAM_SLOT_DURATION * 1000;
+/** the windows the relay still holds */
+export const RETENTION_WINDOWS = Math.floor(RETENTION_MS / WINDOW_MS);
 /** one pass reads at most this many windows across all rooms */
 export const PASS_BUDGET = 600;
-/** a room never read reads this far back on its first pass (1 h) */
-const FIRST_WINDOWS = 12;
+/** a thread on screen reads at most this many windows a tick (6 h) */
+export const TICK_WINDOWS = 72;
+
+/** the first window a room still has to read: where it left off, within what the relay keeps */
+export const startOf = (rec: Pick<PeopleRoom, 'since'>, current: number): number =>
+  Math.max(rec.since ?? 0, current - RETENTION_WINDOWS + 1, 0);
+
+/**
+ * A budget shared out between rooms, in the order given: each takes what it
+ * needs up to an equal share, and what a small one leaves goes round again.
+ */
+export const shares = (need: number[], budget: number): number[] => {
+  const give = need.map(() => 0);
+  let left = budget;
+  let open = need.flatMap((n, i) => (n > 0 ? [i] : []));
+  while (left > 0 && open.length) {
+    const each = Math.max(1, Math.floor(left / open.length));
+    for (const i of open) {
+      const g = Math.min(each, need[i]! - give[i]!, left);
+      give[i]! += g;
+      left -= g;
+    }
+    open = open.filter(i => give[i]! < need[i]!);
+  }
+  return give;
+};
+
+/** the wait before an unsent line is tried again: 30 s, doubling, at most 30 minutes */
+export const backoff = (tries: number): number => Math.min(30_000 * 2 ** (tries - 1), 30 * 60_000);
 
 export class PeopleNeedsRelay extends Error {
   constructor(readonly gate: Exclude<Gate, 'on'>) {
@@ -150,10 +205,14 @@ export const createPeopleService = (
     abort: AbortController;
     rooms: Map<string, { room: Room; me: string }>;
     t3?: ReturnType<typeof setInterval>;
+    /** whose turn a pass starts with */
+    turn: number;
     watches: Map<string, { timer: ReturnType<typeof setInterval>; n: number }>;
   }
   let session: Session | undefined;
   const busy = new Map<string, Promise<PeopleSlot>>();
+  /** drafts being sent right now, by local id */
+  const inFlight = new Set<string>();
 
   // every read-modify-write of the vault goes through one queue
   let queue: Promise<unknown> = Promise.resolve();
@@ -164,7 +223,7 @@ export const createPeopleService = (
   };
 
   const ensure = (): Session =>
-    (session ??= { abort: new AbortController(), rooms: new Map(), watches: new Map() });
+    (session ??= { abort: new AbortController(), rooms: new Map(), watches: new Map(), turn: 0 });
 
   // the slot is written when it changes, or once a minute while it holds
   let said: PeopleStatus | undefined;
@@ -264,7 +323,7 @@ export const createPeopleService = (
     mine: m.author === me,
   });
 
-  const syncOne = async (rec: PeopleRoom, maxWindows = 288): Promise<PeopleSlot> => {
+  const syncOne = async (rec: PeopleRoom, slice: number): Promise<PeopleSlot> => {
     if (deps.online && !deps.online()) {
       return 'offline';
     }
@@ -278,8 +337,10 @@ export const createPeopleService = (
       throw e;
     }
     const { room, me } = made;
-    const from = rec.since ?? room.currentEpoch() - (FIRST_WINDOWS - 1);
-    const res = await room.syncSince(from, maxWindows);
+    const current = room.currentEpoch();
+    const from = startOf(rec, current);
+    const until = Math.min(current, from + slice - 1);
+    const res = await room.syncSince(from, RETENTION_WINDOWS, until);
     if (session?.abort.signal.aborted) {
       return 'idle';
     }
@@ -297,38 +358,51 @@ export const createPeopleService = (
       )
       .map(m => toItem(m, me));
     if (chat.length) {
-      await writeItems(rec, t => mergeItems(t, chat));
+      // only lines new to this thread settle drafts: the window still filling is read again each tick
+      await writeItems(rec, t => {
+        const known = new Set(t?.items.map(i => i.hash));
+        return landed(
+          mergeItems(t, chat),
+          chat.filter(c => !known.has(c.hash)),
+        );
+      });
     }
     const handle = handlers[rec.kind];
     const proto = msgs.filter(m => PROTOCOL_PREFIX.test(m.body));
     // a card's room is not a conversation: nothing in it is ever shown as chat
     const patch = handle && proto.length ? await handle(rec, proto, api) : undefined;
     const head = room.chainHead();
-    // a window that failed is read again next time
-    const since = unreachable ? from : room.currentEpoch();
+    // a window that failed is read again next time, and so is the one still filling
+    const failed = res.dropped.flatMap(d =>
+      d.kind === 'unreachable' ? [Number(d.hash.slice('window:'.length))] : [],
+    );
+    const since = failed.length ? Math.min(...failed) : until < current ? until + 1 : current;
     await updateRoom(rec.id, r => ({ ...(patch ? patch(r) : r), head, since }));
     return unreachable ? 'unreachable' : oversize ? 'oversize' : 'checked';
   };
 
   /** one room, never two passes over it at once */
-  const sync = (roomId: string, maxWindows?: number): Promise<PeopleSlot> => {
+  const sync = (roomId: string, slice = TICK_WINDOWS): Promise<PeopleSlot> => {
     const running = busy.get(roomId);
     if (running) {
       return running;
     }
     const run = (async () => {
       const rec = await findRoom(roomId);
-      return rec ? syncOne(rec, maxWindows) : ('idle' as const);
+      return rec ? syncOne(rec, slice) : ('idle' as const);
     })().finally(() => busy.delete(roomId));
     busy.set(roomId, run);
     return run;
   };
 
-  /** the rooms a pass reads: joined ones, and doors still open */
-  const live = (rooms: PeopleRoom[]) =>
-    rooms
-      .filter(r => r.joined || (r.kind === 'door' && (r.until ?? 0) > now()))
-      .sort((a, b) => (b.since ?? 0) - (a.since ?? 0));
+  /** the rooms a pass reads: joined ones and doors still open, those on screen first, the rest in turn */
+  const live = (rooms: PeopleRoom[], s: Session) => {
+    const all = rooms.filter(r => r.joined || (r.kind === 'door' && (r.until ?? 0) > now()));
+    const shown = all.filter(r => s.watches.has(r.id));
+    const rest = all.filter(r => !s.watches.has(r.id));
+    const k = rest.length ? s.turn++ % rest.length : 0;
+    return [...shown, ...rest.slice(k), ...rest.slice(0, k)];
+  };
 
   const WORST: PeopleSlot[] = [
     'locked',
@@ -341,32 +415,44 @@ export const createPeopleService = (
     'idle',
   ];
 
-  /** T1, T3 and T4: every live room once, the most recent first, within budget */
+  /** T1, T3 and T4: every live room its share of the budget, then the lines waiting to leave */
   const pass = async (): Promise<PeopleSlot> => {
     const rooms = await mine();
     if (!rooms) {
       await status('locked');
       return 'locked';
     }
-    const todo = live(rooms);
+    const todo = live(rooms, ensure());
     if (!todo.length) {
       return 'idle';
     }
     await status('checking');
-    let budget = PASS_BUDGET;
-    const slots: PeopleSlot[] = [];
     const current = presenceEpoch(Math.floor(now() / 1000));
-    for (const rec of todo) {
-      const need = Math.min(288, current - (rec.since ?? current - FIRST_WINDOWS + 1) + 1);
-      if (need > budget || !session) {
-        break; // the rest catch up when they are opened
+    const give = shares(
+      todo.map(r => current - startOf(r, current) + 1),
+      PASS_BUDGET,
+    );
+    const slots: PeopleSlot[] = [];
+    for (const [i, rec] of todo.entries()) {
+      if (!session) {
+        break;
       }
-      budget -= need;
-      slots.push(await sync(rec.id, need).catch(unreadable));
+      if (give[i]) {
+        slots.push(await sync(rec.id, give[i]).catch(unreadable));
+      }
     }
+    await flush().catch(() => undefined);
     const slot = WORST.find(s => slots.includes(s)) ?? 'checked';
     await status(slot);
     return slot;
+  };
+
+  /** one write, sealed for this moment's window: a second call is a fresh record */
+  const publish = async (rec: PeopleRoom, body: string, kind: 'msg' | 'action') => {
+    const { room, me } = await roomFor(rec);
+    const sent = await room.send(body, { kind });
+    await updateRoom(rec.id, r => ({ ...r, head: room.chainHead() }));
+    return { sent, item: toItem(sent, me) };
   };
 
   const send: PeopleApi['send'] = async (roomId, body, kind = 'msg') => {
@@ -374,13 +460,81 @@ export const createPeopleService = (
     if (!rec) {
       throw new Error('no such room');
     }
-    const { room, me } = await roomFor(rec);
-    const sent = await room.send(body, { kind });
-    await updateRoom(roomId, r => ({ ...r, head: room.chainHead() }));
+    const { sent, item } = await publish(rec, body, kind);
     if (!PROTOCOL_PREFIX.test(body)) {
-      await writeItems(rec, t => mergeItems(t, [toItem(sent, me)]));
+      await writeItems(rec, t => mergeItems(t, [item]));
     }
     return sent;
+  };
+
+  /**
+   * One try at a line of yours. It leaves as a fresh record (this window,
+   * this clock, a new seal), since the relay and every reader refuse an old
+   * one replayed; the draft keeps its local id, so the thread shows it once.
+   */
+  const attempt = async (rec: PeopleRoom, draft: ThreadItem): Promise<'sent' | PeopleSlot> => {
+    const local = draft.local!;
+    inFlight.add(local);
+    const settle = (fn: (i: ThreadItem) => ThreadItem) =>
+      writeItems(rec, t =>
+        mergeItems(
+          { read: t?.read ?? 0, items: (t?.items ?? []).filter(i => i.local !== local) },
+          (t?.items ?? []).filter(i => i.local === local).map(fn),
+        ),
+      );
+    try {
+      const { item } = await publish(rec, draft.body, draft.kind === 'action' ? 'action' : 'msg');
+      await settle(() => item);
+      return 'sent';
+    } catch (e) {
+      const refused = e instanceof PeopleNeedsRelay;
+      const tries = (draft.tries ?? 0) + 1;
+      const late = now() - draft.ts * 1000 >= RETENTION_MS;
+      await settle(i =>
+        refused || late
+          ? { ...i, status: 'failed', tries: undefined, next: undefined }
+          : { ...i, status: 'waiting', tries, next: now() + backoff(tries) },
+      );
+      if (refused) {
+        return e.gate === 'blocked' ? 'blocked' : 'needs-opt-in';
+      }
+      return 'unreachable';
+    } finally {
+      inFlight.delete(local);
+    }
+  };
+
+  /** the lines waiting to leave (one room, or all), each once its wait is over; only while people is open */
+  const flush = async (only?: string): Promise<void> => {
+    if (!session || (deps.online && !deps.online())) {
+      return;
+    }
+    const [rooms, threads] = await Promise.all([mine(), deps.readThreads()]);
+    for (const rec of rooms ?? []) {
+      if (only && rec.id !== only) {
+        continue;
+      }
+      for (const it of threads?.[threadKey(rec)]?.items ?? []) {
+        if (!session) {
+          return;
+        }
+        if (!it.local || it.status === 'failed' || inFlight.has(it.local)) {
+          continue;
+        }
+        if (now() - it.ts * 1000 >= RETENTION_MS) {
+          await writeItems(rec, t => ({
+            read: t?.read ?? 0,
+            items: (t?.items ?? []).map(i =>
+              i.local === it.local
+                ? { ...i, status: 'failed' as const, tries: undefined, next: undefined }
+                : i,
+            ),
+          }));
+        } else if ((it.next ?? 0) <= now()) {
+          await attempt(rec, it);
+        }
+      }
+    }
   };
 
   const api: PeopleApi = {
@@ -404,7 +558,7 @@ export const createPeopleService = (
   /**
    * Read a room that is not kept here, once, with a key of the caller's
    * choosing: a card's room before you answer it. From `since` (an epoch),
-   * at most a day of windows; never before the gate.
+   * as far back as the relay keeps; never before the gate.
    */
   const readOnce = async (
     rec: PeopleRoom,
@@ -424,7 +578,7 @@ export const createPeopleService = (
       shardFor: pairShard(rec.secret),
       now: () => Math.floor(now() / 1000),
     });
-    const res = await room.syncSince(since, 288);
+    const res = await room.syncSince(since, RETENTION_WINDOWS);
     if (res.dropped.some(d => d.kind === 'unreachable')) {
       throw new Error('the relay is not answering');
     }
@@ -450,10 +604,13 @@ export const createPeopleService = (
       const w = s.watches.get(roomId);
       // what the screen shows comes from its own room's reads too
       const tick = () =>
-        void sync(roomId).then(
-          slot => slot !== 'idle' && status(slot),
-          (e: unknown) => status(unreadable(e)),
-        );
+        void sync(roomId)
+          .then(
+            slot => slot !== 'idle' && status(slot),
+            (e: unknown) => status(unreadable(e)),
+          )
+          .then(() => flush(roomId))
+          .catch(() => undefined);
       if (w) {
         w.n++;
       } else {
@@ -486,42 +643,28 @@ export const createPeopleService = (
         session?.rooms.delete(threadKey(rec));
         return 'sent';
       }
-      if (retry) {
-        await writeItems(rec, t => ({
-          read: t?.read ?? 0,
-          items: (t?.items ?? []).filter(i => i.local !== retry),
-        }));
-      }
-      const local = crypto.randomUUID();
-      const draft: ThreadItem & { kind: 'msg' | 'action' } = {
+      const action = text.startsWith('/me ');
+      // "try again" sends the same line under the same local id, its clock started over
+      const local = retry ?? crypto.randomUUID();
+      const draft: ThreadItem = {
         hash: '',
         local,
         author: '',
         name: rec.nick ?? '',
-        body: text,
+        body: action ? text.slice(4) : text,
         ts: Math.floor(now() / 1000),
         epoch: 0,
-        kind: text.startsWith('/me ') ? 'action' : 'msg',
+        kind: action ? 'action' : 'msg',
         mine: true,
         status: 'sending',
       };
-      await writeItems(rec, t => mergeItems(t, [draft]));
-      const settle = (fn: (i: ThreadItem) => ThreadItem | undefined) =>
-        writeItems(rec, t => ({
-          read: t?.read ?? 0,
-          items: (t?.items ?? []).flatMap(i => (i.local === local ? (fn(i) ?? []) : [i])),
-        }));
-      try {
-        await send(roomId, draft.kind === 'action' ? text.slice(4) : text, draft.kind);
-        await settle(() => undefined);
-        return 'sent';
-      } catch (e) {
-        await settle(i => ({ ...i, status: 'failed' }));
-        if (e instanceof PeopleNeedsRelay) {
-          return e.gate === 'blocked' ? 'blocked' : 'needs-opt-in';
-        }
-        return 'unreachable';
-      }
+      inFlight.add(local);
+      await writeItems(rec, t =>
+        mergeItems({ read: t?.read ?? 0, items: (t?.items ?? []).filter(i => i.local !== local) }, [
+          draft,
+        ]),
+      );
+      return attempt(rec, draft);
     },
     /** mark a thread read up to now */
     /**
@@ -562,6 +705,8 @@ export const createPeopleService = (
       return !!session;
     },
     readOnce,
+    /** the device is back online: the lines waiting to leave, now */
+    flush: () => flush(),
     /** the session's abort signal: requests made for this session die with it */
     signal: (): AbortSignal => ensure().abort.signal,
     /** resolves when no room is being read (tests) */

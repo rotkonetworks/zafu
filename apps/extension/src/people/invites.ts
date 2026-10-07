@@ -16,6 +16,7 @@
 import { bytesToHex } from '@noble/hashes/utils';
 import { DEFAULT_PEOPLE_RELAY } from '../config/people-relay';
 import { GROUP_ROOM_PLAINTEXT_BYTES, ZAFU_GROUP_APP_SCOPE } from '@zafu/zirc/room';
+import { presenceEpoch } from '@zafu/zid';
 import { readCardPayload } from '../state/contact-share';
 import type { Contact } from '../state/contacts';
 import type { XidKeys } from '../state/identity';
@@ -200,6 +201,8 @@ export const createInvites = (deps: InviteDeps) => {
       signer: { gen: contact.rel.gen, j: contact.rel.j },
       joined: true,
       createdAt: now(),
+      // the memo carries a fresh secret: nothing older to read
+      since: presenceEpoch(Math.floor(now() / 1000)),
       pair: { personId: contact.id, waiting: true },
     });
     return { id: pairId(contact.id) };

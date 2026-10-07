@@ -56,7 +56,7 @@ export interface PeopleRoom {
   /** your name in this room (`/nick`), a user setting, so it is backed up */
   nick?: string;
   head?: { seq: number; hash: string };
-  /** the last window read (`Room.syncSince`) */
+  /** the next window to read (`Room.syncSince`); the current one is read again */
   since?: number;
   /** false while you only asked to join */
   joined: boolean;
@@ -189,9 +189,13 @@ export interface ThreadItem {
   /** 'note': a line zafu writes about the relationship (people/cards `Note`) */
   kind: 'msg' | 'action' | 'note';
   mine: boolean;
-  status?: 'sending' | 'failed';
-  /** local id of an item not yet on the relay */
+  /** a line of yours not on the relay yet: in flight, waiting for the next try, or given up */
+  status?: 'sending' | 'waiting' | 'failed';
+  /** local id of an item not yet on the relay; it keeps it across every try */
   local?: string;
+  /** tries so far, and when the next may run (ms) */
+  tries?: number;
+  next?: number;
 }
 
 export interface Thread {
@@ -277,6 +281,26 @@ export const mergeItems = (thread: Thread | undefined, items: ThreadItem[]): Thr
     read: thread?.read ?? 0,
     items: [...byHash.values(), ...pending].sort(order).slice(-THREAD_CAP),
   };
+};
+
+/**
+ * Lines of yours that arrived from the relay take the place of the drafts
+ * they were: a send whose answer was lost did land, so it is not sent again.
+ * One arrived line settles one draft with the same words, drafted no later.
+ */
+export const landed = (thread: Thread, arrived: ThreadItem[]): Thread => {
+  const left = arrived.filter(a => a.mine);
+  if (!left.length) {
+    return thread;
+  }
+  const items = thread.items.filter(i => {
+    if (!i.local) {
+      return true;
+    }
+    const k = left.findIndex(a => a.body === i.body && a.kind === i.kind && a.ts >= i.ts);
+    return k < 0 || (left.splice(k, 1), false);
+  });
+  return items.length === thread.items.length ? thread : { ...thread, items };
 };
 
 /**
