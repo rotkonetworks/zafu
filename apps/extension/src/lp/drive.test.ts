@@ -73,6 +73,7 @@ const deps = (over: Partial<DriveDeps> = {}) => {
     }),
     shieldBack: vi.fn(async () => 'shield-txid'),
     seen: vi.fn(async () => ({ observed: false, finalised: false })),
+    mined: vi.fn(async () => 1),
     units: vi.fn(async () => 0n),
     utxoZat: vi.fn(async () => []),
     save: vi.fn(async (f: Flight, after?: boolean) => {

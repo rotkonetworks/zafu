@@ -55,6 +55,8 @@ export interface DriveDeps {
     fee: string,
     hold: (held: Held | undefined) => Promise<void>,
   ) => Promise<string>;
+  /** the height a txid was mined at, if it was: a held deposit waits for its shield-out's block */
+  mined: (txid: string) => Promise<number | undefined>;
   /** the lp address -> the vault, with the memo, at the reviewed fee; the held one when there is one */
   deposit: (req: DepositRequest, fee: string, held?: Held) => Promise<string>;
   /** the lp address -> shielded */
@@ -260,6 +262,10 @@ export const act = async (f: Flight, d: DriveDeps): Promise<Flight> => {
       const plan = await d.plan(req);
       if (plan.short !== '0') {
         throw new Error("your lp address doesn't hold this yet · nothing was sent");
+      }
+      // signed with the shield-out: it goes on the shield-out's block, never chained in the mempool
+      if (at.held && (await d.mined(at.held.moveTxid)) === undefined) {
+        return f;
       }
       const out = await d.save(sending(at));
       at = out;

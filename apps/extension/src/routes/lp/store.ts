@@ -27,6 +27,7 @@ import {
   extractSignedPcztTxInWorker,
   frostInspectPcztOutputsInWorker,
   holdColdDepositInWorker,
+  lookupTxInWorker,
   getPoolBalancesInWorker,
   getTransparentUtxosInWorker,
   planTransparentDepositInWorker,
@@ -738,6 +739,7 @@ const depsOf = (storeId: string, lp: { index: number; address: string }): DriveD
     ).txid;
   },
   seen: txid => readTxSeen(txid, lp.address),
+  mined: async txid => (await lookupTxInWorker(zidecar(), txid)).height,
   units: () => Promise.resolve(get().thor?.position?.units ?? 0n),
   utxoZat: async () =>
     (await getTransparentUtxosInWorker(zidecar(), lp.address)).map(u => BigInt(u.valueZat)),
