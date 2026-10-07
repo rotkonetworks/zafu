@@ -4,9 +4,11 @@
  * caller wraps it with its own destination.
  */
 
+// liquify first: thornode.ninerealms.com has no DNS record (2026-10-07), and
+// every dead first try costs a round trip, seconds over nym
 export const THORNODE_URLS = [
-  'https://thornode.ninerealms.com',
   'https://gateway.liquify.com/chain/thorchain_api',
+  'https://thornode.ninerealms.com',
 ];
 
 /** a 4xx: the chain answered, so asking the next node changes nothing */

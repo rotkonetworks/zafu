@@ -20,8 +20,6 @@ export const MIDGARD_DEST = 'midgard';
 /** the market price the swap measures against */
 export const PRICES_DEST = 'near-swap';
 
-const NODES = [...THORNODE_URLS].reverse();
-
 /** a read was not made: its destination is off */
 export class NotAllowed extends Error {
   constructor(readonly destination: string) {
@@ -95,7 +93,7 @@ export interface ThorRead {
 type Raw = Record<string, unknown>;
 
 const node = <T>(path: string, signal?: AbortSignal) =>
-  thornodeGet<T>(`/thorchain${path}`, NODES, signal);
+  thornodeGet<T>(`/thorchain${path}`, THORNODE_URLS, signal);
 
 /** the mimir keys that stop zec liquidity: everyone's, the chain's, or adds to this pool */
 export const pausesOf = (
