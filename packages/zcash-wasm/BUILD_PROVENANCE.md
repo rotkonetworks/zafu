@@ -177,6 +177,40 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
   `voting-wasm` `local_chain_e2e` ran these bindings against a local svoted
   v1.6.1-rc.5 (37 proposals, votes on 37 and 17, tally finalized).
 
+## 2026-10-07 rebuild - verify_flyclient (single-server chain check)
+
+- source repo: zcli, branch `master`, rev `0886e6d` (merge of zcli PR #28,
+  `feat/flyclient-wallet`). Since `8cef107` (the blob it replaces) master
+  gained 2365555 (a test only) and PR #28.
+- #28: new crate `zync-flyclient`; a compiled mainnet checkpoint (height
+  3,508,014) with work and difficulty floors, tip freshness (within 90 min
+  behind, 2 h ahead of `now_secs`), anti-rollback (`min_height`) and the
+  optional note-tree-root burial. zafu-wasm exports
+  `verify_flyclient(resp_proto, now_secs, min_height, mainnet)` returning JSON
+  `{tip_height, tip_hash, total_work, orchard_root, ironwood_root,
+roots_height}`; testnet is refused (no checkpoint).
+- `.d.ts` diff against the previous blob: one export added,
+  `verify_flyclient`; nothing removed or changed. `zafu_wasm_bg.wasm.d.ts`
+  gains its raw binding only. The glue differs by that function and two
+  closure shim indices in comments.
+- `cargo test -p zafu-wasm --lib --tests --release` at `0886e6d`: 160 passed,
+  12 ignored (lib 98).
+- checked in node: the live default-parameter proof from zcash.rotko.net
+  (tip 3,509,023, 1.52 MB) verifies in ~90 ms and returns roots at 3,509,022;
+  the same proof 91 minutes later is refused as stale.
+- toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
+  wasm-bindgen CLI 0.2.126, binaryen 130; recipe above.
+- rayon snippet hash unchanged (`wasm-bindgen-rayon-38edf6e439f6d70d`), the
+  patched `workerHelpers.js` kept in both trees.
+- size: pre `wasm-opt` 28,653,365 bytes (post-bindgen); post `-Oz`
+  13,370,000 bytes (+84,677).
+- sha256(parallel zafu_wasm_bg.wasm) =
+  a56afe17905946cb72aed512a75bb35c90d4ad7b7980f8ccbe5cedc3c3728d80
+- sha256(zafu_wasm.js) =
+  0ee9eeda569fe32e4c97ec1345ebd59d269a28863f64b100f68a35b214cadf6a
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 58 32768 shared)` (unchanged).
+
 ## 2026-10-06 rebuild - ironwood memos, NU7 by node branch, THORChain on NU7
 
 - source repo: zcli, branch `master`, rev `8cef107` (merge of zcli PR #26).
