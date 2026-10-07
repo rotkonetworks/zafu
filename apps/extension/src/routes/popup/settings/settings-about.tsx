@@ -5,7 +5,7 @@ import { Mark } from '@repo/ui/components/ui/mark';
 
 export const SettingsAbout = () => {
   return (
-    <SettingsScreen title='about' backPath={PopupPath.SETTINGS}>
+    <SettingsScreen title='about' backPath={PopupPath.SETTINGS_DEVICES}>
       <div className='relative isolate flex flex-col gap-4'>
         <Watermark glyph='道' corner='bottom-right' />
         <div>

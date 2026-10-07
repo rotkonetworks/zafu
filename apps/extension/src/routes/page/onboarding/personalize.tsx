@@ -27,8 +27,8 @@ import {
   FontRow,
   ApprovalsRow,
 } from '../../popup/settings/settings-appearance';
-import { ContactDiscoverySection, ExplorerLinksRow } from '../../popup/settings/settings-privacy';
-import { ZcashNodeSheet } from '../../popup/settings/settings-zcash-network';
+import { ContactDiscoveryRow } from '../../popup/settings/settings-people';
+import { ExplorerLinksRow, ZcashNodeSheet } from '../../popup/settings/settings-zcash-network';
 import { useAutoLock, AUTO_LOCK_OPTIONS } from '../../popup/settings/use-auto-lock';
 
 // the three choices worth a tap before there is anything to lock; "off" and
@@ -244,7 +244,11 @@ export const Personalize = () => {
               onChange={v => void setSetting('openZafuLinks', v)}
             />
           </RowGroup>
-          {settings.enableIdentity && <ContactDiscoverySection />}
+          {settings.enableIdentity && (
+            <RowGroup>
+              <ContactDiscoveryRow />
+            </RowGroup>
+          )}
         </div>
       </Sheet>
 

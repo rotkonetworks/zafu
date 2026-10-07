@@ -9,6 +9,7 @@ import { selectPenumbraWallets } from '../../../state/wallets';
 import { clearPersonalData } from '../../../state/personal-data';
 import { useState, useEffect } from 'react';
 import { SettingsScreen } from './settings-screen';
+import { PopupPath } from '../paths';
 import type { KeyInfo } from '../../../state/keyring';
 
 interface ClearingState {
@@ -100,7 +101,7 @@ export const SettingsClearCache = () => {
   })).filter(g => g.vaults.length > 0);
 
   return (
-    <SettingsScreen title='resync state'>
+    <SettingsScreen title='start over' backPath={PopupPath.SETTINGS_SECURITY}>
       <div className='flex flex-col gap-4'>
         {clearingState.inProgress ? (
           <div className='flex flex-col gap-3'>

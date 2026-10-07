@@ -12,7 +12,7 @@ import { fileURLToPath } from 'url';
  *
  * This is a static source scan, not a render test: it looks at each `<Row`
  * (or a handful of known wrapper components that render one: OptionsRow,
- * KeplrCompatToggle, ThemeRow, FontRow, ApprovalsRow, AutoLockRow,
+ * KeplrCompatToggle, ThemeRow, FontRow, ApprovalsRow, AutoLockRow, the relay rows,
  * SigningRow, NodeSheet, DestinationRow) and checks the JSX call for an
  * `onExplain` prop or a `{...explainProps(...)}` spread. A row can opt out
  * explicitly with a `{/* no-explain: <reason> *\/}` comment directly above it -
@@ -34,7 +34,9 @@ const WRAPPER_TAGS = [
   'ZcashNodeSheet',
   'DestinationRow',
   'ZcashMeRow',
-  'ContactDiscoverySection',
+  'ContactDiscoveryRow',
+  'PeopleRelayRow',
+  'DiscoveryRelayRow',
   'ChainRow',
 ];
 

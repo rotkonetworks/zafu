@@ -9,6 +9,7 @@
 import { BUNDLED_SERVICE_CONFIG } from '../../../services/voting/bundled-config';
 import type { ServiceEndpoint } from '../../../services/voting/types';
 import { SettingsScreen } from './settings-screen';
+import { PopupPath } from '../paths';
 
 function EndpointList({ title, endpoints }: { title: string; endpoints: ServiceEndpoint[] }) {
   return (
@@ -31,7 +32,7 @@ function EndpointList({ title, endpoints }: { title: string; endpoints: ServiceE
 }
 
 export const SettingsVoting = () => (
-  <SettingsScreen title='voting endpoints'>
+  <SettingsScreen title='voting servers' backPath={PopupPath.SETTINGS_ZCASH_NETWORK}>
     <div className='flex flex-col gap-5'>
       <p className='text-data text-fg-high'>source: bundled with this release</p>
       <div className='flex flex-col gap-3'>

@@ -43,12 +43,18 @@ export const SCREENS = {
   vote: PopupPath.VOTE,
   identity: PopupPath.IDENTITY,
   settings: PopupPath.SETTINGS,
-  'settings/networks': PopupPath.SETTINGS_NETWORKS,
+  'settings/security': PopupPath.SETTINGS_SECURITY,
+  'settings/network': PopupPath.SETTINGS_NETWORK,
+  'settings/zcash': PopupPath.SETTINGS_ZCASH_NETWORK,
+  'settings/people': PopupPath.SETTINGS_PEOPLE,
+  'settings/display': PopupPath.SETTINGS_DISPLAY,
+  'settings/devices': PopupPath.SETTINGS_DEVICES,
+  'settings/about': PopupPath.SETTINGS_ABOUT,
+  // names from before the six groups, each landing in its new home
+  'settings/networks': PopupPath.SETTINGS_DEVICES,
   'settings/networks/zcash': PopupPath.SETTINGS_ZCASH_NETWORK,
   'settings/networks/penumbra': PopupPath.SETTINGS_PENUMBRA_NETWORK,
-  'settings/privacy': PopupPath.SETTINGS_PRIVACY,
-  'settings/security': PopupPath.SETTINGS_SECURITY,
-  'settings/about': PopupPath.SETTINGS_ABOUT,
+  'settings/privacy': PopupPath.SETTINGS_NETWORK,
 } as const;
 
 export type Screen = keyof typeof SCREENS;

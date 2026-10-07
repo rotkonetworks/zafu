@@ -21,9 +21,11 @@ export const popupScreens = {
   settingsConnectedSites: () => import('./identity/sites').then(m => m.SitesPage),
   settingsPassphrase: () =>
     import('./settings/settings-passphrase').then(m => m.SettingsPassphrase),
-  settingsWalletsNetworks: () =>
-    import('./settings/settings-wallets-networks').then(m => m.SettingsWalletsNetworks),
-  settingsPrivacy: () => import('./settings/settings-privacy').then(m => m.SettingsPrivacy),
+  settingsWallets: () => import('./settings/settings-wallets').then(m => m.SettingsWallets),
+  settingsNetwork: () => import('./settings/settings-network').then(m => m.SettingsNetwork),
+  settingsPeople: () => import('./settings/settings-people').then(m => m.SettingsPeople),
+  settingsDisplay: () => import('./settings/settings-display').then(m => m.SettingsDisplay),
+  settingsContacted: () => import('./settings/settings-contacted').then(m => m.SettingsContacted),
   settingsFeatures: () => import('./settings/settings-features').then(m => m.SettingsFeatures),
   settingsChangePassword: () =>
     import('./settings/settings-change-password').then(m => m.SettingsChangePassword),
@@ -41,11 +43,9 @@ export const popupScreens = {
   settingsVoting: () => import('./settings/settings-voting').then(m => m.SettingsVoting),
   settingsZcashMe: () => import('./settings/settings-zcashme').then(m => m.SettingsZcashMe),
 
-  // four category homes (settings IA rework), each the one screen for its
-  // category, + the screens their rows need
+  // the settings group homes and the screens their rows need
   settingsSecurityHome: () =>
     import('./settings/settings-security-home').then(m => m.SettingsSecurityHome),
-  settingsNetworks: () => import('./settings/settings-networks').then(m => m.SettingsNetworks),
   settingsZcashNetwork: () =>
     import('./settings/settings-zcash-network').then(m => m.SettingsZcashNetwork),
   settingsPenumbraNetwork: () =>

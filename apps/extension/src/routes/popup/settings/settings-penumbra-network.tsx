@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { usePopupNav } from '../../../utils/navigate';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
@@ -19,7 +18,6 @@ import { resyncPenumbraFromStart } from '../../../services/penumbra-resync';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
 import { NodeSheet } from './node-sheet';
-import { TintedRow } from './tinted-row';
 import { KeplrCompatToggle } from './keplr-compat-toggle';
 import { useExplain } from './settings-explain';
 import { RpcPoolSheet } from './transparent-chain-endpoints';
@@ -75,10 +73,9 @@ export const SettingsPenumbraNetwork = () => {
   const enabled = useStore(selectEnabledNetworks);
   const endpoint = useStore(s => s.networks.networks.penumbra.endpoint) ?? '';
   const setEndpoint = useStore(s => s.networks.setNetworkEndpoint);
-  const disable = useDisableNetwork();
-  const navigate = usePopupNav();
   const { totalIn, setTotalIn } = usePenumbraTotalIn();
   const keepSyncing = useStore(s => s.privacy.settings.keepPenumbraSyncing);
+  const checkDeposits = useStore(s => s.privacy.settings.enableTransparentBalances);
   const setSetting = useStore(s => s.privacy.setSetting);
   const { explainProps, sheet: explainSheet } = useExplain();
   const [resyncing, setResyncing] = useState(false);
@@ -116,7 +113,7 @@ export const SettingsPenumbraNetwork = () => {
   const sheet = (o: Open) => (next: boolean) => setOpen(next ? o : null);
 
   return (
-    <SettingsScreen title='penumbra' category='networks' backPath={PopupPath.SETTINGS_NETWORKS}>
+    <SettingsScreen title='penumbra' category='devices' backPath={PopupPath.SETTINGS_DEVICES}>
       <div className='flex flex-col gap-4'>
         {resyncing && (
           <StatusSlot tone='gold' progress={progress ? progressPercent : undefined}>
@@ -127,6 +124,7 @@ export const SettingsPenumbraNetwork = () => {
           <Row
             type='value'
             label='node'
+            description='it sees your ip and what you sync'
             value={hostOf(endpoint) ?? 'auto'}
             onPress={() => setOpen('node')}
             {...explainProps('network.penumbraNode')}
@@ -134,6 +132,7 @@ export const SettingsPenumbraNetwork = () => {
           <Row
             type='value'
             label='ibc chains'
+            description='a chain is contacted only once it is on'
             value={
               chainsOn.length === 0
                 ? 'off'
@@ -154,9 +153,18 @@ export const SettingsPenumbraNetwork = () => {
           <Row
             type='toggle'
             label='keep syncing when closed'
+            description='the node sees zafu reading while closed'
             checked={keepSyncing}
             onChange={v => void setSetting('keepPenumbraSyncing', v)}
             {...explainProps('network.keepSyncingClosed')}
+          />
+          <Row
+            type='toggle'
+            label='check deposit addresses'
+            description='each chain asked sees the addresses checked, from your ip'
+            checked={checkDeposits}
+            onChange={v => void setSetting('enableTransparentBalances', v)}
+            {...explainProps('privacy.transparentBalances')}
           />
         </RowGroup>
         <Section title='if something looks wrong'>
@@ -169,16 +177,6 @@ export const SettingsPenumbraNetwork = () => {
             {...explainProps('network.penumbraResync')}
           />
         </Section>
-        <RowGroup>
-          <TintedRow
-            label='turn off penumbra'
-            onPress={() =>
-              void disable('penumbra').then(() =>
-                navigate(PopupPath.SETTINGS_NETWORKS, { replace: true }),
-              )
-            }
-          />
-        </RowGroup>
       </div>
 
       <NodeSheet

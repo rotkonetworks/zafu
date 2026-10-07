@@ -214,12 +214,12 @@ export const SETTINGS_EXPLAIN = {
   'security.txSigning': {
     blurb: 'when zafu asks for your password to sign a transaction.',
     states: [
-      { label: 'unlock only', text: 'being unlocked is enough; no extra password step' },
+      { label: 'never', text: 'being unlocked is enough; no extra password step' },
       {
-        label: 'grace 15 min',
+        label: 'after 15 min',
         text: 'the password is asked again if 15 minutes passed since you last typed it',
       },
-      { label: 'foil hat', text: 'the password is asked every single time, no exceptions' },
+      { label: 'every time', text: 'the password is asked every single time, no exceptions' },
     ],
   },
   'devices.actAsKeplr': {

@@ -31,7 +31,7 @@ export const SettingsMultisig = () => {
 
   if (!wallet?.multisig) {
     return (
-      <SettingsScreen title='multisig' backPath={PopupPath.SETTINGS_WALLETS}>
+      <SettingsScreen title='multisig' backPath={PopupPath.SETTINGS_DEVICES}>
         <p className='text-xs text-fg-muted'>wallet not found</p>
       </SettingsScreen>
     );
@@ -69,7 +69,7 @@ export const SettingsMultisig = () => {
   };
 
   return (
-    <SettingsScreen title='multisig settings' backPath={PopupPath.SETTINGS_WALLETS}>
+    <SettingsScreen title='multisig settings' backPath={PopupPath.SETTINGS_DEVICES}>
       {PasswordModal}
       <BackupModal
         open={backupOpen}

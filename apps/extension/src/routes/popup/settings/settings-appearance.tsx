@@ -60,10 +60,17 @@ export const useZafuTheme = () => {
   return { theme: value, loaded, set, restore };
 };
 
-export const ThemeRow = ({ onExplain }: { onExplain?: (label: string) => void } = {}) => {
+interface RowExtras {
+  onExplain?: (label: string) => void;
+  description?: string;
+}
+
+export const ThemeRow = (extras: RowExtras = {}) => {
   const { theme, set } = useZafuTheme();
   return (
     <OptionsRow
+      description={extras.description}
+      onExplain={extras.onExplain}
       label='theme'
       value={theme}
       options={[
@@ -71,7 +78,6 @@ export const ThemeRow = ({ onExplain }: { onExplain?: (label: string) => void } 
         { value: 'washi', label: 'washi', desc: 'ink on unbleached paper' },
       ]}
       onPick={set}
-      onExplain={onExplain}
     />
   );
 };
@@ -91,23 +97,21 @@ export const useZafuFont = () => {
 /** uncontrolled by default (own hook instance); pass `state` to share one instance with a parent that needs to read or revert it */
 export const FontRow = ({
   state,
-  onExplain,
-}: {
-  state?: ReturnType<typeof useZafuFont>;
-  onExplain?: (label: string) => void;
-} = {}) => {
+  ...extras
+}: RowExtras & { state?: ReturnType<typeof useZafuFont> } = {}) => {
   const own = useZafuFont();
   const { font, set } = state ?? own;
   return (
     <OptionsRow
-      label='type'
+      description={extras.description}
+      onExplain={extras.onExplain}
+      label='typeface'
       value={font}
       options={[
         { value: 'iosevka', label: 'iosevka term' },
         { value: 'system', label: 'system mono' },
       ]}
       onPick={set}
-      onExplain={onExplain}
     />
   );
 };
@@ -128,15 +132,14 @@ export const useApprovalSurface = () => {
 /** uncontrolled by default (own hook instance); pass `state` to share one instance with a parent that needs to read or revert it */
 export const ApprovalsRow = ({
   state,
-  onExplain,
-}: {
-  state?: ReturnType<typeof useApprovalSurface>;
-  onExplain?: (label: string) => void;
-} = {}) => {
+  ...extras
+}: RowExtras & { state?: ReturnType<typeof useApprovalSurface> } = {}) => {
   const own = useApprovalSurface();
   const { surface, set } = state ?? own;
   return (
     <OptionsRow
+      description={extras.description}
+      onExplain={extras.onExplain}
       label='approvals open in'
       value={surface}
       options={[
@@ -145,7 +148,6 @@ export const ApprovalsRow = ({
         { value: 'popup', label: 'a window' },
       ]}
       onPick={set}
-      onExplain={onExplain}
     />
   );
 };

@@ -73,8 +73,11 @@ export const OptionsRow = <T extends string | number>({
   options,
   onPick,
   onExplain,
+  description,
 }: {
   label: string;
+  /** one honest line under the label: who sees what */
+  description?: string;
   value: T;
   options: readonly { value: T; label: string; desc?: string }[];
   onPick: (v: T) => void;
@@ -87,6 +90,7 @@ export const OptionsRow = <T extends string | number>({
       <Row
         type='value'
         label={label}
+        description={description}
         value={options.find(o => o.value === value)?.label ?? String(value)}
         onPress={() => setOpen(true)}
         onExplain={onExplain}
