@@ -1,23 +1,27 @@
 /**
  * webauthn authenticator - builds credential responses from ZID-derived P-256 keys.
  *
- * uses the non-rotating passkey derivation path (not ZID rotation).
- * passkeys are long-lived - rotation would lock users out.
+ * Every function takes the identity node (identityKey), never the phrase. A
+ * passkey made with a user id is per relying party AND account (v3): its
+ * credential id is that user id sealed (AES-GCM) under a per-RP key, so `get`
+ * recovers the userHandle and two accounts at one site are unlinkable. Passkeys
+ * made before v3 (one per rpId) are still recognised and keep their keys.
  *
  * supports:
- * - credential creation (navigator.credentials.create)
+ * - credential creation (navigator.credentials.create), honouring excludeCredentials
  * - assertion signing (navigator.credentials.get)
  * - PRF extension (hmac-secret for E2E encryption keys)
  */
 
 import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { hmac } from '@noble/hashes/hmac';
+import { hexToBytes } from '@noble/hashes/utils';
 import {
   derivePasskeyCredentialId,
-  derivePasskeyForSite,
-  signPasskey,
+  derivePasskeyWrapKey,
   derivePrf,
-  DEFAULT_IDENTITY,
+  passkeyPublicKey,
+  signPasskey,
 } from './identity';
 
 const enc = new TextEncoder();
@@ -34,6 +38,20 @@ const FLAGS = {
   ED: 0x80, // extension data
 };
 
+/** first byte of a v3 (per-account) credential id */
+const V3 = 0x03;
+const NONCE = 12;
+const TAG = 16;
+
+/** a passkey this wallet holds: its credential id, and the account it is for (v3 only) */
+export interface Credential {
+  id: Uint8Array;
+  userId?: Uint8Array;
+}
+
+const equal = (a: Uint8Array, b: Uint8Array) =>
+  a.length === b.length && a.every((x, i) => x === b[i]);
+
 /**
  * The credential id passkeys made before v2: "zafu:" + SHA-256(rpId)[:8], the
  * same for every zafu user at a relying party. Only recognised, never issued:
@@ -48,26 +66,102 @@ export function legacyCredentialId(rpId: string): Uint8Array {
   return id;
 }
 
-/**
- * Which of this user's credential ids to answer `get` with: the one the
- * relying party asked for (new or legacy), the new one when it asked for none
- * (a discoverable sign-in), or undefined when every id it listed belongs to
- * some other authenticator.
- */
-export function pickCredentialId(
-  mnemonic: string,
+/** run `fn` with the relying party's AES-GCM key and zeroize the raw bytes */
+const withWrapKey = async <T>(
+  identity: Uint8Array,
   rpId: string,
-  allowHex: readonly string[] | undefined,
-  identity = DEFAULT_IDENTITY,
-): Uint8Array | undefined {
-  const current = derivePasskeyCredentialId(mnemonic, identity, rpId);
-  if (!allowHex?.length) {
-    return current;
+  fn: (raw: Uint8Array, key: CryptoKey) => Promise<T>,
+): Promise<T> => {
+  const raw = derivePasskeyWrapKey(identity, rpId);
+  try {
+    const key = await crypto.subtle.importKey('raw', Uint8Array.from(raw), 'AES-GCM', false, [
+      'encrypt',
+      'decrypt',
+    ]);
+    return await fn(raw, key);
+  } finally {
+    raw.fill(0);
   }
-  const allow = new Set(allowHex.map(h => h.toLowerCase()));
+};
+
+/**
+ * A v3 credential id: 0x03 || nonce || AES-GCM(userId), with the rpId as
+ * associated data. The nonce is HMAC(key, userId), so one account always gets
+ * the same id and it restores from the phrase alone.
+ */
+export const accountCredentialId = (
+  identity: Uint8Array,
+  rpId: string,
+  userId: Uint8Array,
+): Promise<Uint8Array> =>
+  withWrapKey(identity, rpId, async (raw, key) => {
+    const iv = hmac(sha256, raw, userId).slice(0, NONCE);
+    const sealed = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv, additionalData: enc.encode(rpId) },
+      key,
+      Uint8Array.from(userId),
+    );
+    return new Uint8Array([V3, ...iv, ...new Uint8Array(sealed)]);
+  });
+
+/** the account a v3 id was sealed for, or undefined when it is not this wallet's */
+const openCredentialId = (
+  identity: Uint8Array,
+  rpId: string,
+  id: Uint8Array,
+): Promise<Uint8Array | undefined> =>
+  id[0] !== V3 || id.length < 1 + NONCE + TAG
+    ? Promise.resolve(undefined)
+    : withWrapKey(identity, rpId, (_raw, key) =>
+        crypto.subtle
+          .decrypt(
+            { name: 'AES-GCM', iv: id.slice(1, 1 + NONCE), additionalData: enc.encode(rpId) },
+            key,
+            id.slice(1 + NONCE),
+          )
+          .then(
+            plain => new Uint8Array(plain),
+            () => undefined,
+          ),
+      );
+
+/**
+ * Which of the ids a relying party listed is a passkey this wallet holds: a
+ * v3 id it sealed, the per-rpId (v2) id or the pre-v2 one. Undefined when
+ * every id belongs to some other authenticator.
+ */
+export async function findCredential(
+  identity: Uint8Array,
+  rpId: string,
+  idsHex: readonly string[],
+): Promise<Credential | undefined> {
+  const perRp = derivePasskeyCredentialId(identity, rpId);
   const legacy = legacyCredentialId(rpId);
-  return [current, legacy].find(id => allow.has(bytesToHex(id)));
+  for (const hex of idsHex) {
+    const id = hexToBytes(hex.toLowerCase());
+    if (equal(id, perRp) || equal(id, legacy)) {
+      return { id };
+    }
+    const userId = await openCredentialId(identity, rpId, id);
+    if (userId) {
+      return { id, userId };
+    }
+  }
+  return undefined;
 }
+
+/**
+ * The passkey a sign-in with no credential list answers with: the account
+ * this wallet last used here, else the per-rpId passkey.
+ */
+export const discoverableCredential = async (
+  identity: Uint8Array,
+  rpId: string,
+  userId?: Uint8Array,
+): Promise<Credential> =>
+  userId?.length
+    ? { id: await accountCredentialId(identity, rpId, userId), userId }
+    : { id: derivePasskeyCredentialId(identity, rpId) };
 
 /** CBOR-encode a P-256 COSE public key */
 function coseP256Key(publicKey: Uint8Array): Uint8Array {
@@ -134,22 +228,22 @@ function attestedCredentialData(credentialId: Uint8Array, publicKey: Uint8Array)
 }
 
 /**
- * create a WebAuthn credential.
+ * create a WebAuthn credential: per account when the relying party names a
+ * user, else the per-rpId passkey.
  */
-export function createCredential(
-  mnemonic: string,
+export async function createCredential(
+  identity: Uint8Array,
   rpId: string,
+  userId: Uint8Array,
   /** the person entered their password for this request (sets UV) */
   verified: boolean,
-  identity = DEFAULT_IDENTITY,
-): {
+): Promise<{
   credentialId: Uint8Array;
   authenticatorData: Uint8Array;
   publicKey: Uint8Array;
-} {
-  const { publicKey: pubHex } = derivePasskeyForSite(mnemonic, identity, rpId);
-  const publicKey = hexToBytes(pubHex);
-  const credentialId = derivePasskeyCredentialId(mnemonic, identity, rpId);
+}> {
+  const { id: credentialId, userId: user } = await discoverableCredential(identity, rpId, userId);
+  const publicKey = passkeyPublicKey(identity, rpId, user);
   const rpIdHash = sha256(enc.encode(rpId));
   const acd = attestedCredentialData(credentialId, publicKey);
   const ad = authData(rpIdHash, FLAGS.UP | (verified ? FLAGS.UV : 0) | FLAGS.AT, 0, acd);
@@ -160,42 +254,37 @@ export function createCredential(
 /**
  * sign a WebAuthn assertion: ES256 over authData || clientDataHash, i.e.
  * ECDSA P-256 over SHA-256(authData || clientDataHash), as the spec has it.
- * The caller checks clientDataHash against the challenge and the sender's
- * origin first.
+ * Called only after the person's tap, which is the presence UP claims. The
+ * caller checks clientDataHash against the challenge and the sender's origin
+ * first.
  */
 export function signAssertion(
-  mnemonic: string,
+  identity: Uint8Array,
   rpId: string,
+  credential: Credential,
   clientDataHash: Uint8Array,
   prfSalts: { first: string; second?: string } | undefined,
   /** the person entered their password for this request (sets UV) */
   verified: boolean,
-  identity = DEFAULT_IDENTITY,
 ): {
   authenticatorData: Uint8Array;
   signature: Uint8Array;
   prfResults?: { first: Uint8Array; second?: Uint8Array };
 } {
   const rpIdHash = sha256(enc.encode(rpId));
-  const flags = FLAGS.UP | (verified ? FLAGS.UV : 0);
-  const ad = authData(rpIdHash, flags, 0);
+  const ad = authData(rpIdHash, FLAGS.UP | (verified ? FLAGS.UV : 0), 0);
 
   // message to sign: authData || clientDataHash (signPasskey hashes it)
   const message = new Uint8Array(ad.length + clientDataHash.length);
   message.set(ad, 0);
   message.set(clientDataHash, ad.length);
 
-  const { signature } = signPasskey(mnemonic, rpId, message, identity);
+  const user = credential.userId;
+  const signature = signPasskey(identity, rpId, message, user);
+  const prfResults = prfSalts && {
+    first: derivePrf(identity, rpId, prfSalts.first, user),
+    second: prfSalts.second ? derivePrf(identity, rpId, prfSalts.second, user) : undefined,
+  };
 
-  // PRF outputs
-  let prfResults: { first: Uint8Array; second?: Uint8Array } | undefined;
-  if (prfSalts) {
-    const first = derivePrf(mnemonic, identity, rpId, prfSalts.first);
-    const second = prfSalts.second
-      ? derivePrf(mnemonic, identity, rpId, prfSalts.second)
-      : undefined;
-    prfResults = { first, second };
-  }
-
-  return { authenticatorData: ad, signature: hexToBytes(bytesToHex(signature)), prfResults };
+  return { authenticatorData: ad, signature, prfResults };
 }

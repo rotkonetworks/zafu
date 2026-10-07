@@ -14,11 +14,16 @@ export interface PasskeyGrant {
   rpId: string;
   /** the wallet that consented: its zid, else its vault id */
   owner: string;
+  /**
+   * the account's user id (hex), for a passkey made per account: what lets a
+   * sign-in with no credential list (usernameless) find it again
+   */
+  userId?: string;
   at: number;
 }
 
 const same = (a: PasskeyGrant, b: Omit<PasskeyGrant, 'at'>) =>
-  a.origin === b.origin && a.rpId === b.rpId && a.owner === b.owner;
+  a.origin === b.origin && a.rpId === b.rpId && a.owner === b.owner && a.userId === b.userId;
 
 /** Throws when the wallet is locked, so an edit never writes back an empty list. */
 export const readPasskeyGrants = async (): Promise<PasskeyGrant[]> =>
@@ -37,17 +42,17 @@ export const recordPasskeyGrant = async (g: Omit<PasskeyGrant, 'at'>): Promise<v
 };
 
 /**
- * The wallets that may answer a sign-in from `origin` for `rpId`, newest
+ * The grants that may answer a sign-in from `origin` for `rpId`, newest
  * first. `undefined` means the origin has no recorded grant at all: a passkey
  * made before grants were recorded, which the caller may still offer once.
  */
-export const ownersFor = (
+export const grantsFor = (
   grants: readonly PasskeyGrant[],
   origin: string,
   rpId: string,
-): string[] | undefined => {
+): PasskeyGrant[] | undefined => {
   const here = grants.filter(g => g.origin === origin);
-  return here.length ? here.filter(g => g.rpId === rpId).map(g => g.owner) : undefined;
+  return here.length ? here.filter(g => g.rpId === rpId) : undefined;
 };
 
 /** restore from a backup: merge keeps what is here and adds the rest; replace takes the backup */
@@ -61,6 +66,7 @@ export const restorePasskeyGrants = async (
       typeof g.origin === 'string' &&
       typeof g.rpId === 'string' &&
       typeof g.owner === 'string' &&
+      (g.userId === undefined || typeof g.userId === 'string') &&
       typeof g.at === 'number',
   );
   const here = mode === 'merge' ? await readPasskeyGrants() : [];

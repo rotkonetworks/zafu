@@ -332,6 +332,8 @@ type LOCAL = {
     origin: string;
     rpId: string;
     owner: string;
+    /** the account's user id (hex), for a passkey made per account */
+    userId?: string;
     at: number;
   }[];
 

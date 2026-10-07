@@ -51,7 +51,8 @@ import { isValidExternalSender, type ValidExternalSender } from '../../senders/e
 import { isValidInternalSender } from '../../senders/internal';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { rpIdMatchesOrigin } from '../../state/public-suffix';
-import { ownersFor, readPasskeyGrants, recordPasskeyGrant } from '../../state/passkey-grants';
+import { grantsFor, readPasskeyGrants, recordPasskeyGrant } from '../../state/passkey-grants';
+import type { Credential } from '../../state/webauthn';
 import type { KeyInfo } from '../../state/keyring/types';
 import { clientDataJson } from '../../content-scripts/passkey-wire';
 import { sha256 } from '@noble/hashes/sha256';
@@ -539,12 +540,30 @@ async function askPasskeyTap(
   return r?.approved ? 'approved' : r?.cancelled ? 'cancelled' : 'denied';
 }
 
-/** after a tap: the site may ask again, for this rpId, answered by this wallet */
-async function grantPasskey(origin: string, rpId: string, wallet: KeyInfo): Promise<void> {
+/** after a tap: the site may ask again, for this rpId and account, answered by this wallet */
+async function grantPasskey(
+  origin: string,
+  rpId: string,
+  wallet: KeyInfo,
+  userId: Uint8Array | undefined,
+): Promise<void> {
   const { pocketOwner } = await import('../../state/pockets');
   await grantCapability(origin, 'passkey');
-  await recordPasskeyGrant({ origin, rpId, owner: pocketOwner(wallet) });
+  await recordPasskeyGrant({
+    origin,
+    rpId,
+    owner: pocketOwner(wallet),
+    ...(userId?.length ? { userId: bytesToHex(userId) } : {}),
+  });
 }
+
+/** the hex credential ids a relying party listed */
+const credentialIds = (list: unknown): string[] =>
+  Array.isArray(list)
+    ? list
+        .map((c: { id?: unknown } | null) => c?.id)
+        .filter((id): id is string => typeof id === 'string')
+    : [];
 
 export const externalMessageListener = (
   req: unknown,
@@ -1274,7 +1293,15 @@ export const externalMessageListener = (
     // grant only means "this site may ask"; it never signs on its own.
 
     case 'zafu_passkey_create': {
-      const { rpId } = msg as { rpId: string };
+      const {
+        rpId,
+        userId: userIdHex,
+        excludeCredentials,
+      } = msg as {
+        rpId: string;
+        userId?: string;
+        excludeCredentials?: unknown;
+      };
       // origin is the browser-attested sender, never a caller-supplied field
       if (!passkeySender(sender)) {
         sendResponse({ success: false, error: 'not connected' });
@@ -1298,16 +1325,31 @@ export const externalMessageListener = (
             sendResponse({ success: false, error: 'no wallet selected', code: 'no-wallet' });
             return;
           }
+          // WebAuthn caps a user handle at 64 bytes
+          const userId = hexToBytes(userIdHex ?? '');
+          if (userId.length > 64) {
+            sendResponse({ success: false, error: 'user id too long' });
+            return;
+          }
           const outcome = await askPasskeyTap('create', origin, rpId, wallet.id);
           if (outcome !== 'approved') {
             sendResponse(declined(outcome));
             return;
           }
           try {
-            const { createCredential } = await import('../../state/webauthn');
-            const mnemonic = await useStore.getState().keyRing.getMnemonic(wallet.id);
-            const result = createCredential(mnemonic, rpId, ready.verified);
-            await grantPasskey(origin, rpId, wallet);
+            const { createCredential, findCredential } = await import('../../state/webauthn');
+            const { identityKey } = await import('../../state/identity');
+            const identity = identityKey(await useStore.getState().keyRing.getMnemonic(wallet.id));
+            // the site already holds one of this wallet's passkeys: answered
+            // only after the tap, so a page cannot probe for it silently
+            if (await findCredential(identity, rpId, credentialIds(excludeCredentials))) {
+              identity.fill(0);
+              sendResponse({ success: false, error: 'exists', code: 'exists' });
+              return;
+            }
+            const result = await createCredential(identity, rpId, userId, ready.verified);
+            identity.fill(0);
+            await grantPasskey(origin, rpId, wallet, userId);
             sendResponse({
               success: true,
               credentialId: bytesToHex(result.credentialId),
@@ -1349,7 +1391,7 @@ export const externalMessageListener = (
         challenge?: string;
         clientDataHash: string;
         prfSalts?: { first: string; second?: string };
-        allowCredentials?: { id?: unknown }[];
+        allowCredentials?: unknown;
       };
       // origin is the browser-attested sender, never a caller-supplied field -
       // otherwise any site could forge assertions for an arbitrary rpId
@@ -1395,32 +1437,45 @@ export const externalMessageListener = (
             sendResponse(ready.refusal);
             return;
           }
-          const { signAssertion, pickCredentialId } = await import('../../state/webauthn');
+          const { signAssertion, findCredential, discoverableCredential } =
+            await import('../../state/webauthn');
+          const { identityKey } = await import('../../state/identity');
           const { useStore } = await import('../../state');
           const { pocketOwner } = await import('../../state/pockets');
           const keyRing = useStore.getState().keyRing;
           // only a wallet that made a passkey for this rpId from this origin
-          // may answer; an origin with no recorded grant made its passkey
-          // before grants were recorded, with the wallet selected then
-          const owners = ownersFor(await readPasskeyGrants(), origin, rpId);
-          const wallets = (
-            owners === undefined
-              ? [keyRing.selectedKeyInfo]
-              : owners.map(o => keyRing.keyInfos.find(k => pocketOwner(k) === o))
-          ).filter((k): k is KeyInfo => k?.type === 'mnemonic');
+          // may answer, newest first; an origin with no recorded grant made
+          // its passkey before grants were recorded, with the wallet selected
+          // then and one passkey per rpId
+          const here = grantsFor(await readPasskeyGrants(), origin, rpId);
+          const asked = (here ?? [{ owner: undefined, userId: undefined }]).map(g => ({
+            wallet:
+              g.owner === undefined
+                ? keyRing.selectedKeyInfo
+                : keyRing.keyInfos.find(k => pocketOwner(k) === g.owner),
+            userId: g.userId,
+          }));
           // the relying party lists the credentials it knows; when none is
           // this wallet's the request belongs to another authenticator
-          const allowIds = Array.isArray(allowCredentials)
-            ? allowCredentials.map(c => c?.id).filter((id): id is string => typeof id === 'string')
-            : undefined;
-          let found: { wallet: KeyInfo; mnemonic: string; credentialId: Uint8Array } | undefined;
-          for (const wallet of wallets) {
-            const mnemonic = await keyRing.getMnemonic(wallet.id);
-            const credentialId = pickCredentialId(mnemonic, rpId, allowIds);
-            if (credentialId) {
-              found = { wallet, mnemonic, credentialId };
+          const allowIds = credentialIds(allowCredentials);
+          let found: { wallet: KeyInfo; identity: Uint8Array; credential: Credential } | undefined;
+          for (const { wallet, userId } of asked) {
+            if (wallet?.type !== 'mnemonic') {
+              continue;
+            }
+            const identity = identityKey(await keyRing.getMnemonic(wallet.id));
+            const credential = allowIds.length
+              ? await findCredential(identity, rpId, allowIds)
+              : await discoverableCredential(
+                  identity,
+                  rpId,
+                  userId ? hexToBytes(userId) : undefined,
+                );
+            if (credential) {
+              found = { wallet, identity, credential };
               break;
             }
+            identity.fill(0);
           }
           if (!found) {
             sendResponse({ success: false, error: 'no zafu credential for this request' });
@@ -1428,21 +1483,26 @@ export const externalMessageListener = (
           }
           const outcome = await askPasskeyTap('get', origin, rpId, found.wallet.id);
           if (outcome !== 'approved') {
+            found.identity.fill(0);
             sendResponse(declined(outcome));
             return;
           }
           // the tap is the user presence the assertion claims
+          const { credential } = found;
           const result = signAssertion(
-            found.mnemonic,
+            found.identity,
             rpId,
+            credential,
             hexToBytes(clientDataHashHex),
             prfSalts,
             ready.verified,
           );
-          await grantPasskey(origin, rpId, found.wallet);
+          found.identity.fill(0);
+          await grantPasskey(origin, rpId, found.wallet, credential.userId);
           sendResponse({
             success: true,
-            credentialId: bytesToHex(found.credentialId),
+            credentialId: bytesToHex(credential.id),
+            userHandle: credential.userId ? bytesToHex(credential.userId) : undefined,
             authenticatorData: bytesToHex(result.authenticatorData),
             signature: bytesToHex(result.signature),
             prfResults: result.prfResults

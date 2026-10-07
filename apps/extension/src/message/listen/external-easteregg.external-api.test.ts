@@ -32,22 +32,49 @@ const getReq = (rpId: string) => ({
 // state/webauthn; stub it so the tests can assert mint-vs-no-mint without
 // touching real seed derivation. spread the real state module and override only
 // useStore so the rest of the (statically imported) graph is untouched.
-const { createCredentialMock, signAssertionMock, grants } = vi.hoisted(() => ({
-  grants: [] as { origin: string; rpId: string; owner: string; at: number }[],
-  createCredentialMock: vi.fn(() => ({
-    credentialId: Uint8Array.from([0xab, 0xcd]),
-    authenticatorData: Uint8Array.from([0x01, 0x02]),
-    publicKey: Uint8Array.from([0x04, 0xaa]),
-  })),
-  signAssertionMock: vi.fn(() => ({
-    authenticatorData: Uint8Array.from([0x11]),
-    signature: Uint8Array.from([0x22]),
-  })),
-}));
+// the identity node stands in as the phrase's bytes; read when called, since
+// the worker zeroizes it right after
+const { createCredentialMock, signAssertionMock, grants, signedWith, existing } = vi.hoisted(() => {
+  const signedWith: string[] = [];
+  return {
+    grants: [] as { origin: string; rpId: string; owner: string; userId?: string; at: number }[],
+    signedWith,
+    /** credential ids (hex) that this wallet "holds" for findCredential */
+    existing: new Map<string, string | undefined>(),
+    createCredentialMock: vi.fn(async (identity: Uint8Array) => {
+      signedWith.push(new TextDecoder().decode(identity));
+      return {
+        credentialId: Uint8Array.from([0xab, 0xcd]),
+        authenticatorData: Uint8Array.from([0x01, 0x02]),
+        publicKey: Uint8Array.from([0x04, 0xaa]),
+      };
+    }),
+    signAssertionMock: vi.fn((identity: Uint8Array) => {
+      signedWith.push(new TextDecoder().decode(identity));
+      return {
+        authenticatorData: Uint8Array.from([0x11]),
+        signature: Uint8Array.from([0x22]),
+      };
+    }),
+  };
+});
 vi.mock('../../state/webauthn', () => ({
   createCredential: createCredentialMock,
   signAssertion: signAssertionMock,
-  pickCredentialId: () => Uint8Array.from([0xab, 0xcd]),
+  findCredential: async (_: Uint8Array, __: string, ids: string[]) => {
+    const id = ids.find(i => existing.has(i));
+    if (id === undefined) return undefined;
+    const user = existing.get(id);
+    return { id: hexToBytes(id), ...(user ? { userId: hexToBytes(user) } : {}) };
+  },
+  discoverableCredential: async (_: Uint8Array, __: string, userId?: Uint8Array) => ({
+    id: Uint8Array.from([0xab, 0xcd]),
+    ...(userId ? { userId } : {}),
+  }),
+}));
+vi.mock('../../state/identity', async importOriginal => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  identityKey: (mnemonic: string) => new TextEncoder().encode(mnemonic),
 }));
 // the sealed grant list needs a real password key; keep it in memory here
 vi.mock('../../state/passkey-grants', async importOriginal => ({
@@ -291,6 +318,8 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
     createCredentialMock.mockClear();
     signAssertionMock.mockClear();
     grants.length = 0;
+    signedWith.length = 0;
+    existing.clear();
     await sessionExtStorage.set('passwordKey', 'unlocked-key');
     (globalThis.chrome.windows as unknown as { getLastFocused: unknown }).getLastFocused =
       async () => ({ id: 7 });
@@ -398,7 +427,13 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
       prfEnabled: true,
     });
     // unlocked before the request: a tap is presence, not UV
-    expect(createCredentialMock).toHaveBeenCalledWith('test mnemonic', 'passkey-c.example', false);
+    expect(createCredentialMock).toHaveBeenCalledWith(
+      expect.anything(),
+      'passkey-c.example',
+      new Uint8Array(0),
+      false,
+    );
+    expect(signedWith).toEqual(['test mnemonic']);
     const perms = await getOriginPermissions(origin);
     expect(perms?.granted).toContain('passkey');
     // a passkey must not hand the site the wider connect view
@@ -419,13 +454,15 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
     await tap(origin, { approved: true });
     expect(await pending).toMatchObject({ success: true, credentialId: 'abcd', signature: '22' });
     expect(signAssertionMock).toHaveBeenCalledWith(
-      'test mnemonic',
+      expect.anything(),
       'passkey-f.example',
+      { id: Uint8Array.from([0xab, 0xcd]) },
       hexToBytes(getReq('passkey-f.example').clientDataHash),
       undefined,
       // the wallet was already unlocked: no password, so no UV
       false,
     );
+    expect(signedWith).toEqual(['test mnemonic']);
   });
 
   it('(f1) not now, or a closed window, signs nothing', async () => {
@@ -475,13 +512,7 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
     await tap(origin, { approved: true });
 
     expect(await pending).toMatchObject({ success: true });
-    expect(signAssertionMock).toHaveBeenCalledWith(
-      'mnemonic of key-2',
-      'passkey-f7.example',
-      expect.anything(),
-      undefined,
-      false,
-    );
+    expect(signedWith).toEqual(['mnemonic of key-2']);
   });
 
   it('(f3) a passkey made before grants were recorded (connect only) asks once, then is recorded', async () => {
@@ -524,6 +555,67 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
     expect(res).toEqual({ success: false, error: 'not connected' });
     expect(popupUrlFor(origin)).toBeUndefined();
     expect(signAssertionMock).not.toHaveBeenCalled();
+  });
+
+  it('(m2) create mints per account and remembers the account for usernameless sign-in', async () => {
+    const origin = 'https://passkey-m2.example';
+    const pending = call(
+      { ...create('passkey-m2.example'), userId: 'a1a1', excludeCredentials: [] },
+      validSender(origin),
+    );
+    await tap(origin, { approved: true });
+
+    expect(await pending).toMatchObject({ success: true });
+    expect(createCredentialMock).toHaveBeenCalledWith(
+      expect.anything(),
+      'passkey-m2.example',
+      Uint8Array.from([0xa1, 0xa1]),
+      false,
+    );
+    expect(grants).toMatchObject([{ origin, rpId: 'passkey-m2.example', userId: 'a1a1' }]);
+
+    // no credential list: the remembered account answers, with its userHandle
+    const signIn = call(getReq('passkey-m2.example'), validSender(origin));
+    await vi.waitFor(() => expect(popupUrlsFor(origin)).toHaveLength(2));
+    await tap(origin, { approved: true });
+    expect(await signIn).toMatchObject({ success: true, credentialId: 'abcd', userHandle: 'a1a1' });
+  });
+
+  it('(m2) a listed id recovers its account; a foreign one falls back', async () => {
+    const origin = 'https://passkey-m2b.example';
+    await grantCapability(origin, 'passkey');
+    existing.set('0301', 'b0b0');
+
+    const signIn = call(
+      { ...getReq('passkey-m2b.example'), allowCredentials: [{ id: '0301', type: 'public-key' }] },
+      validSender(origin),
+    );
+    await tap(origin, { approved: true });
+    expect(await signIn).toMatchObject({ success: true, credentialId: '0301', userHandle: 'b0b0' });
+
+    const foreign = await call(
+      { ...getReq('passkey-m2b.example'), allowCredentials: [{ id: 'ffff', type: 'public-key' }] },
+      validSender(origin),
+    );
+    expect(foreign).toMatchObject({ success: false });
+    expect(popupUrlsFor(origin)).toHaveLength(1);
+  });
+
+  it('(m2) excludeCredentials: a site that already holds this passkey gets exists, after the tap', async () => {
+    const origin = 'https://passkey-m2c.example';
+    existing.set('0302', 'c0c0');
+    const pending = call(
+      {
+        ...create('passkey-m2c.example'),
+        userId: 'c0c0',
+        excludeCredentials: [{ id: '0302', type: 'public-key' }],
+      },
+      validSender(origin),
+    );
+    await tap(origin, { approved: true });
+
+    expect(await pending).toMatchObject({ success: false, code: 'exists' });
+    expect(createCredentialMock).not.toHaveBeenCalled();
   });
 
   it('the externally_connectable door, which has no click to check, gets no passkeys', async () => {

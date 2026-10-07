@@ -64,7 +64,9 @@ export const passkeyMessage = (
   }
   if (kind === 'create') {
     const { rpName, userName, userDisplayName, userId, prfRequested } = p;
+    const excludeCredentials = allowOf(p['excludeCredentials']);
     if (
+      excludeCredentials === null ||
       !hex(p['challenge']) ||
       !str(rpName ?? '') ||
       !str(userName ?? '') ||
@@ -82,6 +84,7 @@ export const passkeyMessage = (
       userDisplayName,
       userId,
       prfRequested,
+      excludeCredentials,
       // last, so nothing above can name another handler
       type: PASSKEY_MESSAGE_TYPES.create,
     };

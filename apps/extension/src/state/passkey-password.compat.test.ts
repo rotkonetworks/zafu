@@ -5,8 +5,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { bytesToHex } from '@noble/hashes/utils';
-import { DEFAULT_IDENTITY, derivePassword, derivePrf } from './identity';
-import { createCredential, legacyCredentialId } from './webauthn';
+import { DEFAULT_IDENTITY, derivePassword, derivePrf, identityKey } from './identity';
+import { createCredential, findCredential, legacyCredentialId } from './webauthn';
 
 const MN =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -64,11 +64,16 @@ describe('derivations made before the hardening stay byte for byte', () => {
     expect(derivePassword(m, DEFAULT_IDENTITY, site, user, len, idx, scheme)).toBe(want);
   });
 
-  it.each(PASSKEYS)('passkey %#', (m, rp, pub, credId, prf, legacy) => {
-    const c = createCredential(m, rp, false);
+  it.each(PASSKEYS)('passkey %#', async (m, rp, pub, credId, prf, legacy) => {
+    // a passkey made before v3 has no user id: it keeps its per-rpId key
+    const identity = identityKey(m);
+    const c = await createCredential(identity, rp, new Uint8Array(0), false);
     expect(bytesToHex(c.publicKey)).toBe(pub);
     expect(bytesToHex(c.credentialId)).toBe(credId);
-    expect(bytesToHex(derivePrf(m, DEFAULT_IDENTITY, rp, 'aabb'))).toBe(prf);
+    expect(bytesToHex(derivePrf(identity, rp, 'aabb'))).toBe(prf);
     expect(bytesToHex(legacyCredentialId(rp))).toBe(legacy);
+    // and a site that stored either id gets that passkey back
+    expect(await findCredential(identity, rp, [credId])).toEqual({ id: c.credentialId });
+    expect(await findCredential(identity, rp, [legacy])).toEqual({ id: legacyCredentialId(rp) });
   });
 });

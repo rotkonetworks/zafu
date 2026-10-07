@@ -34,6 +34,7 @@ interface WalletResponse {
   authenticatorData?: string;
   publicKey?: string;
   signature?: string;
+  userHandle?: string;
   prfEnabled?: boolean;
   prfResults?: { first?: string; second?: string };
 }
@@ -160,9 +161,18 @@ navigator.credentials.create = async function (
       userDisplayName: pk.user?.displayName ?? '',
       userId: pk.user?.id ? bufToHex(pk.user.id) : '',
       prfRequested: !!(pk.extensions as Record<string, unknown>)?.['prf'],
+      excludeCredentials: pk.excludeCredentials?.map(c => ({ id: bufToHex(c.id), type: c.type })),
     });
 
     if (!response?.success) {
+      if (response?.code === 'exists') {
+        // the spec's answer when the site already holds this authenticator's
+        // passkey: never a second credential from the platform
+        throw new DOMException(
+          'zafu already holds a passkey for this account',
+          'InvalidStateError',
+        );
+      }
       if (isWalletFailure(response)) {
         throw new WalletFailedError(response?.error);
       }
@@ -207,6 +217,9 @@ navigator.credentials.create = async function (
       },
     } as unknown as PublicKeyCredential;
   } catch (e) {
+    if (e instanceof DOMException && e.name === 'InvalidStateError') {
+      throw e;
+    }
     if (e instanceof WalletFailedError) {
       // keep the wallet's own diagnostic off the page - a dapp has no business
       // reading service-worker internals ("keyring locked", "failed to decrypt
@@ -281,7 +294,7 @@ navigator.credentials.get = async function (
         clientDataJSON: clientDataJSON.buffer,
         authenticatorData: authenticatorData,
         signature: signature,
-        userHandle: null,
+        userHandle: response.userHandle ? hexToBuf(response.userHandle) : null,
       },
       authenticatorAttachment: 'platform',
       getClientExtensionResults: () => {

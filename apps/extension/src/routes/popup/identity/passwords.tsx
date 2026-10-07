@@ -176,7 +176,7 @@ export const PasswordsPage = () => {
           )}
           <span className='text-[11px] text-fg-dim'>
             {passkeys.length
-              ? 'restored from your recovery phrase · nothing to back up'
+              ? 'restored from your recovery phrase and your backup'
               : 'no passkeys yet · a site asks when it wants one'}
           </span>
         </section>
