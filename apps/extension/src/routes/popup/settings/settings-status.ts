@@ -2,7 +2,9 @@ import { UserChoice } from '@repo/storage-chrome/records';
 import type { AllSlices } from '../../../state';
 import type { KeyInfo } from '../../../state/keyring';
 import type { ZcashWalletJson } from '../../../state/wallets';
-import { NETWORKS } from '../../../config/networks';
+import { hasFeature, NETWORKS } from '../../../config/networks';
+import { selectZcashBackend } from '../../../state/networks';
+import { ZCASH_BACKENDS } from '../../../state/keyring/zcash-backend';
 
 /** live one-line status for each settings category, from local state only - nothing here asks a server */
 
@@ -34,20 +36,30 @@ export const selectConnectedSiteCount = (s: AllSlices) =>
     r => r.choice === UserChoice.Approved,
   ).length;
 
-/** the defaults are the private ones; any leak switched on reads as "your settings" */
-export const selectPrivateDefaults = (s: AllSlices) => {
+/**
+ * the privacy settings switched to let more be seen, each counted only where
+ * its network is on. zcash.me's live mode lives outside the store and is
+ * added by the caller. contact discovery on is the chosen default, so it
+ * does not count.
+ */
+export const selectOpenings = (s: AllSlices): number => {
   const p = s.privacy.settings;
-  return !(
-    p.enableTransparentBalances ||
-    p.enableTransactionHistory ||
-    p.transparentBackgroundSync ||
-    p.enablePriceFetching ||
-    p.enableExplorerLinks
-  );
+  const on = (f: 'zcash' | 'cosmos') => s.keyRing.enabledNetworks.some(n => hasFeature(n, f));
+  const zcash = s.networks.networks.zcash;
+  // memo decoys and instant pending exist only on a zidecar node
+  const wire = on('zcash') && !!ZCASH_BACKENDS[selectZcashBackend(s)].extras;
+  return [
+    p.enableTransactionHistory,
+    p.enableExplorerLinks,
+    on('cosmos') && p.enableTransparentBalances,
+    on('zcash') && p.zcashTransparentEachBlock,
+    wire && zcash.memoSyncStrategy === 'fast',
+    wire && zcash.mempoolWatch === 'on',
+  ].filter(Boolean).length;
 };
 
-export const privacyStatus = (privateDefaults: boolean, sites: number) =>
-  `${privateDefaults ? 'private defaults' : 'your settings'} · ${
+export const privacyStatus = (openings: number, sites: number) =>
+  `${openings ? `${plural(openings, 'setting')} less private` : 'private defaults'} · ${
     sites ? `${plural(sites, 'site')} connected` : 'no sites connected'
   }`;
 

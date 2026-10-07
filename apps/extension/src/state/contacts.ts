@@ -30,6 +30,7 @@ import { exportEgressChoices, importEgressChoices, type EgressChoices } from '..
 import {
   exportSettings,
   importPrefs,
+  importBirthdays,
   importNodePools,
   restoredPrivacy,
   type SettingsBackup,
@@ -336,6 +337,8 @@ export const createContactsSlice =
       const c = get().contacts.contacts;
       return Array.isArray(c) ? c : [];
     };
+    const backupWallets = () =>
+      get().keyRing.keyInfos.map(k => ({ id: k.id, owner: pocketOwner(k) }));
     // use local.set (encrypted proxy) - NOT writeEncrypted directly,
     // since local is already the encrypted proxy and writeEncrypted would double-encrypt
     const persist = () => {
@@ -700,7 +703,7 @@ export const createContactsSlice =
         const egress = await exportEgressChoices();
 
         const pockets = get().pockets.book;
-        const settings = await exportSettings(get().privacy.settings);
+        const settings = await exportSettings(get().privacy.settings, backupWallets());
         // wallet labels, keyed by zid (survives a reinstall) falling back to
         // the vault id, same scheme pockets use for their owner key.
         const walletNames = Object.fromEntries(
@@ -892,6 +895,7 @@ export const createContactsSlice =
         }
         await importPrefs(parsed.settings?.prefs);
         await importNodePools(parsed.settings?.nodePools);
+        await importBirthdays(parsed.settings?.birthdays, backupWallets());
 
         return {
           contacts: newContacts.length,

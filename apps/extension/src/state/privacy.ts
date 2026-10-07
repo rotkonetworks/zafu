@@ -83,13 +83,6 @@ export interface PrivacySettings {
   keepPenumbraSyncing: boolean;
 
   /**
-   * transparent (cosmos) networks may be synced by the background alarm.
-   * false (default). Penumbra's own switch is `keepPenumbraSyncing`; the two
-   * were one flag before storage v5.
-   */
-  transparentBackgroundSync: boolean;
-
-  /**
    * check the transparent deposit addresses on their own each time the
    * penumbra balance opens, once the user agreed to the first check.
    * false (default): only a tap on a transparent line asks.
@@ -103,15 +96,6 @@ export interface PrivacySettings {
    * together, one request each.
    */
   zcashTransparentEachBlock: boolean;
-
-  /**
-   * enable price fetching (affects all networks)
-   * when false (default): no fiat price queries
-   * when true: fetches prices from external apis
-   *
-   * note: price apis don't know your addresses, relatively safe
-   */
-  enablePriceFetching: boolean;
 
   /**
    * show "open in block explorer" links on transactions.
@@ -190,12 +174,6 @@ export interface PrivacySlice {
 
   /** update a single setting */
   setSetting: <K extends keyof PrivacySettings>(key: K, value: PrivacySettings[K]) => Promise<void>;
-
-  /** reset all settings to privacy-maximizing defaults */
-  resetToDefaults: () => Promise<void>;
-
-  /** check if any leaky features are enabled */
-  hasLeakyFeatures: () => boolean;
 }
 
 // ============================================================================
@@ -207,10 +185,8 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enableTransactionHistory: false,
   historyAsked: false,
   keepPenumbraSyncing: false,
-  transparentBackgroundSync: false,
   autoCheckTransparent: false,
   zcashTransparentEachBlock: false,
-  enablePriceFetching: false,
   enableExplorerLinks: false,
   openZcashLinks: true,
   openZafuLinks: true,
@@ -235,27 +211,6 @@ export const createPrivacySlice =
 
       const settings = get().privacy.settings;
       await local.set('privacySettings' as keyof LocalStorageState, settings as never);
-    },
-
-    resetToDefaults: async () => {
-      set(state => {
-        state.privacy.settings = { ...DEFAULT_PRIVACY_SETTINGS };
-      });
-
-      await local.set(
-        'privacySettings' as keyof LocalStorageState,
-        DEFAULT_PRIVACY_SETTINGS as never,
-      );
-    },
-
-    hasLeakyFeatures: () => {
-      const { settings } = get().privacy;
-      return (
-        settings.enableTransparentBalances ||
-        settings.enableTransactionHistory ||
-        settings.transparentBackgroundSync ||
-        settings.zcashTransparentEachBlock
-      );
     },
   });
 
@@ -282,35 +237,20 @@ export const canFetchBalancesForNetwork = (state: AllSlices, network: NetworkTyp
   return state.privacy.settings.enableTransparentBalances;
 };
 
-export const canFetchTransparentBalances = (state: AllSlices) =>
-  state.privacy.settings.enableTransparentBalances;
-
-export const canFetchHistory = (state: AllSlices) =>
-  state.privacy.settings.enableTransactionHistory;
-
 /**
- * Pure form of the per-network background-sync rule - usable outside React
- * (e.g. the service worker, which only has chrome.storage, not the Zustand
- * store). Shielded and light-client networks are always allowed; transparent
- * networks honor the `transparentBackgroundSync` flag.
+ * The per-network background-sync rule, for the service worker (it has only
+ * chrome.storage, not the store). Shielded and light-client networks sync;
+ * transparent ones never do, since each sync names their addresses.
  */
-export const networkAllowsBackgroundSync = (
-  network: string,
-  transparentBackgroundSync: boolean,
-): boolean => {
+export const networkAllowsBackgroundSync = (network: string): boolean => {
   if ((SHIELDED_NETWORKS as readonly string[]).includes(network)) {
     return true; // trial decryption, rpc never learns addresses
   }
   if ((LIGHT_CLIENT_NETWORKS as readonly string[]).includes(network)) {
     return true; // p2p network, no central rpc to leak to
   }
-  return transparentBackgroundSync;
+  return false;
 };
-
-export const canBackgroundSyncForNetwork = (state: AllSlices, network: NetworkType) =>
-  networkAllowsBackgroundSync(network, state.privacy.settings.transparentBackgroundSync);
-
-export const canFetchPrices = (state: AllSlices) => state.privacy.settings.enablePriceFetching;
 
 /**
  * zid identity surface enabled? legacy stored state (no field) treats

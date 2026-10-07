@@ -1,6 +1,10 @@
 import { useStore } from '../../../state';
 import { selectEnabledNetworks } from '../../../state/keyring';
-import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import {
+  HARDWARE_WALLET_ENABLED,
+  IS_BETA_BUILD,
+  LEDGER_TRANSPARENT_ENABLED,
+} from '../../../config/feature-flags';
 import { openPageInTab } from '../../../utils/popup-detection';
 import { PagePath } from '../../page/paths';
 import { usePopupNav } from '../../../utils/navigate';
@@ -57,12 +61,15 @@ export const SettingsDevicesHome = () => {
               onPress={() => void openPageInTab(PagePath.CONNECT_LEDGER, true)}
             />
           )}
-          <Row
-            type='screen'
-            label='device update'
-            preload={PopupPath.SETTINGS_OTA}
-            onPress={() => navigate(PopupPath.SETTINGS_OTA)}
-          />
+          {/* its update server is still a local dev stub, so only the beta build offers it */}
+          {IS_BETA_BUILD && (
+            <Row
+              type='screen'
+              label='device update'
+              preload={PopupPath.SETTINGS_OTA}
+              onPress={() => navigate(PopupPath.SETTINGS_OTA)}
+            />
+          )}
         </Section>
         <Section title='app'>
           <ThemeRow {...explainProps('appearance.theme')} />

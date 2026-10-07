@@ -1,6 +1,5 @@
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { SEED_PHRASE_ORIGIN } from './password/types';
-import { DEFAULT_FRONTEND } from './constants';
 
 // Onboarding contacts nothing: a penumbra wallet resolves its node from the
 // shipped default (resolvePenumbraEndpoint) and its numeraires from the
@@ -8,8 +7,6 @@ import { DEFAULT_FRONTEND } from './constants';
 // here hit raw.githubusercontent.com, which the egress policy refuses, and
 // failed every onboarding that had penumbra on.
 export const setOnboardingValuesInStorage = async (seedPhraseOrigin: SEED_PHRASE_ORIGIN) => {
-  await localExtStorage.set('frontendUrl', DEFAULT_FRONTEND);
-
   if (seedPhraseOrigin === SEED_PHRASE_ORIGIN.IMPORTED) {
     // Importing means the user typed the phrase from an existing backup -
     // they demonstrably possess it. Suppress the home backup nudge.

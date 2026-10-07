@@ -79,7 +79,6 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     const activeWalletIndex = await localExtStorage.get('activeWalletIndex');
     const grpcEndpoint = await localExtStorage.get('grpcEndpoint');
     const penumbraSync = await localExtStorage.get('penumbraSync');
-    const frontendUrl = await localExtStorage.get('frontendUrl');
     const numeraires = await localExtStorage.get('numeraires');
     const zignerCameraEnabled = await localExtStorage.get('zignerCameraEnabled');
     const privacySettings = await localExtStorage.get(
@@ -97,7 +96,6 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         state.wallets.activeIndex = activeWalletIndex ?? 0;
         state.network.grpcEndpoint = grpcEndpoint;
         state.network.penumbraSync = penumbraSync;
-        state.defaultFrontend.url = frontendUrl;
         state.numeraires.selectedNumeraires = numeraires;
         state.zigner.cameraEnabled = zignerCameraEnabled ?? false;
         if (privacySettings) {
@@ -272,15 +270,6 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         set(
           produce((state: AllSlices) => {
             state.network.grpcEndpoint = stored ?? state.network.grpcEndpoint;
-          }),
-        );
-      }
-
-      if (changes.frontendUrl) {
-        const stored = changes.frontendUrl.newValue;
-        set(
-          produce((state: AllSlices) => {
-            state.defaultFrontend.url = stored ?? state.defaultFrontend.url;
           }),
         );
       }

@@ -31,6 +31,13 @@ import {
 
 export type ZcashMeMode = 'off' | 'directory' | 'live';
 
+/** each mode's name, the same on the settings row and its screen */
+export const ZCASHME_MODE_LABEL: Record<ZcashMeMode, string> = {
+  off: 'off',
+  directory: 'local directory',
+  live: 'live lookup',
+};
+
 export interface ZcashMeConfig {
   mode: ZcashMeMode;
   /** https url serving a `DirectorySnapshot` json; empty = none */
@@ -134,6 +141,15 @@ export const useZcashMe = (): { config: ZcashMeConfig | null; index: DirectoryIn
     void ensureZcashMeLoaded();
   }, [config?.mode]);
   return { config, index: config && config.mode !== 'off' ? index : null };
+};
+
+/** the mode alone, for a row or a status line: reads the config, never the directory */
+export const useZcashMeMode = (): ZcashMeMode | null => {
+  const config = useSyncExternalStore(onConfigChange, getZcashMeConfig);
+  useEffect(() => {
+    void readZcashMeConfig();
+  }, []);
+  return config?.mode ?? null;
 };
 
 const noProfile = (): ZcashMeProfile | undefined => undefined;

@@ -14,14 +14,13 @@ type Load = () => Promise<ComponentType>;
 export const popupScreens = {
   // settings (layout + screens)
   settings: () => import('./settings').then(m => m.Settings),
+  subscribe: () => import('./settings/subscribe').then(m => m.SubscribePage),
   settingsMain: () => import('./settings/settings').then(m => m.Settings),
   settingsClearCache: () =>
     import('./settings/settings-clear-cache').then(m => m.SettingsClearCache),
   settingsConnectedSites: () => import('./identity/sites').then(m => m.SitesPage),
   settingsPassphrase: () =>
     import('./settings/settings-passphrase').then(m => m.SettingsPassphrase),
-  settingsDefaultFrontend: () =>
-    import('./settings/settings-default-frontend').then(m => m.SettingsDefaultFrontend),
   settingsWalletsNetworks: () =>
     import('./settings/settings-wallets-networks').then(m => m.SettingsWalletsNetworks),
   settingsPrivacy: () => import('./settings/settings-privacy').then(m => m.SettingsPrivacy),
@@ -41,7 +40,6 @@ export const popupScreens = {
   settingsOta: () => import('./settings/settings-ota').then(m => m.SettingsOta),
   settingsVoting: () => import('./settings/settings-voting').then(m => m.SettingsVoting),
   settingsZcashMe: () => import('./settings/settings-zcashme').then(m => m.SettingsZcashMe),
-  subscribe: () => import('./settings/subscribe').then(m => m.SubscribePage),
 
   // four category homes (settings IA rework), each the one screen for its
   // category, + the screens their rows need

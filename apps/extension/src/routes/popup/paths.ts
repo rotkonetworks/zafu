@@ -29,6 +29,9 @@ export enum PopupPath {
   TOOLS = '/tools',
   SETTINGS = '/settings',
 
+  // Subscribe
+  SUBSCRIBE = '/settings/subscribe',
+
   // Identity: "you" (Identity.dc.html) and what hangs off it
   IDENTITY = '/identity',
   IDENTITY_SITES = '/identity/sites',
@@ -105,11 +108,7 @@ export enum PopupPath {
   SETTINGS_MULTISIG = '/settings/multisig',
   SETTINGS_MULTISIG_BACKUP = '/settings/multisig-backup',
 
-  // Subscribe
-  SUBSCRIBE = '/settings/subscribe',
-
   // Settings sub-pages
-  SETTINGS_DEFAULT_FRONTEND = '/settings/default-frontend',
   SETTINGS_CONNECTED_SITES = '/settings/connected-sites',
   SETTINGS_CLEAR_CACHE = '/settings/clear-cache',
   SETTINGS_RECOVERY_PASSPHRASE = '/settings/recovery-passphrase',
