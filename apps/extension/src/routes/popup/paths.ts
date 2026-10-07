@@ -29,6 +29,9 @@ export enum PopupPath {
   TOOLS = '/tools',
   SETTINGS = '/settings',
 
+  // Subscribe
+  SUBSCRIBE = '/settings/subscribe',
+
   // Identity: "you" (Identity.dc.html) and what hangs off it
   IDENTITY = '/identity',
   IDENTITY_SITES = '/identity/sites',

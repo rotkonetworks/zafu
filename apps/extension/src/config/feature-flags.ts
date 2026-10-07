@@ -149,3 +149,10 @@ export const IS_BETA_BUILD = HARDWARE_WALLET_ENABLED;
  * device test is what hardens this from experimental to production-trusted.
  */
 export const LEDGER_TRANSPARENT_ENABLED = true;
+
+/**
+ * Pro subscription upsell surface. Hidden for now - the subscribe route and
+ * pro-gating logic stay in the codebase, just unreachable from the settings
+ * list and the drawer "upgrade" button. Flip back to `true` to re-enable.
+ */
+export const SUBSCRIBE_ENABLED = false;

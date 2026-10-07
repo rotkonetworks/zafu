@@ -14,6 +14,7 @@ type Load = () => Promise<ComponentType>;
 export const popupScreens = {
   // settings (layout + screens)
   settings: () => import('./settings').then(m => m.Settings),
+  subscribe: () => import('./settings/subscribe').then(m => m.SubscribePage),
   settingsMain: () => import('./settings/settings').then(m => m.Settings),
   settingsClearCache: () =>
     import('./settings/settings-clear-cache').then(m => m.SettingsClearCache),

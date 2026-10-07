@@ -12,6 +12,10 @@ export const settingsRoutes: RouteObject[] = [
     ...screen('settingsMain'),
   },
   {
+    path: PopupPath.SUBSCRIBE,
+    ...screen('subscribe'),
+  },
+  {
     path: PopupPath.SETTINGS_CLEAR_CACHE,
     ...screen('settingsClearCache'),
   },
