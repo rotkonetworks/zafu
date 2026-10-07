@@ -68,8 +68,10 @@ export const CAPABILITY_META: Record<
     risk: 'critical',
   },
   encrypt: {
-    label: 'Encryption',
-    description: 'Encrypt and decrypt messages using your ZID identity key',
+    // not "encryption on/off": zafu's own messages are always encrypted. This
+    // lets a site seal and open its messages with a key zafu keeps for it.
+    label: 'Site encryption keys',
+    description: 'Let a site seal and open its messages with a key zafu keeps for that site',
     risk: 'medium',
   },
 };
