@@ -12,6 +12,7 @@ import { isValidInternalSender } from '../senders/internal';
 import { hostedWorkerCount, initNetworkWorkerHost } from '../state/keyring/network-worker';
 import type { ParallelProveRequest } from '@penumbrafi/types/internal-msg/offscreen';
 import type { ParallelWorkerFailure, ParallelWorkerRequest } from '../wasm-build-parallel';
+import { nymTunnelRunning, startNymTunnel } from '../net/nym-host';
 
 // this document is the one long-lived home for the zcash/penumbra sync
 // workers - every popup, settings screen and approval window is a client
@@ -53,7 +54,7 @@ chrome.runtime.onMessage.addListener((req: unknown, sender, respond) => {
   }
   if (typeof req === 'object' && req !== null && 'type' in req && req.type === 'OFFSCREEN_STATUS') {
     respond({
-      inFlight: jobsInFlight + (hostedWorkerCount() > 0 ? 1 : 0),
+      inFlight: jobsInFlight + (hostedWorkerCount() > 0 || nymTunnelRunning() ? 1 : 0),
       idleMs: Date.now() - lastJobAt,
     });
     return false;
@@ -250,6 +251,10 @@ const getOrCreateZcashWorker = (): Worker => {
 
 /** run one prove request from this document's zcash worker on the build worker */
 function proveInBuildWorker(raw: unknown): Promise<unknown> {
+  // a proof means a broadcast is coming: start nym now, so the 10-60 s of
+  // proving hide most of its cold start
+  console.info('[nym] proof started');
+  void startNymTunnel();
   return trackJob(() => proveZcash(raw));
 }
 

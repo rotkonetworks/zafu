@@ -14,7 +14,7 @@ import url from 'node:url';
 const require = createRequire(import.meta.url);
 import { type WebExtRunner, cmd as WebExtCmd } from 'web-ext';
 import { execSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import webpack from 'webpack';
 import WatchExternalFilesPlugin from 'webpack-watch-external-files-plugin';
 import unocssPostcss from '@unocss/postcss';
@@ -91,6 +91,45 @@ const assertZafuWasmMemoryPages = (rootDir: string): void => {
       }
     }
   }
+};
+
+/**
+ * smolmix (the nym client, Apache-2.0) ships only inside @nymproject/mix-tunnel,
+ * as a base64 worker that carries its wasm as base64 again (16.6 MB of js).
+ * Unpack both here, at build time: the worker source becomes the body of the
+ * `workers/nym-worker` entry, behind the egress guard like every other realm,
+ * and the wasm a real file it streams. Nothing generated is committed.
+ * Follow-up: build smolmix from a pinned nym commit instead of the npm blob.
+ */
+const extractNymWorker = (outDir: string): { worker: string; wasm: string } => {
+  const bundlePath = require.resolve('@nymproject/mix-tunnel');
+  const worker = path.join(outDir, 'nym-worker.js');
+  const wasm = path.join(outDir, 'smolmix.wasm');
+  // pnpm's store dates every file 1985, so the stamp is the resolved path (it names the version)
+  const stamp = path.join(outDir, 'source');
+  if (existsSync(worker) && existsSync(stamp) && readFileSync(stamp, 'utf8') === bundlePath) {
+    return { worker, wasm };
+  }
+  const literal = (text: string, marker: string): [start: number, end: number] => {
+    const start = text.indexOf(marker);
+    if (start < 0) {
+      throw new Error(`nym worker extraction: "${marker}" not found; mix-tunnel's format changed`);
+    }
+    return [start + marker.length, text.indexOf("'", start + marker.length)];
+  };
+  const bundle = readFileSync(bundlePath, 'utf8');
+  const [ws, we] = literal(bundle, "createBase64WorkerFactory('");
+  const decoded = Buffer.from(bundle.slice(ws, we), 'base64').toString('utf8');
+  // the loader drops the decoded source's first line the same way
+  const source = decoded.slice(decoded.indexOf('\n', 10) + 1);
+  const [as, ae] = literal(source, "_loadWasmModule(0, null, '");
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(wasm, Buffer.from(source.slice(as, ae), 'base64'));
+  // the glue's own file mode: compileStreaming(fetch(path)), no base64
+  const glue = `${source.slice(0, as - "null, '".length)}'/smolmix.wasm', '${source.slice(ae)}`;
+  writeFileSync(worker, glue);
+  writeFileSync(stamp, bundlePath);
+  return { worker, wasm };
 };
 
 export default ({
@@ -263,6 +302,7 @@ export default ({
   ];
 
   const workersDir = path.join(srcDir, 'workers');
+  const nym = extractNymWorker(path.join(__dirname, 'node_modules/.cache/zafu-nym'));
 
   // Browser config for DOM-based entries (pages, popups, offscreen, injected scripts)
   const browserConfig: webpack.Configuration = {
@@ -288,6 +328,8 @@ export default ({
       'workers/zcash-worker': path.join(workersDir, 'zcash-worker.ts'),
       // UR fountain decode worker — off-threads ur_decode_frames from the popup
       'workers/ur-decode-worker': path.join(workersDir, 'ur-decode-worker.ts'),
+      // the nym tunnel, hosted by the offscreen document
+      'workers/nym-worker': path.join(workersDir, 'nym-worker.ts'),
     },
     output: {
       path: distDir,
@@ -307,6 +349,7 @@ export default ({
             'links',
             'workers/zcash-worker',
             'workers/ur-decode-worker',
+            'workers/nym-worker',
           ];
           return chunk.name ? !filesNotToChunk.includes(chunk.name) : false;
         },
@@ -365,6 +408,7 @@ export default ({
         // protobufjs ships an `inquire()` helper that uses eval() to
         // optionally load long.js. MV3 CSP blocks all eval. Stub it.
         '@protobufjs/inquire': path.resolve(__dirname, 'src/stubs/protobufjs-inquire.cjs'),
+        'nym-smolmix-worker': nym.worker,
       },
       fallback: {
         crypto: false, // use webcrypto instead of node crypto
@@ -390,6 +434,7 @@ export default ({
             from: path.join(wasmPackage, 'wasm'),
             to: 'wasm',
           },
+          { from: nym.wasm, to: 'smolmix.wasm' },
           // zcash-wasm: public/zafu-wasm/ serves BOTH the scanning worker and
           // the offscreen prover (one parallel build, one path) — copied via
           // the 'public' pattern above
