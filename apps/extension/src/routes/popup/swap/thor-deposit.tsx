@@ -90,7 +90,7 @@ export const ThorOutTracker = ({
           {first || run?.moved ? `signature ${first ? 1 : 2} of 2 · ${shown.label}` : shown.label}
         </Strip>
         <Main className='items-center gap-3 px-5 pt-4'>
-          <ZignerRoundView round={round} size={240} pinned />
+          <ZignerRoundView round={round} pinned />
         </Main>
         <Footer>
           <ZignerRoundAction round={round} />

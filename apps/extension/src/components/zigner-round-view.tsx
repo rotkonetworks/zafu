@@ -29,17 +29,10 @@ export const ZignerRoundAction = ({ round }: { round: ZignerRound }) =>
 
 /**
  * The request, or the camera. `pinned` leaves the action out for the caller's
- * footer, so the qr and its action fit a popup with the tab bar.
+ * footer; the qr takes the room left (never under 240 px), so the screen
+ * never scrolls.
  */
-export const ZignerRoundView = ({
-  round,
-  size = 300,
-  pinned,
-}: {
-  round: ZignerRound;
-  size?: number;
-  pinned?: boolean;
-}) => {
+export const ZignerRoundView = ({ round, pinned }: { round: ZignerRound; pinned?: boolean }) => {
   const { shown, scanning } = useStore(round.store);
   // a camera that would not start, said under the qr it goes back to
   const [cameraError, setCameraError] = useState<string>();
@@ -48,7 +41,7 @@ export const ZignerRoundView = ({
   }
   const urType = urTypeOf(shown.urFrames);
   return (
-    <div className='flex flex-col items-center gap-4'>
+    <div className='flex min-h-0 w-full grow flex-col items-center gap-4'>
       {scanning ? (
         <>
           <AnimatedQrScanner
@@ -71,7 +64,7 @@ export const ZignerRoundView = ({
             urFrames={shown.urFrames}
             urSource={shown.cborData ? { bytes: shown.cborData, urType } : undefined}
             totalBytes={shown.cborBytes}
-            size={size}
+            size={300}
             frameInterval={200}
           />
           <span className='text-[13px] text-fg-high'>scan this with zigner, approve there</span>
