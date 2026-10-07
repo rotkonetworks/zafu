@@ -133,7 +133,7 @@ export const ThorOutTracker = ({
           ) : (
             <>
               <Button variant='secondary' onClick={onDrop} className='w-[110px]'>
-                back
+                not now
               </Button>
               <Button onClick={onAgain} className='grow'>
                 get a new price
