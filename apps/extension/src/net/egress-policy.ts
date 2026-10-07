@@ -126,24 +126,13 @@ export interface DestinationSpec {
  * The requests that name you or your transaction, by destination. They go
  * over nym while it is on; everything else to the same host stays direct
  * (sync cannot stream through nym, and every wallet downloads the same blocks).
+ * Only zidecar's grpc-web paths: nym's http client speaks http/1.1, and a
+ * lightwalletd answers native grpc only over http/2, so a lightwalletd node
+ * stays direct rather than unreachable (measured: 404 through nym).
  */
 const NYM_CLASSES: { cls: RequestClass; destination: string; paths: string[] }[] = [
-  {
-    cls: 'broadcast',
-    destination: 'zcash',
-    paths: [
-      '/zidecar.v1.Zidecar/SendTransaction',
-      '/cash.z.wallet.sdk.rpc.CompactTxStreamer/SendTransaction',
-    ],
-  },
-  {
-    cls: 'own-tx',
-    destination: 'zcash',
-    paths: [
-      '/zidecar.v1.Zidecar/GetTransaction',
-      '/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetTransaction',
-    ],
-  },
+  { cls: 'broadcast', destination: 'zcash', paths: ['/zidecar.v1.Zidecar/SendTransaction'] },
+  { cls: 'own-tx', destination: 'zcash', paths: ['/zidecar.v1.Zidecar/GetTransaction'] },
 ];
 
 /** nym's exits only open these ports: a node on any other stays direct rather than unreachable */
