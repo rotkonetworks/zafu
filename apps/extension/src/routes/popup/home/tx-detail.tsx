@@ -36,7 +36,7 @@ const asset = (tx: ParsedTransaction) => ({
 /** what one transaction looks like per network */
 const LOOK: Partial<Record<NetworkType, TxLook>> = {
   zcash: {
-    explorer: id => `https://cipherscan.app/tx/${id}`,
+    explorer: id => `https://zecblock.com/tx/${id}`,
     hero: tx => ({ amount: fmtZecHero(Number(tx.amount ?? 0)), unit: 'zec' }),
     proved: 'proved on this computer',
     contact: 'zcash',
