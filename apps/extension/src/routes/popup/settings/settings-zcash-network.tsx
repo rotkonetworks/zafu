@@ -20,6 +20,7 @@ import { NodeSheet } from './node-sheet';
 import { Row } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { cn } from '@repo/ui/lib/utils';
 import { useExplain, type ExplainId } from './settings-explain';
 import { OptionsRow } from './sheet-options';
@@ -30,7 +31,6 @@ import { BUNDLED_SERVICE_CONFIG } from '../../../services/voting/bundled-config'
 import { usePopupNav } from '../../../utils/navigate';
 
 type Explain = (id: ExplainId) => { onExplain?: (label: string) => void };
-import { Clipped } from '@repo/ui/components/ui/clipped';
 
 /** the wallet's stored birthday (an external system, read once per wallet) */
 const useBirthday = (vaultId: string | undefined) => {
