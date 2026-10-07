@@ -19,6 +19,7 @@ import {
   SUPPORTED_COMPACT_RESPONSE_VERSION,
 } from '../state/keyring/compact-signing';
 import {
+  parsePreludeBatchResponse,
   parsePreludeSinglePcztResponse,
   unwrapCborSinglePczt,
 } from '../routes/popup/send/zcash-send-cbor-helpers';
@@ -74,3 +75,7 @@ export const signedPcztOfAnswer = async (
   const [merged] = await mergeContributions([asked.pcztHex], messages, asked.merge);
   return merged!;
 };
+
+/** the signed PCZTs (hex, request order) in the device's answer to a full batch of `count` */
+export const signedPcztsOfBatchAnswer = (scanned: Uint8Array, count: number): string[] =>
+  parsePreludeBatchResponse(unwrapCborSinglePczt(scanned), count).map(toHex);

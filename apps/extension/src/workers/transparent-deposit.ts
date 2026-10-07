@@ -110,8 +110,8 @@ export const opReturnScript = (dataHex: string): string => {
   return `6a${n > 75 ? '4c' : ''}${n.toString(16).padStart(2, '0')}${dataHex}`;
 };
 
-/** the outputs of a transparent-only V5 transaction */
-export const transparentOutputs = (txHex: string): { value: bigint; script: string }[] => {
+/** the inputs (display-order txid, vout) and outputs of a transparent-only V5 transaction */
+const transparentParts = (txHex: string) => {
   const b = fromHex(txHex);
   let at = 20; // version, group id, branch id, lock time, expiry
   const size = () => {
@@ -127,12 +127,16 @@ export const transparentOutputs = (txHex: string): { value: bigint; script: stri
     at += len;
     return n;
   };
-  for (let i = size(); i > 0; i--) {
+  const inputs = Array.from({ length: size() }, () => {
+    const txid = hex(b.slice(at, at + 32).reverse());
+    const vout =
+      (b[at + 32]! | (b[at + 33]! << 8) | (b[at + 34]! << 16) | (b[at + 35]! << 24)) >>> 0;
     at += 36;
     const script = size();
     at += script + 4;
-  }
-  return Array.from({ length: size() }, () => {
+    return { txid, vout };
+  });
+  const outputs = Array.from({ length: size() }, () => {
     let value = 0n;
     for (let i = 7; i >= 0; i--) {
       value = (value << 8n) | BigInt(b[at + i]!);
@@ -143,7 +147,16 @@ export const transparentOutputs = (txHex: string): { value: bigint; script: stri
     at += len;
     return { value, script };
   });
+  return { inputs, outputs };
 };
+
+/** the outputs of a transparent-only V5 transaction */
+export const transparentOutputs = (txHex: string): { value: bigint; script: string }[] =>
+  transparentParts(txHex).outputs;
+
+/** the outpoints a transparent-only V5 transaction spends */
+export const transparentInputs = (txHex: string): { txid: string; vout: number }[] =>
+  transparentParts(txHex).inputs;
 
 /** throws unless the signed bytes pay [to, OP_RETURN(memo), change to own] and nothing else */
 export const checkDeposit = (
@@ -347,24 +360,92 @@ export const signedDepositTx = (
 /**
  * Cold, the second half: the device's signed PCZT finished against the PCZT
  * zafu built and showed it, then held to the review - the vault, the amount,
- * the memo, and change back to the swap's own address - before broadcast.
+ * the memo, and change back to the swap's own address. Nothing is broadcast:
+ * the bytes may be held until the coin they spend is mined.
  */
-export const finishColdDeposit = async (
+export const coldDepositTx = async (
   wasm: FinalizeWasm,
-  chain: DepositChain,
-  req: DepositRequest & { reviewedFee: string },
+  req: DepositRequest,
   signed: { unsignedPcztHex: string; signedPczt: Uint8Array; pubkeyHex: string },
-): Promise<{ txid: string; fee: string; txHex: string }> => {
+): Promise<string> => {
+  const txHex = signedDepositTx(wasm, signed.unsignedPcztHex, signed.signedPczt, signed.pubkeyHex);
+  checkDeposit(txHex, await wantOf(req));
+  return txHex;
+};
+
+/** what a deposit's signed bytes must pay, from the request alone */
+export const wantOf = async (req: DepositRequest): Promise<DepositWant> => {
   await checkVault(req.to, req.mainnet);
   const [toScript, ownScript] = await Promise.all([
     transparentAddressToScriptHex(req.to, req.mainnet),
     transparentAddressToScriptHex(req.tAddress, req.mainnet),
   ]);
-  const txHex = signedDepositTx(wasm, signed.unsignedPcztHex, signed.signedPczt, signed.pubkeyHex);
-  return finishDeposit(
-    chain,
-    txHex,
-    { toScript, amountZat: BigInt(req.amountZat), memoHex: memoHex(req.memo), ownScript },
-    req.reviewedFee,
-  );
+  return { toScript, amountZat: BigInt(req.amountZat), memoHex: memoHex(req.memo), ownScript };
 };
+
+/** frost_inspect_pczt_outputs, as much of it as a move's coin needs */
+export interface MoveInspected {
+  computed_sighash_hex: string;
+  transparent_input_count: number;
+  transparent_outputs: { value_zat: number; script_pubkey_hex: string; address: string | null }[];
+  expiry_height: number;
+}
+
+export interface MoveCoin {
+  /** display order, as the deposit's utxo list takes it */
+  txid: string;
+  vout: number;
+  value: string;
+  script: string;
+  /** the last height the move can be mined at */
+  expiry: number;
+}
+
+export const MOVE_MISMATCH =
+  "the move zafu built doesn't fund this swap as reviewed · nothing was sent";
+
+/**
+ * The coin a move leaves on the swap's address, read from the move's
+ * unsigned PCZT (frost_inspect_pczt_outputs) before anything is signed. A
+ * move has no transparent inputs, so its shielded sighash is its txid (ZIP
+ * 244; zcli tests/move_txid_before_signing.rs), and the deposit can spend
+ * (txid, vout) at once. Refuses any move that does not pay the address
+ * exactly `shortZat` in one output.
+ */
+export const moveCoin = (m: MoveInspected, tAddress: string, shortZat: string): MoveCoin => {
+  const vout = m.transparent_outputs.findIndex(o => o.address === tAddress);
+  const out = m.transparent_outputs[vout];
+  if (
+    m.transparent_input_count !== 0 ||
+    m.transparent_outputs.length !== 1 ||
+    !out ||
+    String(out.value_zat) !== shortZat ||
+    !/^[0-9a-f]{64}$/.test(m.computed_sighash_hex)
+  ) {
+    throw new Error(MOVE_MISMATCH);
+  }
+  return {
+    txid: m.computed_sighash_hex.match(/../g)!.reverse().join(''),
+    vout,
+    value: shortZat,
+    script: out.script_pubkey_hex,
+    expiry: m.expiry_height,
+  };
+};
+
+/** the chain as it will be once `coin` is mined: the deposit can be built and signed now */
+export const withCoin = (chain: DepositChain, coin?: MoveCoin): DepositChain =>
+  coin
+    ? {
+        ...chain,
+        utxos: async address => [
+          ...(await chain.utxos(address)),
+          {
+            txid: fromHex(coin.txid),
+            outputIndex: coin.vout,
+            valueZat: BigInt(coin.value),
+            script: fromHex(coin.script),
+          },
+        ],
+      }
+    : chain;

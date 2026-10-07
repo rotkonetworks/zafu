@@ -1654,7 +1654,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                           : undefined
                       }
                       totalBytes={pcztUnsignedRef.current?.cborBytes}
-                      // as large as the surface allows, so a phone camera locks on
+                      // as large as the room left allows (min 240), so a phone camera locks on
                       size={300}
                       frameInterval={200}
                     />

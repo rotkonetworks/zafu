@@ -7,7 +7,8 @@
  * the run; its record (open-swaps) is where the next popup picks it up.
  *
  * How a leg is signed is the `Legs` given: a hot wallet's, under the swap's
- * one unlock, or zigner's, one qr round each.
+ * one unlock, or zigner's: one qr round for both, the deposit held (sealed,
+ * on the record) until the move is mined.
  */
 
 import { createStore } from 'zustand/vanilla';
@@ -19,6 +20,7 @@ import {
 } from '../../shared/tx-signing-security';
 import type { DepositPlan, DepositRequest } from '../../workers/transparent-deposit';
 import { isZignerDeclined } from '../../signing/zigner-round';
+import { heldNext, type Held } from '../../signing/move-and-deposit';
 import type { OpenSwap } from './open-swaps';
 import { toUnits } from './provider';
 
@@ -59,8 +61,11 @@ export const nextLeg = (
 /** where a run stands, for the tracker */
 export type Run =
   | { at: 'moving' | 'funding' | 'paying'; moved: boolean }
-  /** waiting for the person: an unlock that ran out, or a zigner round they stepped back from */
-  | { at: 'held'; moved: boolean }
+  /**
+   * waiting for the person: an unlock that ran out, a zigner round they
+   * stepped back from, or (`late`) a move that never reached a block
+   */
+  | { at: 'held'; moved: boolean; late?: true }
   | { at: 'sent'; moved: true; txid: string }
   | { at: 'expired'; moved: boolean }
   | { at: 'stopped'; moved: boolean; error: string };
@@ -84,14 +89,21 @@ export const depositOf = (s: OpenSwap): DepositRequest & { reviewedFee: string }
 export interface Legs {
   /** may the next leg sign now; false holds the run for the person */
   ready: () => Promise<boolean>;
-  /** shielded -> the swap's address, `shortZat`; resolves the txid */
-  move: (shortZat: string) => Promise<string>;
-  /** the reviewed deposit; resolves the txid */
-  pay: (req: DepositRequest & { reviewedFee: string }) => Promise<string>;
+  /**
+   * shielded -> the swap's address, `shortZat`; resolves the txid. A wallet
+   * that signs the deposit with it (zigner, one round) hands it to `hold`
+   * before the move is broadcast.
+   */
+  move: (shortZat: string, hold: (held: Held | undefined) => Promise<void>) => Promise<string>;
+  /** the reviewed deposit, or the one held since the move; resolves the txid */
+  pay: (req: DepositRequest & { reviewedFee: string }, held?: Held) => Promise<string>;
 }
 
 export interface RunDeps {
   plan: (req: DepositRequest) => Promise<DepositPlan>;
+  /** the height a txid was mined at, if it was */
+  mined: (txid: string) => Promise<number | undefined>;
+  tip: () => Promise<number>;
   save: (patch: Partial<OpenSwap>) => Promise<unknown>;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
@@ -123,16 +135,39 @@ export const runThorOut = async (
   reviewed?: DepositPlan,
 ): Promise<void> => {
   const req = depositOf(swap);
+  let held = swap.held;
   let moved = !!swap.moveTxid;
   let plan = reviewed;
   let leg: keyof typeof SHORT = 'move';
+  const hold = async (h: Held | undefined) => {
+    held = h;
+    moved = !!h;
+    await deps.save({ held: h, moveTxid: h?.moveTxid });
+  };
   try {
     for (;;) {
       plan ??= await deps.plan(req);
       if (stopped.has(swap.id)) {
         return;
       }
-      const next = nextLeg(plan, moved, swap.expiresAt, deps.now());
+      const now = deps.now();
+      let next = nextLeg(plan, moved, swap.expiresAt, now);
+      // a deposit signed with the move goes once the move is mined, and only then
+      if (held && next !== 'expired') {
+        const h = heldNext(held, await deps.mined(held.moveTxid), await deps.tip());
+        if (h === 'lost') {
+          await hold(undefined);
+          report(swap.id, { at: 'held', moved: false, late: true });
+          return;
+        }
+        if (h === 'drop') {
+          held = undefined;
+          await deps.save({ held: undefined });
+          plan = undefined;
+          continue;
+        }
+        next = h === 'wait' ? 'wait' : swap.expiresAt && swap.expiresAt <= now ? 'expired' : 'pay';
+      }
       if (next === 'expired') {
         report(swap.id, { at: 'expired', moved });
         await closeSwapUnlock(swap.id);
@@ -144,14 +179,15 @@ export const runThorOut = async (
         plan = undefined;
         continue;
       }
-      if (!(await legs.ready())) {
+      // a held deposit was approved with the move: it sends without asking again
+      if (!held && !(await legs.ready())) {
         report(swap.id, { at: 'held', moved });
         return;
       }
       if (next === 'move') {
         leg = 'move';
         report(swap.id, { at: 'moving', moved });
-        const moveTxid = await legs.move(plan.short);
+        const moveTxid = await legs.move(plan.short, hold);
         moved = true;
         await deps.save({ moveTxid });
         report(swap.id, { at: 'funding', moved });
@@ -161,8 +197,8 @@ export const runThorOut = async (
       }
       leg = 'pay';
       report(swap.id, { at: 'paying', moved });
-      const txid = await legs.pay(req);
-      await deps.save({ stage: 'sent', depositTxid: txid });
+      const txid = await legs.pay(req, held);
+      await deps.save({ stage: 'sent', depositTxid: txid, held: undefined });
       report(swap.id, { at: 'sent', moved: true, txid });
       await closeSwapUnlock(swap.id);
       return;

@@ -330,7 +330,21 @@ export function AnimatedQrDisplay({
   }, [fullscreen]);
   // Square, minus a small margin so it never overflows either axis.
   const fullscreenSize = Math.max(240, Math.min(viewport.w, viewport.h) - 24);
-  const renderSize = fullscreen ? fullscreenSize : size;
+  // bare: the code takes the room its screen leaves it, never below what a
+  // phone still reads (240) nor above `size`, so the screen never scrolls
+  const slotRef = useRef<HTMLDivElement>(null);
+  const [slot, setSlot] = useState<number>();
+  useEffect(() => {
+    const el = slotRef.current;
+    if (!bare || !el) {
+      return;
+    }
+    const ro = new ResizeObserver(() => setSlot(Math.min(el.clientWidth, el.clientHeight)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [bare]);
+  const fitted = slot === undefined ? size : Math.min(size, Math.max(240, slot - 24));
+  const renderSize = fullscreen ? fullscreenSize : fitted;
 
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
@@ -421,13 +435,24 @@ export function AnimatedQrDisplay({
     </div>
   );
 
+  if (bare) {
+    return (
+      <div
+        ref={slotRef}
+        className='flex min-h-0 w-full grow items-center justify-center overflow-hidden'
+      >
+        {qrBlock}
+      </div>
+    );
+  }
+
   return (
     <div className='flex flex-col items-center gap-3'>
       {title && <h3 className='text-sm text-fg'>{title}</h3>}
 
       {qrBlock}
 
-      {!bare && !fullscreen && (
+      {!fullscreen && (
         <button
           type='button'
           onClick={() => setFullscreen(true)}
@@ -438,7 +463,7 @@ export function AnimatedQrDisplay({
         </button>
       )}
 
-      {!bare && frames.length > 1 && (
+      {frames.length > 1 && (
         <div className='flex items-center gap-2 text-label text-fg-muted'>
           <span className='i-ph-circle-notch size-3 animate-spin' />
           scanning - hold camera steady
@@ -446,7 +471,7 @@ export function AnimatedQrDisplay({
       )}
 
       {/* ── QR speed (ms/frame) ── */}
-      {!bare && showSpeedControl && frames.length > 1 && (
+      {showSpeedControl && frames.length > 1 && (
         <label className='flex w-full max-w-xs flex-col gap-1 text-label text-fg-muted'>
           <div className='flex items-center justify-between'>
             <span className='flex items-center gap-1'>
@@ -477,7 +502,7 @@ export function AnimatedQrDisplay({
       )}
 
       {/* ── QR density (payload bytes / frame) ── */}
-      {!bare && showDensityControl && frames.length > 1 && canReDensify && (
+      {showDensityControl && frames.length > 1 && canReDensify && (
         <div className='flex w-full max-w-xs flex-col gap-1 text-label text-fg-muted'>
           <div className='flex items-center justify-between'>
             <span className='flex items-center gap-1'>
@@ -519,12 +544,10 @@ export function AnimatedQrDisplay({
 
       {description && <p className='text-xs text-fg-muted text-center max-w-xs'>{description}</p>}
 
-      {!bare && (
-        <p className='text-label text-fg-muted'>
-          {byteCount.toLocaleString()} bytes · {frames.length} frame
-          {frames.length !== 1 ? 's' : ''}
-        </p>
-      )}
+      <p className='text-label text-fg-muted'>
+        {byteCount.toLocaleString()} bytes · {frames.length} frame
+        {frames.length !== 1 ? 's' : ''}
+      </p>
     </div>
   );
 }

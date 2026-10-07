@@ -211,6 +211,7 @@ describe('one writer at a time, in storage', () => {
       deposit,
       shieldBack: async () => 'shield-txid',
       seen: async () => ({ observed: false, finalised: false }),
+      mined: async () => 1,
       units: async () => 0n,
       utxoZat: async () => [],
       save: (f, after) => saveFlight(ID, f, after),

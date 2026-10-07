@@ -13,7 +13,8 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { SpendKeysCtor } from './hot-sign';
 import {
   buildDeposit,
-  finishColdDeposit,
+  coldDepositTx,
+  wantOf,
   finishDeposit,
   opReturnScript,
   signedDepositTx,
@@ -147,15 +148,17 @@ describe('a zigner-signed deposit', () => {
     const { signedPczt } = parsePreludeSinglePcztResponse(hexToBytes(ZIGNER_ANSWER));
     const tAddress = wasm.transparent_address_from_ufvk(ufvk, INDEX);
     const signed = { unsignedPcztHex: built.pcztHex, signedPczt, pubkeyHex: pubkey };
-    const sent = await finishColdDeposit(wasm, chain, { ...req, tAddress }, signed);
+    const reviewed = { ...req, tAddress };
+    const txHex = await coldDepositTx(wasm, reviewed, signed);
+    const sent = await finishDeposit(chain, txHex, await wantOf(reviewed), req.reviewedFee);
     expect(broadcast).toHaveBeenCalledWith(sent.txHex);
     // the same signed bytes against another review are never broadcast
     const elsewhere = wasm.transparent_address_from_ufvk(ufvk, INDEX + 1);
+    await expect(coldDepositTx(wasm, { ...req, tAddress: elsewhere }, signed)).rejects.toThrow(
+      /does not match/,
+    );
     await expect(
-      finishColdDeposit(wasm, chain, { ...req, tAddress: elsewhere }, signed),
-    ).rejects.toThrow(/does not match/);
-    await expect(
-      finishColdDeposit(wasm, chain, { ...req, tAddress, memo: 'another memo' }, signed),
+      coldDepositTx(wasm, { ...req, tAddress, memo: 'another memo' }, signed),
     ).rejects.toThrow(/does not match/);
     expect(broadcast).toHaveBeenCalledTimes(1);
   });

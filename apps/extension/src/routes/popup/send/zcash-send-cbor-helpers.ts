@@ -1,3 +1,4 @@
+import { sha256 } from '@noble/hashes/sha256';
 /**
  * Pure-byte helpers for the PCZT sign-request envelopes: keystone's
  * `ur:zcash-pczt` CBOR wrap and zigner's `ur:zigner-module` prelude, both
@@ -277,6 +278,61 @@ export function parsePreludeSinglePcztResponse(payload: Uint8Array): {
   return { signedPczt: payload.slice(pos, pos + len), digest };
 }
 
+/**
+ * zigner's batch request (tx_type 0x04, always full): `count:u8`, then per
+ * message `id_len:u8 || id || len:u32(LE) || pczt`. Each id is the message's
+ * index, so the answer is matched back by id, never by position alone.
+ */
+export function zignerBatchEnvelope(pczts: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(4 + pczts.reduce((n, p) => n + 6 + p.length, 0));
+  out.set([0x53, 0x04, 0x04, pczts.length]);
+  let at = 4;
+  pczts.forEach((p, i) => {
+    out.set([1, i], at);
+    new DataView(out.buffer).setUint32(at + 2, p.length, true);
+    out.set(p, at + 6);
+    at += 6 + p.length;
+  });
+  return out;
+}
+
+/**
+ * zigner's batch answer: `[0x53][0x04][0x04] || count:u8 || count * (id_len:u8
+ * || id || digest:32 || len:u32(LE) || signed_pczt)`. Returns the signed PCZTs
+ * in request order; refuses a count, id, digest or length that is not exactly
+ * what `count` messages would carry.
+ */
+export function parsePreludeBatchResponse(payload: Uint8Array, count: number): Uint8Array[] {
+  if (payload[0] !== 0x53 || payload[1] !== 0x04 || payload[2] !== 0x04 || payload[3] !== count) {
+    throw new Error(`zigner answered something other than the ${count} signatures asked for`);
+  }
+  const out: Uint8Array[] = [];
+  let at = 4;
+  for (let i = 0; i < count; i++) {
+    if (payload[at] !== 1 || payload[at + 1] !== i) {
+      throw new Error('zigner answered the batch out of order');
+    }
+    const digest = payload.slice(at + 2, at + 34);
+    at += 34;
+    const len =
+      payload[at]! +
+      payload[at + 1]! * 256 +
+      payload[at + 2]! * 65536 +
+      payload[at + 3]! * 16777216;
+    at += 4;
+    const signed = payload.slice(at, at + len);
+    at += len;
+    if (signed.length !== len || !sha256(signed).every((b, j) => b === digest[j])) {
+      throw new Error("zigner's answer did not arrive whole · please scan again");
+    }
+    out.push(signed);
+  }
+  if (at !== payload.length) {
+    throw new Error("zigner's answer did not arrive whole · please scan again");
+  }
+  return out;
+}
+
 /** the wasm the request side needs */
 export interface ZignerRequestWasm {
   redact_pczt_compact(pczt_hex: string): string;
@@ -318,6 +374,19 @@ export function zignerSignRequest(
     wasm.ur_encode_frames(sent, ZIGNER_PCZT_SIGN_UR_TYPE, fragmentSize),
   ) as string[];
   return { urFrames, envelope: sent, compact: !!envelope };
+}
+
+/** a full batch request for zigner (see `zignerBatchEnvelope`), as `ur:zigner-module` frames */
+export function zignerBatchRequest(
+  wasm: ZignerRequestWasm,
+  pcztHexes: string[],
+  fragmentSize: number,
+): { urFrames: string[]; envelope: Uint8Array } {
+  const envelope = zignerBatchEnvelope(pcztHexes.map(hexBytes));
+  const urFrames = JSON.parse(
+    wasm.ur_encode_frames(envelope, ZIGNER_PCZT_SIGN_UR_TYPE, fragmentSize),
+  ) as string[];
+  return { urFrames, envelope };
 }
 
 /**

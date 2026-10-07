@@ -1,3 +1,4 @@
+import { sha256 } from '@noble/hashes/sha256';
 // Which envelope each cold signer is asked in, and how its answer is read back.
 import { describe, expect, test, vi } from 'vitest';
 import {
@@ -129,10 +130,24 @@ describe('one zigner round', () => {
     await expect(second).rejects.toThrow(/not sent as compact/);
   });
 
-  test('as an ExternalSigner it delivers the signed PCZT for the send tail', async () => {
+  test('a batch round hands back each signed PCZT in request order, and only a whole batch', async () => {
+    const msg = (id: number, hex: string) => {
+      const body = bytes(hex);
+      const len = new Uint8Array(4);
+      new DataView(len.buffer).setUint32(0, body.length, true);
+      return [1, id, ...sha256(body), ...len, ...body];
+    };
+    const batch = cborWrapPczt(
+      Uint8Array.from([0x53, 0x04, 0x04, 2, ...msg(0, 'aa'), ...msg(1, 'bbcc')]),
+    );
     const round = createZignerRound(vi.fn());
-    const out = round.signer(req, 'move')({ pcztHex: PCZT, spendIndices: [], mainnet: true });
+    const both = round.signBatch(req, 2, 'sign once');
+    expect(round.store.getState().shown?.label).toBe('sign once');
+    await round.answer(batch);
+    expect(await both).toEqual(['aa', 'bbcc']);
+
+    const again = round.signBatch(req, 2, 'sign once');
     await round.answer(fullAnswer(PCZT));
-    expect(await out).toEqual({ kind: 'signedPczt', pcztHex: PCZT });
+    await expect(again).rejects.toThrow(/2 signatures/);
   });
 });

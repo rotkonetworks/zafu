@@ -2,8 +2,8 @@
  * A thorchain swap out of zec, in flight (board SwapU-Tracker): the legs the
  * person confirmed once, where they stand, and the way out. Nothing here asks
  * to go on; the run (state/swap/thor-out) carries on while zafu is open, and
- * the person can leave at any point. A zigner wallet's device rounds show
- * here, one per leg, each saying which signature it is.
+ * the person can leave at any point. A zigner wallet's one device round
+ * (the move and the swap together) shows here.
  */
 
 import { useEffect } from 'react';
@@ -15,27 +15,29 @@ import { Sensitive } from '../../../components/sensitive';
 import { ScreenHeader } from '../../../components/screen-header';
 import { ZignerRoundAction, ZignerRoundView } from '../../../components/zigner-round-view';
 import { runs, type Run } from '../../../state/swap/thor-out';
-import { MOVE_LABEL, swapRound } from '../../../state/swap/thor-legs';
+import { swapRound } from '../../../state/swap/thor-legs';
 import { fromUnits } from '../../../state/swap/provider';
 import { Footer, Main, Mark, Strip, shortAddress } from '../send/send-ui';
 
 const zec = (zat: bigint) => fromUnits(zat, 8);
 
 /** the legs in order, and which one a run is on */
-const LEGS = ["move zec to the swap's address", 'the network confirms it', 'send to the vault'];
+const LEGS = ["move zec to the swap's address", 'waiting for a block', 'send to the vault'];
 const ON: Record<'moving' | 'funding' | 'paying', number> = { moving: 0, funding: 1, paying: 2 };
 
 /** what a held-up swap says: the person's money is always placed for them */
 const heldLine = (run: Run, tAddress: string) =>
   run.at === 'stopped'
     ? run.error
-    : run.at === 'held' && run.moved
-      ? 'the move is in · the deposit waits for your signature'
-      : run.moved
-        ? `the zec sits on this swap's address, ${shortAddress(tAddress)} · nothing went to the vault`
-        : run.at === 'expired'
-          ? 'nothing was moved · a fresh price is a tap away'
-          : 'nothing was sent';
+    : run.at === 'held' && run.late
+      ? "the move didn't reach a block in time · nothing left your wallet"
+      : run.at === 'held' && run.moved
+        ? 'the move is in · the deposit waits for your signature'
+        : run.moved
+          ? `the zec sits on this swap's address, ${shortAddress(tAddress)} · nothing went to the vault`
+          : run.at === 'expired'
+            ? 'nothing was moved · a fresh price is a tap away'
+            : 'nothing was sent';
 
 export const ThorOutTracker = ({
   id,
@@ -80,17 +82,14 @@ export const ThorOutTracker = ({
     </Strip>
   );
 
-  // a leg waiting on the device: its qr, then the camera, the action pinned below
+  // the device's round (one, for the move and the swap): its qr, then the camera
   if (shown) {
-    const first = shown.label === MOVE_LABEL;
     return (
       <div className='flex h-full flex-col bg-canvas'>
         <ScreenHeader title='sign on zigner' onBack={() => round.cancel()} />
-        <Strip>
-          {first || run?.moved ? `signature ${first ? 1 : 2} of 2 · ${shown.label}` : shown.label}
-        </Strip>
+        <Strip>{shown.label}</Strip>
         <Main className='items-center gap-3 px-5 pt-4'>
-          <ZignerRoundView round={round} size={240} pinned />
+          <ZignerRoundView round={round} pinned />
         </Main>
         <Footer>
           <ZignerRoundAction round={round} />
@@ -163,9 +162,6 @@ export const ThorOutTracker = ({
               <span className={cn('grow text-[13px]', i > at ? 'text-fg-muted' : 'text-fg-high')}>
                 {name === LEGS[2] ? `send to the ${vault} vault` : name}
               </span>
-              {name === LEGS[1] && (
-                <span className='text-[11px] text-fg-muted'>a block or two</span>
-              )}
             </li>
           ))}
         </ol>

@@ -7,6 +7,7 @@ const worker = vi.hoisted(() => ({
   coldMove: vi.fn(),
   coldPay: vi.fn(),
   coldDone: vi.fn(),
+  inspect: vi.fn(),
 }));
 vi.mock('../keyring/network-worker', () => ({
   buildSendTxInWorker: worker.move,
@@ -15,6 +16,12 @@ vi.mock('../keyring/network-worker', () => ({
   buildSendTxPcztInWorker: worker.coldMove,
   buildColdDepositInWorker: worker.coldPay,
   completeColdDepositInWorker: worker.coldDone,
+  frostInspectPcztOutputsInWorker: worker.inspect,
+  extractSignedPcztTxInWorker: vi.fn(),
+  holdColdDepositInWorker: vi.fn(),
+  broadcastSignedTxInWorker: vi.fn(),
+  lookupTxInWorker: vi.fn(),
+  chainTipInWorker: vi.fn(),
   applySignatureContributionsInWorker: vi.fn(),
 }));
 vi.mock('../../workers/transparent-deposit', async orig => ({
@@ -32,6 +39,7 @@ import {
   openSwapUnlock,
   runThorOut,
   runs,
+  stopThorOut,
   takeSwapUnlock,
   type Legs,
   type RunDeps,
@@ -40,6 +48,7 @@ import { resumeSwapLegs, runSwapLegs, swapRound, type LegContext } from './thor-
 import type { OpenSwap } from './open-swaps';
 import { asksCustody } from './routes';
 import { ZignerDeclined } from '../../signing/zigner-round';
+import type { Held } from '../../signing/move-and-deposit';
 
 const NOW = 1_800_000_000_000;
 const T = { index: 7, address: 't1SwapOwnAddressxxxxxxxxxxxxxxxxx' };
@@ -78,6 +87,8 @@ const world = (...plans: string[]) => {
   const deps: RunDeps = {
     plan: vi.fn(() => Promise.resolve(plan(plans.length > 1 ? plans.shift()! : plans[0]!))),
     save: p => (saved.push(p), Promise.resolve()),
+    mined: () => Promise.resolve(undefined),
+    tip: () => Promise.resolve(100),
     sleep: ms => (slept.push(ms), Promise.resolve()),
     now: () => NOW,
   };
@@ -172,6 +183,98 @@ describe('one press runs both legs', () => {
     expect(runs.getState()[s.id]).toEqual({ at: 'held', moved: false });
   });
 });
+
+describe('zigner: one round, the deposit held until the move is mined', () => {
+  const H: Held = {
+    txHex: 'signed-deposit',
+    expiry: 141,
+    moveTxid: 'aa'.repeat(32),
+    moveExpiry: 140,
+  };
+
+  /** zigner's legs: the move hands its deposit to hold before it is broadcast */
+  const coldish = () => {
+    const l = legs();
+    l.ready = vi.fn(() => Promise.resolve(true));
+    l.move = vi.fn(async (short: string, hold: (h: Held | undefined) => Promise<void>) => {
+      await hold(H);
+      l.calls.push(`move ${short}`);
+      return H.moveTxid;
+    });
+    l.pay = vi.fn((req, held?: Held) => {
+      l.calls.push(held ? `pay held ${held.txHex}` : `pay ${req.amountZat}`);
+      return Promise.resolve('ee'.repeat(32));
+    });
+    return l;
+  };
+
+  it('moves, waits for a block, then sends the held deposit with no second ask', async () => {
+    const s = swap();
+    // the address index lags: the held deposit goes on the move's own block, not on utxos
+    const { deps, saved } = world('10012000');
+    const mined = [undefined, undefined, 120];
+    deps.mined = vi.fn(() => Promise.resolve(mined.shift()));
+    deps.tip = () => Promise.resolve(121);
+    const seen: string[] = [];
+    const off = runs.subscribe(r => seen.push(r[s.id]!.at));
+    const l = coldish();
+    await runThorOut(s, l, deps, plan('10012000'));
+    off();
+    expect(l.calls).toEqual(['move 10012000', 'pay held signed-deposit']);
+    expect(l.ready).toHaveBeenCalledTimes(1);
+    expect(deps.mined).toHaveBeenCalledWith(H.moveTxid);
+    // held (sealed, on the record) before the move went out, dropped once sent
+    expect(saved[0]).toEqual({ held: H, moveTxid: H.moveTxid });
+    expect(saved.at(-1)).toEqual({ stage: 'sent', depositTxid: 'ee'.repeat(32), held: undefined });
+    expect([...new Set(seen)]).toEqual(['moving', 'funding', 'paying', 'sent']);
+  });
+
+  it('a reopened popup sends the held deposit once the move is mined, signing nothing', async () => {
+    const s = swap({ moveTxid: H.moveTxid, held: H });
+    const { deps } = world('0');
+    deps.mined = () => Promise.resolve(130);
+    deps.tip = () => Promise.resolve(131);
+    const l = coldish();
+    await runThorOut(s, l, deps);
+    expect(l.calls).toEqual(['pay held signed-deposit']);
+    expect(l.ready).not.toHaveBeenCalled();
+  });
+
+  it('a move mined too late for its deposit: the deposit is signed afresh', async () => {
+    const s = swap({ moveTxid: H.moveTxid, held: H });
+    const { deps, saved } = world('0');
+    deps.mined = () => Promise.resolve(141);
+    deps.tip = () => Promise.resolve(141);
+    const l = coldish();
+    await runThorOut(s, l, deps);
+    expect(saved[0]).toEqual({ held: undefined });
+    expect(l.calls).toEqual(['pay 10000000']);
+  });
+
+  it('a move that never reaches a block stops calmly, offering to sign again', async () => {
+    const s = swap({ moveTxid: H.moveTxid, held: H });
+    const { deps, saved } = world('10012000');
+    deps.tip = () => Promise.resolve(150);
+    const l = coldish();
+    await runThorOut(s, l, deps);
+    expect(l.calls).toEqual([]);
+    expect(saved).toEqual([{ held: undefined, moveTxid: undefined }]);
+    expect(runs.getState()[s.id]).toEqual({ at: 'held', moved: false, late: true });
+  });
+
+  it('waits while the move can still land', async () => {
+    const s = swap({ moveTxid: H.moveTxid, held: H });
+    const { deps, slept } = world('10012000');
+    deps.tip = () => Promise.resolve(141);
+    deps.sleep = vi.fn(() => (slept.push(1), slept.length > 2 ? stopAll(s.id) : Promise.resolve()));
+    const l = coldish();
+    await runThorOut(s, l, deps);
+    expect(l.calls).toEqual([]);
+    expect(runs.getState()[s.id]).toEqual({ at: 'funding', moved: true });
+  });
+});
+
+const stopAll = (id: string) => (stopThorOut(id), Promise.resolve());
 
 describe('the swap unlock: once for both legs, dropped after', () => {
   const take = (id: string, now = NOW) => takeSwapUnlock(id, now);
@@ -330,6 +433,41 @@ describe('the second leg picks up after a reopened popup (funds path)', () => {
     round.cancel();
     await settle();
     expect(runs.getState()[s.id]).toEqual({ at: 'held', moved: true });
+    expect(worker.coldDone).not.toHaveBeenCalled();
+  });
+});
+
+describe('a fresh zigner swap asks once', () => {
+  it('one batch round carrying the move and the deposit that spends it', async () => {
+    const s = swap();
+    worker.plan.mockResolvedValue(plan('10012000'));
+    worker.coldMove.mockResolvedValue({
+      pcztHex: 'aa',
+      cborData: Uint8Array.of(0x53, 0x04, 0x03, 0xbe, 0xef),
+      coldSendId: 'c1',
+    });
+    worker.inspect.mockResolvedValue({
+      computed_sighash_hex: 'cd'.repeat(32),
+      transparent_input_count: 0,
+      transparent_outputs: [{ value_zat: 10012000, script_pubkey_hex: '76a9', address: T.address }],
+      expiry_height: 140,
+    });
+    worker.coldPay.mockResolvedValue({ pcztHex: 'dd', urFrames: ['ur:zigner-module/x'] });
+    runSwapLegs(s, ctx({ cold: true, ufvk: 'uview1x' }), plan('10012000'));
+    await settle();
+    const round = swapRound(s.id, 'vault#1');
+    expect(round.store.getState().shown?.label).toBe('sign once · the move and the swap');
+    // the deposit spends the unsigned move's coin and rides the same request
+    const [, , req, ufvk, pair] = worker.coldPay.mock.lastCall!;
+    expect(req).toMatchObject({ tAddress: T.address, to: VAULT, memo: MEMO, reviewedFee: '12000' });
+    expect(ufvk).toBe('uview1x');
+    expect(pair).toEqual({
+      coin: { txid: 'cd'.repeat(32), vout: 0, value: '10012000', script: '76a9', expiry: 140 },
+      movePcztHex: 'beef',
+    });
+    round.cancel();
+    await settle();
+    expect(runs.getState()[s.id]).toEqual({ at: 'held', moved: false });
     expect(worker.coldDone).not.toHaveBeenCalled();
   });
 });

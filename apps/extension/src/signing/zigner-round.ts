@@ -1,19 +1,17 @@
 /**
  * One QR round with zigner, outside any one screen: show a request, scan the
- * device's answer, hand back the signed PCZT. The send screen keeps its own
- * round; the swap deposit (two rounds: fund the swap's address, then the
- * deposit) and lp.html share this one, so the display and scan steps read the
+ * device's answer, hand back the signed PCZT(s). The send screen keeps its own
+ * round; a thorchain swap and lp.html share this one (one batch for the move
+ * and the deposit that spends it), so the display and scan steps read the
  * same everywhere.
  *
- * Built on the suspended signer (zigner-signer.ts): `sign` parks until
- * `answer` (or `cancel`) settles it. The surface that calls it must stay open
- * for the whole round, the same bar the send screen has.
+ * `sign` (or `signBatch`) parks until `answer` (or `cancel`) settles it. The
+ * surface that calls it must stay open for the whole round, the same bar the
+ * send screen has.
  */
 
 import { createStore } from 'zustand/vanilla';
-import type { ExternalSigner } from './external-signer';
-import { createZignerSigner } from './zigner-signer';
-import { signedPcztOfAnswer } from './zigner-answer';
+import { signedPcztOfAnswer, signedPcztsOfBatchAnswer } from './zigner-answer';
 
 /** what the worker built for zigner */
 export interface ZignerRequest {
@@ -47,64 +45,53 @@ export const createZignerRound = (
   merge: (pcztHex: string, contributionsJson: string) => Promise<string>,
 ) => {
   const store = createStore<ZignerRoundState>()(() => ({ shown: null, scanning: false }));
-  let live: {
-    req: ZignerRequest;
-    deliver: (hex: string) => boolean;
-    fail: (e: unknown) => boolean;
-  } | null = null;
+  interface Live {
+    read: (scanned: Uint8Array) => Promise<void>;
+    fail: (e: unknown) => void;
+  }
+  let live: Live | null = null;
 
-  /** show `req` (named by `label`) and wait for the signed PCZT, as hex */
-  const sign = async (req: ZignerRequest, label: string): Promise<string> => {
+  /** show `req` (named by `label`) and wait until `read` makes sense of the device's answer */
+  const ask = <T>(
+    req: ZignerRequest,
+    label: string,
+    read: (scanned: Uint8Array) => Promise<T>,
+  ): Promise<T> => {
     live?.fail(new ZignerDeclined());
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- createZignerSigner returns plain closures
-    const { signer, deliver, fail } = createZignerSigner(() =>
-      store.setState({ shown: { ...req, label }, scanning: false }),
-    );
-    const round = { req, deliver, fail };
+    let round!: Live;
+    const done = new Promise<T>((resolve, reject) => {
+      round = { read: scanned => read(scanned).then(resolve, reject), fail: reject };
+    });
     live = round;
-    try {
-      const out = await signer({ pcztHex: req.pcztHex, spendIndices: [], mainnet: true });
-      if (out.kind !== 'signedPczt') {
-        throw new Error('zigner answered in a shape zafu does not read here');
-      }
-      return out.pcztHex;
-    } finally {
+    store.setState({ shown: { ...req, label }, scanning: false });
+    return done.finally(() => {
       if (live === round) {
         live = null;
         store.setState({ shown: null, scanning: false });
       }
-    }
+    });
   };
 
-  /** the same round as an ExternalSigner, for the shielded send tail (cold-send.ts) */
-  const signer =
-    (req: ZignerRequest, label: string): ExternalSigner =>
-    async () => ({ kind: 'signedPczt', pcztHex: await sign(req, label) });
+  /** show `req` (named by `label`) and wait for the signed PCZT, as hex */
+  const sign = (req: ZignerRequest, label: string): Promise<string> =>
+    ask(req, label, scanned =>
+      signedPcztOfAnswer(scanned, {
+        compact: req.compactRequest === true,
+        pcztHex: req.pcztHex,
+        merge,
+      }),
+    );
 
-  /** the scanner read the device's answer */
-  const answer = async (scanned: Uint8Array): Promise<void> => {
-    const round = live;
-    if (!round) {
-      return;
-    }
-    try {
-      round.deliver(
-        await signedPcztOfAnswer(scanned, {
-          compact: round.req.compactRequest === true,
-          pcztHex: round.req.pcztHex,
-          merge,
-        }),
-      );
-    } catch (e) {
-      round.fail(e instanceof Error ? e : new Error(String(e)));
-    }
-  };
+  /** a full batch of `count` PCZTs, one scan each way: the signed PCZTs in request order */
+  const signBatch = (req: ZignerRequest, count: number, label: string): Promise<string[]> =>
+    ask(req, label, async scanned => signedPcztsOfBatchAnswer(scanned, count));
 
   return {
     store,
     sign,
-    signer,
-    answer,
+    signBatch,
+    /** the scanner read the device's answer */
+    answer: async (scanned: Uint8Array): Promise<void> => live?.read(scanned),
     scan: (scanning: boolean) => store.setState({ scanning }),
     /** step back: the parked round rejects with ZignerDeclined */
     cancel: () => live?.fail(new ZignerDeclined()),

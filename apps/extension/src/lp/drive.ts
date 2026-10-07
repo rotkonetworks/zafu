@@ -14,6 +14,7 @@
  */
 
 import { checkVault, type DepositPlan, type DepositRequest } from '../workers/transparent-deposit';
+import type { Held } from '../signing/move-and-deposit';
 import {
   advance,
   HALF_BLOCKS,
@@ -44,10 +45,20 @@ export interface DriveDeps {
   /** a fresh look at the zec vault and the pauses */
   vault: () => Promise<{ inbound: ZecInbound; addPaused?: string; outPaused?: string }>;
   plan: (req: DepositRequest) => Promise<DepositPlan>;
-  /** shielded -> the lp address */
-  shieldOut: (zat: bigint) => Promise<string>;
-  /** the lp address -> the vault, with the memo, at the reviewed fee */
-  deposit: (req: DepositRequest, fee: string) => Promise<string>;
+  /**
+   * shielded -> the lp address. A zigner wallet signs the deposit `req` in
+   * the same round and hands it to `hold` before the shield-out is broadcast.
+   */
+  shieldOut: (
+    zat: bigint,
+    req: DepositRequest,
+    fee: string,
+    hold: (held: Held | undefined) => Promise<void>,
+  ) => Promise<string>;
+  /** the height a txid was mined at, if it was: a held deposit waits for its shield-out's block */
+  mined: (txid: string) => Promise<number | undefined>;
+  /** the lp address -> the vault, with the memo, at the reviewed fee; the held one when there is one */
+  deposit: (req: DepositRequest, fee: string, held?: Held) => Promise<string>;
   /** the lp address -> shielded */
   shieldBack: () => Promise<string>;
   seen: (txid: string) => Promise<TxSeen>;
@@ -208,16 +219,17 @@ export const act = async (f: Flight, d: DriveDeps): Promise<Flight> => {
       // refused here, before any zec leaves the shielded pool
       const p = await payable(f, d);
       at = p.f;
-      const plan = await d.plan(reqOf(at, d, p.inbound.address));
+      const req = reqOf(at, d, p.inbound.address);
+      const plan = await d.plan(req);
       if (plan.short === '0') {
         return await d.save(sent(at, undefined));
       }
-      const out = await d.save(sending(at));
+      let out = await d.save(sending(at));
       at = out;
-      return await d.save(
-        sent(out, await d.shieldOut(BigInt(plan.short)), { fundZat: plan.short }),
-        true,
-      );
+      const txid = await d.shieldOut(BigInt(plan.short), req, plan.fee, async held => {
+        out = at = await d.save({ ...out, held });
+      });
+      return await d.save(sent(out, txid, { fundZat: plan.short }), true);
     }
     if (step === 'rune' || step === 'recover') {
       if (!d.runeSend || !f.thor) {
@@ -251,9 +263,16 @@ export const act = async (f: Flight, d: DriveDeps): Promise<Flight> => {
       if (plan.short !== '0') {
         throw new Error("your lp address doesn't hold this yet · nothing was sent");
       }
+      // signed with the shield-out: it goes on the shield-out's block, never chained in the mempool
+      if (at.held && (await d.mined(at.held.moveTxid)) === undefined) {
+        return f;
+      }
       const out = await d.save(sending(at));
       at = out;
-      return await d.save(sent(out, await d.deposit(req, plan.fee)), true);
+      return await d.save(
+        sent(out, await d.deposit(req, plan.fee, at.held), { held: undefined }),
+        true,
+      );
     }
     const out = await d.save(sending(f));
     at = out;
