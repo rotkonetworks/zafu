@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Sensitive } from '../../../components/sensitive';
 import { discardTxOp, writeTxOp } from '../../../tx-ops';
 import { useStore } from '../../../state';
+import { zcashViewKey } from '../../../state/zcash-view-key';
 import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
@@ -423,9 +424,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const { requestAuth, PasswordModal } = usePasswordGate();
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const activeZcashWallet = useStore(selectActiveZcashWallet);
-  const ufvk =
-    activeZcashWallet?.ufvk ??
-    (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
+  const ufvk = zcashViewKey(activeZcashWallet);
 
   // which signer this wallet holds; the resolver picks its implementation in
   // handleSign, and a kind without a signer for this pool is refused before

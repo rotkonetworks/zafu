@@ -31,6 +31,7 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
+import { zcashViewKey } from '../../../state/zcash-view-key';
 import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
 import { CAPS, walletKind } from '../../../signing/wallet-kind';
 import { isEgressBlocked } from '../../../net/egress';
@@ -552,9 +553,7 @@ export const CrosschainSwap = ({
   const pocket = useStore(activeAccountIndex);
   const wallet = useStore(swapWallet);
   const kind = selectedKeyInfo && walletKind(selectedKeyInfo, activeZcashWallet);
-  const ufvk =
-    activeZcashWallet?.ufvk ??
-    (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
+  const ufvk = zcashViewKey(activeZcashWallet);
   const { requestAuth, PasswordModal } = usePasswordGate();
   const { chosen, choose } = useSwapRoutes();
   const { last, read, remember } = useSwapLast(wallet);

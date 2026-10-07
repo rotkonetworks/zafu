@@ -122,11 +122,11 @@ function toZcashExport(parsed: Extract<ParsedConnectCode, { network: 'zcash' }>)
   return {
     accountIndex: parsed.accountIndex,
     label: parsed.label,
-    orchardFvk: parsed.orchardFvk,
+    orchardFvk: null,
     transparentXpub: null,
     mainnet: parsed.mainnet,
     address: null,
-    ufvk: parsed.ufvk ?? undefined,
+    ufvk: parsed.ufvk,
     zidPublicKey: parsed.zidPublicKey,
     coldSignerType: parsed.device,
   } satisfies ZcashFvkExportData;

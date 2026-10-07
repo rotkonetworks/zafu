@@ -7,6 +7,7 @@
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
+import { zcashViewKey } from '../state/zcash-view-key';
 import { activeAccountIndex, activePockets } from '../state/pockets';
 import { pocketStoreId } from '../state/pocket-id';
 import { selectZcashBackend } from '../state/networks';
@@ -36,8 +37,7 @@ const target = () => {
   const storeId = pocketStoreId(key.id, activeAccountIndex(s));
   const pockets = activePockets(s);
   const watch = key.type === 'mnemonic' ? undefined : selectActiveZcashWallet(s);
-  const ufvk =
-    watch?.ufvk ?? (watch?.orchardFvk?.startsWith('uview') ? watch.orchardFvk : undefined);
+  const ufvk = zcashViewKey(watch);
 
   const start = async (from: number | undefined) => {
     if (key.type === 'mnemonic') {

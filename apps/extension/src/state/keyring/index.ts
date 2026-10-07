@@ -24,6 +24,7 @@ import type {
   VaultUnlock,
 } from './types';
 import type { ZcashWalletJson } from '../wallets';
+import { zcashViewKey } from '../zcash-view-key';
 
 // pure domain functions
 import {
@@ -624,7 +625,7 @@ export const createKeyRingSlice =
         // also check zcash wallets for matching FVK (catches cross-device duplicates)
         if (data.viewingKey) {
           const existingZcash = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
-          if (existingZcash.some(w => w.orchardFvk === data.viewingKey)) {
+          if (existingZcash.some(w => zcashViewKey(w) === data.viewingKey)) {
             throw new Error('a wallet with this zcash viewing key already exists');
           }
         }

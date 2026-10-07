@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { StepList } from '@repo/ui/components/ui/step-list';
 import { Sensitive } from '../../../components/sensitive';
 import { useStore } from '../../../state';
+import { zcashViewKey } from '../../../state/zcash-view-key';
 import {
   selectEffectiveKeyInfo,
   selectGetMnemonic,
@@ -346,12 +347,7 @@ export const SubscribePage = () => {
     try {
       const accountIndex = activeZcashWallet.accountIndex ?? 0;
       const mainnet = activeZcashWallet.mainnet ?? true;
-      // mirror zcash-send: prefer stored ufvk, fall back to orchardFvk if it's a UFVK string
-      const ufvk =
-        activeZcashWallet.ufvk ??
-        (activeZcashWallet.orchardFvk?.startsWith('uview')
-          ? activeZcashWallet.orchardFvk
-          : undefined);
+      const ufvk = zcashViewKey(activeZcashWallet);
 
       const result = await buildSendTxInWorker(
         'zcash',

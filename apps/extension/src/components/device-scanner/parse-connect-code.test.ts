@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { beforeAll, describe, it, expect } from 'vitest';
+import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { parseConnectCode, parseConnectCodeBytes } from './parse-connect-code';
+import { buildZignerImport } from './connect-device';
 
 // ── fixture builders, from the documented wire formats in
 // packages/wallet/src/{zigner-signer,zcash-zigner}.ts (legacy binary QR) and
@@ -31,10 +35,11 @@ function penumbraLegacyHex(): string {
 }
 
 /** legacy zigner zcash FVK export QR (see zcash-zigner.ts parseZcashFvkQR) */
-function zcashLegacyHex(): string {
+function zcashLegacyHex(fvk: number[] | null = new Array(96).fill(0xef), mainnet = true): string {
   const label = 'zigner zcash';
   const labelBytes = Array.from(new TextEncoder().encode(label));
-  const flags = 0b0000_0011; // mainnet + has orchard, no transparent
+  // bit 0 mainnet, bit 1 has orchard; no transparent
+  const flags = (mainnet ? 0b01 : 0) | (fvk ? 0b10 : 0);
   return toHex([
     0x53,
     0x04,
@@ -43,7 +48,7 @@ function zcashLegacyHex(): string {
     ...u32le(0),
     labelBytes.length,
     ...labelBytes,
-    ...new Array(96).fill(0xef), // orchard fvk
+    ...(fvk ?? []),
   ]);
 }
 
@@ -124,7 +129,22 @@ describe('parseConnectCode', () => {
     }
     expect(result.network).toBe('zcash');
     expect(result.mainnet).toBe(true);
-    expect(result.orchardFvk).not.toBeNull();
+    // the raw orchard key, as the orchard-only unified key sync needs
+    expect(result.ufvk).toMatch(/^uview1/);
+  });
+
+  it('a testnet legacy code reads as a testnet key', () => {
+    const result = parseConnectCode(zcashLegacyHex(undefined, false));
+    expect(result.ok && result.ufvk).toMatch(/^uviewtest1/);
+  });
+
+  it('refuses a legacy zcash code with no key to sync from, calmly', () => {
+    const result = parseConnectCode(zcashLegacyHex(null));
+    expect(result).toEqual({
+      ok: false,
+      reason: 'older-code',
+      message: 'this zigner shows an older code · please update zigner and scan again',
+    });
   });
 
   it('declines a substrate connect code calmly (polkadot is gone)', () => {
@@ -208,5 +228,47 @@ describe('parseConnectCodeBytes (keystone / multi-frame path)', () => {
   it('refuses malformed cbor', () => {
     const result = parseConnectCodeBytes(new Uint8Array([0xff, 0xff]));
     expect(result.ok).toBe(false);
+  });
+});
+
+interface Wasm {
+  initSync(opts: { module: Uint8Array }): void;
+  validate_ufvk(ufvk: string): boolean;
+  address_from_ufvk(ufvk: string, index: number): string;
+  WalletKeys: new (seed: string) => {
+    get_fvk_hex(): string;
+    get_receiving_address(mainnet: boolean): string;
+    free(): void;
+  };
+}
+
+describe('an old-firmware zigner code, with the real zafu-wasm', () => {
+  const SEED =
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+  let wasm: Wasm;
+  beforeAll(async () => {
+    wasm = (await import('@repo/zcash-wasm')) as unknown as Wasm;
+    // vitest runs from apps/extension
+    const blob = resolve(process.cwd(), '../../packages/zcash-wasm/zafu_wasm_bg.wasm');
+    wasm.initSync({ module: readFileSync(blob) });
+  });
+
+  it('becomes a valid viewing key of the same account, so the wallet syncs', () => {
+    const keys = new wasm.WalletKeys(SEED);
+    const fvkHex = keys.get_fvk_hex();
+    const address = fixOrchardAddress(keys.get_receiving_address(true));
+    keys.free();
+    const fvk = fvkHex.match(/../g)!.map(h => parseInt(h, 16));
+    expect(fvk).toHaveLength(96);
+
+    const result = parseConnectCode(zcashLegacyHex(fvk));
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.network !== 'zcash') {
+      return;
+    }
+    expect(wasm.validate_ufvk(result.ufvk)).toBe(true);
+    expect(fixOrchardAddress(wasm.address_from_ufvk(result.ufvk, 0))).toBe(address);
+    // what the keyring stores is the unified key the sync hook reads
+    expect(buildZignerImport(result).viewingKey).toBe(result.ufvk);
   });
 });
