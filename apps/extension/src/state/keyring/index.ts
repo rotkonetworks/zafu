@@ -325,8 +325,8 @@ export const createKeyRingSlice =
         });
 
         // pro-license auto-check on auto-unlock disabled for now - it phoned
-        // license.zafu.pro on every unlock for an unfinished feature. License
-        // is fetched only on the explicit subscribe action (settings/subscribe).
+        // license.zafu.pro on every unlock for an unfinished feature; pro is
+        // shelved, so nothing fetches the license today.
       },
 
       // ── password / unlock / lock ──

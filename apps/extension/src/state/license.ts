@@ -19,7 +19,6 @@ import type { AllSlices, SliceCreator } from '.';
 import {
   isLicenseValid,
   hasProFeature,
-  daysRemaining,
   type License,
   type Plan,
   type ProFeature,
@@ -239,11 +238,7 @@ export const createLicenseSlice = (): SliceCreator<LicenseSlice> => set => ({
 });
 
 // selectors
-export const licenseSelector = (state: AllSlices) => state.license;
 export const isPro = (state: AllSlices): boolean => isLicenseValid(state.license.license);
 export const selectPlan = (state: AllSlices): Plan => (isPro(state) ? 'pro' : 'free');
-export const selectDaysRemaining = (state: AllSlices): number =>
-  daysRemaining(state.license.license);
-export const selectPending = (state: AllSlices): PendingPayment | null => state.license.pending;
 export const canUseFeature = (state: AllSlices, feature: ProFeature): boolean =>
   hasProFeature(state.license.license, feature);

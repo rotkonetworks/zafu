@@ -117,13 +117,6 @@ export const nu63ActivationHeight = (mainnet: boolean): number =>
 export const PASSWORD_GENERATOR = false;
 
 /**
- * Pro subscription upsell surface. Hidden for now - the subscribe route and
- * pro-gating logic stay in the codebase, just unreachable from the settings
- * list and the drawer "upgrade" button. Flip back to `true` to re-enable.
- */
-export const SUBSCRIBE_ENABLED = false;
-
-/**
  * Ledger SHIELDED support through the Ledger Zcash app (3.9.4+): connect
  * exports the account's UFVK, sends and shielding are signed on the device
  * (src/ledger/zcash-app). On in the BETA build only, until a physical device

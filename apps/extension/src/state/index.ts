@@ -14,7 +14,6 @@ import { createEncryptedLocal } from './encrypted-storage';
 import { createTxApprovalSlice, TxApprovalSlice } from './tx-approval';
 import { createOriginApprovalSlice, OriginApprovalSlice } from './origin-approval';
 import { ConnectedSitesSlice, createConnectedSitesSlice } from './connected-sites';
-import { createDefaultFrontendSlice, DefaultFrontendSlice } from './default-frontend';
 import { createNumerairesSlice, NumerairesSlice } from './numeraires';
 import { createZignerSlice, ZignerSlice } from './zigner';
 import { createZignerSigningSlice, ZignerSigningSlice } from './zigner-signing';
@@ -43,7 +42,6 @@ export interface AllSlices {
   txApproval: TxApprovalSlice;
   originApproval: OriginApprovalSlice;
   connectedSites: ConnectedSitesSlice;
-  defaultFrontend: DefaultFrontendSlice;
   zigner: ZignerSlice;
   zignerSigning: ZignerSigningSlice;
   privacy: PrivacySlice;
@@ -87,7 +85,6 @@ export const initializeStore = (
     connectedSites: createConnectedSitesSlice(local)(setState, getState, store),
     txApproval: createTxApprovalSlice(local)(setState, getState, store),
     originApproval: createOriginApprovalSlice()(setState, getState, store),
-    defaultFrontend: createDefaultFrontendSlice(local)(setState, getState, store),
     zigner: createZignerSlice(local)(setState, getState, store),
     zignerSigning: createZignerSigningSlice(setState, getState, store),
     privacy: createPrivacySlice(local)(setState, getState, store),
