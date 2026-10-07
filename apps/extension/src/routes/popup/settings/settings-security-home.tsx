@@ -9,7 +9,7 @@ import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { useAutoLock, AUTO_LOCK_OPTIONS } from './use-auto-lock';
 import { OptionsRow } from './sheet-options';
-import { selectUnbackedSeatCount } from './settings-status';
+import { selectSeatCount, selectUnbackedSeatCount } from './settings-status';
 import { useExplain } from './settings-explain';
 
 const SIGNING_OPTIONS: readonly {
@@ -104,6 +104,9 @@ const RemoveWalletRow = () => {
 export const SettingsSecurityHome = () => {
   const navigate = usePopupNav();
   const zcashOn = useStore(s => selectEnabledNetworks(s).includes('zcash'));
+  // seat backups are separate from the recovery phrase, and only mean
+  // something once there is a group seat to back up
+  const hasSeats = useStore(selectSeatCount) > 0;
   const { explainProps, sheet } = useExplain();
 
   return (
@@ -129,7 +132,7 @@ export const SettingsSecurityHome = () => {
             preload={PopupPath.SETTINGS_RECOVERY_PASSPHRASE}
             onPress={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
           />
-          {zcashOn && <BackupsRow />}
+          {zcashOn && hasSeats && <BackupsRow />}
         </Section>
 
         {/* each network's own resync lives on its screen; this one also clears personal data */}

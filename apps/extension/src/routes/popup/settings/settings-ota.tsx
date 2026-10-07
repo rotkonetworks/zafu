@@ -14,6 +14,7 @@
 
 import { useState } from 'react';
 import { useStore } from '../../../state';
+import { selectZignerPaired } from './settings-status';
 import { otaSelector } from '../../../state/ota';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
@@ -44,6 +45,7 @@ export const SettingsOta = () => {
     abortSession,
   } = useStore(otaSelector);
 
+  const zignerPaired = useStore(selectZignerPaired);
   const [scanMode, setScanMode] = useState<ScanMode>('none');
   const [checking, setChecking] = useState(false);
 
@@ -121,8 +123,19 @@ export const SettingsOta = () => {
       />
     ) : null;
 
+  // it updates a paired zigner: without one there is nothing to update
+  if (!zignerPaired) {
+    return (
+      <SettingsScreen title='zigner update' backPath={PopupPath.SETTINGS_DEVICES}>
+        <p className='text-data text-fg-muted'>
+          pair a zigner first: updates go to it by qr, from this screen.
+        </p>
+      </SettingsScreen>
+    );
+  }
+
   return (
-    <SettingsScreen title='device update' backPath={PopupPath.SETTINGS}>
+    <SettingsScreen title='zigner update' backPath={PopupPath.SETTINGS_DEVICES}>
       <div className='flex flex-col gap-4'>
         <p className='text-label text-fg-muted'>
           devices:{' '}

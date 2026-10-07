@@ -1,7 +1,9 @@
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { Capability } from '@repo/storage-chrome/capabilities';
 import {
+  DEFAULT_ON,
   parseCapabilityMode,
+  withDefault,
   type CapabilityMode,
   type CapabilityModeMap,
 } from '../utils/capability-decision';
@@ -17,14 +19,20 @@ const KEY = 'capabilityModes';
 
 export const getCapabilityMode = async (capability: Capability): Promise<CapabilityMode> => {
   const modes = await localExtStorage.get(KEY);
-  return parseCapabilityMode(modes?.[capability]);
+  return withDefault(capability, parseCapabilityMode(modes?.[capability]));
 };
 
 export const getCapabilityModes = async (): Promise<CapabilityModeMap> => {
   const modes = await localExtStorage.get(KEY);
   const parsed: CapabilityModeMap = {};
+  for (const cap of DEFAULT_ON) {
+    parsed[cap] = 'enabled';
+  }
   for (const [capability, raw] of Object.entries(modes ?? {})) {
-    parsed[capability as Capability] = parseCapabilityMode(raw);
+    parsed[capability as Capability] = withDefault(
+      capability as Capability,
+      parseCapabilityMode(raw),
+    );
   }
   return parsed;
 };

@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  withDefault,
   decideCapabilityUse,
   isOptinPending,
   modeFromOptin,
@@ -62,5 +63,13 @@ describe('decideCapabilityUse', () => {
 
   it('falls back to the per-site prompt once enabled but ungranted', () => {
     expect(decide('enabled', false)).toEqual({ action: 'prompt', prompt: 'origin-consent' });
+  });
+});
+
+describe('withDefault', () => {
+  it('reads an unanswered default-on capability as on, and leaves the rest alone', () => {
+    expect(withDefault('encrypt', 'unset')).toBe('enabled');
+    expect(withDefault('encrypt', 'disabled')).toBe('disabled');
+    expect(withDefault('frost', 'unset')).toBe('unset');
   });
 });

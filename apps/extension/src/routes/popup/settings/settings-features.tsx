@@ -5,7 +5,12 @@ import { SettingsScreen } from './settings-screen';
 import { cn } from '@repo/ui/lib/utils';
 import { Segmented } from '@repo/ui/components/ui/segmented';
 import { getCapabilityModes, setCapabilityMode } from '../../../state/capability-modes';
-import type { CapabilityMode, CapabilityModeMap } from '../../../utils/capability-decision';
+import {
+  DEFAULT_ON,
+  withDefault,
+  type CapabilityMode,
+  type CapabilityModeMap,
+} from '../../../utils/capability-decision';
 
 /**
  * Per-capability participation switch, the settings half of the opt-in asked
@@ -56,7 +61,7 @@ export const SettingsFeatures = () => {
           ? null
           : (Object.keys(CAPABILITY_META) as Capability[]).map(cap => {
               const meta = CAPABILITY_META[cap];
-              const current = modes[cap] ?? 'unset';
+              const current = withDefault(cap, modes[cap] ?? 'unset');
               return (
                 <div
                   key={cap}
@@ -76,7 +81,8 @@ export const SettingsFeatures = () => {
                     label={`${meta.label} mode`}
                     value={current}
                     onChange={mode => set(cap, mode)}
-                    options={MODES}
+                    // on by default: there is no "ask" to go back to
+                    options={DEFAULT_ON.has(cap) ? MODES.filter(m => m.value !== 'unset') : MODES}
                   />
                 </div>
               );

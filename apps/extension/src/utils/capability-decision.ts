@@ -50,6 +50,18 @@ export const decideCapabilityUse = (state: CapabilityState): CapabilityDecision 
     : { action: 'prompt', prompt: 'origin-consent' };
 };
 
+/**
+ * Capabilities zafu does unless turned off: no one-time opt-in. `encrypt` is
+ * one: its keys are derived per site, so a site can only open what was sealed
+ * to its own identity there, never another site's or the wallet's. Each site
+ * still asks its own consent once.
+ */
+export const DEFAULT_ON: ReadonlySet<Capability> = new Set<Capability>(['encrypt']);
+
+/** A capability's mode once its default is applied: unset means on for these. */
+export const withDefault = (capability: Capability, mode: CapabilityMode): CapabilityMode =>
+  mode === 'unset' && DEFAULT_ON.has(capability) ? 'enabled' : mode;
+
 /** Storage holds only decisions; anything else (including absent) is `unset`. */
 export const parseCapabilityMode = (raw: unknown): CapabilityMode =>
   raw === 'enabled' || raw === 'disabled' ? raw : 'unset';

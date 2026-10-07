@@ -9,7 +9,11 @@ import { NETWORK_BLURB } from '../../../components/network-sheet';
 import { getNetwork, getTopLevelNetworks } from '../../../config/networks';
 import { DEFAULT_RELAY_URL } from '../../../config/multisig-relay';
 import { relayHost } from '../../../config/people-relay';
-import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import {
+  HARDWARE_WALLET_ENABLED,
+  IS_BETA_BUILD,
+  LEDGER_TRANSPARENT_ENABLED,
+} from '../../../config/feature-flags';
 import { openPageInTab } from '../../../utils/popup-detection';
 import { PagePath } from '../../page/paths';
 import { usePopupNav } from '../../../utils/navigate';
@@ -114,6 +118,17 @@ export const SettingsDevicesHome = () => {
             preload={PopupPath.SETTINGS_ZIGNER}
             onPress={() => navigate(PopupPath.SETTINGS_ZIGNER)}
           />
+          {/* updates the paired zigner, so only with one; its update server is
+              still a local dev stub, so only the beta build offers it */}
+          {IS_BETA_BUILD && zigner && (
+            <Row
+              type='screen'
+              label='zigner update'
+              description='a signed module, checked here and on the zigner'
+              preload={PopupPath.SETTINGS_OTA}
+              onPress={() => navigate(PopupPath.SETTINGS_OTA)}
+            />
+          )}
           <Row
             type='value'
             label='keystone'
