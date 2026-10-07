@@ -25,7 +25,10 @@ import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { useTransparentBalance } from '../../../hooks/zcash-transparent-balance';
 import { newTip } from '../../../transparent/zcash-check';
 import { ago } from '../../../transparent/chain-check';
-import type { HistoryEntry } from '../../../state/keyring/network-worker';
+import {
+  acceptUnverifiedNodeInWorker,
+  type HistoryEntry,
+} from '../../../state/keyring/network-worker';
 import {
   EMPTY_POOL_BALANCES,
   useWorkerValue,
@@ -43,6 +46,7 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { Button } from '@repo/ui/components/ui/button';
 import { fmtZecHero } from './format';
+import { ACTION_LABEL, CHAIN_NOTICE, chainNoticeOf, type ChainAction } from './chain-notice';
 import { HistoryContent, AskHistorySheet } from './history';
 import { HOME_LOOK } from './look';
 import { SyncStrip } from '../../../components/wallet/sync-strip';
@@ -81,26 +85,6 @@ const PENDING_VERB: Record<NonNullable<HistoryEntry['kind']>, string> = {
   send: 'sending',
   shield: 'shielding',
   migrate: 'moving to ironwood',
-};
-
-/** the chain notices the home shows in its status slot, two short lines each */
-const CHAIN_NOTICE: Partial<
-  Record<
-    string,
-    { tone: 'warn' | 'info'; icon: string; lines: [string, string]; chooseNode?: boolean }
-  >
-> = {
-  paused: {
-    tone: 'warn',
-    icon: 'i-ph-warning',
-    lines: ["this server's chain didn't check out", 'balances are paused · nothing was lost'],
-    chooseNode: true,
-  },
-  clock: {
-    tone: 'info',
-    icon: 'i-ph-clock',
-    lines: ["this computer's clock looks off", "zafu can't check the chain until it's right"],
-  },
 };
 
 /** zcash home: sync strip, hero balance, actions, in-flight, pools, activity */
@@ -280,28 +264,33 @@ export const ZcashContent = ({
   const orchardRefusal =
     ironwoodLive && pools.orchard > 0n && kind ? CAPS[kind].refuses?.orchard : undefined;
 
-  // the node's chain: paused when its proof did not check out, a quiet word
-  // when this computer's clock keeps zafu from checking it
-  const chainNotice = syncFailure?.kind === 'chainUnproven' ? 'paused' : chain?.reason;
+  // the node's chain: paused when its proof did not check out or stopped
+  // coming, a quiet word when it is not verified or the clock is off
+  const chainNotice = chainNoticeOf(syncFailure?.kind === 'chainUnproven', chain);
   const chainSlot = chainNotice && CHAIN_NOTICE[chainNotice];
-
-  // one message at a time: the chain > ironwood move > orchard waits > backup nudge
-  const messageSlot: ReactNode = chainSlot ? (
+  const chainActions: Record<ChainAction, () => void> = {
+    choose: () => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`),
+    accept: () =>
+      void acceptUnverifiedNodeInWorker(chain?.serverUrl ?? zidecarUrl, isMainnet).then(
+        retryZcashSync,
+      ),
+  };
+  const chainMessage = chainSlot && (
     <StatusSlot
       tone={chainSlot.tone}
       icon={chainSlot.icon}
-      action={
-        chainSlot.chooseNode
-          ? {
-              label: 'choose another node',
-              onClick: () => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`),
-            }
-          : undefined
-      }
+      action={chainSlot.actions?.map(a => ({ label: ACTION_LABEL[a], onClick: chainActions[a] }))}
     >
       <span className='text-fg-high'>{chainSlot.lines[0]}</span>
       <span>{chainSlot.lines[1]}</span>
     </StatusSlot>
+  );
+
+  // one message at a time: the chain > ironwood move > orchard waits > backup
+  // nudge > a chain that is only not verified
+  const urgent = !chainSlot?.quiet && chainMessage;
+  const messageSlot: ReactNode = urgent ? (
+    urgent
   ) : orchardRefusal ? (
     <StatusSlot icon='i-ph-lock-simple'>
       <span className='text-fg-high'>
@@ -319,7 +308,7 @@ export const ZcashContent = ({
       </span>
     </StatusSlot>
   ) : (
-    nudge
+    (nudge ?? chainMessage)
   );
 
   // the pool rows deep-link to their notes; the route exists only with the flag
