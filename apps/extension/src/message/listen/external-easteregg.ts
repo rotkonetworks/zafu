@@ -50,7 +50,6 @@ import { isPro } from '../../state/license';
 import { isValidExternalSender, type ValidExternalSender } from '../../senders/external';
 import { isValidInternalSender } from '../../senders/internal';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
-import { rpIdMatchesOrigin } from '../../state/public-suffix';
 import { grantsFor, readPasskeyGrants, recordPasskeyGrant } from '../../state/passkey-grants';
 import type { Credential } from '../../state/webauthn';
 import type { KeyInfo } from '../../state/keyring/types';
@@ -1313,6 +1312,8 @@ export const externalMessageListener = (
       const origin = sender.origin;
       void (async () => {
         try {
+          // the full suffix list loads only when a site asks for a passkey
+          const { rpIdMatchesOrigin } = await import('../../state/public-suffix');
           if (!rpIdMatchesOrigin(rpId, origin)) {
             sendResponse({ success: false, error: 'rpId does not match origin' });
             return;
@@ -1408,6 +1409,8 @@ export const externalMessageListener = (
       const origin = sender.origin;
       void (async () => {
         try {
+          // the full suffix list loads only when a site asks for a passkey
+          const { rpIdMatchesOrigin } = await import('../../state/public-suffix');
           if (!rpIdMatchesOrigin(rpId, origin)) {
             sendResponse({ success: false, error: 'rpId does not match origin' });
             return;

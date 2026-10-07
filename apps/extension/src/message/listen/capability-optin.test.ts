@@ -222,7 +222,8 @@ describe('global opt-in - the other gates', () => {
       { type: 'zafu_passkey_create', rpId: 'passkey-optin.example' },
       validSender(origin),
     );
-    await flush();
+    // the rpId check loads the suffix list on first use
+    expect(await until(() => createMock.mock.calls.length > 0)).toBe(true);
 
     // the first surface must be the zafu-level question, not the unlock or the
     // per-credential consent: the user is not dragged through an unlock for a
