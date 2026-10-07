@@ -4,10 +4,15 @@
  * terminating the worker and forgetting that identity.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LocalChannel } from './local-channel.testkit';
 
 let routing = true;
 const setup = vi.fn((_opts: Record<string, unknown>) => Promise.resolve());
-vi.mock('./egress', () => ({ nymRoutingOn: () => Promise.resolve(routing) }));
+vi.mock('./egress', () => ({
+  nymRoutingOn: () => Promise.resolve(routing),
+  checkEgress: () => ({ allow: true }),
+  EgressBlockedError: Error,
+}));
 vi.mock('comlink', () => ({ wrap: () => ({ setupMixTunnel: setup }) }));
 
 const spawned: FakeWorker[] = [];
@@ -37,6 +42,7 @@ beforeEach(() => {
   deleted.length = 0;
   setup.mockClear();
   vi.stubGlobal('Worker', FakeWorker);
+  vi.stubGlobal('BroadcastChannel', LocalChannel);
   vi.stubGlobal('indexedDB', { deleteDatabase: (name: string) => deleted.push(name) });
 });
 
