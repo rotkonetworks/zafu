@@ -115,6 +115,13 @@ describe('promptCooldown', () => {
     expect(c.quiet(130_000)).toBe(false);
   });
 
+  it('a sign-in that goes through lifts a wait already running', () => {
+    const c = promptCooldown();
+    c.after({ success: false, code: 'denied' }, 0);
+    c.after({ success: true }, 1_000);
+    expect(c.quiet(1_001)).toBe(false);
+  });
+
   it('does not wait after a refusal the person never saw', () => {
     const c = promptCooldown();
     c.after({ success: false }, 0);

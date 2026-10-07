@@ -162,6 +162,7 @@ export const promptCooldown = (base = 30_000) => {
         until = now + wait;
         wait *= 2;
       } else if (r?.success === true) {
+        until = 0;
         wait = base;
       }
     },

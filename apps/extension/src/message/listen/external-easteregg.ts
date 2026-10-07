@@ -475,12 +475,15 @@ interface PasskeyRefusal {
 const passkeySender = (sender: chrome.runtime.MessageSender): sender is ValidExternalSender =>
   sender.id === chrome.runtime.id && isValidExternalSender(sender);
 
-/** a tap the person did not give: `denied` said not now, `cancelled` never answered */
-const declined = (outcome: 'denied' | 'cancelled'): PasskeyRefusal => ({
-  success: false,
-  error: outcome,
-  code: outcome,
-});
+/**
+ * a tap the person did not give: `denied` said not now, `cancelled` never
+ * answered. `busy` (this site's window is already open) carries no code: the
+ * person declined nothing, so the page must not back off for it.
+ */
+const declined = (outcome: 'denied' | 'cancelled' | 'busy'): PasskeyRefusal =>
+  outcome === 'busy'
+    ? { success: false, error: 'denied' }
+    : { success: false, error: outcome, code: outcome };
 
 /**
  * The passkey switch is on and the wallet is unlocked, both asked for before
@@ -519,7 +522,7 @@ async function askPasskeyTap(
   origin: string,
   rpId: string,
   walletId: string,
-): Promise<'approved' | 'denied' | 'cancelled'> {
+): Promise<'approved' | 'denied' | 'cancelled' | 'busy'> {
   const requestId = crypto.randomUUID();
   const decided = new Promise<{ approved?: boolean; cancelled?: boolean } | undefined>(resolve =>
     pendingPicks.set(requestId, r => resolve(r as { approved?: boolean; cancelled?: boolean })),
@@ -534,7 +537,7 @@ async function askPasskeyTap(
   const url = chrome.runtime.getURL(`popup.html#/passkey-approve?${params.toString()}`);
   if (!(await openApprovalPopup(origin, url, requestId))) {
     pendingPicks.delete(requestId);
-    return 'cancelled';
+    return 'busy';
   }
   const r = await decided;
   return r?.approved ? 'approved' : r?.cancelled ? 'cancelled' : 'denied';
