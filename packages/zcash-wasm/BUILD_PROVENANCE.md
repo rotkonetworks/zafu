@@ -179,10 +179,11 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
 
 ## 2026-10-07 rebuild (2) - the deposit's expiry follows the branch, or the move
 
-- source repo: zcli, branch `fix/deposit-expiry-follows-node`, rev `cbd2d7d`
-  (zcli PR #29, one commit on master `0886e6d`, the rev of the blob it
-  replaces). NOT a master build: rebuild from master once #29 merges and
-  replace this entry.
+- source repo: zcli, branch `master`, rev `565027d` (merge of zcli PR #29,
+  `fix/deposit-expiry-follows-node` cbd2d7d, on `0886e6d`, the rev of the
+  blob it replaces). Master's tree at `565027d` equals cbd2d7d's, and a fresh
+  worktree build from `565027d` is byte-identical to the cbd2d7d build (all
+  four vendored files, same sha256).
 - `build_unsigned_transparent_transaction` takes an optional trailing
   `expiry_delta`: omitted is the branch default (target + 40, or + 120 on
   NU7, as the move gets), given is validated by `resolve_pczt_expiry_height`.
@@ -190,7 +191,7 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
   - 40.
 - `.d.ts` diff against the previous blob: that one signature (one optional
   arg) and its doc; nothing removed. The glue differs only in that function.
-- `cargo test -p zafu-wasm --lib --tests --release` at `cbd2d7d`: 162 passed
+- `cargo test -p zafu-wasm --lib --tests --release` at `cbd2d7d` (same tree): 162 passed
   (160 + 2 new in `tests/transparent_op_return.rs`).
 - toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
   wasm-bindgen CLI 0.2.126, binaryen 130; recipe above.
