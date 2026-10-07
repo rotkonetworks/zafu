@@ -30,21 +30,43 @@ import {
   type EgressDecision,
   type EgressRealm,
   type EgressTable,
+  type RequestClass,
 } from './egress-table';
 import { viaNym } from './nym-bridge';
 
 export type EgressRefusal = Extract<EgressDecision, { allow: false }>;
+
+/** what a request that could not reach nym says, by its class */
+const NYM_DOWN: Record<RequestClass, string> = {
+  broadcast: "nym isn't reachable right now. nothing was sent.",
+  'own-tx': "couldn't load over nym · try again",
+  'names-you': "couldn't reach this over nym · try again",
+};
 
 export class EgressBlockedError extends TypeError {
   override readonly name = 'EgressBlockedError';
   constructor(readonly refusal: EgressRefusal) {
     super(
       refusal.reason === 'transport-down'
-        ? "nym isn't reachable right now. nothing was sent."
+        ? NYM_DOWN[refusal.nym ?? 'names-you']
         : `zafu did not contact ${refusal.host}`,
     );
   }
 }
+
+/** the class a cometbft JSON-RPC body names, if its rule reads bodies */
+const classOfBody = (
+  rows: [string, RequestClass][] | undefined,
+  body: BodyInit | null | undefined,
+): RequestClass | undefined => {
+  const text =
+    typeof body === 'string'
+      ? body
+      : body instanceof Uint8Array || body instanceof ArrayBuffer
+        ? new TextDecoder().decode(body)
+        : undefined;
+  return text === undefined ? undefined : rows?.find(([p]) => new RegExp(p).test(text))?.[1];
+};
 
 export const isEgressBlocked = (e: unknown): e is EgressBlockedError =>
   e instanceof Error && e.name === 'EgressBlockedError';
@@ -210,14 +232,15 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
         }
       }
       // a request that names you goes through nym, or nowhere
-      if (decision.allow && decision.nym) {
+      const nym = decision.allow && (decision.nym ?? classOfBody(decision.nymBody, init?.body));
+      if (decision.allow && nym) {
         const { host: h = '', destination } = decision;
         return viaNym(
           input,
           init,
-          decision.nym,
+          nym,
           () => send(input, init),
-          () => refuse({ allow: false, host: h, destination, reason: 'transport-down' }),
+          () => refuse({ allow: false, host: h, destination, reason: 'transport-down', nym }),
         );
       }
       return send(input, init);

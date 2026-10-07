@@ -117,19 +117,89 @@ export interface DestinationSpec {
   hidden?: boolean;
   /** the only realm that may reach it */
   realm?: EgressRealm;
+  /** shares the nym rows of its family (every cosmos chain's nodes) */
+  family?: string;
 }
 
+/** every cosmos chain's nodes share these rows */
+const COSMOS = 'cosmos-chain';
+
+const tx = 'cosmos/tx/v1beta1/txs';
+
 /**
- * The requests that name you or your transaction, by destination. They go
- * over nym while it is on; everything else to the same host stays direct
- * (sync cannot stream through nym, and every wallet downloads the same blocks).
- * Only zidecar's grpc-web paths: nym's http client speaks http/1.1, and a
- * lightwalletd answers native grpc only over http/2, so a lightwalletd node
- * stays direct rather than unreachable (measured: 404 through nym).
+ * Requests that tie you to a transaction or an address, by destination. They
+ * go over nym while it is on; everything else to the same host stays direct.
+ * A path is a prefix under the destination's url; `''` is the whole
+ * destination. `body` classifies by the request body (a JSON-RPC method on
+ * a cometbft node's `/`) instead of the path.
+ *
+ * Stay direct, on purpose: sync (every wallet downloads the same blocks, and
+ * nym cannot stream), and the public reads that are the same for everyone
+ * (thornode inbound_addresses, mimir, network, pools; 1click tokens; midgard
+ * pools), which the swap screen reads on its critical path.
+ *
+ * zcash: only zidecar's grpc-web paths. nym's http client speaks http/1.1 and
+ * a lightwalletd answers native grpc only over http/2 (measured: 404 through
+ * nym), so a lightwalletd node stays direct rather than unreachable.
  */
-const NYM_CLASSES: { cls: RequestClass; destination: string; paths: string[] }[] = [
+const NYM_CLASSES: { cls: RequestClass; destination: string; paths: string[]; body?: string }[] = [
   { cls: 'broadcast', destination: 'zcash', paths: ['/zidecar.v1.Zidecar/SendTransaction'] },
   { cls: 'own-tx', destination: 'zcash', paths: ['/zidecar.v1.Zidecar/GetTransaction'] },
+  {
+    cls: 'names-you',
+    destination: 'zcash',
+    paths: ['/zidecar.v1.Zidecar/GetAddressUtxos', '/zidecar.v1.Zidecar/GetTaddressTxids'],
+  },
+  {
+    cls: 'broadcast',
+    destination: 'penumbra',
+    paths: ['/penumbra.util.tendermint_proxy.v1.TendermintProxyService/BroadcastTxSync'],
+  },
+  {
+    cls: 'own-tx',
+    destination: 'penumbra',
+    paths: ['/penumbra.util.tendermint_proxy.v1.TendermintProxyService/GetTx'],
+  },
+  { cls: 'broadcast', destination: COSMOS, paths: [`/${tx}`] },
+  { cls: 'own-tx', destination: COSMOS, paths: [`/${tx}/`] },
+  {
+    cls: 'names-you',
+    destination: COSMOS,
+    paths: [
+      '/cosmos/bank/v1beta1/balances',
+      '/cosmos/auth/v1beta1/accounts',
+      '/cosmos/tx/v1beta1/simulate',
+    ],
+  },
+  { cls: 'broadcast', destination: COSMOS, paths: [''], body: '"method"\\s*:\\s*"broadcast_tx_' },
+  {
+    cls: 'names-you',
+    destination: COSMOS,
+    paths: [''],
+    body: '"method"\\s*:\\s*"(abci_query|tx|tx_search)"',
+  },
+  { cls: 'broadcast', destination: 'thorchain', paths: [`/${tx}`] },
+  { cls: 'own-tx', destination: 'thorchain', paths: [`/${tx}/`, '/thorchain/tx/'] },
+  {
+    cls: 'names-you',
+    destination: 'thorchain',
+    paths: [
+      '/thorchain/quote/',
+      '/thorchain/pool/ZEC.ZEC/liquidity_provider',
+      '/cosmos/auth/v1beta1/accounts',
+      '/cosmos/bank/v1beta1/balances',
+      '/cosmos/tx/v1beta1/simulate',
+    ],
+  },
+  { cls: 'names-you', destination: 'midgard', paths: ['/v2/actions', '/v2/member'] },
+  { cls: 'names-you', destination: 'near-swap', paths: ['/v0/quote', '/v0/status', '/v0/deposit'] },
+  { cls: 'names-you', destination: 'mayachain', paths: ['/mayachain/quote/', '/mayachain/tx/'] },
+  // every request to these names you or what you look up
+  ...['zcash-me', 'peer', 'base', 'sponsor', 'voting'].map(destination => ({
+    cls: 'names-you' as const,
+    destination,
+    paths: [''],
+  })),
 ];
 
 /** nym's exits only open these ports: a node on any other stays direct rather than unreachable */
@@ -184,6 +254,7 @@ const multisigRelays = (i: EgressInputs): string[] =>
 /** a cosmos chain's nodes: on while a flow uses the chain (useChainInUse) */
 const chainNodes = (chain: CosmosChainConfig): DestinationSpec => ({
   id: chain.id,
+  family: COSMOS,
   label: `${chain.name.toLowerCase()} nodes`,
   purpose: 'chain-rpc',
   gate: { kind: 'network', networks: [chain.id] },
@@ -524,9 +595,21 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
           ...(spec.realm ? { realm: spec.realm } : {}),
         };
         rules.push(rule);
-        if (nym && on && NYM_EXIT_PORTS.has(portOf(url!))) {
-          for (const { cls, paths } of NYM_CLASSES.filter(c => c.destination === spec.id)) {
-            rules.push(...paths.map(p => ({ ...rule, path: `${target.path}${p}`, nym: cls })));
+        if (!nym || !on || !NYM_EXIT_PORTS.has(portOf(url!))) {
+          continue;
+        }
+        const ours = NYM_CLASSES.filter(
+          c => c.destination === spec.id || c.destination === spec.family,
+        );
+        for (const { cls, paths, body } of ours) {
+          for (const p of paths) {
+            if (body) {
+              (rule.nymBody ??= []).push([body, cls]);
+            } else if (p === '') {
+              rule.nym = cls;
+            } else {
+              rules.push({ ...rule, path: `${target.path}${p}`, nym: cls, nymBody: undefined });
+            }
           }
         }
       }
