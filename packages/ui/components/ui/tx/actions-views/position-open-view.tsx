@@ -1,5 +1,6 @@
 import { ViewBox } from '../viewbox';
 import { ActionDetails } from './action-details';
+import { Clipped } from '../../clipped';
 import { uint8ArrayToBase64 } from '@penumbrafi/types/base64';
 import {
   PositionOpenView,
@@ -28,17 +29,13 @@ export const PositionOpenViewComponent = ({ value }: { value: PositionOpenView }
 
           {!!position.phi?.pair?.asset1 && (
             <ActionDetails.Row label='Asset 1'>
-              <ActionDetails.TruncatedText>
-                {bech32mAssetId(position.phi.pair.asset1)}
-              </ActionDetails.TruncatedText>
+              <Clipped>{bech32mAssetId(position.phi.pair.asset1)}</Clipped>
             </ActionDetails.Row>
           )}
 
           {!!position.phi?.pair?.asset2 && (
             <ActionDetails.Row label='Asset 2'>
-              <ActionDetails.TruncatedText>
-                {bech32mAssetId(position.phi.pair.asset2)}
-              </ActionDetails.TruncatedText>
+              <Clipped>{bech32mAssetId(position.phi.pair.asset2)}</Clipped>
             </ActionDetails.Row>
           )}
 
@@ -47,9 +44,7 @@ export const PositionOpenViewComponent = ({ value }: { value: PositionOpenView }
           )}
 
           <ActionDetails.Row label='Nonce'>
-            <ActionDetails.TruncatedText>
-              {uint8ArrayToBase64(position.nonce)}
-            </ActionDetails.TruncatedText>
+            <Clipped>{uint8ArrayToBase64(position.nonce)}</Clipped>
           </ActionDetails.Row>
 
           <ActionDetails.Row label='Close on fill'>
