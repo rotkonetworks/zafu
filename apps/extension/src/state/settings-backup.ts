@@ -25,6 +25,7 @@ const PREF_KEYS = [
   'penumbraTotalIn',
   'penumbraRowsInUsd',
   'swapRoutes',
+  'swapCustodyAck',
 ] as const;
 
 type PrefKey = (typeof PREF_KEYS)[number];

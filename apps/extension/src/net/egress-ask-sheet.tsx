@@ -1,5 +1,6 @@
 /**
- * The ask-at-the-moment sheet: the UI side of {@link setEgressAsker}.
+ * The ask-at-the-moment sheet: the UI side of {@link setEgressAsker}. Several
+ * destinations a feature needs together are asked in one sheet, one tap.
  *
  * Mounted once at the root of each realm that has one (popup, page). While
  * installed, a feature calling {@link requestEgressOptIn} for an off
@@ -22,7 +23,7 @@ import { NET_PURPOSE_LABEL } from './purpose';
 import type { DestinationView } from './egress-policy';
 
 interface PendingAsk {
-  view: DestinationView;
+  views: DestinationView[];
   resolve: (allowed: boolean) => void;
 }
 
@@ -30,7 +31,7 @@ export const EgressAskSheet = () => {
   const [pending, setPending] = useState<PendingAsk>();
 
   useEffect(() => {
-    const ask: EgressAsker = view => new Promise(resolve => setPending({ view, resolve }));
+    const ask: EgressAsker = views => new Promise(resolve => setPending({ views, resolve }));
     return setEgressAsker(ask);
   }, []);
 
@@ -39,9 +40,11 @@ export const EgressAskSheet = () => {
     setPending(undefined);
   };
 
-  const host = pending?.view.hosts[0] ?? pending?.view.label;
+  const views = pending?.views ?? [];
+  const hostOf = (v: DestinationView) => v.hosts[0] ?? v.label;
   // the people relay has its own words (design-social 5.0)
-  const people = pending?.view.id === 'people-relay';
+  const people = views.length === 1 && views[0]!.id === 'people-relay';
+  const one = views.length === 1;
 
   return (
     <Sheet
@@ -51,24 +54,42 @@ export const EgressAskSheet = () => {
           respond(false);
         }
       }}
-      title={people ? 'use a relay for messages?' : 'allow this connection'}
+      title={
+        people
+          ? 'use a relay for messages?'
+          : one
+            ? 'allow this connection'
+            : 'allow these connections'
+      }
     >
       {pending && (
         <div className='flex flex-col gap-4 px-1 text-sm text-fg-muted lowercase'>
           {people ? (
             <p>
               messages go through{' '}
-              <span className='font-mono text-fg-high'>{host?.split('/')[0]}</span>. it sees when
-              you check in, never what you say.
+              <span className='font-mono text-fg-high'>{hostOf(views[0]!).split('/')[0]}</span>. it
+              sees when you check in, never what you say.
             </p>
-          ) : (
+          ) : one ? (
             <>
               <p>
-                {pending.view.label} needs to talk to{' '}
-                <span className='font-mono text-fg-high'>{host}</span> - zafu hasn't contacted it
-                before.
+                {views[0]!.label} needs to talk to{' '}
+                <span className='font-mono text-fg-high'>{hostOf(views[0]!)}</span> - zafu hasn't
+                contacted it before.
               </p>
-              <p className='text-xs text-fg-dim'>{NET_PURPOSE_LABEL[pending.view.purpose]}</p>
+              <p className='text-xs text-fg-dim'>{NET_PURPOSE_LABEL[views[0]!.purpose]}</p>
+            </>
+          ) : (
+            <>
+              <p>zafu hasn't contacted these before, and asks them only while you use this.</p>
+              <ul className='flex flex-col gap-1.5'>
+                {views.map(v => (
+                  <li key={v.id} className='flex justify-between gap-3 text-xs'>
+                    <span>{v.label}</span>
+                    <span className='truncate font-mono text-fg-high'>{hostOf(v)}</span>
+                  </li>
+                ))}
+              </ul>
             </>
           )}
           <div className='flex gap-2 pt-1'>

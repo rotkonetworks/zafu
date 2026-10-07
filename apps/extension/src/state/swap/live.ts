@@ -47,6 +47,9 @@ const LEAD_MS = 15_000;
 /** the routes zafu offers that have an implementation */
 export const QUOTABLE = OFFERED.filter(id => PROVIDERS[id]);
 
+/** everything a swap talks to: asked together, once, when the swap first opens */
+export const SWAP_EGRESS = QUOTABLE.map(id => ROUTES[id].egress);
+
 /** a route as the screen lists it: asked for a price, or one quiet line saying why not */
 export interface Gate {
   route: RouteId;

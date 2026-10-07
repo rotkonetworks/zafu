@@ -50,6 +50,10 @@ export interface OpenSwap {
   expiresAt?: number;
   watch?: Quote['watch'];
   depositTxid?: string;
+  /** thorchain out: the move that funds the swap's address, once sent */
+  moveTxid?: string;
+  /** thorchain out: the deposit's network fee as reviewed; the deposit is refused at any other */
+  depositFee?: string;
   /** the swap's own transparent address (THORChain) */
   swapT?: { index: number; address: string };
   stage: OpenSwapStage;
@@ -229,7 +233,13 @@ export const swapCardLines = (
               tone: 'gold',
             };
     case 'thor-out':
-      return { title, status: 'waiting for you · tap to carry on', tone: 'gold' };
+      return {
+        title,
+        status: s.moveTxid
+          ? 'the network is confirming the move, then the swap'
+          : "moving zec to the swap's address",
+        tone: 'gold',
+      };
     case 'sent':
       return { title, status: s.line ?? 'waiting for the deposit', tone: 'gold' };
     case 'done':

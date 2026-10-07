@@ -18,8 +18,9 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@repo/ui/lib/utils';
+import { localExtStorage } from '@repo/storage-chrome/local';
 import { Button } from '@repo/ui/components/ui/button';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Sheet } from '@repo/ui/components/ui/sheet';
@@ -53,7 +54,14 @@ import {
   type OpenSwap,
 } from '../../../state/swap/open-swaps';
 import { usePasswordGate } from '../../../hooks/password-gate';
-import { buildSendTxInWorker, completeSendTxInWorker } from '../../../state/keyring/network-worker';
+import {
+  buildSendTxInWorker,
+  completeSendTxInWorker,
+  planTransparentDepositInWorker,
+} from '../../../state/keyring/network-worker';
+import { checkVault, type DepositPlan } from '../../../workers/transparent-deposit';
+import { legContextOf, resumeSwapLegs, runSwapLegs } from '../../../state/swap/thor-legs';
+import { openSwapUnlock, stopThorOut, tooLateToMove } from '../../../state/swap/thor-out';
 import type { VaultUnlock } from '../../../state/keyring/types';
 import { EMPTY_POOL_NOTES, usePoolNotes } from '../../../hooks/zcash-pool-balances';
 import { maxSendable, quoteSend } from '../send/spendable';
@@ -84,11 +92,13 @@ import {
   quoteQuery,
   quoteStatus,
   refreshIn,
+  SWAP_EGRESS,
   WAIT,
   watchEgress,
 } from '../../../state/swap/live';
 import { NeedsRefundAddress } from '../../../state/swap/near';
 import {
+  asksCustody,
   pairKey,
   ROUTES,
   routeLabel,
@@ -111,8 +121,8 @@ import { useBackNav, usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { looksLikeLink, toUri } from '../../../links/router';
 import { viaLine, type SwapLinkState } from '../../../links/land';
-import { Footer, Main } from '../send/send-ui';
-import { ThorDeposit } from './thor-deposit';
+import { Footer, Main, shortAddress } from '../send/send-ui';
+import { ThorOutTracker } from './thor-deposit';
 import { AmountField, AddressSheet, ToField } from '../send/send-fields';
 import { chainLabel, chainOfSwap, isAddressOn } from '../../../addresses/kind';
 import { useYourAddresses } from '../../../hooks/use-your-addresses';
@@ -485,6 +495,37 @@ const DeepenLink = () => (
   </button>
 );
 
+/** what a thorchain deposit from the swap's own address costs, and what that address is short */
+const depositPlanQuery = (zidecarUrl: string, t?: SwapTAddress, q?: Quote, amountIn = '') =>
+  queryOptions({
+    queryKey: ['swap-deposit-plan', t?.address, q?.depositAddress, q?.memo, amountIn],
+    queryFn: async (): Promise<DepositPlan> => {
+      const req = {
+        tAddress: t!.address,
+        tIndex: t!.index,
+        to: q!.depositAddress,
+        amountZat: toUnits(amountIn, 8).toString(),
+        memo: q!.memo ?? '',
+        mainnet: true,
+      };
+      // the vault is checked first: nothing is reviewed toward a deposit that could never be paid
+      await checkVault(req.to, req.mainnet);
+      return planTransparentDepositInWorker(zidecarUrl, req);
+    },
+    staleTime: 60_000,
+    retry: false,
+  });
+
+const samePlan = (a?: DepositPlan, b?: DepositPlan) => a?.fee === b?.fee && a?.short === b?.short;
+
+const zecOf = (zat: string | bigint) => fromUnits(BigInt(zat), 8);
+
+/** the custodial routes the person acknowledged, each once */
+const custodyAckQuery = queryOptions({
+  queryKey: ['swapCustodyAck'],
+  queryFn: async (): Promise<RouteId[]> => (await localExtStorage.get('swapCustodyAck')) ?? [],
+});
+
 /** where a remembered swap reopens */
 const stepOf = (s: OpenSwap): Step =>
   s.stage === 'thor-out'
@@ -498,6 +539,9 @@ const stepOf = (s: OpenSwap): Step =>
         : s.stage === 'failed'
           ? 'error'
           : s.stage;
+
+/** the swap asks for its routes once per popup: a "not now" waits for the next open */
+let askedRoutes = false;
 
 export const CrosschainSwap = ({
   link,
@@ -527,6 +571,13 @@ export const CrosschainSwap = ({
   const { requestAuth, PasswordModal } = usePasswordGate();
   const { chosen, choose } = useSwapRoutes();
   const { last, read, remember } = useSwapLast(wallet);
+  // one ask, on the first open, for everything the swap talks to; once allowed, never again
+  useEffect(() => {
+    if (!askedRoutes) {
+      askedRoutes = true;
+      void requestEgressOptIn(SWAP_EGRESS);
+    }
+  }, []);
 
   // a link to a route zafu doesn't offer opens the normal router, with that one line
   const off = link?.link.route && ROUTES[link.link.route].off;
@@ -566,6 +617,7 @@ export const CrosschainSwap = ({
   /** the swap ended here, or the person let it go: home stops showing it */
   const forget = () => {
     if (openId.current) {
+      stopThorOut(openId.current);
       void forgetOpenSwap(openId.current);
     }
     openId.current = undefined;
@@ -605,12 +657,19 @@ export const CrosschainSwap = ({
           setError(o.line);
         }
       }
+      if (o.stage === 'thor-out' && !o.depositFee) {
+        // reviewed before both legs were one: priced again from the form, its address (and zec) kept
+        forget();
+        setStep('input');
+        return;
+      }
       setStep(stepOf(o));
+      resumeSwapLegs(o, useStore.getState());
     });
   }, [resume]);
   const [checking, setChecking] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [riskAcknowledged, setRiskAcknowledged] = useState(false);
+  const [custodyOpen, setCustodyOpen] = useState(false);
   const [status, setStatus] = useState<SwapStatusView>();
   const [depositTxid, setDepositTxid] = useState<string>();
   const [error, setError] = useState<string>();
@@ -758,7 +817,6 @@ export const CrosschainSwap = ({
     ...gated.flatMap(g => (g.line ? [{ ...g, line: g.line }] : [])),
   ];
   const below = answers.find(a => a.error instanceof BelowMinimum && !a.data)?.error;
-  const askable = gated.filter(g => g.ask).map(g => g.route);
   const allFailed =
     !!req && !quotes.length && !fetching && asked.length > 0 && quiet.length >= asked.length;
   // every route keeps its one line, best first: an arrival reorders rows, never adds or removes one
@@ -776,8 +834,9 @@ export const CrosschainSwap = ({
         stale: !!a?.isPlaceholderData || !!a?.isFetching,
         onPress: q
           ? () => setRoutesOpen(true)
-          : g.ask
-            ? () => void askFor([g.route])
+          : // a route turned down at the first ask is asked again only on its own tap
+            g.ask
+            ? () => void requestEgressOptIn(ROUTES[g.route].egress)
             : // near wants a refund address: choosing it brings the field back
               a?.error instanceof NeedsRefundAddress
               ? () => setPicked(g.route)
@@ -802,13 +861,6 @@ export const CrosschainSwap = ({
     })),
   );
 
-  // a route not yet allowed asks once, on a tap; then its price is asked like the rest
-  const askFor = async (routes: RouteId[]) => {
-    for (const r of routes) {
-      await requestEgressOptIn(ROUTES[r].egress);
-    }
-  };
-
   // the prices shown are kept for a reopened popup, and put back as this one opens
   useEffect(() => {
     if (!wallet) {
@@ -827,12 +879,32 @@ export const CrosschainSwap = ({
   }, [wallet, req, typedAmount, typedAddress]);
 
   const deal = firm?.quote;
+  // a custodial route is acknowledged once, by the first confirm through it (board SwapU-Custody)
+  const custodyAcked = useQuery(custodyAckQuery).data ?? [];
+  const askCustody = !!deal && asksCustody(deal.route, custodyAcked);
+  // out of zec over thorchain the review shows both legs: the move to the swap's own address
+  // (when it is short) and the deposit from it, priced before anything is signed
+  const thorOut = !!deal?.memo && isFromZec;
+  const tLook = swapT ?? swapTNext.next;
+  const planAsk = useQuery({
+    ...depositPlanQuery(zidecarUrl, tLook, deal, firm?.req.amountIn),
+    enabled: reviewOpen && thorOut && !!tLook,
+  });
+  const reviewedPlan = planAsk.data;
+  const moving = !!reviewedPlan && reviewedPlan.short !== '0';
+  const moveFee = moving
+    ? quoteSend(notes, BigInt(reviewedPlan.short), { transparentRecipient: true }).feeZat
+    : 0n;
   const carrier = pair && deal && poolAsset(deal.route, pair)?.carrier;
   // the deadline in review is the price's; on the deposit screen it is the window to pay in
   const left = useDeadlineCountdown(
     reviewOpen || step === 'deposit' ? (deal?.expiresAt ?? null) : null,
   );
-  const expired = reviewOpen && !!deal?.expiresAt && deal.expiresAt <= Date.now();
+  // a price that can't outlast the move is asked again before any zec leaves the shielded pool
+  const expired =
+    reviewOpen &&
+    !!deal?.expiresAt &&
+    (deal.expiresAt <= Date.now() || (moving && tooLateToMove(deal.expiresAt)));
   const provider = deal && PROVIDERS[deal.route];
   const watchable =
     !!provider?.status && (deal?.watch === 'deposit' || (deal?.watch === 'txid' && !!depositTxid));
@@ -921,7 +993,6 @@ export const CrosschainSwap = ({
     if (reviewable && req) {
       setError(undefined);
       setFirm({ quote, req });
-      setRiskAcknowledged(false);
       setReviewOpen(true);
     }
   };
@@ -934,8 +1005,14 @@ export const CrosschainSwap = ({
     if (!firm) {
       return;
     }
+    // the confirm that acknowledged a custodial route is remembered for it, for good
+    if (askCustody) {
+      const next = [...custodyAcked, firm.quote.route];
+      queryClient.setQueryData(custodyAckQuery.queryKey, next);
+      await localExtStorage.set('swapCustodyAck', next);
+    }
     if (firm.checked) {
-      return confirm(firm.quote, firm.req);
+      return confirm(firm.quote, firm.req, swapT, reviewedPlan);
     }
     const ask = (firmAsk.current = new AbortController());
     setChecking(true);
@@ -945,15 +1022,21 @@ export const CrosschainSwap = ({
       setSwapT(t);
       const req = t ? { ...firm.req, zcashTransparent: t.address } : firm.req;
       const got = await PROVIDERS[firm.quote.route]!.quote({ ...req, dry: false }, ask.signal);
+      // out of zec over thorchain, the legs are priced again for the firm memo and the claimed address
+      const plan =
+        got.memo && req.direction === 'from_zec'
+          ? await queryClient.fetchQuery(depositPlanQuery(zidecarUrl, t, got, req.amountIn))
+          : undefined;
       if (ask.signal.aborted) {
         return;
       }
-      if (got.amountOut !== firm.quote.amountOut) {
+      // a moved price or moved legs get a second look; nothing is signed that wasn't shown
+      if (got.amountOut !== firm.quote.amountOut || (plan && !samePlan(plan, reviewedPlan))) {
         setFirm({ quote: got, req, was: firm.quote, checked: true });
         return;
       }
       // `t` by hand: the swapT state set above is not this closure's yet
-      return confirm(got, req, t);
+      return confirm(got, req, t, plan);
     } catch (e) {
       if (!ask.signal.aborted) {
         setReviewOpen(false);
@@ -969,7 +1052,7 @@ export const CrosschainSwap = ({
    * `r` is the request `d` answered: what is sent, whatever the form says by
    * now. `t` is the swap's own t-address when it claimed one.
    */
-  const confirm = async (d: Quote, r: QuoteRequest, t = swapT) => {
+  const confirm = async (d: Quote, r: QuoteRequest, t = swapT, plan?: DepositPlan) => {
     if (!selectedKeyInfo || !wallet) {
       return;
     }
@@ -995,9 +1078,20 @@ export const CrosschainSwap = ({
     if (d.notYet) {
       return;
     }
-    // a memo deposit is never a shielded send: a t->t with an OP_RETURN, its own steps
+    // a memo deposit is never a shielded send: a t->t with an OP_RETURN from the swap's own
+    // address, funded first when it is short. one unlock covers both legs
     if (d.memo) {
-      await remember('thor-out');
+      const ctx = legContextOf(useStore.getState());
+      if (!plan || !t || !ctx || (!ctx.cold && !(await requestAuth()))) {
+        return;
+      }
+      const o = { ...openSwapOf(d, r, wallet, 'thor-out', t), depositFee: plan.fee };
+      openId.current = o.id;
+      await saveOpenSwap(o);
+      if (!ctx.cold) {
+        await openSwapUnlock(o.id, d.expiresAt, ctx.legsPerUnlock);
+      }
+      runSwapLegs(o, ctx, plan);
       setStep('thor-out');
       return;
     }
@@ -1149,6 +1243,18 @@ export const CrosschainSwap = ({
     return () => clearInterval(interval);
   }, [step, deal, provider, watchable, depositTxid]);
 
+  const resumeHeld = async () => {
+    const o = (await readOpenSwaps()).find(x => x.id === openId.current);
+    const ctx = legContextOf(useStore.getState());
+    if (!o || !ctx || (!ctx.cold && !(await requestAuth()))) {
+      return;
+    }
+    if (!ctx.cold) {
+      await openSwapUnlock(o.id, o.expiresAt, ctx.legsPerUnlock);
+    }
+    runSwapLegs(o, ctx);
+  };
+
   const reset = () => {
     forget();
     setStep('input');
@@ -1292,37 +1398,49 @@ export const CrosschainSwap = ({
           </div>
           {token && (
             <div className='flex flex-col gap-1.5'>
-              <button
-                type='button'
-                onClick={() => setRoutesOpen(true)}
-                disabled={!quotes.length}
-                className='flex h-24 flex-col justify-center gap-1 overflow-hidden border border-border-soft bg-elev-1 px-4 py-2.5 text-left disabled:cursor-default'
-              >
-                {view ? (
-                  <>
-                    <span className='flex items-center justify-between text-sm text-fg-high'>
-                      {routeLabel(view.route, view.route === best?.route)}
-                      <span className='i-lucide-chevron-right size-3.5 text-fg-muted' />
+              <div className='relative'>
+                <button
+                  type='button'
+                  onClick={() => setRoutesOpen(true)}
+                  disabled={!quotes.length}
+                  className='flex h-24 w-full flex-col justify-center gap-1 overflow-hidden border border-border-soft bg-elev-1 py-2.5 pl-4 pr-10 text-left disabled:cursor-default'
+                >
+                  {view ? (
+                    <>
+                      <span className='flex items-center justify-between text-sm text-fg-high'>
+                        {routeLabel(view.route, view.route === best?.route)}
+                        <span className='i-lucide-chevron-right size-3.5 text-fg-muted' />
+                      </span>
+                      <span
+                        className={cn(
+                          'flex flex-wrap gap-x-3 text-[11px] text-fg-muted transition-opacity duration-300',
+                          stale && 'opacity-50',
+                        )}
+                      >
+                        <RouteMeta quote={view} unit={outUnit} decimals={outDecimals} />
+                      </span>
+                    </>
+                  ) : (
+                    <span className='text-[11px] text-fg-muted'>
+                      {allFailed
+                        ? 'no route can take this right now · nothing was sent'
+                        : fetching
+                          ? 'asking for prices'
+                          : 'route'}
                     </span>
-                    <span
-                      className={cn(
-                        'flex flex-wrap gap-x-3 text-[11px] text-fg-muted transition-opacity duration-300',
-                        stale && 'opacity-50',
-                      )}
-                    >
-                      <RouteMeta quote={view} unit={outUnit} decimals={outDecimals} />
-                    </span>
-                  </>
-                ) : (
-                  <span className='text-[11px] text-fg-muted'>
-                    {allFailed
-                      ? 'no route can take this right now · nothing was sent'
-                      : fetching
-                        ? 'asking for prices'
-                        : 'route'}
-                  </span>
+                  )}
+                </button>
+                {view && (
+                  <button
+                    type='button'
+                    onClick={() => setCustodyOpen(true)}
+                    aria-label='who holds the funds on this route'
+                    className='absolute bottom-1.5 right-1.5 grid size-8 place-items-center text-fg-muted hover:text-fg-high'
+                  >
+                    <span className='i-ph-question size-3.5' aria-hidden='true' />
+                  </button>
                 )}
-              </button>
+              </div>
               <div ref={routeList} className='flex flex-col'>
                 {lines.map(({ deepen, ...l }) => (
                   <div key={l.route} data-key={l.route} className='flex min-w-0 items-center gap-3'>
@@ -1384,15 +1502,9 @@ export const CrosschainSwap = ({
           )}
         </Main>
         <Footer>
-          {!quotes.length && req && askable.length > 0 && !fetching ? (
-            <Button className='w-full' onClick={() => void askFor(askable)}>
-              ask for prices
-            </Button>
-          ) : (
-            <Button className='w-full' onClick={openReview} disabled={!reviewable}>
-              review swap
-            </Button>
-          )}
+          <Button className='w-full' onClick={openReview} disabled={!reviewable}>
+            review swap
+          </Button>
         </Footer>
         <TokenSheet
           title={isFromZec ? 'you get' : 'you pay'}
@@ -1411,6 +1523,16 @@ export const CrosschainSwap = ({
             onPick={row => setAddress(row.address)}
             onPaste={() => document.getElementById('swap-other')?.focus()}
           />
+        )}
+        {view && (
+          <Sheet
+            open={custodyOpen}
+            onOpenChange={setCustodyOpen}
+            title={`${ROUTES[view.route].label} · who holds it`}
+          >
+            <p className='text-xs text-fg'>{ROUTES[view.route].custody}</p>
+            <p className='text-xs text-fg-muted'>{NOTE[view.route][direction]}</p>
+          </Sheet>
         )}
         <Sheet open={routesOpen} onOpenChange={setRoutesOpen} title='route'>
           {quotes.map(q => (
@@ -1448,14 +1570,14 @@ export const CrosschainSwap = ({
                   <Button
                     className='flex-1'
                     onClick={() => void recheck()}
-                    disabled={!riskAcknowledged}
+                    disabled={thorOut && !reviewedPlan}
                     loading={checking}
                   >
-                    {/* a memo deposit has its own reviews next; nothing is signed here */}
+                    {askCustody && 'understood · '}
                     {isFromZec
-                      ? deal.memo
-                        ? 'continue'
-                        : 'confirm & send'
+                      ? kind === 'zigner'
+                        ? 'sign with zigner'
+                        : 'swap'
                       : 'show deposit address'}
                   </Button>
                 )}
@@ -1492,13 +1614,38 @@ export const CrosschainSwap = ({
               ))}
               {deal.cost && <CostList cost={deal.cost} unit={outUnit} decimals={outDecimals} />}
             </div>
+            {thorOut && (
+              <p className='text-xs text-fg'>
+                {reviewedPlan ? (
+                  <>
+                    {moving && (
+                      <>
+                        moves <Sensitive>{`${zecOf(reviewedPlan.short)} zec`}</Sensitive> to this
+                        swap's own address{' '}
+                        <span className='font-mono'>{tLook && shortAddress(tLook.address)}</span>,
+                        then{' '}
+                      </>
+                    )}
+                    sends <Sensitive>{`${firm.req.amountIn} zec`}</Sensitive> to the{' '}
+                    {ROUTES[deal.route].label} vault · fees{' '}
+                    <Sensitive>{`${moving ? `${zecOf(moveFee)} + ` : ''}${zecOf(reviewedPlan.fee)} zec`}</Sensitive>
+                  </>
+                ) : planAsk.error ? (
+                  <span className='text-warn'>{plain(deal.route, planAsk.error)}</span>
+                ) : (
+                  <span className='text-fg-muted'>reading the swap's address</span>
+                )}
+              </p>
+            )}
             {deal.route === best?.route && more && (
               <p className='text-xs text-fg-muted'>
                 you get <Sensitive className='text-success'>{`${more} ${outUnit}`}</Sensitive> more
                 than the next route
               </p>
             )}
-            {note && <p className='text-xs text-fg-muted'>{note}</p>}
+            {note && (
+              <p className={cn('text-xs', askCustody ? 'text-warn' : 'text-fg-muted')}>{note}</p>
+            )}
             {deal.streamLine && <p className='text-xs text-fg-muted'>{deal.streamLine}</p>}
             {deal.refundLine && <p className='text-xs text-fg-muted'>{deal.refundLine}</p>}
             <p className='text-xs text-fg-muted'>
@@ -1518,15 +1665,6 @@ export const CrosschainSwap = ({
                 </>
               )}
             </p>
-            <label className='flex cursor-pointer items-start gap-2.5 text-xs text-fg'>
-              <input
-                type='checkbox'
-                checked={riskAcknowledged}
-                onChange={e => setRiskAcknowledged(e.target.checked)}
-                className='mt-0.5 h-4 w-4 shrink-0 accent-[var(--zigner-gold)]'
-              />
-              i accept these risks.
-            </label>
             {link?.via && <p className='text-[11px] text-fg-muted'>{viaLine(link.via)}</p>}
           </Sheet>
         )}
@@ -1534,31 +1672,33 @@ export const CrosschainSwap = ({
     );
   }
 
-  if (step === 'thor-out' && deal && firm && swapT) {
+  if (step === 'thor-out' && deal && firm && swapT && openId.current) {
     return (
-      <ThorDeposit
-        quote={deal}
-        amountZat={toUnits(firm.req.amountIn, 8)}
-        swapT={swapT}
-        onSent={txid => {
-          track({ stage: 'sent', depositTxid: txid });
-          setDepositTxid(txid);
-          setStep('polling');
-        }}
-        onBack={() => {
-          forget();
-          setStep('input');
-        }}
-        // a fresh price for the same swap: its address (and any zec moved there) is kept
-        onExpired={() => {
-          forget();
-          setStep('input');
-        }}
-        onShield={() => {
-          forget();
-          navigate(PopupPath.INDEX);
-        }}
-      />
+      <>
+        {PasswordModal}
+        <ThorOutTracker
+          id={openId.current}
+          storeId={storeId ?? selectedKeyInfo?.id ?? ''}
+          amountZat={toUnits(firm.req.amountIn, 8)}
+          tAddress={swapT.address}
+          vault={ROUTES[deal.route].label}
+          onSent={txid => {
+            setDepositTxid(txid);
+            setStep('polling');
+          }}
+          onLeave={() => navigate(PopupPath.INDEX)}
+          onResume={() => void resumeHeld()}
+          // a fresh price for the same swap: its address (and any zec moved there) is kept
+          onAgain={() => {
+            forget();
+            setStep('input');
+          }}
+          onDrop={() => {
+            forget();
+            navigate(PopupPath.INDEX);
+          }}
+        />
+      </>
     );
   }
 
@@ -1578,15 +1718,17 @@ export const CrosschainSwap = ({
             <p className='text-center text-sm text-fg-muted'>
               open zigner, scan this code, then review and approve
             </p>
+            {error && <p className='text-center text-xs text-warn'>{error}</p>}
           </div>
         )}
 
         {step === 'scan' && (
           <QrScanner
             onScan={data => void signatureScanned(data)}
+            // a camera that won't start goes back to the qr, saying so there
             onError={err => {
               setError(typeof err === 'string' ? err : "that code didn't scan · please try again");
-              setStep('error');
+              setStep('sign');
             }}
             onClose={() => setStep('sign')}
             title='scan signature'
@@ -1681,7 +1823,13 @@ export const CrosschainSwap = ({
       </Main>
       <Footer>
         {step === 'sign' && (
-          <Button className='w-full' onClick={() => setStep('scan')}>
+          <Button
+            className='w-full'
+            onClick={() => {
+              setError(undefined);
+              setStep('scan');
+            }}
+          >
             scan signature
           </Button>
         )}

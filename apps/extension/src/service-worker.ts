@@ -725,6 +725,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
         await chrome.storage.session.remove([
           'passwordKey',
           'signGraceUntil',
+          'swapUnlock',
           'retiredPasswordKey',
           'penumbraBalancesSnapshot',
         ]);

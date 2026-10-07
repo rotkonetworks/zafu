@@ -27,7 +27,7 @@ export const readEgressInputs = async (): Promise<EgressInputs> =>
 export const readEgressView = async (): Promise<DestinationView[]> =>
   describeEgress(await readEgressInputs());
 
-export type EgressAsker = (destination: DestinationView) => Promise<boolean>;
+export type EgressAsker = (destinations: DestinationView[]) => Promise<boolean>;
 
 let asker: EgressAsker = () => Promise.resolve(false);
 
@@ -41,23 +41,40 @@ export const setEgressAsker = (next: EgressAsker): (() => void) => {
   };
 };
 
-/**
- * Resolve true when `destination` may be contacted, asking the user if it is
- * off. A destination the user blocked is not asked about again - unblocking
- * is a settings decision, not a prompt.
- */
-export const requestEgressOptIn = async (destination: string): Promise<boolean> => {
-  const view = (await readEgressView()).find(d => d.id === destination);
-  if (!view) {
+const ask = async (ids: readonly string[]): Promise<boolean> => {
+  const views = (await readEgressView()).filter(d => ids.includes(d.id));
+  const off = views.filter(d => !d.on);
+  // a destination the user blocked is not asked about again - unblocking is a settings decision
+  const askable = off.filter(d => d.why !== 'you-blocked' && d.why !== 'network-off');
+  if (views.length < ids.length) {
     return false;
   }
-  if (view.on) {
+  if (!off.length) {
     return true;
   }
-  if (view.why === 'you-blocked' || view.why === 'network-off' || !(await asker(view))) {
+  if (!askable.length || !(await asker(askable))) {
     return false;
   }
-  await setDestinationOptIn(destination, 'allowed');
+  for (const d of askable) {
+    await setDestinationOptIn(d.id, 'allowed');
+  }
   await refreshEgress();
-  return true;
+  return askable.length === off.length;
+};
+
+/** one sheet at a time: a later ask waits for the open one, then sees its answer */
+let asking: Promise<unknown> = Promise.resolve();
+
+/**
+ * Resolve true when every one of `destinations` may be contacted, asking once,
+ * in one sheet, about those that are off. A feature that needs several (a swap
+ * asks every route it prices) asks for them together, so the person answers
+ * once.
+ */
+export const requestEgressOptIn = (destinations: string | readonly string[]): Promise<boolean> => {
+  const turn = asking.then(() =>
+    ask(typeof destinations === 'string' ? [destinations] : destinations),
+  );
+  asking = turn.catch(() => undefined);
+  return turn;
 };
