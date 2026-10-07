@@ -185,7 +185,29 @@ export const askSendDirect = async (host: string): Promise<boolean> => {
  * Never sends directly on its own: only a broadcast the person chose to send
  * directly, this once, goes to `next`.
  */
-export const viaNym = async (
+export const viaNym = (
+  input: string | URL | Request,
+  init: RequestInit | undefined,
+  cls: RequestClass,
+  next: () => Promise<Response>,
+  refuse: () => never,
+): Promise<Response> => {
+  // the tunnel cannot cancel a request, but the caller can stop waiting for it
+  const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+  const run = route(input, init, cls, next, refuse);
+  return signal
+    ? new Promise((resolve, reject) => {
+        const abort = () => reject(signal.reason as Error);
+        if (signal.aborted) {
+          abort();
+        }
+        signal.addEventListener('abort', abort, { once: true });
+        run.then(resolve, reject);
+      })
+    : run;
+};
+
+const route = async (
   input: string | URL | Request,
   init: RequestInit | undefined,
   cls: RequestClass,
