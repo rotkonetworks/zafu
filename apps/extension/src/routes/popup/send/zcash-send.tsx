@@ -1,5 +1,6 @@
 /** zcash send: form, review, then the wallet's own signer (resolve.ts), then done */
 
+import { shorten } from '@repo/ui/lib/utils';
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Sensitive } from '../../../components/sensitive';
 import { discardTxOp, writeTxOp } from '../../../tx-ops';
@@ -95,7 +96,7 @@ import {
   Sending,
   Stopped,
   Strip,
-  shortAddress,
+  Addr,
   stepMeta,
   type SendingNote,
 } from './send-ui';
@@ -556,7 +557,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const toName =
     recipientContact?.contact.name ??
     (resolvedProfile?.address === to ? zcashMeLabel(resolvedProfile) : undefined);
-  const toLabel = toName ?? shortAddress(to);
+  const toLabel = toName ?? <Addr>{to}</Addr>;
   const toHelper: [warn: boolean, text: string] = requestError
     ? [true, requestError]
     : to && toRefusal && !parseZcashMeHandle(to)
@@ -566,7 +567,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             false,
             [
               toName ?? requestNote,
-              shortAddress(to),
+              shorten(to, 6, 5),
               recipientIsTransparent ? 'public' : 'shielded',
             ]
               .filter(Boolean)
@@ -1510,7 +1511,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             amount={amount}
             unit='zec'
             rows={[
-              ['to', toName ? `${toName} · ${shortAddress(to)}` : shortAddress(to)],
+              [
+                'to',
+                toName ? (
+                  <>
+                    {toName} · <Addr>{to}</Addr>
+                  </>
+                ) : (
+                  <Addr>{to}</Addr>
+                ),
+              ],
               ['fee', <Sensitive key='fee'>{fee} zec</Sensitive>],
               [
                 'total',
@@ -1693,7 +1703,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 <span className='flex h-[42px] w-[150px] flex-col justify-center gap-0.5 border border-border-soft bg-canvas px-2.5'>
                   <span className='text-[10px] text-fg-high'>review transaction</span>
                   <span className='truncate text-[9px] text-fg-muted'>
-                    <Sensitive>{amount} zec</Sensitive> · {shortAddress(to)}
+                    <Sensitive>{amount} zec</Sensitive> · <Addr>{to}</Addr>
                   </span>
                 </span>
                 <span className='size-[22px] border-2 border-fg-muted' />

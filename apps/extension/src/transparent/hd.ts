@@ -103,8 +103,3 @@ export function scanIndices(
   }
   return [...out].sort((a, b) => a - b);
 }
-
-/** 0xabcd...wxyz / inj1abcd...wxyz */
-export function shortAddress(address: string): string {
-  return address.length > 14 ? `${address.slice(0, 8)}...${address.slice(-4)}` : address;
-}

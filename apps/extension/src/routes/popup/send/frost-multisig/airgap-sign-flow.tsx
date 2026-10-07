@@ -2,6 +2,7 @@
 // tx, hands sighash + alphas to zigner via QR, mediates relay traffic with
 // peers, then aggregates + broadcasts. zigner does all FROST math.
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { AnimatedQrDisplay } from '../../../../shared/components/animated-qr-display';
@@ -259,8 +260,10 @@ export function FrostAirgapSignFlow({
               {ms.threshold}-of-{ms.maxSigners} threshold
             </p>
             <p>
-              send <Sensitive>{amount} ZEC</Sensitive> to {recipient.slice(0, 16)}…
-              {recipient.slice(-8)}
+              send <Sensitive>{amount} ZEC</Sensitive> to{' '}
+              <Clipped head={16} tail={8} label='address'>
+                {recipient}
+              </Clipped>
             </p>
             <p>
               fee: <Sensitive>{fee} ZEC</Sensitive>

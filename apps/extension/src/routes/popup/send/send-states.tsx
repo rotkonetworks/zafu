@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { Button } from '@repo/ui/components/ui/button';
 import { ScreenHeader } from '../../../components/screen-header';
 import type { LedgerSigningPhase } from '../../../ledger/zcash-app/contract';
@@ -54,13 +55,13 @@ export const CatchUpNotice = ({
         </p>
         <div className='flex shrink-0 flex-col gap-2 border border-border-soft bg-elev-1 px-3.5 py-3'>
           <div className='flex items-center justify-between gap-3 text-[11px] text-fg-muted'>
-            <span className='truncate'>
+            <Clipped>
               {catchUp.replaying
                 ? 'reading the tree'
                 : catchUp.done !== undefined && catchUp.total
                   ? `${fmt(catchUp.done)} of ${fmt(catchUp.total)} blocks`
                   : `${fmt(catchUp.to - catchUp.from + 1)} blocks to read`}
-            </span>
+            </Clipped>
             {left && <span className='shrink-0'>{left}</span>}
           </div>
           <div className='h-[3px] w-full overflow-hidden bg-border-soft'>

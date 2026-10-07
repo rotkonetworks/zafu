@@ -16,6 +16,7 @@
  * its own password gate, so the parent only passes display/network inputs.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useStore } from '../../state';
@@ -511,7 +512,11 @@ export const ShieldTransparent = ({
 
       {txid && !error && (
         <p className='font-mono text-label text-fg-muted'>
-          shielded: {txid.slice(0, 16)}... (wait for confirmation)
+          shielded:{' '}
+          <Clipped head={16} tail={0} label='transaction id'>
+            {txid}
+          </Clipped>{' '}
+          (wait for confirmation)
         </p>
       )}
       {error && (

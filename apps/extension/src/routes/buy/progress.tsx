@@ -6,6 +6,7 @@
  */
 
 import { Button } from '@repo/ui/components/ui/button';
+import { shorten } from '@repo/ui/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 import { payApp } from '../../buy/apps';
 import { clock, loadOffer, type OpenBuy } from '../../buy/machine';
@@ -59,7 +60,7 @@ const trackSteps = (b: OpenBuy, now: number): (Step & { bad?: boolean })[] => {
     },
     {
       t: 'usdc in your zafu base account',
-      d: `${usdc2(o.net)} usdc${b.fulfillTx ? ` · base tx ${b.fulfillTx.slice(0, 6)}…${b.fulfillTx.slice(-4)}` : ''}`,
+      d: `${usdc2(o.net)} usdc${b.fulfillTx ? ` · base tx ${shorten(b.fulfillTx, 6, 4)}` : ''}`,
       at: b.at.released,
       state: 'done',
     },

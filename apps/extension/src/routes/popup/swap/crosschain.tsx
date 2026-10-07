@@ -7,6 +7,7 @@
  * signed or shown to pay.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { LP_PRELOAD, openLpPage } from '../../../lp/open';
 import {
   useEffect,
@@ -122,7 +123,7 @@ import { useBackNav, usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { looksLikeLink, toUri } from '../../../links/router';
 import { viaLine, type SwapLinkState } from '../../../links/land';
-import { Footer, Main, shortAddress } from '../send/send-ui';
+import { Addr, Footer, Main } from '../send/send-ui';
 import { ThorOutTracker } from './thor-deposit';
 import { DepositCard, untilLabel } from './deposit-card';
 import { AmountField, AddressSheet, ToField } from '../send/send-fields';
@@ -439,23 +440,25 @@ const RouteLine = ({
       onClick={onPress}
       disabled={!onPress}
       className={cn(
-        'relative flex h-6 shrink-0 items-center truncate text-left text-[11px]',
+        'relative flex h-6 min-w-0 shrink-0 items-center text-left text-[11px]',
         on ? 'text-fg-high' : 'text-fg-muted',
         onPress ? 'underline-offset-4 hover:text-fg-high hover:underline' : 'cursor-default',
       )}
     >
-      {ROUTES[route].label}
-      {line && (
-        <span
-          key={line}
-          className={cn(
-            'transition-opacity duration-300 animate-in fade-in motion-reduce:animate-none',
-            stale && 'opacity-50',
-          )}
-        >
-          &nbsp;· {line}
-        </span>
-      )}
+      <Clipped>
+        {ROUTES[route].label}
+        {line && (
+          <span
+            key={line}
+            className={cn(
+              'transition-opacity duration-300 animate-in fade-in motion-reduce:animate-none',
+              stale && 'opacity-50',
+            )}
+          >
+            &nbsp;· {line}
+          </span>
+        )}
+      </Clipped>
       {waiting && wait && (
         <span
           className='swap-wait absolute inset-x-0 bottom-0.5 h-px bg-zigner-gold'
@@ -1605,7 +1608,7 @@ export const CrosschainSwap = ({
                       <>
                         moves <Sensitive>{`${zecOf(reviewedPlan.short)} zec`}</Sensitive> to this
                         swap's own address{' '}
-                        <span className='font-mono'>{tLook && shortAddress(tLook.address)}</span>,
+                        <span className='font-mono'>{tLook && <Addr>{tLook.address}</Addr>}</span>,
                         then{' '}
                       </>
                     )}

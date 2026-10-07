@@ -8,6 +8,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { RowGroup } from '@repo/ui/components/ui/row';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { Mark as StampMark } from '@repo/ui/components/ui/mark';
@@ -15,8 +16,12 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { Sensitive } from '../../../components/sensitive';
 import { sendStage, stageMeta, type SendProgress, type Stages } from './send-stage';
 
-/** board address form: head and tail that identify it, u1v9ga…qrdva */
-export const shortAddress = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-5)}` : a);
+/** board address form: head and tail that identify it, u1v9ga…qrdva, whole on demand */
+export const Addr = ({ children }: { children: string }) => (
+  <Clipped head={6} tail={5} label='address'>
+    {children}
+  </Clipped>
+);
 
 export const isTransparentAddress = (a: string) => /^(t1|t3|tm|t2)/.test(a.trim());
 
@@ -36,9 +41,9 @@ export const Footer = ({ children, className }: { children: ReactNode; className
 
 /** the fixed one-line helper under a field; blank keeps its height */
 export const Helper = ({ warn, children }: { warn?: boolean; children?: ReactNode }) => (
-  <span className={cn('h-4 truncate text-[11px]', warn ? 'text-warn' : 'text-fg-muted')}>
+  <Clipped className={cn('h-4 text-[11px]', warn ? 'text-warn' : 'text-fg-muted')}>
     {children}
-  </span>
+  </Clipped>
 );
 
 /** what is being signed, pinned under the header */
@@ -53,7 +58,7 @@ export const Strip = ({
 }) => (
   <div className='flex h-11 shrink-0 items-center gap-2 border-b border-border-soft bg-elev-1 px-4'>
     {icon && <span className={cn(icon, 'size-3.5 shrink-0 text-fg-muted')} />}
-    <span className='truncate text-xs text-fg'>{children}</span>
+    <Clipped className='text-xs text-fg'>{children}</Clipped>
     {right && <span className='ml-auto shrink-0 text-[11px] text-fg-muted'>{right}</span>}
   </div>
 );
@@ -95,7 +100,7 @@ export const Facts = ({ rows }: { rows: readonly Fact[] }) => (
     {rows.map(([k, v]) => (
       <div key={k} className='flex h-12 items-center justify-between gap-3 px-3.5'>
         <span className='shrink-0 text-xs text-fg-muted'>{k}</span>
-        <span className='truncate text-[13px] text-fg-high'>{v}</span>
+        <Clipped className='text-[13px] text-fg-high'>{v}</Clipped>
       </div>
     ))}
   </RowGroup>
@@ -105,7 +110,7 @@ export const Facts = ({ rows }: { rows: readonly Fact[] }) => (
 export const PrivacyLine = ({ children }: { children: ReactNode }) => (
   <div className='flex h-10 items-center gap-2 border border-border-soft px-3'>
     <span className='i-lucide-shield size-3.5 shrink-0 text-network-accent' />
-    <span className='truncate text-xs text-fg'>{children}</span>
+    <Clipped className='text-xs text-fg'>{children}</Clipped>
   </div>
 );
 
@@ -209,7 +214,9 @@ export const Done = ({
       <span className='text-[13px] text-fg-muted'>{line}</span>
       {txHash && (
         <span className='flex items-center gap-1.5 text-xs text-fg-muted'>
-          {shortAddress(txHash)}
+          <Clipped head={6} tail={5} label='transaction id'>
+            {txHash}
+          </Clipped>
           <CopyButton text={txHash} />
         </span>
       )}

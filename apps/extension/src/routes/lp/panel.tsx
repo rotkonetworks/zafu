@@ -4,6 +4,7 @@
  * shows the last read, dimmed.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import type { ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { cn } from '@repo/ui/lib/utils';
@@ -12,7 +13,7 @@ import { Sensitive } from '../../components/sensitive';
 import { isDone } from '../../lp/flight';
 import { pairedWithdraw, runeText, zecText } from '../../lp/math';
 import { openSheet, positionOf, show, worthOf } from './store';
-import { short, useAddQuote, useLp } from './screens';
+import { Short, useAddQuote, useLp } from './screens';
 
 const usd0 = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 const usd2 = (n: number) =>
@@ -84,9 +85,9 @@ const Group = ({
               {r.v}
             </span>
           ) : (
-            <span className={cn('truncate text-[13px] tabular-nums', r.c ?? 'text-fg-high')}>
+            <Clipped className={cn('text-[13px] tabular-nums', r.c ?? 'text-fg-high')}>
               {r.v}
-            </span>
+            </Clipped>
           )}
         </span>
         {r.src && <span className='text-[11px] tabular-nums text-fg-dim'>{r.src}</span>}
@@ -164,8 +165,8 @@ export const Panel = ({ screen }: { screen: string }) => {
     paired && t ? pairedWithdraw(t.pool, paired.units, 10_000, t.minSlipBps, 'both') : undefined;
   const withRune: R[] = s.thor1
     ? [
-        { k: 'rune address', v: short(s.thor1) },
-        { k: 'lp address', v: short(s.address) },
+        { k: 'rune address', v: <Short>{s.thor1}</Short> },
+        { k: 'lp address', v: <Short>{s.address}</Short> },
         rr
           ? { k: 'holds', v: <Sensitive>{runeText(rr.balance)} rune</Sensitive> }
           : { k: 'holds', v: s.blocked ? 'off' : 'not read', tag: true },
@@ -204,7 +205,7 @@ export const Panel = ({ screen }: { screen: string }) => {
           v: <Sensitive>{zecText(BigInt(s.flight!.amountZat))} zec</Sensitive>,
           c: 'text-zigner-gold',
         },
-        { k: 'lp address', v: short(s.address) },
+        { k: 'lp address', v: <Short>{s.address}</Short> },
       ]
     : p && worth !== undefined && t
       ? [
@@ -227,7 +228,7 @@ export const Panel = ({ screen }: { screen: string }) => {
         ]
       : [
           { k: 'in the pool', v: 'nothing yet', c: 'text-fg-muted' },
-          { k: 'lp address', v: short(s.address) || 'made on first add' },
+          { k: 'lp address', v: s.address ? <Short>{s.address}</Short> : 'made on first add' },
         ];
   return (
     <div className='flex min-w-0 max-w-[440px] flex-[1_1_440px] flex-col self-stretch border border-border-soft bg-elev-1 max-xl:hidden'>
@@ -275,12 +276,12 @@ export const Panel = ({ screen }: { screen: string }) => {
                       v: <Sensitive>{zecText(BigInt(s.cache.zat))} zec</Sensitive>,
                       c: 'text-fg-muted',
                     },
-                    { k: 'lp address', v: short(s.address), c: 'text-fg-muted' },
+                    { k: 'lp address', v: <Short>{s.address}</Short>, c: 'text-fg-muted' },
                   ]
                 : [
                     {
                       k: 'lp address',
-                      v: short(s.address) || 'made on first add',
+                      v: s.address ? <Short>{s.address}</Short> : 'made on first add',
                       c: 'text-fg-muted',
                     },
                   ]

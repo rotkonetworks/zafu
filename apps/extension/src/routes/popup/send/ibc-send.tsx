@@ -1,5 +1,6 @@
 /** penumbra ibc withdraw: out of the shielded pool to a cosmos chain, on the shared send steps */
 
+import { shorten } from '@repo/ui/lib/utils';
 import { useState, useMemo, useEffect, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
@@ -32,7 +33,7 @@ import { Sensitive } from '../../../components/sensitive';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { IbcTransferStatusLine } from '../ibc-transfer-status';
 import { EMPTY_BALANCES } from './shared';
-import { Footer, Main, shortAddress } from './send-ui';
+import { Addr, Footer, Main } from './send-ui';
 import { AmountField, AddressSheet, PickSheet, ToField } from './send-fields';
 import { BalanceSheet, balanceLook } from './balance-sheet';
 import { PenumbraFlow } from './penumbra-flow';
@@ -330,11 +331,15 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
           rows: [
             [
               'to',
-              own
-                ? `your ${chainName} address`
-                : toName
-                  ? `${toName} · ${shortAddress(to)}`
-                  : shortAddress(to),
+              own ? (
+                `your ${chainName} address`
+              ) : toName ? (
+                <>
+                  {toName} · <Addr>{to}</Addr>
+                </>
+              ) : (
+                <Addr>{to}</Addr>
+              ),
             ],
             ['network', chainName],
             ['fee', 'shown before you approve'],
@@ -379,7 +384,7 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
               />
             </RowGroup>
             <ToField
-              value={own ? shortAddress(to) : to}
+              value={own ? shorten(to, 6, 5) : to}
               onChange={ibcState.setDestinationAddress}
               placeholder={ibcState.chain ? `${ibcState.chain.addressPrefix}1…` : 'address'}
               disabled={own || !ibcState.chain}

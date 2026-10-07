@@ -4,6 +4,7 @@
  * lists active and past proposals, allows delegator voting
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { governanceClient } from '../../../clients';
@@ -302,7 +303,7 @@ export function VotePage() {
                     <span className={`text-label ${stateColor(p.state)}`}>{p.state}</span>
                     <span className='text-label text-fg-muted'>{p.kind}</span>
                   </div>
-                  <p className='text-sm mt-0.5 truncate'>{p.title}</p>
+                  <Clipped className='mt-0.5 block text-sm'>{p.title}</Clipped>
                 </div>
                 {isExpanded ? (
                   <span className='i-ph-caret-up h-4 w-4 shrink-0 text-fg-muted' />

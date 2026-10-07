@@ -6,6 +6,7 @@
  * nothing of anyone, and an add or take-out picks up when it opens again.
  */
 
+import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useEffect, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
@@ -40,7 +41,7 @@ import {
   EgressScreen,
   FirstScreen,
   PositionScreen,
-  short,
+  Short,
   TrackScreen,
   TwoSidedScreen,
   useLp,
@@ -266,7 +267,9 @@ const Sheets = () => {
         className='mx-auto max-w-[560px]'
       >
         <span className='text-xs text-fg-muted'>
-          <span className='font-mono normal-case'>{short(address)}</span>
+          <span className='font-mono normal-case'>
+            <Short>{address}</Short>
+          </span>
           {mid
             ? ` · midgard · ${Math.max(0, Math.round((now - mid.at) / 1000))} s ago`
             : ' · midgard is off'}
@@ -310,7 +313,14 @@ const Sheets = () => {
                     })
                     .toLowerCase()}
                   {h.memo && ` · memo ${h.memo}`}
-                  {h.txid && ` · tx ${h.txid.slice(0, 4)}…${h.txid.slice(-4)}`}
+                  {h.txid && (
+                    <>
+                      {' · tx '}
+                      <Clipped head={4} tail={4} label='transaction id'>
+                        {h.txid}
+                      </Clipped>
+                    </>
+                  )}
                   {h.reason && ` · ${h.reason}`}
                 </span>
               </span>
