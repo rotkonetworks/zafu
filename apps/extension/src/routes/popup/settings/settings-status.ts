@@ -23,6 +23,13 @@ export const unbackedSeats = (wallets: readonly ZcashWalletJson[]) =>
       !w.multisig.backedUpAt,
   );
 
+/** self-custody group seats at all (backed up or not): the only thing the
+ *  seat-backup screen is for. */
+export const selectSeatCount = (s: AllSlices) =>
+  (Array.isArray(s.wallets.zcashWallets) ? s.wallets.zcashWallets : []).filter(
+    w => w.multisig && w.multisig.custody !== 'airgapSigner' && !w.multisig.hidden,
+  ).length;
+
 export const selectUnbackedSeatCount = (s: AllSlices) =>
   unbackedSeats(Array.isArray(s.wallets.zcashWallets) ? s.wallets.zcashWallets : []).length;
 

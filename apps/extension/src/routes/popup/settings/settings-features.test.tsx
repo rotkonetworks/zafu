@@ -10,6 +10,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { CAPABILITY_META, type Capability } from '@repo/storage-chrome/capabilities';
+import { DEFAULT_ON } from '../../../utils/capability-decision';
 
 // Lets react-dom's act() run outside a test renderer.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -27,14 +28,15 @@ vi.mock('./settings-screen', () => ({
 import { SettingsFeatures } from './settings-features';
 
 /** The row for one capability: the block whose state group (a radiogroup of
- * three radios) is its direct child. */
+ * three radios, or two - on and off - for one that is on by default) is its
+ * direct child. */
 const row = (cap: Capability): HTMLElement => {
   const label = CAPABILITY_META[cap].label;
   const hit = [...document.querySelectorAll('div')].find(d => {
     const states = [...d.children].find(
       c =>
         c.getAttribute('role') === 'radiogroup' &&
-        c.querySelectorAll(':scope > button').length === 3,
+        c.querySelectorAll(':scope > button').length >= 2,
     );
     return !!states && (d.textContent ?? '').includes(label);
   });
@@ -90,9 +92,18 @@ describe('SettingsFeatures', () => {
     await render({});
 
     for (const cap of Object.keys(CAPABILITY_META) as Capability[]) {
-      // a capability nobody answered must not render as "off" - it is a question
-      expect(active(cap)).toBe('ask');
+      // a capability nobody answered must not render as "off" - it is a question,
+      // or "on" for the ones zafu does unless turned off
+      expect(active(cap)).toBe(DEFAULT_ON.has(cap) ? 'on' : 'ask');
     }
+  });
+
+  it('offers no "ask" for a capability that is on by default, only on and off', async () => {
+    await render({ encrypt: 'disabled' });
+
+    expect(active('encrypt')).toBe('off');
+    const labels = [...row('encrypt').querySelectorAll('button')].map(b => b.textContent);
+    expect(labels).toEqual(['on', 'off']);
   });
 
   it('shows a revoked capability as off, so a refusal from a prompt is visible', async () => {
