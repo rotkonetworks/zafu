@@ -38,6 +38,7 @@ import { COMPACT_SIGN_REQUEST } from '../config/feature-flags';
 import {
   cborWrapPczt,
   orchardSignRequest,
+  zignerBatchRequest,
   zignerSignRequest,
 } from '../routes/popup/send/zcash-send-cbor-helpers';
 import { nu63ActivationHeight } from '../config/feature-flags';
@@ -88,10 +89,14 @@ import {
 } from './thor-sign';
 import {
   buildDeposit,
-  finishColdDeposit,
+  coldDepositTx,
+  finishDeposit,
   planDeposit,
   sendDeposit,
+  wantOf,
+  withCoin,
   type DepositChain,
+  type MoveCoin,
   type DepositRequest,
   type DepositWasm,
   type FinalizeWasm,
@@ -256,6 +261,7 @@ interface WorkerMessage {
     | 'transparent-deposit-unsigned'
     | 'transparent-deposit-complete'
     | 'transparent-deposit'
+    | 'chain-tip'
     | 'list-wallets'
     | 'delete-wallet'
     | 'get-notes'
@@ -7022,20 +7028,27 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!wasm) {
           throw new Error('wasm not initialized');
         }
-        const { serverUrl, ufvk, fragmentSize, ...req } = payload as DepositRequest & {
-          serverUrl: string;
-          ufvk: string;
-          reviewedFee: string;
-          fragmentSize?: number;
-        };
-        const chain = depositChain(await makeZcashClient(serverUrl), serverUrl);
+        const { serverUrl, ufvk, fragmentSize, coin, movePcztHex, ...req } =
+          payload as DepositRequest & {
+            serverUrl: string;
+            ufvk: string;
+            reviewedFee: string;
+            fragmentSize?: number;
+            /** the unsigned move's coin, spent before it is mined */
+            coin?: MoveCoin;
+            /** the move's device copy: both ride one batch */
+            movePcztHex?: string;
+          };
+        const chain = withCoin(depositChain(await makeZcashClient(serverUrl), serverUrl), coin);
         // the external key at the swap's index: the one its address was derived from
         const pubkey = wasm.transparent_pubkey_from_ufvk(ufvk, req.tIndex);
         const built = await buildDeposit(wasm, chain, pubkey, req);
-        const request = zignerSignRequest(wasm, built.pcztHex, {
-          compact: false,
-          fragmentSize: fragOf(fragmentSize),
-        });
+        const request = movePcztHex
+          ? zignerBatchRequest(wasm, [movePcztHex, built.pcztHex], fragOf(fragmentSize))
+          : zignerSignRequest(wasm, built.pcztHex, {
+              compact: false,
+              fragmentSize: fragOf(fragmentSize),
+            });
         workerSelf.postMessage({
           type: 'result',
           id,
@@ -7053,6 +7066,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         return;
       }
 
+      // Finish the device's deposit, or take one held since it was signed;
+      // check it against the review either way. `hold` returns the checked
+      // bytes unsent, for a deposit whose coin is not mined yet.
       case 'transparent-deposit-complete': {
         if (!walletId) {
           throw new Error('walletId required');
@@ -7062,20 +7078,35 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!wasm) {
           throw new Error('wasm not initialized');
         }
-        const { serverUrl, ufvk, unsignedPcztHex, signedPcztHex, ...req } =
+        const { serverUrl, ufvk, unsignedPcztHex, signedPcztHex, txHex, hold, ...req } =
           payload as DepositRequest & {
             serverUrl: string;
             ufvk: string;
             reviewedFee: string;
-            unsignedPcztHex: string;
-            signedPcztHex: string;
+            unsignedPcztHex?: string;
+            signedPcztHex?: string;
+            txHex?: string;
+            hold?: boolean;
           };
+        const signed =
+          txHex ??
+          (await coldDepositTx(wasm, req, {
+            unsignedPcztHex: unsignedPcztHex!,
+            signedPczt: hexDecode(signedPcztHex!),
+            pubkeyHex: wasm.transparent_pubkey_from_ufvk(ufvk, req.tIndex),
+          }));
+        if (hold) {
+          workerSelf.postMessage({
+            type: 'result',
+            id,
+            network: 'zcash',
+            walletId,
+            payload: { txHex: signed, expiry: parseExpiryHeight(signed) ?? 0 },
+          });
+          return;
+        }
         const chain = depositChain(await makeZcashClient(serverUrl), serverUrl);
-        const sent = await finishColdDeposit(wasm, chain, req, {
-          unsignedPcztHex,
-          signedPczt: hexDecode(signedPcztHex),
-          pubkeyHex: wasm.transparent_pubkey_from_ufvk(ufvk, req.tIndex),
-        });
+        const sent = await finishDeposit(chain, signed, await wantOf(req), req.reviewedFee);
         await recordSentTx({
           walletId,
           txid: sent.txid,
@@ -7094,6 +7125,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           network: 'zcash',
           walletId,
           payload: { txid: sent.txid, fee: sent.fee },
+        });
+        return;
+      }
+
+      case 'chain-tip': {
+        const { serverUrl } = payload as { serverUrl: string };
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: (await (await makeZcashClient(serverUrl)).getTip()).height,
         });
         return;
       }

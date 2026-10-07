@@ -134,7 +134,49 @@ describe('sending', () => {
     expect(log).toEqual(['vault', 'save:fund:sending', 'shieldOut', 'save:settle']);
     expect(f.fundTxid).toBe('fund-txid');
     expect(f.fundZat).toBe('1015000');
-    expect(d.shieldOut).toHaveBeenCalledWith(1_015_000n);
+    // the deposit it funds rides along, for a wallet that signs both in one round
+    expect(d.shieldOut).toHaveBeenCalledWith(
+      1_015_000n,
+      expect.objectContaining({ memo: ADD_MEMO, amountZat: '1000000' }),
+      '15000',
+      expect.any(Function),
+    );
+  });
+
+  it('zigner: the deposit signed with the shield-out is kept on the flight, then sent as is', async () => {
+    const held = { txHex: 'signed', expiry: 141, moveTxid: 'fund-txid', moveExpiry: 140 };
+    const { d, log, box } = deps({
+      shieldOut: vi.fn(async (_zat, _req, _fee, hold) => {
+        await hold(held);
+        log.push('shieldOut');
+        return 'fund-txid';
+      }),
+    });
+    const f = await drive(add(), d, TEX_VAULT);
+    // held on the stored flight before the shield-out left
+    expect(log).toEqual([
+      'vault',
+      'save:fund:sending',
+      'save:fund:sending',
+      'shieldOut',
+      'save:settle',
+    ]);
+    expect(f.held).toEqual(held);
+    expect(box.f?.held).toEqual(held);
+    const funded = await d.save(advance(f, { short: 0n }));
+    const sending = funded.stage === 'send' ? funded : await d.save({ ...funded, stage: 'send' });
+    (d.plan as ReturnType<typeof vi.fn>).mockResolvedValue({
+      fee: '15000',
+      change: '0',
+      short: '0',
+    });
+    const out = await act(sending, d);
+    expect(d.deposit).toHaveBeenCalledWith(
+      expect.objectContaining({ memo: ADD_MEMO }),
+      '15000',
+      held,
+    );
+    expect(out.held).toBeUndefined();
   });
 
   it('skips the shield-out when the lp address already holds enough', async () => {
@@ -159,6 +201,7 @@ describe('sending', () => {
     expect(d.deposit).toHaveBeenCalledWith(
       expect.objectContaining({ to: TEX_VAULT, memo: ADD_MEMO, tIndex: 21, amountZat: '1000000' }),
       '15000',
+      undefined,
     );
   });
 

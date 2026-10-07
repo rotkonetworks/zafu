@@ -23,6 +23,7 @@
  *                                          \-> refunded -> shield -> shielded
  */
 
+import type { Held } from '../signing/move-and-deposit';
 import type { PayoutAs } from './math';
 
 import type { TxSeen } from './thor';
@@ -65,6 +66,8 @@ export interface Flight {
   expectZat?: string;
   /** what the shield-out moved to the lp address */
   fundZat?: string;
+  /** zigner: the deposit signed with the shield-out, sent once that is mined */
+  held?: Held;
   /** the position's units before an add, to tell when it is credited */
   unitsBefore?: string;
   fundTxid?: string;

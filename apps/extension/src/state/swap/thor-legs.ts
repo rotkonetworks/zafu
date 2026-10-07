@@ -1,8 +1,8 @@
 /**
  * The two legs of a thorchain swap out of zec, per wallet kind: a hot wallet
- * signs in the worker under the swap's one unlock, a zigner wallet one qr
- * round per leg (the move over the module envelope, then the reviewed
- * deposit, finished and checked here before broadcast). The run that drives
+ * signs in the worker under the swap's one unlock, a zigner wallet in one qr
+ * round for both (signing/move-and-deposit): the move goes at once, the
+ * deposit is held until the move is mined. The run that drives
  * them is ./thor-out; this is where the kind is chosen, once.
  */
 
@@ -11,10 +11,16 @@ import { selectEffectiveKeyInfo } from '../keyring';
 import { selectTxSigningSecurity } from '../privacy';
 import {
   applySignatureContributionsInWorker,
+  broadcastSignedTxInWorker,
   buildColdDepositInWorker,
   buildSendTxInWorker,
   buildSendTxPcztInWorker,
+  chainTipInWorker,
   completeColdDepositInWorker,
+  extractSignedPcztTxInWorker,
+  frostInspectPcztOutputsInWorker,
+  holdColdDepositInWorker,
+  lookupTxInWorker,
   planTransparentDepositInWorker,
   sendTransparentDepositInWorker,
   type SignatureContribution,
@@ -23,11 +29,22 @@ import type { VaultUnlock } from '../keyring/types';
 import { activeAccountIndex, activeZcashStoreId } from '../pockets';
 import { selectActiveZcashWallet } from '../wallets';
 import { walletKind } from '../../signing/wallet-kind';
-import { signAndBroadcast } from '../../signing/cold-send';
+import { moveAndDeposit } from '../../signing/move-and-deposit';
 import { createZignerRound, type ZignerRound } from '../../signing/zigner-round';
-import { checkVault, type DepositPlan } from '../../workers/transparent-deposit';
+import {
+  checkVault,
+  type DepositPlan,
+  type MoveInspected,
+} from '../../workers/transparent-deposit';
 import { patchOpenSwap, type OpenSwap } from './open-swaps';
-import { isRunning, legsPerUnlock, startThorOut, takeSwapUnlock, type Legs } from './thor-out';
+import {
+  depositOf,
+  isRunning,
+  legsPerUnlock,
+  startThorOut,
+  takeSwapUnlock,
+  type Legs,
+} from './thor-out';
 
 /** what signing a swap's legs needs from the wallet, read once from the store */
 export interface LegContext {
@@ -113,7 +130,7 @@ export const swapRound = (id: string, storeId: string): ZignerRound => {
 };
 
 /** the round's line, saying what the device signs */
-export const MOVE_LABEL = 'move zec to the swap address';
+export const PAIR_LABEL = 'sign once · the move and the swap';
 export const PAY_LABEL = 'the swap deposit';
 
 const coldLegs = (c: LegContext, swap: OpenSwap): Legs => {
@@ -124,45 +141,67 @@ const coldLegs = (c: LegContext, swap: OpenSwap): Legs => {
     }
     return c.ufvk;
   };
+  const req = depositOf(swap);
   return {
-    // the device is the confirmation: each leg is approved there
+    // the device is the confirmation: each round is approved there
     ready: () => Promise.resolve(true),
-    move: async short => {
-      const built = await buildSendTxPcztInWorker(
-        'zcash',
-        c.storeId,
-        c.zidecarUrl,
-        swap.swapT!.address,
-        short,
-        '',
-        0,
-        true,
-        ufvk(),
-        false,
-        undefined,
-        undefined,
-        true,
-      );
-      const sent = await signAndBroadcast(round.signer(built, MOVE_LABEL), built, {
-        walletId: c.storeId,
-        zidecarUrl: c.zidecarUrl,
-        mainnet: true,
-      });
-      return sent.txid;
-    },
-    pay: async req => {
+    move: (short, hold) => {
       const key = ufvk();
-      const ask = await buildColdDepositInWorker(c.storeId, c.zidecarUrl, req, key);
-      const signed = await round.sign(ask, PAY_LABEL);
-      const sent = await completeColdDepositInWorker(
-        c.storeId,
-        c.zidecarUrl,
-        req,
-        key,
-        ask.pcztHex,
-        signed,
+      return moveAndDeposit(
+        {
+          buildMove: () =>
+            buildSendTxPcztInWorker(
+              'zcash',
+              c.storeId,
+              c.zidecarUrl,
+              req.tAddress,
+              short,
+              '',
+              0,
+              true,
+              key,
+              false,
+              undefined,
+              undefined,
+              true,
+            ),
+          inspect: async pczt =>
+            (await frostInspectPcztOutputsInWorker(pczt, key)) as unknown as MoveInspected,
+          buildDeposit: (coin, movePcztHex) =>
+            buildColdDepositInWorker(c.storeId, c.zidecarUrl, req, key, {
+              coin,
+              movePcztHex,
+            }),
+          sign: ask => round.signBatch(ask, 2, PAIR_LABEL),
+          finishDeposit: (unsignedPcztHex, signedPcztHex) =>
+            holdColdDepositInWorker(c.storeId, c.zidecarUrl, req, key, {
+              unsignedPcztHex,
+              signedPcztHex,
+            }),
+          extract: extractSignedPcztTxInWorker,
+          hold,
+          broadcastMove: async (txHex, coldSendId) =>
+            (await broadcastSignedTxInWorker(c.storeId, c.zidecarUrl, txHex, coldSendId)).txid,
+        },
+        req.tAddress,
+        short,
       );
-      return sent.txid;
+    },
+    pay: async (r, held) => {
+      const key = ufvk();
+      if (held) {
+        return (
+          await completeColdDepositInWorker(c.storeId, c.zidecarUrl, r, key, { txHex: held.txHex })
+        ).txid;
+      }
+      const ask = await buildColdDepositInWorker(c.storeId, c.zidecarUrl, r, key);
+      const signed = await round.sign(ask, PAY_LABEL);
+      return (
+        await completeColdDepositInWorker(c.storeId, c.zidecarUrl, r, key, {
+          unsignedPcztHex: ask.pcztHex,
+          signedPcztHex: signed,
+        })
+      ).txid;
     },
   };
 };
@@ -179,6 +218,8 @@ export const runSwapLegs = (swap: OpenSwap, c: LegContext, reviewed?: DepositPla
           planTransparentDepositInWorker(c.zidecarUrl, req),
         ),
       save: patch => patchOpenSwap(swap.id, patch),
+      mined: async txid => (await lookupTxInWorker(c.zidecarUrl, txid)).height,
+      tip: () => chainTipInWorker(c.zidecarUrl),
       sleep: ms => new Promise(r => setTimeout(r, ms)),
       now: Date.now,
     },

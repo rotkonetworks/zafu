@@ -22,7 +22,11 @@ import {
   buildColdDepositInWorker,
   buildSendTxInWorker,
   buildSendTxPcztInWorker,
+  broadcastSignedTxInWorker,
   completeColdDepositInWorker,
+  extractSignedPcztTxInWorker,
+  frostInspectPcztOutputsInWorker,
+  holdColdDepositInWorker,
   getPoolBalancesInWorker,
   getTransparentUtxosInWorker,
   planTransparentDepositInWorker,
@@ -35,13 +39,13 @@ import {
   type ThorKeyIn,
 } from '../../state/keyring/network-worker';
 import { walletKind } from '../../signing/wallet-kind';
-import { signAndBroadcast } from '../../signing/cold-send';
 import { createZignerRound } from '../../signing/zigner-round';
+import { moveAndDeposit } from '../../signing/move-and-deposit';
 import { refreshEgress } from '../../net/egress';
 import { setDestinationOptIn } from '../../net/ledger';
 import { readEgressView } from '../../net/egress-opt-in';
 import { claimTAddress, tAddressAt } from '../../hooks/use-transparent-addresses';
-import { depositFeeZat } from '../../workers/transparent-deposit';
+import { depositFeeZat, type MoveInspected } from '../../workers/transparent-deposit';
 import { drive, VAULT_MOVED_LINE, type DriveDeps } from '../../lp/drive';
 import {
   cancelFlight,
@@ -626,33 +630,51 @@ const depsOf = (storeId: string, lp: { index: number; address: string }): DriveD
   height: () => get().thor?.height,
   vault: readVault,
   plan: req => planTransparentDepositInWorker(zidecar(), req),
-  shieldOut: async zat => {
+  shieldOut: async (zat, req, fee, hold) => {
     const ufvk = coldKey();
     if (ufvk) {
-      // an ordinary zigner send to the lp address, over the module envelope
-      const built = await buildSendTxPcztInWorker(
-        'zcash',
-        storeId,
-        zidecar(),
+      // one zigner round: the shield-out and the deposit that spends it
+      const reviewed = { ...req, reviewedFee: fee };
+      return moveAndDeposit(
+        {
+          buildMove: () =>
+            buildSendTxPcztInWorker(
+              'zcash',
+              storeId,
+              zidecar(),
+              lp.address,
+              zat.toString(),
+              '',
+              0,
+              true,
+              ufvk,
+              false,
+              undefined,
+              undefined,
+              true,
+            ),
+          inspect: async pczt =>
+            (await frostInspectPcztOutputsInWorker(pczt, ufvk)) as unknown as MoveInspected,
+          buildDeposit: (coin, movePcztHex) =>
+            buildColdDepositInWorker(storeId, zidecar(), reviewed, ufvk, {
+              coin,
+              movePcztHex,
+            }),
+          sign: ask =>
+            lpRound.signBatch(ask, 2, 'sign once · to your lp address, then the deposit'),
+          finishDeposit: (unsignedPcztHex, signedPcztHex) =>
+            holdColdDepositInWorker(storeId, zidecar(), reviewed, ufvk, {
+              unsignedPcztHex,
+              signedPcztHex,
+            }),
+          extract: extractSignedPcztTxInWorker,
+          hold,
+          broadcastMove: async (txHex, coldSendId) =>
+            (await broadcastSignedTxInWorker(storeId, zidecar(), txHex, coldSendId)).txid,
+        },
         lp.address,
         zat.toString(),
-        '',
-        0,
-        true,
-        ufvk,
-        false,
-        undefined,
-        undefined,
-        true,
       );
-      const signer = lpRound.signer(built, 'move zec to your lp address');
-      return (
-        await signAndBroadcast(signer, built, {
-          walletId: storeId,
-          zidecarUrl: zidecar(),
-          mainnet: true,
-        })
-      ).txid;
     }
     const r = await buildSendTxInWorker(
       'zcash',
@@ -672,15 +694,32 @@ const depsOf = (storeId: string, lp: { index: number; address: string }): DriveD
     }
     return r.txid;
   },
-  deposit: async (req, fee) => {
+  deposit: async (req, fee, held) => {
     const reviewed = { ...req, reviewedFee: fee };
     const ufvk = coldKey();
     if (ufvk) {
+      if (held) {
+        // signed with the shield-out; one that no longer fits (expired, a new vault) is signed again
+        try {
+          return (
+            await completeColdDepositInWorker(storeId, zidecar(), reviewed, ufvk, {
+              txHex: held.txHex,
+            })
+          ).txid;
+        } catch (e) {
+          if (!/^broadcast failed|does not match your review/.test(String((e as Error)?.message))) {
+            throw e;
+          }
+        }
+      }
       // the same reviewed bytes, signed on zigner, checked against the review before broadcast
       const ask = await buildColdDepositInWorker(storeId, zidecar(), reviewed, ufvk);
       const signed = await lpRound.sign(ask, 'the deposit to thorchain');
       return (
-        await completeColdDepositInWorker(storeId, zidecar(), reviewed, ufvk, ask.pcztHex, signed)
+        await completeColdDepositInWorker(storeId, zidecar(), reviewed, ufvk, {
+          unsignedPcztHex: ask.pcztHex,
+          signedPcztHex: signed,
+        })
       ).txid;
     }
     return (await sendTransparentDepositInWorker(storeId, zidecar(), reviewed, await vaultOf()))

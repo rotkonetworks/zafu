@@ -352,6 +352,7 @@ describe('driving a two-sided add', () => {
     expect(d.deposit).toHaveBeenCalledWith(
       expect.objectContaining({ memo: `+:ZEC.ZEC:${THOR1}` }),
       '15000',
+      undefined,
     );
   });
 

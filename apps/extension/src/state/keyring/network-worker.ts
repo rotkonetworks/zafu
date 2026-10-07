@@ -35,7 +35,7 @@ import {
   type SealedVault,
   type WorkerKey,
 } from '../../shared/vault-seal';
-import type { DepositPlan, DepositRequest } from '../../workers/transparent-deposit';
+import type { DepositPlan, DepositRequest, MoveCoin } from '../../workers/transparent-deposit';
 import type { StopOutcome } from '../../workers/build-abort';
 
 /** true only inside the offscreen document - the one place that owns real Workers */
@@ -95,6 +95,7 @@ export interface NetworkWorkerMessage {
     | 'transparent-deposit-unsigned'
     | 'transparent-deposit-complete'
     | 'transparent-deposit'
+    | 'chain-tip'
     | 'list-wallets'
     | 'delete-wallet'
     | 'get-notes'
@@ -1341,30 +1342,61 @@ export interface ColdDepositRequest {
   fee: string;
 }
 
-/** build the reviewed deposit for zigner, keyed by the wallet's viewing key; nothing is signed */
+/**
+ * Build the reviewed deposit for zigner, keyed by the wallet's viewing key;
+ * nothing is signed. With `pair` it spends the unsigned move's coin and the
+ * request is one batch: the move's device copy, then the deposit.
+ */
 export const buildColdDepositInWorker = (
   storeId: string,
   serverUrl: string,
   req: DepositRequest & { reviewedFee: string },
   ufvk: string,
+  pair?: { coin: MoveCoin; movePcztHex: string },
 ): Promise<ColdDepositRequest> =>
-  callWorker('zcash', 'transparent-deposit-unsigned', { serverUrl, ufvk, ...req }, storeId);
+  callWorker(
+    'zcash',
+    'transparent-deposit-unsigned',
+    { serverUrl, ufvk, ...req, ...pair },
+    storeId,
+  );
 
-/** finish the reviewed deposit with zigner's signed PCZT, check it, and broadcast */
+/** where a signed deposit comes from: zigner's answer to zafu's PCZT, or bytes held since */
+export type SignedDeposit = { unsignedPcztHex: string; signedPcztHex: string } | { txHex: string };
+
+/** finish the reviewed deposit (zigner's answer, or a held one), check it, and broadcast */
 export const completeColdDepositInWorker = (
   storeId: string,
   serverUrl: string,
   req: DepositRequest & { reviewedFee: string },
   ufvk: string,
-  unsignedPcztHex: string,
-  signedPcztHex: string,
+  signed: SignedDeposit,
 ): Promise<{ txid: string; fee: string }> =>
   callWorker(
     'zcash',
     'transparent-deposit-complete',
-    { serverUrl, ufvk, unsignedPcztHex, signedPcztHex, ...req },
+    { serverUrl, ufvk, ...signed, ...req },
     storeId,
   );
+
+/** finish and check zigner's deposit without sending it: the bytes to hold, and their expiry */
+export const holdColdDepositInWorker = (
+  storeId: string,
+  serverUrl: string,
+  req: DepositRequest & { reviewedFee: string },
+  ufvk: string,
+  signed: { unsignedPcztHex: string; signedPcztHex: string },
+): Promise<{ txHex: string; expiry: number }> =>
+  callWorker(
+    'zcash',
+    'transparent-deposit-complete',
+    { serverUrl, ufvk, ...signed, ...req, hold: true },
+    storeId,
+  );
+
+/** the light client's chain tip */
+export const chainTipInWorker = (serverUrl: string): Promise<number> =>
+  callWorker('zcash', 'chain-tip', { serverUrl });
 
 /** result of building an unsigned send transaction */
 export interface SendTxUnsignedResult {

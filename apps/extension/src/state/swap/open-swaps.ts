@@ -16,6 +16,7 @@ import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { readEncrypted, readEncryptedWithMigration, writeEncrypted } from '../encrypted-storage';
 import type { Quote, SwapPhase, SwapToken } from './provider';
 import type { RouteId, SwapPair } from './routes';
+import type { Held } from '../../signing/move-and-deposit';
 
 export const OPEN_SWAPS_KEY = 'openSwaps';
 const KEY = OPEN_SWAPS_KEY as keyof LocalStorageState;
@@ -52,6 +53,8 @@ export interface OpenSwap {
   depositTxid?: string;
   /** thorchain out: the move that funds the swap's address, once sent */
   moveTxid?: string;
+  /** thorchain out, zigner: the deposit signed with the move, sent once the move is mined */
+  held?: Held;
   /** thorchain out: the deposit's network fee as reviewed; the deposit is refused at any other */
   depositFee?: string;
   /** the swap's own transparent address (THORChain) */
