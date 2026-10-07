@@ -1,5 +1,6 @@
 import { cn } from '@repo/ui/lib/utils';
-import type { KeyInfo, KeyType } from '../state/keyring';
+import type { KeyInfo } from '../state/keyring';
+import { walletKind, type WalletKind } from '../signing/wallet-kind';
 
 /**
  * custody indicator - where the spending key actually lives.
@@ -8,14 +9,15 @@ import type { KeyInfo, KeyType } from '../state/keyring';
  * previously invisible: the picker showed only a name, so "savings" and
  * "savings (zigner)" looked identical right up until you tried to send.
  *
- * Three states, because two would be a lie:
+ * Four states, because fewer would be a lie:
  *
- *   hot     the spending key is in this browser, encrypted under your
- *           password. zafu can sign on its own.
- *   cold    the key has never been here. zafu holds a viewing key, builds
- *           the transaction, and the signature comes back over QR or USB.
- *   shared  a FROST threshold share. Neither hot nor cold - this share
- *           alone cannot spend, and co-signers must approve.
+ *   hot      the spending key is in this browser, encrypted under your
+ *            password. zafu can sign on its own.
+ *   cold     the key has never been here. zafu holds a viewing key, builds
+ *            the transaction, and the signature comes back over QR or USB.
+ *   shared   a FROST threshold share. Neither hot nor cold - this share
+ *            alone cannot spend, and co-signers must approve.
+ *   watching a viewing key and no signer: it sees, never spends.
  *
  * Deliberately not alarming. Hot custody is the normal, useful state for a
  * spending wallet; painting it red would train people to ignore red. The
@@ -23,23 +25,24 @@ import type { KeyInfo, KeyType } from '../state/keyring';
  * things that are actually wrong.
  */
 
-export type Custody = 'hot' | 'cold' | 'shared';
+export type Custody = 'hot' | 'cold' | 'shared' | 'watching';
 
-export const custodyOf = (type: KeyType): Custody => {
-  switch (type) {
-    case 'mnemonic':
-      return 'hot';
-    case 'frost-multisig':
-      return 'shared';
-    // zigner, ledger, trezor, keystone: the key is on the other side of an
-    // air gap or a secure element, and only signatures cross back.
-    case 'zigner-zafu':
-    case 'ledger':
-    case 'trezor':
-    case 'keystone':
-      return 'cold';
-  }
+/** read from the signer the vault holds now, so a viewing key a signer joined reads cold */
+const CUSTODY: Record<WalletKind, Custody> = {
+  hot: 'hot',
+  zigner: 'cold',
+  keystone: 'cold',
+  'ledger-shielded': 'cold',
+  'ledger-transparent': 'cold',
+  'frost-self': 'shared',
+  'frost-airgap': 'shared',
+  'viewing-key': 'watching',
+  // a signer zafu does not know is still somewhere other than here
+  unknown: 'cold',
 };
+
+export const custodyOf = (vault: Pick<KeyInfo, 'type' | 'insensitive'>): Custody =>
+  CUSTODY[walletKind(vault)];
 
 const STYLE: Record<Custody, { icon: string; tint: string; title: string }> = {
   hot: {
@@ -57,6 +60,11 @@ const STYLE: Record<Custody, { icon: string; tint: string; title: string }> = {
     tint: 'text-fg-muted bg-elev-2',
     title: 'shared - a threshold share; co-signers must approve before this can spend',
   },
+  watching: {
+    icon: 'i-ph-eye',
+    tint: 'text-fg-muted bg-elev-2',
+    title: 'watching - a viewing key; it sees this wallet but cannot spend',
+  },
 };
 
 export const CustodyBadge = ({
@@ -69,7 +77,7 @@ export const CustodyBadge = ({
   showLabel?: boolean;
   className?: string;
 }) => {
-  const custody = custodyOf(vault.type);
+  const custody = custodyOf(vault);
   const style = STYLE[custody];
 
   // for a threshold vault the ratio *is* the useful label - "2/3" says more

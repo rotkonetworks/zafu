@@ -59,6 +59,10 @@ export const walletKind = (key: WalletFacts, zcash?: ZcashFacts): WalletKind => 
       : 'unknown';
 };
 
+/** a viewing key with no signer: watch it, never offer it a send */
+export const isViewOnly = (key: WalletFacts | undefined): boolean =>
+  !!key && walletKind(key) === 'viewing-key';
+
 export type ZcashPool = 'orchard' | 'ironwood';
 
 /** the zcash send implementations; signing/resolve.ts picks one per kind */

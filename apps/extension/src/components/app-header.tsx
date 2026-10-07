@@ -12,6 +12,7 @@ import { selectActiveNetwork, selectEffectiveKeyInfo, selectLock } from '../stat
 import { useNavigate } from 'react-router-dom';
 import { PopupPath } from '../routes/popup/paths';
 import { selectActiveZcashWallet } from '../state/wallets';
+import { isViewOnly } from '../signing/wallet-kind';
 import { activePockets, hiddenPockets, pocketOwner } from '../state/pockets';
 import { getNetwork, getRootNetwork } from '../config/networks';
 import { AccountsSheet, pocketTarget, type PocketSheetTarget } from './accounts-sheet';
@@ -68,7 +69,7 @@ export const AppHeader = () => {
     activeNetwork === 'zcash' && selectedKeyInfo?.type !== 'mnemonic'
       ? (activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet')
       : (selectedKeyInfo?.name ?? 'no wallet');
-  const viewOnly = selectedKeyInfo?.insensitive['coldSignerType'] === 'viewing-key';
+  const viewOnly = isViewOnly(selectedKeyInfo);
   // pockets exist only for the hot wallet - shows which one is active
   const subtitle =
     pockets.find(p => p.account === pocketAccount)?.name ?? (viewOnly ? 'view only' : undefined);

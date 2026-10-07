@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
+import { isViewOnly } from '../../../signing/wallet-kind';
 import { PopupPath } from '../paths';
 import { BUY_PRELOAD, openBuyPage } from '../../../buy/open';
 
@@ -27,9 +28,7 @@ export const HomeActions = ({
   icons?: boolean;
 }) => {
   const navigate = useNavigate();
-  const viewOnly = useStore(
-    s => selectEffectiveKeyInfo(s)?.insensitive['coldSignerType'] === 'viewing-key',
-  );
+  const viewOnly = useStore(s => isViewOnly(selectEffectiveKeyInfo(s)));
   const receive = (
     <Button
       variant='secondary'
