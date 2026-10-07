@@ -19,6 +19,8 @@ import {
 } from '../../../config/contact-discovery-relay';
 import { usePopupNav } from '../../../utils/navigate';
 import { useZcashMeMode, ZCASHME_MODE_LABEL } from '../../../services/zcashme/config';
+import { readNetEgress, setDestinationOptIn } from '../../../net/ledger';
+import { NYM } from '../../../net/nym-bridge';
 import { useExplain, type ExplainId } from './settings-explain';
 import { ZCASH_BACKENDS } from '../../../state/keyring/zcash-backend';
 import {
@@ -105,6 +107,32 @@ export const ExplorerLinksRow = ({ onExplain }: { onExplain?: (label: string) =>
     />
   );
 };
+
+/** send over nym: on unless the person blocked the nym destination (stored with the egress choices) */
+function SendOverNymRow({ onExplain }: { onExplain?: (label: string) => void }) {
+  const [on, setOn] = useState<boolean>();
+  useEffect(() => {
+    const load = () => void readNetEgress().then(s => setOn(s.optIns[NYM] !== 'blocked'));
+    const onChanged = (changes: Record<string, unknown>, area: string) =>
+      area === 'local' && 'netEgress' in changes && load();
+    load();
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, []);
+  if (on === undefined) {
+    return null;
+  }
+  return (
+    <Row
+      type='toggle'
+      label='send over nym'
+      description="slower · nym's directory sees that you use nym"
+      checked={on}
+      onChange={v => void setDestinationOptIn(NYM, v ? undefined : 'blocked')}
+      onExplain={onExplain}
+    />
+  );
+}
 
 type Group = 'on screen' | 'network' | 'people';
 
@@ -349,6 +377,7 @@ export function SettingsPrivacy() {
       <div className='flex flex-col gap-4'>
         <Section title='on screen'>{rows('on screen')}</Section>
         <Section title='network'>
+          <SendOverNymRow {...explainProps('privacy.sendOverNym')} />
           {rows('network')}
           {zcashOn && <ExplorerLinksRow {...explainProps('privacy.explorerLinks')} />}
           {zcashOn && <ZcashWireRows explainProps={explainProps} />}
