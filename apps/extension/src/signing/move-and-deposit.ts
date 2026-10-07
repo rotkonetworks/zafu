@@ -113,6 +113,13 @@ export type HeldNext = 'wait' | 'pay' | 'drop' | 'lost';
 export const LOST_AFTER = 3;
 
 /**
+ * Blocks a held deposit outlives its move. A move mined in its own last block
+ * and seen LOST_AFTER blocks late still leaves the deposit the next block, with
+ * zcashd's 3-block "expiring soon" relay rule to spare (zebra has none).
+ */
+export const DEPOSIT_OUTLIVES_MOVE = LOST_AFTER + 1 + 3;
+
+/**
  * What a held deposit does next, from the chain alone. The move mined and the
  * deposit can still land in the next block: pay. Mined too late for it: drop
  * it (the coin is on the address; a fresh deposit is signed). Not mined yet:

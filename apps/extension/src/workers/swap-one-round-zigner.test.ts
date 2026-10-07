@@ -3,7 +3,8 @@
 // seed's mainnet keys, t-index 57; zcli tests/move_txid_before_signing.rs),
 // the deposit zafu builds against that move's output before anything is
 // signed, one 0x04 batch carrying both, and zigner's answer to exactly that
-// batch from the SHIPPED module0.wasm (zigner tests/swap_one_round.rs).
+// batch from the SHIPPED module0.wasm (zigner tests/swap_one_round.rs, re-run
+// on this request: the deposit expires DEPOSIT_OUTLIVES_MOVE after the move).
 // Fixtures: ./fixtures/swap-one-round-*.hex.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -25,7 +26,7 @@ import {
   type MoveInspected,
 } from './transparent-deposit';
 import { parseExpiryHeight } from './sent-tx-reconcile';
-import { moveAndDeposit, type Held } from '../signing/move-and-deposit';
+import { DEPOSIT_OUTLIVES_MOVE, moveAndDeposit, type Held } from '../signing/move-and-deposit';
 import { signedPcztsOfBatchAnswer } from '../signing/zigner-answer';
 import { cborWrapPczt, zignerBatchEnvelope } from '../routes/popup/send/zcash-send-cbor-helpers';
 
@@ -36,7 +37,7 @@ const VAULT = 't1Puwyjt8X8r9B4yr9PvVJ93Vu5phobsGqJ';
 const INDEX = 57;
 const SHORT = '425000';
 /** sha256 of the batch request zigner signed (its tests/fixtures/swap_one_round_request.hex) */
-const REQUEST_SHA256 = '70d8ec764c2722ec07bea29d452d1bbdaabe92a03a0f592ccb2f8ca2862fb500';
+const REQUEST_SHA256 = '644e4d45b6e9735f4218732c787c3586afa834cb5f2b2234f6ff6fedf5d0f41b';
 
 const fixture = (name: string) =>
   readFileSync(resolve(__dirname, `fixtures/swap-one-round-${name}.hex`), 'utf8').trim();
@@ -65,6 +66,9 @@ const emptyChain: DepositChain = {
   branchId: () => Promise.resolve(0x37a5165b),
   broadcast: () => Promise.reject(new Error('nothing is broadcast here')),
 };
+
+/** as the worker builds it for a move: the deposit outlives the move */
+const outlives = (coin: { expiry: number }) => coin.expiry + DEPOSIT_OUTLIVES_MOVE;
 
 const display = (wire: string) => wire.match(/../g)!.reverse().join('');
 
@@ -124,7 +128,7 @@ describe('one zigner round for the move and the swap', () => {
 
   test("zafu's batch is the one zigner signed, and both come back finished", async () => {
     const coin = moveCoin(inspected, tAddress, SHORT);
-    const built = await buildDeposit(wasm, withCoin(emptyChain, coin), pubkey, req);
+    const built = await buildDeposit(wasm, withCoin(emptyChain, coin), pubkey, req, outlives(coin));
     const envelope = zignerBatchEnvelope([
       hexToBytes(fixture('move-device')),
       hexToBytes(built.pcztHex),
@@ -142,8 +146,8 @@ describe('one zigner round for the move and the swap', () => {
     expect(pay!.value).toBe(400_000n);
     expect(memo!.value).toBe(0n);
     expect(change).toEqual([]); // the move funds it exactly
-    // it outlives the move: a move mined in time leaves a block for the deposit
-    expect(parseExpiryHeight(txHex)).toBeGreaterThanOrEqual(coin.expiry);
+    // it outlives the move: a move mined in its last block still leaves the deposit room
+    expect(parseExpiryHeight(txHex)).toBe(coin.expiry + DEPOSIT_OUTLIVES_MOVE);
   });
 
   test('the device answer must be whole and in order', () => {
@@ -156,7 +160,7 @@ describe('one zigner round for the move and the swap', () => {
 
   test('signed bytes that pay anything but the review are refused, nothing held or sent', async () => {
     const coin = moveCoin(inspected, tAddress, SHORT);
-    const built = await buildDeposit(wasm, withCoin(emptyChain, coin), pubkey, req);
+    const built = await buildDeposit(wasm, withCoin(emptyChain, coin), pubkey, req, outlives(coin));
     const [, signedDeposit] = signedPcztsOfBatchAnswer(answer(), 2);
     const signed = {
       unsignedPcztHex: built.pcztHex,
@@ -198,7 +202,13 @@ describe('one zigner round for the move and the swap', () => {
         inspect: pczt =>
           Promise.resolve(JSON.parse(wasm.frost_inspect_pczt_outputs(pczt, ufvk)) as MoveInspected),
         buildDeposit: async (coin, movePcztHex) => {
-          const built = await buildDeposit(wasm, withCoin(emptyChain, coin), pubkey, req);
+          const built = await buildDeposit(
+            wasm,
+            withCoin(emptyChain, coin),
+            pubkey,
+            req,
+            outlives(coin),
+          );
           const envelope = zignerBatchEnvelope([
             hexToBytes(movePcztHex),
             hexToBytes(built.pcztHex),
@@ -233,6 +243,7 @@ describe('one zigner round for the move and the swap', () => {
     expect(calls).toEqual(['sign', 'hold', 'move']);
     expect(held!.moveTxid).toBe(txid);
     expect(held!.moveExpiry).toBe(3_500_040);
+    expect(held!.expiry).toBe(3_500_040 + DEPOSIT_OUTLIVES_MOVE);
     expect(transparentInputs(held!.txHex)).toEqual([{ txid, vout: 0 }]);
     expect(display(wasm.compute_txid(sent[0]!))).toBe(txid);
   });

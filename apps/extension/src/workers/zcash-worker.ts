@@ -107,6 +107,7 @@ import {
   type DepositWasm,
   type FinalizeWasm,
 } from './transparent-deposit';
+import { DEPOSIT_OUTLIVES_MOVE } from '../signing/move-and-deposit';
 import { assertProveRequest, type ProveRequest } from '../shared/prove-guard';
 import { issueWorkerKey, openCall, type SealedCall, type SealedVault } from '../shared/vault-seal';
 import {
@@ -7133,7 +7134,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const chain = withCoin(depositChain(await makeZcashClient(serverUrl), serverUrl), coin);
         // the external key at the swap's index: the one its address was derived from
         const pubkey = wasm.transparent_pubkey_from_ufvk(ufvk, req.tIndex);
-        const built = await buildDeposit(wasm, chain, pubkey, req);
+        // a deposit held for its move must still land after a move mined in its last block
+        const built = await buildDeposit(
+          wasm,
+          chain,
+          pubkey,
+          req,
+          coin && coin.expiry + DEPOSIT_OUTLIVES_MOVE,
+        );
         const request = movePcztHex
           ? zignerBatchRequest(wasm, [movePcztHex, built.pcztHex], fragOf(fragmentSize))
           : zignerSignRequest(wasm, built.pcztHex, {

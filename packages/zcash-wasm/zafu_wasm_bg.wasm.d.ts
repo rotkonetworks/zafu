@@ -16,7 +16,7 @@ export const build_unsigned_pczt: (a: number, b: number, c: any, d: number, e: n
 export const build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number, i: number, j: number) => [number, number, number, number];
 export const build_unsigned_shielding_transaction_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number, number];
 export const build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number];
-export const build_unsigned_transparent_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
+export const build_unsigned_transparent_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
 export const build_vote_commitment_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
 export const build_vote_shares_from_recovery: (a: number, b: number, c: bigint, d: bigint) => [number, number, number, number];
 export const build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
