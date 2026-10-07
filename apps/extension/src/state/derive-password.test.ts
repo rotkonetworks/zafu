@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { derivePassword, normalizeOrigin, normalizeOriginV1, DEFAULT_IDENTITY } from './identity';
+import { derivePassword, identityKey, normalizeOrigin, normalizeOriginV1 } from './identity';
 import { schemeOf } from './password-logins';
 
 // harness test phrase (zero funds, never holds anything real)
 const SEED = Array(23).fill('abandon').concat(['art']).join(' ');
+const ID = identityKey(SEED);
 const B85_CHARS = /^[0-9A-Za-z!#$%&()*+\-;<=>?@^_`{|}~]*$/;
 
 describe('derivePassword', () => {
@@ -13,39 +14,32 @@ describe('derivePassword', () => {
   // real, usable password.
   test('fixed vector, v1: forum.z.cash / tommi / 32 / rotation 0', () => {
     // the password a v1 saved login has always had; it must never change
-    expect(derivePassword(SEED, DEFAULT_IDENTITY, 'forum.z.cash', 'tommi', 32, 0, 1)).toBe(
+    expect(derivePassword(ID, 'forum.z.cash', 'tommi', 32, 0, 1)).toBe(
       '!*5mO4D&0lFGpti8Oc~4X{5I&7Lv2^@p',
     );
   });
 
   test('same inputs always give the same password', () => {
-    const a = derivePassword(SEED, DEFAULT_IDENTITY, 'forum.z.cash', 'tommi', 32, 0);
-    const b = derivePassword(SEED, DEFAULT_IDENTITY, 'forum.z.cash', 'tommi', 32, 0);
+    const a = derivePassword(ID, 'forum.z.cash', 'tommi', 32, 0);
+    const b = derivePassword(ID, 'forum.z.cash', 'tommi', 32, 0);
     expect(a).toBe(b);
   });
 
   test('rotation changes the password, same prefix logic applies per group', () => {
-    const rot0 = derivePassword(SEED, DEFAULT_IDENTITY, 'forum.z.cash', 'tommi', 32, 0);
-    const rot1 = derivePassword(SEED, DEFAULT_IDENTITY, 'forum.z.cash', 'tommi', 32, 1);
+    const rot0 = derivePassword(ID, 'forum.z.cash', 'tommi', 32, 0);
+    const rot1 = derivePassword(ID, 'forum.z.cash', 'tommi', 32, 1);
     expect(rot1).not.toBe(rot0);
   });
 
   test('normalizeOrigin folds protocol, subdomain and path to the same password', () => {
-    const bare = derivePassword(SEED, DEFAULT_IDENTITY, 'forum.z.cash', 'tommi', 32, 0);
-    const dressed = derivePassword(
-      SEED,
-      DEFAULT_IDENTITY,
-      'https://www.forum.z.cash/path?x=1',
-      'tommi',
-      32,
-      0,
-    );
+    const bare = derivePassword(ID, 'forum.z.cash', 'tommi', 32, 0);
+    const dressed = derivePassword(ID, 'https://www.forum.z.cash/path?x=1', 'tommi', 32, 0);
     expect(dressed).toBe(bare);
     expect(normalizeOrigin('https://www.forum.z.cash/path?x=1')).toBe('forum.z.cash');
   });
 
   test.each([16, 24, 32, 40] as const)('length %i is honored exactly', len => {
-    const pw = derivePassword(SEED, DEFAULT_IDENTITY, 'forum.z.cash', 'tommi', len, 0);
+    const pw = derivePassword(ID, 'forum.z.cash', 'tommi', len, 0);
     expect(pw).toHaveLength(len);
     expect(pw).toMatch(B85_CHARS);
     expect(pw).not.toContain('undefined');
@@ -56,7 +50,7 @@ describe('derivePassword', () => {
   // asking for more silently truncates. the UI must never offer a length
   // past this.
   test('length beyond the 40-char ceiling truncates instead of erroring', () => {
-    const pw = derivePassword(SEED, DEFAULT_IDENTITY, 'forum.z.cash', 'tommi', 48, 0);
+    const pw = derivePassword(ID, 'forum.z.cash', 'tommi', 48, 0);
     expect(pw).toHaveLength(40);
   });
 
@@ -67,7 +61,7 @@ describe('derivePassword', () => {
   // the `>>> 0` fix; none of today's outputs may contain it.
   test('no derived password ever contains the literal word "undefined"', () => {
     for (let i = 0; i < 200; i++) {
-      const pw = derivePassword(SEED, DEFAULT_IDENTITY, 'forum.z.cash', `user${i}`, 32, 0);
+      const pw = derivePassword(ID, 'forum.z.cash', `user${i}`, 32, 0);
       expect(pw).not.toContain('undefined');
     }
   });
@@ -75,7 +69,7 @@ describe('derivePassword', () => {
 
 describe('password schemes', () => {
   const pw = (site: string, user: string, index = 0, scheme: 1 | 2 = 2) =>
-    derivePassword(SEED, DEFAULT_IDENTITY, site, user, 32, index, scheme);
+    derivePassword(ID, site, user, 32, index, scheme);
 
   test('v2 keeps the registrable domain: unrelated sites never share a password', () => {
     for (const [a, b] of [

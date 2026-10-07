@@ -405,6 +405,7 @@ export const createKeyRingSlice =
 
       lock: () => {
         void session.remove('passwordKey');
+        void session.remove('identityKeys');
         void session.remove('retiredPasswordKey');
         // grace must never outlive the unlock
         void session.remove('signGraceUntil');

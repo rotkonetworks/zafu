@@ -4,6 +4,7 @@ import { Mark } from '@repo/ui/components/ui/mark';
 import { cn } from '@repo/ui/lib/utils';
 import { usePopupNav } from '../../utils/navigate';
 import { useStore } from '../../state';
+import { getIdentityKey } from '../../state/identity-keys';
 import { passwordSelector } from '../../state/password';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../state/keyring';
 import { FormEvent, useState } from 'react';
@@ -50,7 +51,8 @@ export const Login = () => {
           // block - we offer re-import or continue.
           if (activeKeyInfo?.type === 'mnemonic') {
             try {
-              await getMnemonic(activeKeyInfo.id); // result intentionally discarded
+              // the one decrypt passkeys and passwords need this unlock
+              await getIdentityKey(activeKeyInfo.id, getMnemonic);
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
               if (msg.includes('failed to decrypt vault')) {

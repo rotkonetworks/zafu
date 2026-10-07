@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { bytesToHex } from '@noble/hashes/utils';
-import { DEFAULT_IDENTITY, derivePassword, derivePrf, identityKey } from './identity';
+import { derivePassword, derivePrf, identityKey } from './identity';
 import { createCredential, findCredential, legacyCredentialId } from './webauthn';
 
 const MN =
@@ -61,7 +61,7 @@ const PASSKEYS: [string, string, string, string, string, string][] = [
 
 describe('derivations made before the hardening stay byte for byte', () => {
   it.each(PASSWORDS)('password %#', (m, site, user, len, idx, scheme, want) => {
-    expect(derivePassword(m, DEFAULT_IDENTITY, site, user, len, idx, scheme)).toBe(want);
+    expect(derivePassword(identityKey(m), site, user, len, idx, scheme)).toBe(want);
   });
 
   it.each(PASSKEYS)('passkey %#', async (m, rp, pub, credId, prf, legacy) => {

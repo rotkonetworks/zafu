@@ -11,14 +11,9 @@
  * multisig wallet has no phrase on this device, so the form stays disabled
  * with one calm line instead of failing silently.
  *
- * TODO(seed exposure): getMnemonic decrypts the phrase here, in the popup.
- * state/shared/vault-seal.ts + getVaultUnlock already move a decrypt like
- * this into the zcash worker for sends, so it never touches the popup - but
- * that worker only exists when zcash is enabled, and passwords is an
- * everywhere tool (a penumbra-only wallet has no zcash worker to host it
- * in). Moving this derivation there would make an everywhere tool secretly
- * depend on a zcash-only process. Needs its own always-on host (or a
- * network-agnostic seal target) before this can move out of the popup.
+ * passwords derive from the wallet's identity node (state/identity-keys.ts),
+ * read once per wallet and derived inline on every keystroke: the phrase is
+ * not decrypted here, and the node cannot reach a spending key.
  */
 
 import { useEffect, useState } from 'react';
@@ -31,12 +26,8 @@ import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { getAllPermissions } from '@repo/storage-chrome/origin';
 import { useStore } from '../../../state';
 import { selectSelectedKeyInfo, selectGetMnemonic } from '../../../state/keyring';
-import {
-  derivePassword,
-  normalizeOriginFor,
-  DEFAULT_IDENTITY,
-  PASSWORD_SCHEME,
-} from '../../../state/identity';
+import { derivePassword, normalizeOriginFor, PASSWORD_SCHEME } from '../../../state/identity';
+import { getIdentityKey } from '../../../state/identity-keys';
 import { pocketOwner } from '../../../state/pockets';
 import {
   forgetPasswordLogin,
@@ -82,9 +73,8 @@ export const PasswordsPage = () => {
   // the person can still ask for the older derivation
   const [older, setOlder] = useState(false);
   const [revealed, setRevealed] = useState(false);
-  const [password, setPassword] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<Uint8Array | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [deriving, setDeriving] = useState(false);
   const owner = keyInfo ? pocketOwner(keyInfo) : undefined;
   const [logins, setLogins] = useState<PasswordLogin[]>([]);
   const [picking, setPicking] = useState(false);
@@ -119,45 +109,26 @@ export const PasswordsPage = () => {
       setError('zafu could not reach your saved logins. please unlock and try again.'),
     );
 
+  // the wallet's identity node, read once; every keystroke derives from it below
+  const keyId = canDerive ? keyInfo.id : undefined;
   useEffect(() => {
-    setPassword(null);
-    setError(null);
-    if (!canDerive || !keyInfo || !site.trim()) {
+    setIdentity(null);
+    if (!keyId) {
       return;
     }
-    let cancelled = false;
-    setDeriving(true);
-    void (async () => {
-      try {
-        const mnemonic = await getMnemonic(keyInfo.id);
-        if (cancelled) {
-          return;
-        }
-        setPassword(
-          derivePassword(
-            mnemonic,
-            DEFAULT_IDENTITY,
-            site.trim(),
-            username.trim(),
-            length,
-            rotation,
-            scheme,
-          ),
-        );
-      } catch {
-        if (!cancelled) {
-          setError('something broke on our side, not yours. nothing was lost.');
-        }
-      } finally {
-        if (!cancelled) {
-          setDeriving(false);
-        }
-      }
-    })();
+    let live = true;
+    getIdentityKey(keyId, getMnemonic).then(
+      id => live && setIdentity(id),
+      () => live && setError('something broke on our side, not yours. nothing was lost.'),
+    );
     return () => {
-      cancelled = true;
+      live = false;
     };
-  }, [canDerive, keyInfo, site, username, length, rotation, scheme, getMnemonic]);
+  }, [keyId, getMnemonic]);
+  const password =
+    identity && site.trim()
+      ? derivePassword(identity, site.trim(), username.trim(), length, rotation, scheme)
+      : null;
 
   return (
     <SettingsScreen title='passkeys and passwords' backPath={PopupPath.IDENTITY}>
@@ -243,7 +214,6 @@ export const PasswordsPage = () => {
               className='hover:text-fg-high'
             >
               {length} characters · version {rotation + 1}
-              {deriving ? ' · deriving...' : ''}
             </button>
             <span className='flex items-center gap-3'>
               {!saved && (

@@ -1338,8 +1338,11 @@ export const externalMessageListener = (
           }
           try {
             const { createCredential, findCredential } = await import('../../state/webauthn');
-            const { identityKey } = await import('../../state/identity');
-            const identity = identityKey(await useStore.getState().keyRing.getMnemonic(wallet.id));
+            const { getIdentityKey } = await import('../../state/identity-keys');
+            const identity = await getIdentityKey(
+              wallet.id,
+              useStore.getState().keyRing.getMnemonic,
+            );
             // the site already holds one of this wallet's passkeys: answered
             // only after the tap, so a page cannot probe for it silently
             if (await findCredential(identity, rpId, credentialIds(excludeCredentials))) {
@@ -1439,7 +1442,7 @@ export const externalMessageListener = (
           }
           const { signAssertion, findCredential, discoverableCredential } =
             await import('../../state/webauthn');
-          const { identityKey } = await import('../../state/identity');
+          const { getIdentityKey } = await import('../../state/identity-keys');
           const { useStore } = await import('../../state');
           const { pocketOwner } = await import('../../state/pockets');
           const keyRing = useStore.getState().keyRing;
@@ -1463,7 +1466,7 @@ export const externalMessageListener = (
             if (wallet?.type !== 'mnemonic') {
               continue;
             }
-            const identity = identityKey(await keyRing.getMnemonic(wallet.id));
+            const identity = await getIdentityKey(wallet.id, keyRing.getMnemonic);
             const credential = allowIds.length
               ? await findCredential(identity, rpId, allowIds)
               : await discoverableCredential(

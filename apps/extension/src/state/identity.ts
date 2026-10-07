@@ -1031,8 +1031,8 @@ const passwordTag = (
 };
 
 export const derivePassword = (
-  mnemonic: string,
-  identity: string,
+  /** the identity node (identityKey), never the phrase */
+  identity: Uint8Array,
   origin: string,
   username: string,
   length = 32,
@@ -1040,35 +1040,34 @@ export const derivePassword = (
   index = 0,
   /** which scheme: a saved login's own, else the current one */
   scheme: PasswordScheme = PASSWORD_SCHEME,
-): string =>
-  withIdentity(mnemonic, identity, id => {
-    if (!Number.isInteger(index) || index < 0 || index > 0xffffffff) {
-      throw new Error('a password rotation is a u32');
-    }
-    const tag = passwordTag(scheme, normalizeOriginFor(scheme, origin), username, index);
-    const seed = deriveSeed(id, tag);
-    const bytes = seed.slice(0, 32);
-    seed.fill(0);
+): string => {
+  if (!Number.isInteger(index) || index < 0 || index > 0xffffffff) {
+    throw new Error('a password rotation is a u32');
+  }
+  const tag = passwordTag(scheme, normalizeOriginFor(scheme, origin), username, index);
+  const seed = deriveSeed(identity, tag);
+  const bytes = seed.slice(0, 32);
+  seed.fill(0);
 
-    // base85 encode for high entropy density + printable chars
-    let result = '';
-    for (let i = 0; i < bytes.length && result.length < length; i += 4) {
-      let val = 0;
-      for (let j = 0; j < 4 && i + j < bytes.length; j++) {
-        // unsigned: `<<` on a byte >= 0x80 would make val negative after 4
-        // shifts, and `%` keeps the dividend's sign, so B85[val % 85] reads
-        // out of range and returns undefined - a password with the literal
-        // word "undefined" baked in. `>>> 0` forces the unsigned reading.
-        val = ((val << 8) | bytes[i + j]!) >>> 0;
-      }
-      for (let j = 0; j < 5 && result.length < length; j++) {
-        result += B85[val % 85]!;
-        val = Math.floor(val / 85);
-      }
+  // base85 encode for high entropy density + printable chars
+  let result = '';
+  for (let i = 0; i < bytes.length && result.length < length; i += 4) {
+    let val = 0;
+    for (let j = 0; j < 4 && i + j < bytes.length; j++) {
+      // unsigned: `<<` on a byte >= 0x80 would make val negative after 4
+      // shifts, and `%` keeps the dividend's sign, so B85[val % 85] reads
+      // out of range and returns undefined - a password with the literal
+      // word "undefined" baked in. `>>> 0` forces the unsigned reading.
+      val = ((val << 8) | bytes[i + j]!) >>> 0;
     }
-    bytes.fill(0);
-    return result.slice(0, length);
-  });
+    for (let j = 0; j < 5 && result.length < length; j++) {
+      result += B85[val % 85]!;
+      val = Math.floor(val / 85);
+    }
+  }
+  bytes.fill(0);
+  return result.slice(0, length);
+};
 
 // -- backwards compatibility --
 

@@ -724,6 +724,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
         // runtime.reload(), so remove it explicitly here too
         await chrome.storage.session.remove([
           'passwordKey',
+          'identityKeys',
           'signGraceUntil',
           'swapUnlock',
           'retiredPasswordKey',
