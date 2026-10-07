@@ -193,7 +193,6 @@ const NYM_CLASSES: { cls: RequestClass; destination: string; paths: string[]; bo
   },
   { cls: 'names-you', destination: 'midgard', paths: ['/v2/actions', '/v2/member'] },
   { cls: 'names-you', destination: 'near-swap', paths: ['/v0/quote', '/v0/status', '/v0/deposit'] },
-  { cls: 'names-you', destination: 'mayachain', paths: ['/mayachain/quote/', '/mayachain/tx/'] },
   // the vote servers see your vote arrive. pir hides what it is asked by design and
   // its answers can be large (nym moves about 11 KB/s), so it stays direct
   { cls: 'names-you', destination: 'voting', paths: ['/shielded-vote'] },
