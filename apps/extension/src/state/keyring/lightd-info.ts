@@ -1,3 +1,12 @@
+import {
+  readBytes,
+  readTag,
+  readVarintNumber,
+  skipValue,
+  WIRE_LEN,
+  WIRE_VARINT,
+} from '../../net/proto-reader';
+
 /**
  * LightdInfo, the answer to the standard GetLightdInfo (lightwalletd
  * service.proto). Every zcash light server speaks it - lightwalletd, Zaino and
@@ -34,19 +43,6 @@ export const EMPTY_LIGHTD_INFO: Readonly<LightdInfo> = {
   zcashdSubversion: '',
 };
 
-/** an unsigned varint at `pos`: [value, next pos], or undefined if cut short or past 2^53 */
-const varint = (buf: Uint8Array, pos: number): [number, number] | undefined => {
-  let v = 0;
-  for (let i = 0; i < 8 && pos < buf.length; i++) {
-    const b = buf[pos++]!;
-    v += (b & 0x7f) * 2 ** (7 * i);
-    if (!(b & 0x80)) {
-      return Number.isSafeInteger(v) ? [v, pos] : undefined;
-    }
-  }
-  return undefined;
-};
-
 /**
  * Decode a LightdInfo message. Tags are varints (newer lightwalletd sends
  * fields past 15), unknown fields are skipped, and a malformed message yields
@@ -57,16 +53,13 @@ export const decodeLightdInfo = (buf: Uint8Array): LightdInfo => {
   const decoder = new TextDecoder();
   let pos = 0;
   while (pos < buf.length) {
-    const tag = varint(buf, pos);
+    const tag = readTag(buf, pos);
     if (!tag) {
       break;
     }
-    const [key, afterTag] = tag;
-    const field = Math.floor(key / 8);
-    const wire = key % 8;
-    pos = afterTag;
-    if (wire === 0) {
-      const v = varint(buf, pos);
+    const { field, wire } = tag;
+    if (wire === WIRE_VARINT) {
+      const v = readVarintNumber(buf, tag.next);
       if (!v) {
         break;
       }
@@ -76,22 +69,22 @@ export const decodeLightdInfo = (buf: Uint8Array): LightdInfo => {
         info.blockHeight = v[0];
       }
       pos = v[1];
-    } else if (wire === 2) {
-      const len = varint(buf, pos);
-      if (!len || len[1] + len[0] > buf.length) {
+    } else if (wire === WIRE_LEN) {
+      const v = readBytes(buf, tag.next);
+      if (!v) {
         break;
       }
       const name = LIGHTD_INFO_STRINGS[field];
       if (name) {
-        info[name] = decoder.decode(buf.subarray(len[1], len[1] + len[0]));
+        info[name] = decoder.decode(v[0]);
       }
-      pos = len[1] + len[0];
-    } else if (wire === 1) {
-      pos += 8;
-    } else if (wire === 5) {
-      pos += 4;
+      pos = v[1];
     } else {
-      break;
+      const next = skipValue(buf, tag.next, wire);
+      if (next === undefined) {
+        break;
+      }
+      pos = next;
     }
   }
   return info;
