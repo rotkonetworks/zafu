@@ -59,7 +59,7 @@ export function SendOverNymRows({
               key={g.id}
               type='toggle'
               label={g.label}
-              description={groupOn(g) ? 'over nym' : `direct · ${g.direct}`}
+              description={groupOn(g) ? `over nym · ${g.nym}` : `direct · ${g.direct}`}
               checked={groupOn(g)}
               onChange={v =>
                 void setDestinationOptIn(
