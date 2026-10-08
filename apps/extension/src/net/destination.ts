@@ -11,7 +11,8 @@
  *    the networks and services the user has turned on.
  *  - `optIns` is the per-destination choice (`zcash-me`, `chat-relay`, ...):
  *    `allowed` turns an optional service on, `blocked` turns any destination
- *    off, including one an enabled network requires.
+ *    off, including one an enabled network requires. `nym:<network>` is the
+ *    per-network choice of nym (`./egress-policy` NYM_GROUPS).
  *  - `v` is the ledger format. v2 dropped the old "trusted hosts are born
  *    allowed" rule; `./egress-migrate` upgrades a v1 ledger once.
  */

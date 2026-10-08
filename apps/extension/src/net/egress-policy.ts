@@ -213,6 +213,85 @@ const NYM_CLASSES: {
   })),
 ];
 
+/**
+ * The person's per-network choice of nym, stored as `optIns['nym:<id>']`
+ * beside the master switch (`optIns.nym`). Unset means `on` here. penumbra is
+ * off by default: its transactions are already shielded, and ~10 s through
+ * nym is two blocks. `direct` says what going direct reveals.
+ */
+export const NYM_GROUPS: {
+  id: string;
+  label: string;
+  on: boolean;
+  direct: string;
+  members: string[];
+}[] = [
+  {
+    id: 'zcash',
+    label: 'zcash',
+    on: true,
+    direct: 'the node sees your ip with the send',
+    members: ['zcash'],
+  },
+  {
+    id: 'penumbra',
+    label: 'penumbra',
+    on: false,
+    direct: 'the node sees your ip with a shielded send',
+    members: ['penumbra'],
+  },
+  {
+    id: 'cosmos',
+    label: 'cosmos chains',
+    on: true,
+    direct: 'the node sees your ip with your address',
+    members: [COSMOS, 'sponsor'],
+  },
+  {
+    id: 'swaps',
+    label: 'swaps',
+    on: true,
+    direct: 'the swap service sees your ip with your address',
+    members: ['thorchain', 'midgard', 'near-swap'],
+  },
+  {
+    id: 'voting',
+    label: 'zcash voting',
+    on: true,
+    direct: 'the vote servers see your ip with your vote',
+    members: ['voting'],
+  },
+  {
+    id: 'zcash-me',
+    label: 'zcash.me',
+    on: true,
+    direct: 'the directory sees your ip with each lookup',
+    members: ['zcash-me'],
+  },
+  {
+    id: 'buy',
+    label: 'buying zec',
+    on: true,
+    direct: 'peer and base see your ip with your address',
+    members: ['peer', 'base'],
+  },
+];
+
+export const nymGroupKey = (id: string): string => `${NYM}:${id}`;
+
+/** whether this group's requests go over nym, the master switch aside */
+export const nymGroupOn = (i: EgressInputs, group: (typeof NYM_GROUPS)[number]): boolean => {
+  const choice = i.netEgress?.optIns?.[nymGroupKey(group.id)];
+  return choice ? choice === 'allowed' : group.on;
+};
+
+const nymRoutes = (i: EgressInputs, spec: DestinationSpec): boolean => {
+  const group = NYM_GROUPS.find(
+    g => g.members.includes(spec.id) || (!!spec.family && g.members.includes(spec.family)),
+  );
+  return !!group && nymGroupOn(i, group);
+};
+
 /** nym's exits only open these ports: a node on any other stays direct rather than unreachable */
 const NYM_EXIT_PORTS = new Set(['443', '80', '81', '9001']);
 
@@ -585,6 +664,7 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
   const nym = stateOf(destinationSpec(NYM)!, i).on;
   for (const spec of DESTINATIONS) {
     const { on, why } = stateOf(spec, i);
+    const route = nym && nymRoutes(i, spec);
     // one malformed input must not cost every other destination its row
     let urls: (string | undefined)[];
     try {
@@ -606,7 +686,7 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
           ...(spec.realm ? { realm: spec.realm } : {}),
         };
         rules.push(rule);
-        if (!nym || !on || !NYM_EXIT_PORTS.has(portOf(url!))) {
+        if (!route || !on || !NYM_EXIT_PORTS.has(portOf(url!))) {
           continue;
         }
         const ours = NYM_CLASSES.filter(
