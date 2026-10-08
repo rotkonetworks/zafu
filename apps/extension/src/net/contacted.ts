@@ -31,6 +31,11 @@ export interface ContactedEntry {
   last: number;
   /** count per day, keyed by days since the epoch */
   days: Record<string, number>;
+  /**
+   * how many of each day's went over nym; absent means all direct, as every
+   * log written before nym routing is
+   */
+  nym?: Record<string, number>;
 }
 
 /** keyed by destination id, or by host when no destination owns it */
@@ -41,7 +46,17 @@ export const dayOf = (ms: number): number => Math.floor(ms / DAY_MS);
 const count = (n: unknown): n is number =>
   typeof n === 'number' && Number.isSafeInteger(n) && n > 0;
 
-/** a stored log, keeping only well-formed counts */
+/** an entry from its day counts, the nym map left out when nothing went over nym */
+const entry = (
+  last: number,
+  days: [string, number][],
+  nym: [string, number][] = [],
+): ContactedEntry =>
+  nym.length
+    ? { last, days: Object.fromEntries(days), nym: Object.fromEntries(nym) }
+    : { last, days: Object.fromEntries(days) };
+
+/** a stored log, keeping only well-formed counts, with never more over nym than in all */
 export const parseContacted = (raw: unknown): ContactedLog => {
   const out: ContactedLog = {};
   if (!raw || typeof raw !== 'object') {
@@ -49,11 +64,20 @@ export const parseContacted = (raw: unknown): ContactedLog => {
   }
   for (const [id, e] of Object.entries(raw as Record<string, Partial<ContactedEntry>>)) {
     const days = Object.entries(e?.days ?? {}).filter(([d, n]) => /^\d+$/.test(d) && count(n));
+    const all = Object.fromEntries(days) as Record<string, number>;
+    const nym = Object.entries(e?.nym ?? {}).filter(([d, n]) => count(n) && n <= (all[d] ?? 0));
     if (count(e?.last) && days.length) {
-      out[id] = { last: e.last, days: Object.fromEntries(days) as Record<string, number> };
+      out[id] = entry(e.last, days, nym);
     }
   }
   return out;
+};
+
+const add = (into: Record<string, number>, from: Record<string, number> = {}) => {
+  for (const [d, n] of Object.entries(from)) {
+    into[d] = (into[d] ?? 0) + n;
+  }
+  return into;
 };
 
 /** a and b added together, day by day */
@@ -62,8 +86,9 @@ export const mergeContacted = (a: ContactedLog, b: ContactedLog): ContactedLog =
   for (const [id, e] of Object.entries(b)) {
     const into = (out[id] ??= { last: 0, days: {} });
     into.last = Math.max(into.last, e.last);
-    for (const [d, n] of Object.entries(e.days)) {
-      into.days[d] = (into.days[d] ?? 0) + n;
+    add(into.days, e.days);
+    if (e.nym) {
+      into.nym = add(into.nym ?? {}, e.nym);
     }
   }
   return out;
@@ -72,11 +97,13 @@ export const mergeContacted = (a: ContactedLog, b: ContactedLog): ContactedLog =
 /** the days older than {@link KEEP_DAYS} dropped, and any destination left with none */
 export const pruneContacted = (log: ContactedLog, now: number): ContactedLog => {
   const oldest = dayOf(now) - KEEP_DAYS + 1;
+  const kept = (m: Record<string, number> = {}) =>
+    Object.entries(m).filter(([d]) => Number(d) >= oldest);
   const out: ContactedLog = {};
   for (const [id, e] of Object.entries(log)) {
-    const days = Object.entries(e.days).filter(([d]) => Number(d) >= oldest);
+    const days = kept(e.days);
     if (days.length) {
-      out[id] = { last: e.last, days: Object.fromEntries(days) };
+      out[id] = entry(e.last, days, kept(e.nym));
     }
   }
   return out;
@@ -85,8 +112,19 @@ export const pruneContacted = (log: ContactedLog, now: number): ContactedLog => 
 /** one realm's tally as a log */
 export const fromTally = (tally: ContactTally): ContactedLog =>
   Object.fromEntries(
-    Object.entries(tally).map(([id, t]) => [id, { last: t.at, days: { [dayOf(t.at)]: t.n } }]),
+    Object.entries(tally).map(([id, t]) => {
+      const d = String(dayOf(t.at));
+      return [id, entry(t.at, [[d, t.n]], t.nym ? [[d, t.nym]] : [])];
+    }),
   );
+
+const sum = (m: Record<string, number> = {}) => Object.values(m).reduce((a, b) => a + b, 0);
+
+/** an entry's week: all contacts, and how many of them went over nym */
+export const totalContacted = (e: ContactedEntry): { n: number; nym: number } => ({
+  n: sum(e.days),
+  nym: sum(e.nym),
+});
 
 const parseJson = (s: string | null): unknown => {
   try {
