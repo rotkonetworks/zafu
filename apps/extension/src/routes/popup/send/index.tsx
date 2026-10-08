@@ -4,7 +4,8 @@
  * cosmos chains use skip go api for routing
  */
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ensureNym } from '../../../net/nym-bridge';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { PopupPath } from '../paths';
 import { ZcashSend } from './zcash-send';
@@ -80,7 +81,11 @@ export function SendPage() {
   const cosmosChain = locationState?.cosmosChain ?? resolveNetworkCosmosChain(activeNetwork);
 
   const network = locationState?.network ?? activeNetwork;
-  if (!locationState?.cosmosChain && (zcashLink || network === 'zcash')) {
+  const zcashSend = !locationState?.cosmosChain && (zcashLink || network === 'zcash');
+  // the destination this send reaches: nym starts for it unless it goes direct
+  const via = zcashSend ? 'zcash' : (cosmosChain ?? network);
+  useEffect(() => void ensureNym(via), [via]);
+  if (zcashSend) {
     if (waitingForWallets) {
       return (
         <div className='flex h-full items-center justify-center p-6 text-xs text-fg-muted'>

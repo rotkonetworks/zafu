@@ -8,6 +8,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
+import { ensureNym } from '../../../net/nym-bridge';
 import { viewClient, simulationClient } from '../../../clients';
 import { Button } from '@repo/ui/components/ui/button';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
@@ -105,6 +106,8 @@ export const SwapPage = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const location = useLocation();
   const swapState = location.state as SwapLocationState | undefined;
+  // the chain's own node and the swap services: nym starts for those that use it
+  useEffect(() => void ensureNym(activeNetwork, 'thorchain', 'near-swap'), [activeNetwork]);
 
   // gate on the capability, not the chain: a network without swap has no page
   // here. Which implementation renders below is chain-specific routing.

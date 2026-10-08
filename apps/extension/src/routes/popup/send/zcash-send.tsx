@@ -31,7 +31,6 @@ import {
 import { BuildStopped, isBuildStopped } from '../../../workers/build-abort';
 import { SendRun } from './send-run';
 import { isHeartbeat, phaseOf, useSendWatch, watchNote } from './send-watch';
-import { startNym } from '../../../net/nym-bridge';
 import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { nu63ActivationHeight } from '../../../config/feature-flags';
@@ -410,9 +409,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     buildStartRef.current,
     step === 'building' || step === 'broadcast',
   );
-  // a send is coming even when the screen opened without a press on its way
-  // (a link, a reopened popup): nym's cold start overlaps the form
-  useEffect(() => void startNym(), []);
 
   // a witness rebuild the worker reported for this build (board StWitness)
   const catchUp = useCatchUp();

@@ -44,7 +44,8 @@ export interface NymRequestInit {
 }
 
 export type NymMessage =
-  | { type: 'start' }
+  /** start if any of `via` (every destination when empty) sends over nym */
+  | { type: 'start'; via?: string[] }
   | { type: 'stop' }
   | { type: 'ping' }
   /** `down`: the last start failed, so a waiting request need not wait out its bound */
@@ -118,18 +119,20 @@ interface Chrome {
 }
 
 /**
- * Start the tunnel if it is not up (the host ignores this while nym is off).
- * The service worker makes sure the offscreen document exists; pages ask it
- * to; a web worker already lives inside it.
+ * The tunnel is up, or on its way, if any of `via` (destination ids; every
+ * one when none is named) sends over nym; otherwise nothing starts. The same
+ * call whether nym is kept ready or started on demand. The service worker
+ * makes sure the offscreen document exists; pages ask it to; a web worker
+ * already lives inside it.
  */
-export const startNym = async (): Promise<void> => {
+export const ensureNym = async (...via: string[]): Promise<void> => {
   const chrome = (globalThis as { chrome?: Chrome }).chrome;
   await (
     chrome?.offscreen
       ? ensureOffscreenDocument()
       : chrome?.runtime?.sendMessage?.({ type: 'ZCASH_ENSURE_OFFSCREEN' })
   )?.catch(() => undefined);
-  postNym({ type: 'start' });
+  postNym({ type: 'start', via });
 };
 
 /** true once the tunnel is ready, false if it was not within `ms` or its start failed */
@@ -137,7 +140,7 @@ export const nymReady = async (ms: number): Promise<boolean> =>
   (await waitFor(
     m => (m.type !== 'state' ? undefined : m.ready ? true : m.down ? false : undefined),
     ms,
-    () => void startNym().then(() => postNym({ type: 'ping' })),
+    () => void ensureNym().then(() => postNym({ type: 'ping' })),
   )) ?? false;
 
 const flatten = async (

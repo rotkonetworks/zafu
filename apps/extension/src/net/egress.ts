@@ -183,12 +183,20 @@ const urlOf = (input: string | URL | Request): string =>
 export const checkEgress = (input: string | URL | Request): EgressDecision =>
   decideEgress(urlOf(input), realm ?? 'worker', table);
 
-/** "send over nym" is on, once this realm has its table */
-export const nymRoutingOn = async (): Promise<boolean> => {
+/** something sends over nym (any of `destinations`, when named), once this realm has its table */
+export const nymRoutingOn = async (destinations: string[] = []): Promise<boolean> => {
   if (!table) {
     await waitForTable();
   }
-  return table?.nym === true;
+  const via = table?.nymVia ?? [];
+  return destinations.length ? destinations.some(d => via.includes(d)) : via.length > 0;
+};
+
+const tableListeners = new Set<(t: EgressTable) => void>();
+/** every table this realm takes, from now on */
+export const onEgressTable = (listener: (t: EgressTable) => void): (() => void) => {
+  tableListeners.add(listener);
+  return () => void tableListeners.delete(listener);
 };
 
 const refuse = (refusal: EgressRefusal): never => {
@@ -211,6 +219,7 @@ const enforce = (input: string | URL | Request): void => {
 
 const publish = (next: EgressTable): void => {
   table = next;
+  tableListeners.forEach(l => l(next));
   markReady?.();
   channel?.postMessage({ type: 'table', table: next } satisfies ChannelMessage);
 };
@@ -366,6 +375,7 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
       channel!.postMessage({ type: 'table', table } satisfies ChannelMessage);
     } else if (msg.type === 'table' && !host.load) {
       table = msg.table;
+      tableListeners.forEach(l => l(msg.table));
       markReady?.();
     } else if (msg.type === 'blocked') {
       emit(msg.refusal, msg.realm);
