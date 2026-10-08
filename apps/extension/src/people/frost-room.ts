@@ -558,6 +558,12 @@ export const foldFrost = async (
   };
 };
 
+/** a message this device said, kept at once rather than when the relay hands it back */
+export const keepSaid = (r: PeopleRoom, m: FrostMsg): PeopleRoom => ({
+  ...r,
+  frost: { ...r.frost, msgs: pruneMsgs([...(r.frost?.msgs ?? []), m]) },
+});
+
 /** what keeps one copy of a message: an object is itself; a round record is its author's word */
 const slotOf = (m: FrostMsg): string => {
   const b = m.body;

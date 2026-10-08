@@ -52,6 +52,7 @@ import type { XidKeys } from '../state/identity';
 import {
   foldFrost,
   packFrost,
+  keepSaid,
   readMsgs,
   roundsOf,
   walletGenesis,
@@ -201,10 +202,16 @@ export interface LxDeps {
   now: () => number;
 }
 
-const post = async (api: PeopleApi, roomId: string, body: FrostBody) => {
+/** said in the room, and kept here at once: the next step need not wait for the relay to echo it */
+const post = async (api: PeopleApi, roomId: string, body: FrostBody, from = '') => {
   for (const b of await packFrost(body)) {
     await api.send(roomId, b, 'action');
   }
+  if (body.t !== 'all') {
+    const at = Math.floor(api.now() / 1000);
+    await api.updateRoom(roomId, r => keepSaid(r, { from, at, mid: 'said', body }));
+  }
+  return body;
 };
 
 export const createLeaderless = (deps: LxDeps) => {
@@ -244,7 +251,7 @@ export const createLeaderless = (deps: LxDeps) => {
     const signed = new Set(
       msgs.flatMap(({ body: b }) => (b.t === 'join' && b.os ? [joinId(b.j)] : [])),
     );
-    let any = false;
+    const said: FrostBody[] = [];
     for (const h of halves) {
       const i = mine.get(h.id)!;
       const id = joinId(h.j);
@@ -278,10 +285,18 @@ export const createLeaderless = (deps: LxDeps) => {
       } else if (signed.has(id)) {
         continue;
       }
-      await post(api, room.id, { t: 'join', v: 2, id: h.id, j: h.j, js: h.js, os: signId(me, id) });
-      any = true;
+      said.push(
+        await post(api, room.id, {
+          t: 'join',
+          v: 2,
+          id: h.id,
+          j: h.j,
+          js: h.js,
+          os: signId(me, id),
+        }),
+      );
     }
-    if (any) {
+    if (said.length) {
       // the relay keeps two days: a newcomer reads every seat from this, not from the past
       const items = msgs.flatMap(({ body: b }) =>
         b.t === 'i' || (b.t === 'join' && b.os) || b.t === 'rot' || b.t === 'g' || b.t === 'rs'
@@ -297,6 +312,7 @@ export const createLeaderless = (deps: LxDeps) => {
         });
       }
     }
+    return said;
   };
 
   /** a rotation out of this room bound: move to its room, or, left out of it, say so */
@@ -402,13 +418,17 @@ export const createLeaderless = (deps: LxDeps) => {
     );
 
   /** after the fold: what this device can move forward in a leaderless room */
-  const act = async (room: PeopleRoom, before: PeopleRoom, api: PeopleApi): Promise<boolean> => {
-    const g = room.group;
+  const act = async (seen: PeopleRoom, before: PeopleRoom, api: PeopleApi): Promise<boolean> => {
+    const g = seen.group;
     if (!g?.g || g.gone) {
       return false;
     }
-    const me = await deps.keys(room);
-    await cosign(api, room, me);
+    const me = await deps.keys(seen);
+    // a seat this device just co-signed counts in this pass, not the next
+    const room = (await cosign(api, seen, me)).reduce(
+      (r, body) => keepSaid(r, { from: me.pubkey, at: 0, mid: 'said', body }),
+      seen,
+    );
     const v = viewOf(room)!;
     if (await follow(api, room, v, me)) {
       return true;
@@ -461,11 +481,11 @@ export const createLeaderless = (deps: LxDeps) => {
     }
     // said once, on the pass that brought it: what was already there was said before
     const prior = viewOf(before);
-    const seen = new Set(prior?.rotations.map(x => x.id));
+    const known = new Set(prior?.rotations.map(x => x.id));
     // a removal someone asked for that waits on this member's word (how it is given is #110's to say)
     for (const x of v.rotations) {
       if (
-        !seen.has(x.id) &&
+        !known.has(x.id) &&
         !x.bound &&
         x.roster.r.members.includes(me.pubkey) &&
         !x.signed.has(me.pubkey)
