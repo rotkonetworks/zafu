@@ -21,7 +21,8 @@ import type { NetEgressState } from '../../../net/destination';
 import { readNetEgress, setDestinationDecision, setDestinationOptIn } from '../../../net/ledger';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
-import { ExplainSheet, type Explain } from './settings-explain';
+import { ExplainSheet, useExplain, type Explain } from './settings-explain';
+import { SendOverNymRows } from './nym-rows';
 
 interface Connections {
   destinations: DestinationView[];
@@ -89,6 +90,7 @@ const DestinationRow = ({
 
 export const SettingsConnections = () => {
   const data = useConnections();
+  const { explainProps, sheet } = useExplain();
   const [confirm, setConfirm] = useState<DestinationView>();
   const [unusedOpen, setUnusedOpen] = useState(false);
   const [explainDest, setExplainDest] = useState<DestinationView | null>(null);
@@ -127,6 +129,13 @@ export const SettingsConnections = () => {
   return (
     <SettingsScreen title='everything zafu talks to' backPath={PopupPath.SETTINGS_NETWORK}>
       <div className='flex flex-col gap-5'>
+        <section>
+          <p className='kicker mb-2'>how sends travel</p>
+          <RowGroup>
+            <SendOverNymRows optIns={data.ledger.optIns} {...explainProps('privacy.sendOverNym')} />
+          </RowGroup>
+        </section>
+
         <section>
           <p className='kicker mb-2'>in use</p>
           <RowGroup>
@@ -253,6 +262,7 @@ export const SettingsConnections = () => {
           </Button>
         </div>
       </Sheet>
+      {sheet}
     </SettingsScreen>
   );
 };
