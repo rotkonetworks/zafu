@@ -77,9 +77,10 @@ export const ToolsPage = () => {
     },
     hasFeature(activeNetwork, 'multisig') && {
       icon: 'i-zafu-torii',
-      label: 'multisig',
-      desc: 'threshold wallets',
-      path: PopupPath.MULTISIG,
+      label: 'shared wallet',
+      desc: 'any k of n can send',
+      // a hot wallet makes one straight away; a zigner's keys are made with the zigner
+      path: hot ? `${PopupPath.INBOX_NEW_GROUP}?wallet=1` : PopupPath.MULTISIG,
     },
     IRONWOOD_MIGRATION &&
       hasFeature(activeNetwork, 'zcash') && {
