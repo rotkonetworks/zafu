@@ -344,9 +344,9 @@ describe('a group through its door', () => {
     for (const w of [a, b]) {
       const v = viewOf(w.room(groupId(G))!)!;
       expect([...v.m.members]).toEqual([alice.pubkey]);
-      expect(w.lines(groupId(G))?.some(l => l.includes('let two people in with one code'))).toBe(
-        true,
-      );
+      expect(
+        w.lines(groupId(G))?.filter(l => l.includes('let two people in with one code')),
+      ).toHaveLength(1);
     }
   });
 
@@ -357,6 +357,8 @@ describe('a group through its door', () => {
     await comeIn(a, b, code, G, clock, pake);
     const bobKey = deriveRoomKeys(BOB, 0, G).pubkey;
     const old = a.room(groupId(G))!.secret;
+    // a code alice made before the removal, typed after it
+    const { code: early } = (await a.op('group-renew', { G })) as { code: string };
 
     await a.op('group-remove', { G, key: bobKey });
     for (let i = 0; i < 2; i++) {
@@ -378,12 +380,12 @@ describe('a group through its door', () => {
     await b.service.check();
     expect(b.lines(groupId(G))?.some(l => l.includes('only for the ones still here'))).toBe(false);
 
-    // invited again, with a new code: bob comes into the new room
-    const { code: next } = (await a.op('group-renew', { G })) as { code: string };
-    await comeIn(a, b, next, G, clock, pake);
+    // invited again, with the code made before: bob comes into the new room
+    await comeIn(a, b, early, G, clock, pake);
     expect(b.room(groupId(G))?.secret).toBe(moved.secret);
     expect(b.room(groupId(G))?.group?.gone).toBeFalsy();
     expect(a.room(groupId(G))?.group?.members).toHaveLength(2);
+    expect(b.room(groupId(G))?.group?.members).toHaveLength(2);
   });
 
   test('removing someone with others left waits for every one of them, and then all move', async () => {
@@ -407,7 +409,7 @@ describe('a group through its door', () => {
     }
     // bob has not signed: nobody moved, and bob is shown what is asked of him
     expect(a.room(groupId(G))!.secret).toBe(old);
-    expect(b.lines(groupId(G))?.some(l => l.includes('asked to remove'))).toBe(true);
+    expect(b.lines(groupId(G))?.filter(l => l.includes('asked to remove'))).toHaveLength(1);
     // bob signs both (how bob says yes is still open in #110; here his device does it directly)
     const v = viewOf(b.room(groupId(G))!)!;
     const rot = v.rotations[0]!;

@@ -27,6 +27,7 @@ import { presenceEpoch } from '@zafu/zid';
 import {
   frame,
   genesisId,
+  inviteId,
   joinId,
   maySignRoster,
   maySignRotate,
@@ -59,6 +60,7 @@ import {
   type LxBody,
 } from './frost-room';
 import { encodeWire } from './door';
+import { inviteFor } from './door-run';
 import { memberName, wordName } from './word-name';
 import type { PeopleApi, PeopleService, RecordHandler } from './service';
 import type { GroupMember, PeopleRoom } from './vault';
@@ -359,6 +361,22 @@ export const createLeaderless = (deps: LxDeps) => {
       items: proof,
     });
     await sayHello(api, room, me);
+    // this member's codes still open: their invites are said again where a joiner will now land
+    const moved = (await api.room(room.id))!;
+    for (const d of await api.rooms()) {
+      if (
+        d.kind === 'door' &&
+        d.door?.role === 'host' &&
+        d.door.owner === me.pubkey &&
+        !d.door.admitted &&
+        d.signer.G === g.G &&
+        (d.until ?? 0) > deps.now()
+      ) {
+        const i = inviteFor(d, moved, me.pubkey);
+        const id = inviteId(i);
+        await post(api, room.id, { t: 'i', v: 2, id, i, sig: signId(me, id) });
+      }
+    }
     for (const k of gone) {
       await api.note(room.id, {
         hash: `n:left:${rot.id}:${k}`,
@@ -383,7 +401,7 @@ export const createLeaderless = (deps: LxDeps) => {
     );
 
   /** after the fold: what this device can move forward in a leaderless room */
-  const act = async (room: PeopleRoom, api: PeopleApi): Promise<boolean> => {
+  const act = async (room: PeopleRoom, before: PeopleRoom, api: PeopleApi): Promise<boolean> => {
     const g = room.group;
     if (!g?.g || g.gone) {
       return false;
@@ -413,7 +431,7 @@ export const createLeaderless = (deps: LxDeps) => {
     if (came.length || seats.length !== g.members.length) {
       await api.updateRoom(room.id, x => ({
         ...x,
-        group: { ...x.group!, members: seatsOf(x, membershipOf(recordsOf(x)!, verify)) },
+        group: { ...x.group!, members: seatsOf(x, v.m) },
       }));
       const doors = (await api.rooms()).filter(
         d => d.kind === 'door' && d.door?.role === 'host' && d.signer.G === g.G,
@@ -440,9 +458,17 @@ export const createLeaderless = (deps: LxDeps) => {
         group: { ...x.group!, told: v.m.members.size },
       }));
     }
+    // said once, on the pass that brought it: what was already there was said before
+    const prior = viewOf(before);
+    const seen = new Set(prior?.rotations.map(x => x.id));
     // a removal someone asked for that waits on this member's word (how it is given is #110's to say)
     for (const x of v.rotations) {
-      if (!x.bound && x.roster.r.members.includes(me.pubkey) && !x.signed.has(me.pubkey)) {
+      if (
+        !seen.has(x.id) &&
+        !x.bound &&
+        x.roster.r.members.includes(me.pubkey) &&
+        !x.signed.has(me.pubkey)
+      ) {
         const out = [...v.m.members].filter(k => !x.roster.r.members.includes(k));
         const by = [...x.signed][0];
         await api.note(room.id, {
@@ -454,7 +480,10 @@ export const createLeaderless = (deps: LxDeps) => {
         });
       }
     }
-    for (const t of v.m.twice.values()) {
+    for (const [I, t] of v.m.twice) {
+      if (prior?.m.twice.has(I)) {
+        continue;
+      }
       await api.note(room.id, {
         hash: `n:twice:${t}`,
         body: `${memberName(t, g.names?.[t])} let two people in with one code · neither seat counts`,
@@ -472,13 +501,16 @@ export const createLeaderless = (deps: LxDeps) => {
       if (!room.group?.g || room.group.gone) {
         return patch;
       }
-      const moved = await act(patch ? patch(room) : room, api);
+      const moved = await act(patch ? patch(room) : room, room, api);
       return moved ? undefined : patch;
     };
 
   const groupRoom = async (svc: PeopleService, roomId: string) => {
     const room = await svc.api.room(roomId);
-    if (!room?.group?.g || room.group.gone) {
+    if (room?.group?.gone) {
+      throw new Error("you're no longer in this group");
+    }
+    if (!room?.group?.g) {
       throw new Error('this group was made with an older zafu');
     }
     return room;

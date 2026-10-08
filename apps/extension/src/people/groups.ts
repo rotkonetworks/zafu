@@ -255,6 +255,7 @@ export const createGroups = (deps: GroupDeps) => {
         names,
         seals: { [keys.pubkey]: keys.xwingPublicKey },
         members: [{ key: keys.pubkey, name: names[keys.pubkey]!, at }],
+        told: 1,
         ...(want ? { want } : {}),
       },
     };
