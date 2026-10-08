@@ -3,10 +3,12 @@
 import type { LightdInfo } from './lightd-info';
 import { ZidecarClient } from './zidecar-client';
 import { LightwalletdClient } from './lightwalletd-client';
-import type { ChainTip, CompactBlock, Utxo } from './zidecar-client';
+import type { ChainTip, CompactBlock, Utxo } from './zcash-types';
 import type { SubtreePool, SubtreeRoot } from './subtree-roots';
 import { findPresetByUrl } from '../../config/zcash-endpoints';
 import { eachAddress } from './each-address';
+
+export type { ChainTip, CompactAction, CompactBlock, Utxo } from './zcash-types';
 
 export type ZcashBackend = 'zidecar' | 'lightwalletd';
 
