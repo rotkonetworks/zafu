@@ -22,13 +22,20 @@ export const NYM_CHANNEL = 'zafu-nym';
 /** the tunnel worker's name: its egress realm is `nym` */
 export const NYM_WORKER_NAME = 'zafu-nym';
 
-/** how long a request waits for the tunnel before it is refused */
-export const NYM_READY_MS = 60_000;
+/**
+ * How long a request keeps trying routes. A broadcast that still has no
+ * answer then waits {@link NYM_ANSWER_MS} for the person; both fit inside the
+ * send screen's broadcast bound (send-watch, 4 min).
+ */
+export const NYM_BUDGET_MS = 150_000;
 /** how long a held broadcast waits for the person's answer */
-// with the wait for nym it stays inside the send screen's broadcast bound (3 min)
-export const NYM_ANSWER_MS = 90_000;
-/** how long a request inside the tunnel may take (mixFetch has no timeout of its own) */
-export const NYM_REPLY_MS = 90_000;
+export const NYM_ANSWER_MS = 60_000;
+/**
+ * How long one try inside the tunnel may take before its route is dropped
+ * (mixFetch has no timeout of its own). On a working route a broadcast
+ * answers in about 6 s; on a bad exit it never does.
+ */
+export const NYM_REPLY_MS = 30_000;
 
 export interface NymRequestInit {
   method: string;
@@ -51,9 +58,12 @@ export type NymMessage =
       headers: [string, string][];
       body: Uint8Array;
     }
-  | { type: 'failed'; id: string; message: string }
-  /** a broadcast waits: nym was not reachable */
-  | { type: 'held'; id: string; host: string }
+  /** `route`: the tunnel failed it, not the policy, so another route may carry it */
+  | { type: 'failed'; id: string; message: string; route?: boolean }
+  /** a request got no answer on this route: the host takes another */
+  | { type: 'reroute'; id: string }
+  /** a broadcast waits: nym was not reachable; `sent`, a try may have reached the node */
+  | { type: 'held'; id: string; host: string; sent: boolean }
   /** the person's answer for that one broadcast */
   | { type: 'answer'; id: string; direct: boolean };
 
@@ -122,8 +132,8 @@ export const startNym = async (): Promise<void> => {
   postNym({ type: 'start' });
 };
 
-/** true once the tunnel is ready, false if it was not within `ms` */
-export const nymReady = async (ms = NYM_READY_MS): Promise<boolean> =>
+/** true once the tunnel is ready, false if it was not within `ms` or its start failed */
+export const nymReady = async (ms: number): Promise<boolean> =>
   (await waitFor(
     m => (m.type !== 'state' ? undefined : m.ready ? true : m.down ? false : undefined),
     ms,
@@ -134,7 +144,8 @@ const flatten = async (
   input: string | URL | Request,
   init?: RequestInit,
 ): Promise<{ url: string; init: NymRequestInit }> => {
-  const req = new Request(input, init);
+  // the caller's signal stays with viaNym: the tunnel has no way to cancel
+  const req = new Request(input, init && { ...init, signal: null });
   const body = req.body ? new Uint8Array(await req.arrayBuffer()) : undefined;
   return {
     url: req.url,
@@ -142,40 +153,28 @@ const flatten = async (
   };
 };
 
-/** one request through the tunnel; the tunnel must be ready */
-export const nymFetch = async (
-  input: string | URL | Request,
-  init?: RequestInit,
-): Promise<Response> => {
-  const id = crypto.randomUUID();
-  const req = await flatten(input, init);
-  const reply = await waitFor(
+type Reply = Extract<NymMessage, { type: 'response' | 'failed' }>;
+
+/** one try through the ready tunnel: its reply, or undefined after `ms` */
+const exchange = (
+  id: string,
+  req: { url: string; init: NymRequestInit },
+  ms: number,
+): Promise<Reply | undefined> =>
+  waitFor(
     m => ((m.type === 'response' || m.type === 'failed') && m.id === id ? m : undefined),
-    NYM_REPLY_MS,
+    ms,
     () => postNym({ type: 'fetch', id, ...req }),
   );
-  // it entered the tunnel, so it may still arrive: never "nothing was sent"
-  if (!reply) {
-    throw new TypeError('nym did not answer in time · it may still arrive');
-  }
-  if (reply.type === 'failed') {
-    throw new TypeError(reply.message);
-  }
-  return new Response(reply.status === 204 ? null : (reply.body as Uint8Array<ArrayBuffer>), {
-    status: reply.status,
-    statusText: reply.statusText,
-    headers: reply.headers,
-  });
-};
 
 /** hold one broadcast until a zafu window answers; no answer is "don't send" */
-export const askSendDirect = async (host: string): Promise<boolean> => {
+export const askSendDirect = async (host: string, sent: boolean): Promise<boolean> => {
   const id = crypto.randomUUID();
   return (
     (await waitFor(
       m => (m.type === 'answer' && m.id === id ? m.direct : undefined),
       NYM_ANSWER_MS,
-      () => postNym({ type: 'held', id, host }),
+      () => postNym({ type: 'held', id, host, sent }),
     )) ?? false
   );
 };
@@ -194,7 +193,7 @@ export const viaNym = (
 ): Promise<Response> => {
   // the tunnel cannot cancel a request, but the caller can stop waiting for it
   const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
-  const run = route(input, init, cls, next, refuse);
+  const run = route(input, init, cls, next, refuse, signal);
   return signal
     ? new Promise((resolve, reject) => {
         const abort = () => reject(signal.reason as Error);
@@ -207,19 +206,51 @@ export const viaNym = (
     : run;
 };
 
+/**
+ * Try routes until one answers or the budget is spent. Sending the same bytes
+ * again is safe: every nym class is a read, or a broadcast the node keeps once.
+ */
 const route = async (
   input: string | URL | Request,
   init: RequestInit | undefined,
   cls: RequestClass,
   next: () => Promise<Response>,
   refuse: () => never,
+  signal?: AbortSignal,
 ): Promise<Response> => {
-  if (await nymReady()) {
-    return nymFetch(input, init);
+  const req = await flatten(input, init);
+  const deadline = Date.now() + NYM_BUDGET_MS;
+  let sent = false;
+  for (let left = NYM_BUDGET_MS; left > 0 && !signal?.aborted; left = deadline - Date.now()) {
+    // down: the host already tried its routes
+    if (!(await nymReady(left))) {
+      break;
+    }
+    const id = crypto.randomUUID();
+    sent = true;
+    const reply = await exchange(id, req, Math.min(NYM_REPLY_MS, deadline - Date.now()));
+    if (reply?.type === 'response') {
+      return new Response(reply.status === 204 ? null : (reply.body as Uint8Array<ArrayBuffer>), {
+        status: reply.status,
+        statusText: reply.statusText,
+        headers: reply.headers,
+      });
+    }
+    if (reply && !reply.route) {
+      throw new TypeError(reply.message);
+    }
+    postNym({ type: 'reroute', id });
   }
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-  if (cls === 'broadcast' && (await askSendDirect(hostOf(url) ?? url))) {
+  if (
+    cls === 'broadcast' &&
+    !signal?.aborted &&
+    (await askSendDirect(hostOf(req.url) ?? req.url, sent))
+  ) {
     return next();
+  }
+  // it entered the tunnel, so it may still arrive: never "nothing was sent"
+  if (sent) {
+    throw new TypeError('nym did not answer in time · it may still arrive');
   }
   return refuse();
 };

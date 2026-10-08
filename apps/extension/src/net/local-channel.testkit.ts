@@ -16,6 +16,10 @@ export class LocalChannel {
       }
     }
   }
+  /** every channel of this realm closed: a fresh module's channel is the only one listening */
+  static closeAll(): void {
+    LocalChannel.open.clear();
+  }
   close(): void {
     LocalChannel.open.delete(this);
   }
