@@ -97,6 +97,8 @@ const startOnce = async (): Promise<Remote<IMixTunnelWorker> | undefined> => {
         forceTls: true,
         // the exit handshake answers in a few seconds when it answers at all
         connectTimeoutMs: 15_000,
+        // a lookup answers in 1-2 s; a lost one waited 30 s for the next resolver
+        dnsTimeoutMs: 5_000,
         maxRedirects: 0,
       }),
       new Promise((_, reject) => {
