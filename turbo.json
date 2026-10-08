@@ -50,7 +50,7 @@
     },
     "test": {
       "cache": false,
-      "env": ["MINIRELAY_URL", "MINIRELAY_TOKEN"]
+      "env": ["MINIRELAY_URL", "MINIRELAY_TOKEN", "UPDATE_VECTORS"]
     }
   }
 }
