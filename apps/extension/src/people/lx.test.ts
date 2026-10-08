@@ -23,7 +23,7 @@ import { ed25519 } from '@noble/curves/ed25519';
 import { deriveRoomKeys } from '../state/identity';
 import { DOOR_VERSION, openBox, sealBox } from './door';
 import type { FrostMsg } from './frost-room';
-import { joinMac, keygensOf, recordsOf } from './lx';
+import { isLegacy, joinMac, keygensOf, recordsOf, upgradeGenesis } from './lx';
 import type { PeopleRoom } from './vault';
 
 const PHRASES = [
@@ -79,11 +79,20 @@ describe('a leaderless room on this device', () => {
     expect(joinMac(k1!, j2!)).not.toBe(joinMac(k1!, j1!));
   });
 
-  test('a group an older zafu made has no leaderless records and makes no keys here', () => {
+  test('a group an older zafu made is upgrading, and makes no keys until it is upgraded', () => {
     const r = sortKeys([A.pubkey, B.pubkey, C.pubkey]);
     const roster = { G: genesisId(wallet), members: r };
     const old = room([signed(roster, A)], null);
-    expect(recordsOf(old)).toBeUndefined();
+    expect(isLegacy(old)).toBe(true);
+    // its genesis is fixed by its tag and its founder: every member arrives at the same one
+    expect(recordsOf(old)?.G).toEqual(upgradeGenesis(old));
+    expect(upgradeGenesis(old)).toEqual({
+      purpose: 'chat',
+      t: 0,
+      n: 0,
+      salt: TAG,
+      creator: A.pubkey,
+    });
     expect(keygensOf(old)).toEqual([]);
   });
 

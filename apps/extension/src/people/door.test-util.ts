@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { RelayTransport } from '@zafu/zid';
-import { deriveRoomKeys } from '../state/identity';
+import { deriveRelationshipKeys, deriveRoomKeys } from '../state/identity';
 import { doorPake, type DoorPakeWasm } from '../workers/door-pake';
 import { hostStep, joinStep, type DoorPake } from './door-run';
 import { createGroups, groupId } from './groups';
@@ -64,6 +64,11 @@ export const peopleWallet = (
   let rooms: PeopleRoom[] = [];
   let threads: Record<string, Thread> = {};
   const keys = async (_w: string, gen: number, G: string) => deriveRoomKeys(phrase, gen, G);
+  // a pair room speaks with a relationship key, a group with its room key
+  const keyOf = (room: PeopleRoom) =>
+    room.signer.j !== undefined
+      ? deriveRelationshipKeys(phrase, room.signer.gen, room.signer.j)
+      : deriveRoomKeys(phrase, room.signer.gen, room.signer.G!);
   const groups = createGroups({
     walletId: async () => walletId,
     keys,
@@ -73,10 +78,14 @@ export const peopleWallet = (
     now: () => clock.t,
   });
   const lx = createLeaderless({
-    keys: room => Promise.resolve(deriveRoomKeys(phrase, room.signer.gen, room.signer.G!)),
+    keys: room => Promise.resolve(keyOf(room)),
     now: () => clock.t,
   });
-  const base = { ...groups.handlers, group: chain(groups.handlers.group, lx.handler(foldFrost)) };
+  const base = {
+    ...groups.handlers,
+    group: chain(groups.handlers.group, lx.handler(foldFrost)),
+    pair: lx.handler(foldFrost),
+  };
   const service = createPeopleService(
     {
       readRooms: async () => structuredClone(rooms),
@@ -84,7 +93,7 @@ export const peopleWallet = (
       readThreads: async () => structuredClone(threads),
       writeThreads: async t => ((threads = structuredClone(t)), true),
       walletId: async () => walletId,
-      identity: async room => identityOf(await keys(walletId, room.signer.gen, room.signer.G!)),
+      identity: async room => identityOf(keyOf(room)),
       gate: async () => 'on',
       transport,
       status: () => undefined,

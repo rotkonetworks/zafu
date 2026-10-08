@@ -18,7 +18,7 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { RelayTransport } from '@zafu/zid';
 import { commitOf, genesisId, r1Id, rosterId, sortKeys } from '@zafu/zirc/leaderless';
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
-import { deriveRoomKeys } from '../state/identity';
+import { deriveRelationshipKeys, deriveRoomKeys } from '../state/identity';
 import { groupId } from './groups';
 import { comeIn, peopleWallet, realPake, relayBoard } from './door.test-util';
 import {
@@ -41,7 +41,7 @@ import {
   type FrostStatus,
   type Seat,
 } from './frost-room';
-import { keygensOf } from './lx';
+import { keygensOf, viewOf } from './lx';
 import type { PeopleRoom } from './vault';
 import { advanceSign, decline, proposalsOf, seal, type SignCalls } from './room-sign';
 
@@ -313,7 +313,7 @@ describe('a shared wallet made from a chat', () => {
         id: rosterId({ G: genesisId(c.G), members: [b.me(G).pubkey] }),
       }),
     ).rejects.toThrow();
-    expect(b.room(G).group?.signed?.r?.[genesisId(c.G)]).toBe(c.id);
+    expect(b.room(G).signed?.r?.[genesisId(c.G)]).toBe(c.id);
   });
 
   test('someone who never comes: start again without them, as a new wallet', async () => {
@@ -720,5 +720,100 @@ describe('room records a peer can write', () => {
       records.map((body, i) => ({ author: key, ts: 1, body, hash: String(i) }) as never),
     );
     expect(fold!(room).frost!.msgs.map(m => m.body)).toEqual([rs]);
+  });
+});
+
+describe('a deal in a pair room (#110 decision 1)', () => {
+  const pairOf = (w: Member, peer: string, secret: string, clock: { t: number }) =>
+    w.service.api.addRoom({
+      id: 'p:deal',
+      walletId: w.rooms()[0]?.walletId ?? 'w',
+      kind: 'pair',
+      name: 'ken',
+      appScope: 'zafu-pair-v1',
+      secret,
+      size: 4096,
+      relay: 'https://relay.example',
+      signer: { gen: 0, j: 1 },
+      joined: true,
+      createdAt: clock.t,
+      pair: { personId: 'deal', peer },
+    });
+
+  test('both people are seated: the proposer signs, the other agrees to the terms, one wallet', async () => {
+    const board = relayBoard();
+    const clock = clockAt();
+    const [a, b] = [0, 1].map(i => wallet(i, board, clock)) as [Member, Member];
+    // walletIds come from the kit; a pair room needs one to live under
+    await a.op('group-create', { name: 'anchor' });
+    await b.op('group-create', { name: 'anchor' });
+    const [ka, kb] = [0, 1].map(i => deriveRelationshipKeys(PHRASES[i]!, 0, 1));
+    const secret = '5a'.repeat(32);
+    await pairOf(a, kb!.pubkey, secret, clock);
+    await pairOf(b, ka!.pubkey, secret, clock);
+    const deal = { amount: '125000000', what: 'logo design', payer: 'proposer' as const };
+    await a.op('lx-wallet', { roomId: 'p:deal', members: [ka!.pubkey, kb!.pubkey], k: 2, deal });
+    const turn = async (w: Member, k: typeof ka) => {
+      await w.service.check();
+      const r = w.rooms().find(x => x.id === 'p:deal')!;
+      let last: FrostStatus = 'idle';
+      for (const c of keygensOf(r, k!.pubkey)) {
+        last = await advance(
+          c,
+          r.frost?.mine?.[c.id],
+          k!,
+          frost,
+          {
+            post: bodies => frostOps['frost-post']({ roomId: 'p:deal', bodies }, w.service),
+            keep: (id, patch) => frostOps['frost-keep']({ roomId: 'p:deal', id, patch }, w.service),
+            save: async seat => void w.seats.push(seat),
+          },
+          c.deal?.what ?? r.name,
+        );
+      }
+      return last;
+    };
+    clock.t += 1_000;
+    expect(await turn(b, kb)).toBe('idle');
+    const [c] = keygensOf(b.rooms().find(x => x.id === 'p:deal')!, kb!.pubkey);
+    // ken reads the terms the deal was proposed with, and has not agreed yet
+    expect(c).toMatchObject({ deal, bound: false, byCode: false, k: 2 });
+    await b.op('lx-agree', { roomId: 'p:deal', id: c!.id });
+    let last: FrostStatus[] = ['idle'];
+    for (let i = 0; i < 6 && !last.every(s => s === 'done'); i++) {
+      clock.t += 1_000;
+      last = [await turn(a, ka), await turn(b, kb)];
+    }
+    expect(last).toEqual(['done', 'done']);
+    expect(a.seats[0]!.address).toBe(b.seats[0]!.address);
+    expect(a.seats[0]).toMatchObject({ threshold: 2, maxSigners: 2, label: 'logo design' });
+  });
+
+  test('terms said twice, differently, under one wallet stop it', async () => {
+    const msgs = (deal: object) => ({ from: 'x', at: 1, mid: 'm', body: { t: 'g', v: 2, deal } });
+    const G = {
+      purpose: 'wallet' as const,
+      t: 2,
+      n: 2,
+      salt: 'ab'.repeat(16),
+      creator: 'cd'.repeat(32),
+    };
+    const id = genesisId(G);
+    const one = { amount: '1', what: 'a', payer: 'other' };
+    const two = { amount: '2', what: 'a', payer: 'other' };
+    const room = {
+      id: 'p:x',
+      kind: 'pair',
+      appScope: 'zafu-pair-v1',
+      secret: '11'.repeat(32),
+      pair: { personId: 'x', peer: 'ef'.repeat(32) },
+      frost: {
+        msgs: [
+          { ...msgs(one), body: { ...msgs(one).body, id, g: G } },
+          { ...msgs(two), mid: 'n', body: { ...msgs(two).body, id, g: G } },
+        ],
+      },
+    } as unknown as PeopleRoom;
+    expect(viewOf(room, 'cd'.repeat(32))!.twice.has(id)).toBe(true);
   });
 });

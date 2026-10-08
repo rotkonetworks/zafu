@@ -62,6 +62,10 @@ import {
   type Join,
   type Roster,
   type Rotate,
+  type Upgrade,
+  type Withdraw,
+  upgradeId,
+  withdrawId,
 } from '@zafu/zirc/leaderless';
 import type { RoomMessage } from '@zafu/zirc/room';
 import { decodeWire, encodeWire } from './door';
@@ -83,7 +87,8 @@ export interface Deal {
 
 /** the leaderless objects, as the room carries them */
 export type LxBody =
-  | { t: 'g'; v: 2; id: string; g: Genesis }
+  /** a wallet's genesis, and for a deal its terms, said with it */
+  | { t: 'g'; v: 2; id: string; g: Genesis; deal?: Deal }
   | { t: 'i'; v: 2; id: string; i: Invite; sig: string }
   /** `jm`: the joiner's proof to the owner that its door run let it in (lx joinMac) */
   | { t: 'join'; v: 2; id: string; j: Join; js: string; jm?: string; os?: string }
@@ -97,7 +102,11 @@ export type LxBody =
       k: string;
       sig: string;
       box?: Record<string, string>;
-    };
+    }
+  /** an invite's owner takes back the seat its join gave (a wallet filled up twice) */
+  | { t: 'wd'; v: 2; id: string; w: Withdraw; sig: string }
+  /** member k signs the upgrade of a group an older zafu made */
+  | { t: 'up'; v: 2; id: string; u: Upgrade; k: string; sig: string };
 
 export type FrostBody =
   | LxBody
@@ -284,8 +293,28 @@ const readGenesis = (v: unknown): Genesis | undefined => {
 
 const readRoster = (v: unknown): Roster | undefined => {
   const r = obj(v);
-  return r && str(r['G'], KEY) && keys(r['members'])
-    ? { G: r['G'], members: [...r['members']] }
+  return r &&
+    str(r['G'], KEY) &&
+    keys(r['members']) &&
+    (r['supersedes'] === undefined || str(r['supersedes'], KEY))
+    ? {
+        G: r['G'],
+        members: [...r['members']],
+        ...(r['supersedes'] !== undefined ? { supersedes: r['supersedes'] } : {}),
+      }
+    : undefined;
+};
+
+/** a deal's terms, built again from its checked fields */
+const readDeal = (v: unknown): Deal | undefined => {
+  const d = obj(v);
+  return d &&
+    str(d['amount'], DIGITS) &&
+    typeof d['what'] === 'string' &&
+    d['what'].length >= 1 &&
+    d['what'].length <= 48 &&
+    (d['payer'] === 'proposer' || d['payer'] === 'other')
+    ? { amount: d['amount'], what: d['what'], payer: d['payer'] }
     : undefined;
 };
 
@@ -295,8 +324,28 @@ const readLx = (x: Record<string, unknown>): LxBody | undefined => {
   switch (x['t']) {
     case 'g': {
       const g = readGenesis(x['g']);
-      return g && g.purpose === 'wallet' && named(id, g, genesisId)
-        ? { t: 'g', v: 2, id: id as string, g }
+      const deal = readDeal(x['deal']);
+      return g &&
+        g.purpose === 'wallet' &&
+        (x['deal'] === undefined || deal) &&
+        named(id, g, genesisId)
+        ? { t: 'g', v: 2, id: id as string, g, ...(deal ? { deal } : {}) }
+        : undefined;
+    }
+    case 'wd': {
+      const w = obj(x['w']);
+      const wd = w && str(w['join'], KEY) && { join: w['join'] };
+      return wd && str(x['sig'], SIG) && named(id, wd, withdrawId)
+        ? { t: 'wd', v: 2, id: id as string, w: wd, sig: x['sig'] }
+        : undefined;
+    }
+    case 'up': {
+      const u = obj(x['u']);
+      const up = u &&
+        str(u['G'], KEY) &&
+        keys(u['members']) && { G: u['G'], members: [...u['members']] };
+      return up && str(x['k'], KEY) && str(x['sig'], SIG) && named(id, up, upgradeId)
+        ? { t: 'up', v: 2, id: id as string, u: up, k: x['k'], sig: x['sig'] }
         : undefined;
     }
     case 'i': {
@@ -570,7 +619,10 @@ const slotOf = (m: FrostMsg): string => {
   switch (b.t) {
     case 'g':
     case 'i':
+    case 'wd':
       return `${b.t}:${b.id}`;
+    case 'up':
+      return `up:${b.id}:${b.k}`;
     case 'join':
       return `join:${b.id}:${b.j.joiner}:${b.j.th}:${b.os ? 'both' : 'half'}`;
     case 'rs':
@@ -609,7 +661,7 @@ const pruneMsgs = (all: FrostMsg[]): FrostMsg[] => {
     ...last(['prop'], KEEP_PROPOSALS),
     ...last(['old'], 1),
   ]);
-  const lx = new Set<FrostBody['t']>(['g', 'i', 'join', 'rs', 'rot']);
+  const lx = new Set<FrostBody['t']>(['g', 'i', 'join', 'rs', 'rot', 'wd', 'up']);
   return msgs.filter(m => lx.has(m.body.t) || keep.has(m.body.id));
 };
 
@@ -649,6 +701,8 @@ export interface Keygen {
   bound: boolean;
   /** another roster for the same wallet has signatures too: it waits until one is settled */
   rival: boolean;
+  /** a deal's terms, as its proposer said them with the wallet */
+  deal?: Deal;
   r1: Map<string, R1Rec>;
   r2: Map<string, R2Rec>;
   /** each member's commitment to the wallet it made */

@@ -29,13 +29,14 @@ import {
   packFrost,
   propId,
   readMsgs,
+  type Deal,
   type FrostCalls,
   type FrostIo,
   type FrostMine,
   type Keygen,
   type Seat,
 } from './frost-room';
-import { keygensOf } from './lx';
+import { isLegacy, keygensOf, overOf, removalsFor, type Removal } from './lx';
 import {
   advanceSign,
   decline,
@@ -172,8 +173,8 @@ const step = async (walletId: string, roomId: string) => {
   }
   const me = await roomKeysOf(room);
   const io = ioFor(room);
-  for (const c of keygensOf(room)) {
-    await advance(c, room.frost.mine?.[c.id], me, frost, io, room.name);
+  for (const c of keygensOf(room, me.pubkey)) {
+    await advance(c, room.frost.mine?.[c.id], me, frost, io, c.deal?.what ?? room.name);
   }
   // payments this device sealed: name the signers, release shares, finish
   const seat = seatOf(useStore.getState().wallets.zcashWallets, room);
@@ -232,6 +233,12 @@ export interface FrostView {
   keygens: Keygen[];
   /** a key setup an older zafu started here: the other side needs a newer zafu */
   older: boolean;
+  /** a group an older zafu made, until everyone in it signed its upgrade */
+  upgrading: boolean;
+  /** removals someone asked for that wait on this member's "agree" */
+  removals: Removal[];
+  /** a shared wallet that filled up twice, and whose code is asked to step back */
+  over?: { join: string; owner: string };
   seat?: ZcashWalletJson;
   /** payments proposed from the seat's wallet, oldest first */
   payments: Proposal[];
@@ -245,7 +252,7 @@ export const useFrostRoom = (room: PeopleRoom | undefined): FrostView => {
   const seat = seatOf(wallets, room);
   const msgs = room?.frost?.msgs;
   const me = useMe(room);
-  const keygens = useMemo(() => (room ? keygensOf(room) : []), [room?.secret, msgs]);
+  const keygens = useMemo(() => (room ? keygensOf(room, me) : []), [room, me]);
   const w = walletOf(seat);
   const payments = useMemo(() => (w ? proposalsOf(msgs, w) : []), [msgs, w?.ceremony]);
   const kept = room?.frost?.mine ?? {};
@@ -260,6 +267,13 @@ export const useFrostRoom = (room: PeopleRoom | undefined): FrostView => {
       kick(room.walletId, room.id);
     }
   }, [live, room, msgs?.length]);
+  // a group an older zafu made: opening it is this member's part of its upgrade
+  const legacy = !!room && isLegacy(room);
+  useEffect(() => {
+    if (legacy) {
+      void peopleCall('lx-upgrade', { roomId: room.id }).catch(() => undefined);
+    }
+  }, [legacy, room?.id]);
   // a step that failed (the relay did not answer) is tried again while this is on screen
   useEffect(() => {
     if (!live) {
@@ -272,6 +286,9 @@ export const useFrostRoom = (room: PeopleRoom | undefined): FrostView => {
     me,
     keygens,
     older: !seat && readMsgs(msgs).some(m => m.body.t === 'old'),
+    upgrading: !!room && isLegacy(room),
+    removals: room && me ? removalsFor(room, me, Date.now()) : [],
+    ...(room && overOf(room) ? { over: overOf(room) } : {}),
     seat,
     payments,
     kept,
@@ -356,6 +373,14 @@ const useMe = (room: PeopleRoom | undefined): string | undefined => {
   return me && me.id === id ? me.key : undefined;
 };
 
-/** "make keys together": a wallet for these members, its roster signed by this one */
-export const proposeWallet = (roomId: string, members: string[], k: number) =>
-  peopleAsk('lx-wallet', { roomId, members, k });
+/** "make keys together", or a deal: a wallet for these members, its roster signed by this one */
+export const proposeWallet = (roomId: string, members: string[], k: number, deal?: Deal) =>
+  peopleAsk('lx-wallet', { roomId, members, k, ...(deal ? { deal } : {}) });
+
+/** a removal someone asked for: "agree" signs it, "not now" sets it aside here */
+export const answerRemoval = (roomId: string, id: string, yes: boolean) =>
+  peopleAsk(yes ? 'lx-agree-remove' : 'lx-not-now', { roomId, id });
+
+/** "withdraw my code": the wallet filled up twice, and this member's join steps back */
+export const withdrawJoin = (roomId: string, join: string) =>
+  peopleAsk('lx-withdraw', { roomId, join });

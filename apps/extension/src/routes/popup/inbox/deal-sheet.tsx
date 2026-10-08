@@ -6,8 +6,11 @@
  * other choice once its escrow service answers (COURT_OPEN); until then it is
  * not offered, since its keys could never be made.
  *
- * Proposing waits (#110): a deal's terms have no agreed object yet, and a
- * pair room has no joins to make a roster from. Nothing is sent until then.
+ * A deal between the two of you is a shared wallet made in your pair room
+ * (#110): both of you are seated there, since you exchanged cards, and its
+ * roster binds when both signed it; the other side signs by agreeing to the
+ * terms. Someone you both trust deciding waits for #110 to say how its terms
+ * bind across a group.
  */
 
 import { Clipped } from '@repo/ui/components/ui/clipped';
@@ -22,6 +25,7 @@ import { useStore } from '../../../state';
 import { isMutual } from '../../../state/contacts';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { COURT_OPEN, type Deal } from '../../../people/frost-room';
+import { proposeWallet } from '../../../people/use-frost-room';
 
 type Who = 'two' | 'court' | 'person';
 
@@ -68,14 +72,22 @@ const Choice = ({
 export const DealSheet = ({
   open,
   onClose,
+  roomId,
   contactId,
   name,
+  me,
+  peer,
 }: {
   open: boolean;
   onClose: () => void;
+  roomId: string;
   contactId: string;
   name: string;
+  me: string;
+  peer: string;
 }) => {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const walletId = useStore(s => selectEffectiveKeyInfo(s)?.id);
   const contacts = useStore(s => s.contacts.contacts);
   const [amount, setAmount] = useState('');
@@ -174,9 +186,26 @@ export const DealSheet = ({
             : `${chosen?.name ?? 'they'} and ${name} both agree first`}
       </div>
       <span className='h-4 text-[11px] text-fg-muted'>
-        {ready ? 'making a deal waits for a newer zafu · nothing was sent' : ''}
+        {error || (ready && who === 'person' ? 'someone who decides waits for a newer zafu' : '')}
       </span>
-      <Button disabled>
+      <Button
+        disabled={!ready || busy || who !== 'two'}
+        onClick={() => {
+          setBusy(true);
+          setError('');
+          const deal: Deal = { amount: String(zat), what: what.trim().slice(0, 48), payer };
+          void proposeWallet(roomId, [me, peer], 2, deal).then(
+            () => {
+              setBusy(false);
+              onClose();
+            },
+            () => {
+              setBusy(false);
+              setError('this did not leave · please try again');
+            },
+          );
+        }}
+      >
         {who === 'person' ? `ask ${chosen?.name ?? 'them'}` : `propose to ${name}`}
       </Button>
     </Sheet>

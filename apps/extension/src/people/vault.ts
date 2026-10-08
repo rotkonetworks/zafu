@@ -119,11 +119,6 @@ export interface PeopleRoom {
     g?: Genesis;
     /** X-Wing keys members said (`ask`): what a new room secret is sealed to */
     seals?: Record<string, string>;
-    /**
-     * what this device signed in this room (by room id), kept before it left:
-     * the roster per genesis, and the rotation
-     */
-    signed?: { room: string; r?: Record<string, string>; rot?: string };
     /** a rotation this device proposed: the new secret, until it binds */
     next?: { rot: string; secret: string };
     /** seats this device last said hello for */
@@ -144,6 +139,13 @@ export interface PeopleRoom {
   card?: CardRoom;
   /** shared wallets made in this room: the FROST messages read so far (people/frost-room) */
   frost?: FrostRoom;
+  /**
+   * what this device signed in this room (by room id), kept before it left:
+   * the roster per genesis, the rotation, and the upgrade (people/lx)
+   */
+  signed?: { room: string; r?: Record<string, string>; rot?: string; up?: string };
+  /** removals this member said "not now" to, by rotation id */
+  notNow?: string[];
   /** pair rooms */
   pair?: {
     personId: string;

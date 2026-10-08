@@ -14,7 +14,9 @@ import { useBackNav } from '../../../utils/navigate';
 import { peopleCall, peopleSay, useMyRooms, useThread, useWatchRoom } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import type { ThreadItem } from '../../../people/vault';
-import { useFrostRoom } from '../../../people/use-frost-room';
+import { answerRemoval, useFrostRoom, withdrawJoin } from '../../../people/use-frost-room';
+import type { Removal } from '../../../people/lx';
+import { Button } from '@repo/ui/components/ui/button';
 import { useSharedBalance } from '../../../hooks/use-shared-balance';
 import { useStickToBottom } from '../../../hooks/use-stick-to-bottom';
 import { fmtZec } from '../home/format';
@@ -114,6 +116,10 @@ export function GroupPage() {
     ...keygens.map(c => ({ at: c.at, node: card(c) })),
     // a wallet whose setup records were let go, or an older zafu made: its card from the seat
     ...(seat && !made ? [{ at: -Infinity, node: card() }] : []),
+    ...shared.removals.map(x => ({
+      at: x.at,
+      node: <RemovalCard key={x.id} roomId={roomId} x={x} nameOf={memberName} />,
+    })),
     ...(room && seat && me
       ? shared.payments.map(p => ({
           at: p.at,
@@ -202,6 +208,25 @@ export function GroupPage() {
         })}
         {cardsIn(last?.ts ?? -Infinity, Infinity)}
       </div>
+      {shared.upgrading && (
+        <span className='shrink-0 border-t border-border-soft px-4 py-2 text-[11px] text-fg-muted'>
+          upgrading · waits for everyone here
+        </span>
+      )}
+      {shared.over && (
+        <div className='flex h-11 shrink-0 items-center justify-between gap-3 border-t border-border-soft px-4 text-[11px] text-fg-muted'>
+          <span>the group filled up · this code wasn&apos;t needed</span>
+          {shared.over.owner === me && (
+            <button
+              type='button'
+              onClick={() => void withdrawJoin(roomId, shared.over!.join).catch(() => undefined)}
+              className='shrink-0 text-zigner-gold hover:underline'
+            >
+              withdraw my code
+            </button>
+          )}
+        </div>
+      )}
       {shared.older && (
         <span className='shrink-0 border-t border-border-soft px-4 py-2 text-[11px] text-fg-muted'>
           the other side needs a newer zafu to make keys together
@@ -271,6 +296,46 @@ export function GroupPage() {
     </div>
   );
 }
+
+/** "x wants to remove y": one tap for each member left, never automatic */
+const RemovalCard = ({
+  roomId,
+  x,
+  nameOf,
+}: {
+  roomId: string;
+  x: Removal;
+  nameOf: (key: string) => string;
+}) => {
+  const [busy, setBusy] = useState(false);
+  const answer = (yes: boolean) => {
+    setBusy(true);
+    void answerRemoval(roomId, x.id, yes)
+      .catch(() => undefined)
+      .finally(() => setBusy(false));
+  };
+  return (
+    <article className='flex flex-col gap-2 self-stretch border border-border-hard bg-elev-1 px-3.5 py-3'>
+      <span className='text-xs text-fg'>
+        {x.by ? nameOf(x.by) : 'someone'} wants to remove {x.out.map(nameOf).join(', ')}
+      </span>
+      <div className='flex gap-2'>
+        <Button size='sm' className='flex-1' disabled={busy} onClick={() => answer(true)}>
+          agree
+        </Button>
+        <Button
+          variant='secondary'
+          size='sm'
+          className='flex-1'
+          disabled={busy}
+          onClick={() => answer(false)}
+        >
+          not now
+        </Button>
+      </div>
+    </article>
+  );
+};
 
 const Header = ({
   onBack,

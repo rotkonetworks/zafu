@@ -370,7 +370,7 @@ export const createGroups = (deps: GroupDeps) => {
    * code again finds the door already open. Nothing is said yet: the
    * screen's SPAKE2 step speaks once it has read the inviter's hello.
    */
-  const open = async (svc: PeopleService, raw: string, nick = '') => {
+  const open = async (svc: PeopleService, raw: string, nick = '', at_?: string) => {
     const code = normalizeCode(raw);
     if (OLD_CODE_RE.test(code)) {
       throw new Error(OLDER_CODE);
@@ -380,7 +380,8 @@ export const createGroups = (deps: GroupDeps) => {
     if (!plate || !walletId) {
       throw new Error("zafu couldn't read this code");
     }
-    const relay = await deps.relay();
+    // a code that came in a memo names its inviter's relay; a typed one is on this zafu's
+    const relay = at_ && /^https?:\/\/[^\s]+$/.test(at_) ? at_ : await deps.relay();
     await ensureGate(deps, relay);
     await sweep(svc.api);
     const at = now();
@@ -670,7 +671,12 @@ export const createGroups = (deps: GroupDeps) => {
         create(s, String(r['name'] ?? ''), String(r['nick'] ?? ''), wantOf(r)),
       'group-renew': (r: Record<string, unknown>, s: PeopleService) => renew(s, String(r['G'])),
       'door-open': (r: Record<string, unknown>, s: PeopleService) =>
-        open(s, String(r['code'] ?? ''), String(r['nick'] ?? '')),
+        open(
+          s,
+          String(r['code'] ?? ''),
+          String(r['nick'] ?? ''),
+          typeof r['relay'] === 'string' ? r['relay'] : undefined,
+        ),
       'door-join': (r: Record<string, unknown>, s: PeopleService) => join(s, r),
       'door-answer': (r: Record<string, unknown>, s: PeopleService) => answer(s, r),
       'door-enter': (r: Record<string, unknown>, s: PeopleService) => enter(s, r),

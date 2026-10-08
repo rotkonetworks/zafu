@@ -18,8 +18,10 @@ import {
   restartOf,
   roundOf,
   stepOf,
+  type Deal,
   type Keygen,
 } from '../../../people/frost-room';
+import { formatZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import { agree, proposeWallet } from '../../../people/use-frost-room';
 import type { ZcashWalletJson } from '../../../state/wallets';
 import { PopupPath } from '../paths';
@@ -77,14 +79,34 @@ interface CardProps {
   onSend?: () => void;
 }
 
-const Head = ({ title, k, n, step }: { title: string; k: number; n: number; step?: number }) => (
+const Head = ({
+  title,
+  k,
+  n,
+  step,
+  deal,
+}: {
+  title: string;
+  k: number;
+  n: number;
+  step?: number;
+  deal?: Deal;
+}) => (
   <div className='flex flex-col gap-1.5 px-3.5 py-3'>
     <span className='flex items-center gap-2 text-[11px] text-fg-muted'>
-      <Hanko ch='蔵' />
-      <span className='grow'>shared wallet · {title}</span>
+      <Hanko ch={deal ? '契' : '蔵'} />
+      <span className='grow'>
+        {deal ? 'deal' : 'shared wallet'} · {title}
+      </span>
       {step !== undefined && <span>step {step} of 3</span>}
     </span>
+    {deal && (
+      <span className='font-display text-[26px] text-fg-high'>
+        {formatZecAmount(BigInt(deal.amount))} <span className='text-sm text-zigner-gold'>zec</span>
+      </span>
+    )}
     <span className='text-xs text-fg-muted'>
+      {deal ? `${deal.what} · ` : ''}
       {k} of {n}
     </span>
   </div>
@@ -156,9 +178,9 @@ export const KeyCard = ({ c, seat, me, roomId, nameOf, onMessage, onSend }: Card
   const missing = missingOf(c, now / 1000);
   const bad = mismatched(c);
   const n = c.members.length;
-  const again = (members: string[], k: number) => {
+  const again = (members: string[], k: number, deal?: Deal) => {
     setBusy(true);
-    void proposeWallet(roomId, members, k).finally(() => setBusy(false));
+    void proposeWallet(roomId, members, k, deal).finally(() => setBusy(false));
   };
   const rest = restartOf(c, missing);
   const who = (m: string) => (m === me ? 'you' : nameOf(m));
@@ -179,6 +201,7 @@ export const KeyCard = ({ c, seat, me, roomId, nameOf, onMessage, onSend }: Card
         k={c.k}
         n={n}
         step={c.bound && !bad ? round : undefined}
+        deal={c.deal}
       />
       <div className='border-t border-border-soft'>
         {c.members.map(m => {
@@ -212,7 +235,11 @@ export const KeyCard = ({ c, seat, me, roomId, nameOf, onMessage, onSend }: Card
       {toAgree ? (
         <div className='flex flex-col gap-2 border-t border-border-soft px-3.5 py-3'>
           <span className='text-xs text-fg'>
-            {who(c.by)} asks to make a shared wallet together · any {c.k} of {n} can send
+            {!c.deal
+              ? `${who(c.by)} asks to make a shared wallet together · any ${c.k} of ${n} can send`
+              : c.k === n
+                ? 'both of you sign to release it. if one of you stops answering, it stays locked.'
+                : 'you both sign to release it, or one of you with the one who decides.'}
           </span>
           <Button
             size='sm'
@@ -235,7 +262,7 @@ export const KeyCard = ({ c, seat, me, roomId, nameOf, onMessage, onSend }: Card
             nothing was saved. please make the keys again together.
           </span>
           {mine && (
-            <Button size='sm' disabled={busy} onClick={() => again(c.members, c.k)}>
+            <Button size='sm' disabled={busy} onClick={() => again(c.members, c.k, c.deal)}>
               make them again
             </Button>
           )}
