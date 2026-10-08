@@ -4,7 +4,14 @@
  * held broadcast goes directly only on a window's answer, for that one send.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { NYM_ANSWER_MS, NYM_CHANNEL, NYM_READY_MS, viaNym, type NymMessage } from './nym-bridge';
+import {
+  NYM_ANSWER_MS,
+  NYM_BUDGET_MS,
+  NYM_CHANNEL,
+  NYM_REPLY_MS,
+  viaNym,
+  type NymMessage,
+} from './nym-bridge';
 import { LocalChannel } from './local-channel.testkit';
 
 vi.stubGlobal('BroadcastChannel', LocalChannel);
@@ -13,6 +20,7 @@ const URL_SEND = 'https://zcash.rotko.net/zidecar.v1.Zidecar/SendTransaction';
 
 let peer: BroadcastChannel;
 let seen: NymMessage[];
+const ok = new TextEncoder().encode('nym');
 const next = vi.fn(() => Promise.resolve(new Response('direct')));
 const refuse = vi.fn((): never => {
   throw new TypeError('refused');
@@ -29,7 +37,7 @@ const answerWith = (reply: (m: NymMessage) => NymMessage | undefined) =>
   });
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   peer = new BroadcastChannel(NYM_CHANNEL);
   seen = [];
   next.mockClear();
@@ -75,18 +83,18 @@ describe('viaNym', () => {
   it('refuses a broadcast when nym is not ready in time and no window answers', async () => {
     answerWith(() => undefined);
     const done = viaNym(URL_SEND, undefined, 'broadcast', next, refuse).catch((e: unknown) => e);
-    await vi.advanceTimersByTimeAsync(NYM_READY_MS + NYM_ANSWER_MS);
+    await vi.advanceTimersByTimeAsync(NYM_BUDGET_MS + NYM_ANSWER_MS);
     expect(await done).toBeInstanceOf(TypeError);
     expect(refuse).toHaveBeenCalledTimes(1);
     expect(next).not.toHaveBeenCalled();
-    expect(seen.some(m => m.type === 'held')).toBe(true);
+    expect(seen.find(m => m.type === 'held')).toMatchObject({ sent: false });
   });
 
   it('sends a held broadcast directly when a window says so, and leaves the setting alone', async () => {
     const before = await chrome.storage.local.get(null);
     answerWith(m => (m.type === 'held' ? { type: 'answer', id: m.id, direct: true } : undefined));
     const done = viaNym(URL_SEND, undefined, 'broadcast', next, refuse);
-    await vi.advanceTimersByTimeAsync(NYM_READY_MS);
+    await vi.advanceTimersByTimeAsync(NYM_BUDGET_MS);
     expect(await (await done).text()).toBe('direct');
     expect(next).toHaveBeenCalledTimes(1);
     expect(refuse).not.toHaveBeenCalled();
@@ -109,7 +117,7 @@ describe('viaNym', () => {
   it("refuses when the window answers don't send", async () => {
     answerWith(m => (m.type === 'held' ? { type: 'answer', id: m.id, direct: false } : undefined));
     const done = viaNym(URL_SEND, undefined, 'broadcast', next, refuse).catch((e: unknown) => e);
-    await vi.advanceTimersByTimeAsync(NYM_READY_MS);
+    await vi.advanceTimersByTimeAsync(NYM_BUDGET_MS);
     expect(await done).toBeInstanceOf(TypeError);
     expect(next).not.toHaveBeenCalled();
   });
@@ -128,9 +136,92 @@ describe('viaNym', () => {
   it('never offers a lookup of your own transaction directly', async () => {
     answerWith(m => (m.type === 'held' ? { type: 'answer', id: m.id, direct: true } : undefined));
     const done = viaNym(URL_SEND, undefined, 'own-tx', next, refuse).catch((e: unknown) => e);
-    await vi.advanceTimersByTimeAsync(NYM_READY_MS);
+    await vi.advanceTimersByTimeAsync(NYM_BUDGET_MS);
     expect(await done).toBeInstanceOf(TypeError);
     expect(seen.some(m => m.type === 'held')).toBe(false);
     expect(next).not.toHaveBeenCalled();
+  });
+  it('takes another route when a try gets no answer, and sends the same bytes again', async () => {
+    let tries = 0;
+    answerWith(m =>
+      m.type === 'ping'
+        ? { type: 'state', ready: true }
+        : m.type === 'fetch' && ++tries === 2
+          ? { type: 'response', id: m.id, status: 200, statusText: 'OK', headers: [], body: ok }
+          : undefined,
+    );
+    const done = viaNym(
+      URL_SEND,
+      { method: 'POST', body: new Uint8Array([7]) },
+      'broadcast',
+      next,
+      refuse,
+    );
+    await vi.advanceTimersByTimeAsync(NYM_REPLY_MS);
+    expect(await (await done).text()).toBe('nym');
+    const fetches = seen.filter(m => m.type === 'fetch');
+    expect(fetches).toHaveLength(2);
+    expect(fetches.map(m => (m.type === 'fetch' ? Array.from(m.init.body!) : []))).toEqual([
+      [7],
+      [7],
+    ]);
+    // the first try's route is dropped, by its id
+    expect(seen.find(m => m.type === 'reroute')).toEqual({
+      type: 'reroute',
+      id: fetches[0]!.type === 'fetch' && fetches[0]!.id,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('tries again when the tunnel itself failed a try', async () => {
+    let tries = 0;
+    answerWith(m =>
+      m.type === 'ping'
+        ? { type: 'state', ready: true }
+        : m.type === 'fetch'
+          ? ++tries === 1
+            ? { type: 'failed', id: m.id, message: 'nym changed route', route: true }
+            : { type: 'response', id: m.id, status: 200, statusText: 'OK', headers: [], body: ok }
+          : undefined,
+    );
+    const res = await viaNym(URL_SEND, undefined, 'own-tx', next, refuse);
+    expect(await res.text()).toBe('nym');
+    expect(tries).toBe(2);
+  });
+
+  it('never tries again what the policy refused', async () => {
+    answerWith(m =>
+      m.type === 'ping'
+        ? { type: 'state', ready: true }
+        : m.type === 'fetch'
+          ? { type: 'failed', id: m.id, message: 'refused here' }
+          : undefined,
+    );
+    const done = viaNym(URL_SEND, undefined, 'names-you', next, refuse).catch((e: unknown) => e);
+    expect(((await done) as Error).message).toBe('refused here');
+    expect(seen.filter(m => m.type === 'fetch')).toHaveLength(1);
+    expect(seen.some(m => m.type === 'reroute')).toBe(false);
+  });
+
+  it('after the budget, a broadcast that went in asks honestly: it may have arrived', async () => {
+    answerWith(m => (m.type === 'ping' ? { type: 'state', ready: true } : undefined));
+    const done = viaNym(URL_SEND, undefined, 'broadcast', next, refuse).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(NYM_BUDGET_MS + NYM_ANSWER_MS);
+    expect(seen.find(m => m.type === 'held')).toMatchObject({ sent: true });
+    expect(((await done) as Error).message).toMatch(/may still arrive/);
+    expect(refuse).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('stops trying once the caller stopped waiting', async () => {
+    answerWith(m => (m.type === 'ping' ? { type: 'state', ready: true } : undefined));
+    const stop = new AbortController();
+    void viaNym(URL_SEND, { signal: stop.signal }, 'names-you', next, refuse).catch(
+      () => undefined,
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    stop.abort();
+    await vi.advanceTimersByTimeAsync(NYM_BUDGET_MS);
+    expect(seen.filter(m => m.type === 'fetch')).toHaveLength(1);
   });
 });

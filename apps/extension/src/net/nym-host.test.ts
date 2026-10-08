@@ -5,15 +5,17 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalChannel } from './local-channel.testkit';
+import type { NymMessage } from './nym-bridge';
 
 let routing = true;
-const setup = vi.fn((_opts: Record<string, unknown>) => Promise.resolve());
+const setup = vi.fn((_opts: Record<string, unknown>): Promise<void> => Promise.resolve());
+const mixFetch = vi.fn((): Promise<unknown> => new Promise(() => undefined));
 vi.mock('./egress', () => ({
   nymRoutingOn: () => Promise.resolve(routing),
   checkEgress: () => ({ allow: true }),
   EgressBlockedError: Error,
 }));
-vi.mock('comlink', () => ({ wrap: () => ({ setupMixTunnel: setup }) }));
+vi.mock('comlink', () => ({ wrap: () => ({ setupMixTunnel: setup, mixFetch }) }));
 
 const spawned: FakeWorker[] = [];
 class FakeWorker extends EventTarget {
@@ -40,8 +42,11 @@ beforeEach(() => {
   routing = true;
   spawned.length = 0;
   deleted.length = 0;
-  setup.mockClear();
+  setup.mockReset();
+  setup.mockImplementation(() => Promise.resolve());
+  mixFetch.mockClear();
   vi.stubGlobal('Worker', FakeWorker);
+  LocalChannel.closeAll();
   vi.stubGlobal('BroadcastChannel', LocalChannel);
   vi.stubGlobal('indexedDB', {
     deleteDatabase: (name: string) => deleted.push(name),
@@ -50,7 +55,18 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
+/** what the host says on the channel */
+const listen = () => {
+  const heard: NymMessage[] = [];
+  const peer = new BroadcastChannel('zafu-nym');
+  peer.onmessage = (e: MessageEvent<NymMessage>) => heard.push(e.data);
+  return { heard, peer };
+};
 
 describe('the nym tunnel', () => {
   it('does not start while nym is off', async () => {
@@ -101,5 +117,78 @@ describe('the nym tunnel', () => {
     sw.postMessage({ type: 'stop' });
     await vi.waitFor(() => expect(spawned[0]!.terminated).toBe(true));
     sw.close();
+  });
+  it('drops a start that is not ready in time and tries a fresh worker and identity', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    setup.mockImplementationOnce(() => new Promise(() => undefined));
+    const { heard, peer } = listen();
+    const host = await import('./nym-host');
+    const started = host.startNymTunnel();
+    await vi.advanceTimersByTimeAsync(host.START_MS);
+    await started;
+    expect(spawned).toHaveLength(2);
+    expect(spawned[0]!.terminated).toBe(true);
+    expect(setup.mock.calls[1]![0]['clientId']).not.toBe(setup.mock.calls[0]![0]['clientId']);
+    await vi.waitFor(() => expect(heard).toContainEqual({ type: 'state', ready: true }));
+    peer.close();
+  });
+
+  it('says it is down after its tries, never more workers than that', async () => {
+    setup.mockImplementation(() => Promise.reject(new Error('handshake timed out')));
+    const { heard, peer } = listen();
+    const host = await import('./nym-host');
+    await host.startNymTunnel();
+    expect(spawned).toHaveLength(host.START_TRIES);
+    expect(spawned.every(w => w.terminated)).toBe(true);
+    await vi.waitFor(() =>
+      expect(heard).toContainEqual({ type: 'state', ready: false, down: true }),
+    );
+    peer.close();
+  });
+
+  it('a reroute drops the route, fails what was inside it, and starts a fresh one', async () => {
+    const { heard, peer } = listen();
+    const host = await import('./nym-host');
+    await host.startNymTunnel();
+    peer.postMessage({
+      type: 'fetch',
+      id: 'a',
+      url: 'https://zcash.rotko.net/x',
+      init: { method: 'POST', headers: {} },
+    });
+    await vi.waitFor(() => expect(mixFetch).toHaveBeenCalledTimes(1));
+    // a reroute for a request this tunnel does not hold changes nothing
+    peer.postMessage({ type: 'reroute', id: 'other' });
+    peer.postMessage({ type: 'reroute', id: 'a' });
+    await vi.waitFor(() => expect(spawned).toHaveLength(2));
+    expect(spawned[0]!.terminated).toBe(true);
+    expect(heard).toContainEqual({
+      type: 'failed',
+      id: 'a',
+      message: 'nym changed route',
+      route: true,
+    });
+    peer.close();
+  });
+  it('a try the tunnel failed outright drops that route too', async () => {
+    const { heard, peer } = listen();
+    const host = await import('./nym-host');
+    await host.startNymTunnel();
+    mixFetch.mockImplementationOnce(() => Promise.reject(new Error('tunnel not ready: Failed')));
+    peer.postMessage({
+      type: 'fetch',
+      id: 'b',
+      url: 'https://zcash.rotko.net/x',
+      init: { method: 'POST', headers: {} },
+    });
+    await vi.waitFor(() => expect(spawned).toHaveLength(2));
+    expect(spawned[0]!.terminated).toBe(true);
+    expect(heard).toContainEqual({
+      type: 'failed',
+      id: 'b',
+      message: 'tunnel not ready: Failed',
+      route: true,
+    });
+    peer.close();
   });
 });

@@ -12,13 +12,13 @@ import { Button } from '@repo/ui/components/ui/button';
 import { onNymMessage, postNym } from './nym-bridge';
 
 export const NymHeldSheet = () => {
-  const [held, setHeld] = useState<{ id: string; host: string }>();
+  const [held, setHeld] = useState<{ id: string; host: string; sent: boolean }>();
 
   useEffect(
     () =>
       onNymMessage(m => {
         if (m.type === 'held') {
-          setHeld({ id: m.id, host: m.host });
+          setHeld({ id: m.id, host: m.host, sent: m.sent });
         } else if (m.type === 'answer') {
           setHeld(h => (h?.id === m.id ? undefined : h));
         }
@@ -37,11 +37,15 @@ export const NymHeldSheet = () => {
     <Sheet
       open={!!held}
       onOpenChange={open => !open && answer(false)}
-      title="nym isn't reachable right now"
+      title={held?.sent ? "nym didn't answer in time" : "nym isn't reachable right now"}
     >
       {held && (
         <div className='flex flex-col gap-4 px-1 text-sm text-fg-muted lowercase'>
-          <p>nothing was sent.</p>
+          <p>
+            {held.sent
+              ? 'it may have arrived already. sending it again is safe, the network keeps one copy.'
+              : 'nothing was sent.'}
+          </p>
           <p className='text-xs text-fg-dim'>
             directly, <span className='font-mono'>{held.host}</span> sees where it comes from. only
             this send.

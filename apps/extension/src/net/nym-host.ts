@@ -8,6 +8,11 @@
  * the last zafu window by terminating the worker: smolmix's own disconnect
  * leaves its wasm unusable, so each start is a fresh worker with a fresh,
  * throwaway client identity.
+ *
+ * A route (entry gateway and exit) that stalls is dropped, not waited on: a
+ * start that is not ready within {@link START_MS} is tried again from a fresh
+ * worker, which picks its own gateway and exit, and a request that got no
+ * answer may ask for a fresh route (`reroute`).
  */
 
 import { wrap, type Remote } from 'comlink';
@@ -18,12 +23,22 @@ import { NYM_CHANNEL, NYM_WORKER_NAME, type NymMessage, type NymRequestInit } fr
 const channel = new BroadcastChannel(NYM_CHANNEL);
 const say = (m: NymMessage): void => channel.postMessage(m);
 
-let worker: Worker | undefined;
-let tunnel: Promise<Remote<IMixTunnelWorker>> | undefined;
-let ready = false;
-/** smolmix keeps its client key in IndexedDB under this prefix and the id: forgotten at stop */
+/** one start: a stuck gateway registration or exit handshake is dropped after this */
+export const START_MS = 40_000;
+/** starts in a row before the tunnel says it is down */
+export const START_TRIES = 3;
+/** smolmix keeps its client key in IndexedDB under this prefix and the id: forgotten at drop */
 const NYM_DB = 'wasm-client-storage-';
+
+let worker: Worker | undefined;
 let clientId: string | undefined;
+/** the ready tunnel */
+let tunnel: Remote<IMixTunnelWorker> | undefined;
+let starting: Promise<void> | undefined;
+/** bumped by a stop: a start that was overtaken gives up */
+let generation = 0;
+/** requests inside the tunnel: a dropped route answers them as failed, so their callers retry */
+const inFlight = new Set<string>();
 
 const spawn = (): Promise<Remote<IMixTunnelWorker>> =>
   new Promise((resolve, reject) => {
@@ -45,18 +60,23 @@ const randomHex = (): string =>
     '',
   );
 
-/** start the tunnel if nym is on and it is not up; resolves once it is ready */
-export const startNymTunnel = async (): Promise<void> => {
-  if (!tunnel && !(await nymRoutingOn())) {
-    return;
+/** end this route: its worker, its identity, and every request still inside it */
+const drop = (): void => {
+  worker?.terminate();
+  worker = undefined;
+  tunnel = undefined;
+  if (clientId) {
+    indexedDB.deleteDatabase(NYM_DB + clientId);
+    clientId = undefined;
   }
-  if (tunnel) {
-    await tunnel.catch(() => undefined);
-    return;
-  }
-  const t0 = performance.now();
-  clientId = `zafu-${randomHex().slice(0, 16)}`;
-  const id = clientId;
+  inFlight.forEach(id => say({ type: 'failed', id, message: 'nym changed route', route: true }));
+  inFlight.clear();
+};
+
+/** one fresh worker and identity: smolmix picks its own gateway and exit */
+const startOnce = async (): Promise<Remote<IMixTunnelWorker> | undefined> => {
+  const id = `zafu-${randomHex().slice(0, 16)}`;
+  clientId = id;
   // an identity a closed browser never got to forget
   void indexedDB
     .databases?.()
@@ -66,71 +86,119 @@ export const startNymTunnel = async (): Promise<void> => {
           name?.startsWith(NYM_DB) && name !== NYM_DB + id && indexedDB.deleteDatabase(name),
       ),
     );
-  tunnel = spawn().then(async t => {
-    await t.setupMixTunnel({
-      clientId: id,
-      // the key is sealed with a passphrase nobody keeps
-      storagePassphrase: randomHex(),
-      forceTls: true,
-      connectTimeoutMs: 30_000,
-      maxRedirects: 0,
-    });
-    return t;
-  });
-  const mine = tunnel;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await mine;
+    const t = await spawn();
+    await Promise.race([
+      t.setupMixTunnel({
+        clientId: id,
+        // the key is sealed with a passphrase nobody keeps
+        storagePassphrase: randomHex(),
+        forceTls: true,
+        // the exit handshake answers in a few seconds when it answers at all
+        connectTimeoutMs: 15_000,
+        maxRedirects: 0,
+      }),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`not ready in ${START_MS}ms`)), START_MS);
+      }),
+    ]);
+    return t;
   } catch (e) {
-    console.warn('[nym] the tunnel did not start:', e);
-    if (tunnel === mine) {
-      stopNymTunnel();
+    console.warn('[nym] this route did not start:', e instanceof Error ? e.message : e);
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/** start the tunnel if nym is on and it is not up; resolves once it is ready or down */
+export const startNymTunnel = async (why = 'asked'): Promise<void> => {
+  if (tunnel) {
+    return;
+  }
+  if (!starting && (await nymRoutingOn()) && !tunnel && !starting) {
+    console.info(`[nym] starting: ${why}`);
+    const gen = generation;
+    const t0 = performance.now();
+    starting = (async () => {
+      for (let n = 1; n <= START_TRIES; n++) {
+        const t = await startOnce();
+        if (gen !== generation) {
+          return;
+        }
+        if (t) {
+          tunnel = t;
+          console.info(`[nym] ready in ${Math.round(performance.now() - t0)}ms (route ${n})`);
+          say({ type: 'state', ready: true });
+          return;
+        }
+        drop();
+      }
       say({ type: 'state', ready: false, down: true });
-    }
-    return;
+    })().finally(() => {
+      if (gen === generation) {
+        starting = undefined;
+      }
+    });
   }
-  // stopped while it started: the last window closed
-  if (tunnel !== mine) {
-    return;
-  }
-  ready = true;
-  console.info(`[nym] ready in ${Math.round(performance.now() - t0)}ms`);
-  say({ type: 'state', ready });
+  await starting;
 };
 
 export const stopNymTunnel = (): void => {
-  worker?.terminate();
-  worker = undefined;
-  tunnel = undefined;
-  ready = false;
-  if (clientId) {
-    indexedDB.deleteDatabase(NYM_DB + clientId);
-    clientId = undefined;
-  }
-  say({ type: 'state', ready });
+  generation++;
+  starting = undefined;
+  drop();
+  say({ type: 'state', ready: false });
 };
 
-export const nymTunnelRunning = (): boolean => worker !== undefined;
+/** a request inside this tunnel got no answer: drop the route and take a fresh one */
+const reroute = (id: string): void => {
+  if (inFlight.has(id)) {
+    console.info('[nym] no answer on this route, taking another');
+    stopNymTunnel();
+    void startNymTunnel('reroute');
+  }
+};
+
+/** a tunnel up or on its way: the offscreen document stays */
+export const nymTunnelRunning = (): boolean => worker !== undefined || starting !== undefined;
 
 const relay = async (id: string, url: string, init: NymRequestInit): Promise<void> => {
+  // the tunnel carries only what the policy allows, whoever asks
+  const decision = checkEgress(url);
+  if (!decision.allow) {
+    say({ type: 'failed', id, message: new EgressBlockedError(decision).message });
+    return;
+  }
+  if (!tunnel) {
+    say({ type: 'failed', id, message: 'nym is not running', route: true });
+    return;
+  }
+  const used = tunnel;
+  inFlight.add(id);
   try {
-    if (!tunnel || !ready) {
-      throw new TypeError('nym is not running');
+    const reply = await used.mixFetch(url, init);
+    if (inFlight.delete(id)) {
+      say({ type: 'response', id, ...reply });
     }
-    // the tunnel carries only what the policy allows, whoever asks
-    const decision = checkEgress(url);
-    if (!decision.allow) {
-      throw new EgressBlockedError(decision);
-    }
-    say({ type: 'response', id, ...(await (await tunnel).mixFetch(url, init)) });
   } catch (e) {
-    say({ type: 'failed', id, message: e instanceof Error ? e.message : String(e) });
+    if (inFlight.delete(id)) {
+      say({ type: 'failed', id, message: e instanceof Error ? e.message : String(e), route: true });
+    }
+    // a try this route failed outright: the caller's next try gets a fresh one
+    if (tunnel === used) {
+      stopNymTunnel();
+      void startNymTunnel('failed try');
+    }
   }
 };
 
 const handlers: { [K in NymMessage['type']]?: (m: Extract<NymMessage, { type: K }>) => void } = {
   start: () => void startNymTunnel(),
-  ping: () => say({ type: 'state', ready }),
+  ping: () => say({ type: 'state', ready: !!tunnel }),
   stop: stopNymTunnel,
+  reroute: m => reroute(m.id),
   fetch: m => void relay(m.id, m.url, m.init),
 };
 

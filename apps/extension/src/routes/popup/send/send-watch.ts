@@ -21,7 +21,8 @@ export const LIMITS: Record<WatchPhase, { slowMs: number; hardMs: number }> = {
   // batches land every second or two; the replay at the end is one long step
   'catch-up': { slowMs: 90_000, hardMs: 10 * 60_000 },
   proving: { slowMs: 150_000, hardMs: 6 * 60_000 },
-  broadcast: { slowMs: 45_000, hardMs: 3 * 60_000 },
+  // over nym a broadcast may try a few routes, then ask (nym-bridge NYM_BUDGET_MS + NYM_ANSWER_MS)
+  broadcast: { slowMs: 45_000, hardMs: 4 * 60_000 },
 };
 
 export const isHeartbeat = (step: string) => step.startsWith('proving (halo2)');
