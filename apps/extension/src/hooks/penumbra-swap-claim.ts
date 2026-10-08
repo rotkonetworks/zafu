@@ -161,6 +161,9 @@ export function usePenumbraSwapClaim(
         .catch(err => {
           if (isTransientPortClosure(err)) {
             console.debug('[swap-claim] port closed before claim started, will retry');
+          } else if (String(err).includes('penumbra network not')) {
+            // penumbra was just turned off or switched away from: nothing to claim
+            console.debug('[swap-claim] penumbra is not running, skipped');
           } else {
             console.error('[swap-claim] auto-claim error:', err);
           }

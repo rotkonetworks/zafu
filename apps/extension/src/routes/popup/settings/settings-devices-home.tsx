@@ -113,7 +113,7 @@ export const SettingsDevicesHome = () => {
           <Row
             type='value'
             label='zigner'
-            description='air-gapped · signs by qr, never online'
+            description='air-gapped · signs by qr'
             value={zigner ? 'paired' : 'not paired'}
             preload={PopupPath.SETTINGS_ZIGNER}
             onPress={() => navigate(PopupPath.SETTINGS_ZIGNER)}

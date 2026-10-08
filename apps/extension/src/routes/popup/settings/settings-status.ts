@@ -103,9 +103,9 @@ export const displayStatus = (theme: string, hidden: boolean): Status => ({
   text: `${theme} · balances ${hidden ? 'hidden' : 'shown'}`,
 });
 
-/** the enabled networks by name */
+/** the enabled networks by name; a parent's ibc chains live on its own screen */
 export const networkNames = (enabled: readonly string[]) =>
-  enabled.map(n => NETWORKS[n]?.name.toLowerCase() ?? n);
+  enabled.filter(n => !NETWORKS[n]?.parent).map(n => NETWORKS[n]?.name.toLowerCase() ?? n);
 
 export const isZigner = (k: KeyInfo) =>
   k.type === 'zigner-zafu' && (k.insensitive['coldSignerType'] ?? 'zigner') === 'zigner';
