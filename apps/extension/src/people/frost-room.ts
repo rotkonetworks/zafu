@@ -638,6 +638,8 @@ export interface Keygen {
   last: number;
   /** members whose signature on the roster holds: their "agree" */
   agreed: Set<string>;
+  /** the room's own wallet, made by codes: typing the code was the yes, nobody is asked */
+  byCode: boolean;
   bound: boolean;
   /** another roster for the same wallet has signatures too: it waits until one is settled */
   rival: boolean;

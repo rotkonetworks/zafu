@@ -162,7 +162,7 @@ export const KeyCard = ({ c, seat, me, roomId, nameOf, onMessage, onSend }: Card
   };
   const rest = restartOf(c, missing);
   const who = (m: string) => (m === me ? 'you' : nameOf(m));
-  const toAgree = mine && !c.bound && !c.agreed.has(me) && !c.rival;
+  const toAgree = mine && !c.byCode && !c.bound && !c.agreed.has(me) && !c.rival;
 
   return (
     <article className='flex flex-col self-stretch border border-border-hard bg-elev-1'>
@@ -196,7 +196,9 @@ export const KeyCard = ({ c, seat, me, roomId, nameOf, onMessage, onSend }: Card
                 {!c.bound
                   ? c.agreed.has(m)
                     ? 'agreed'
-                    : 'to agree'
+                    : c.byCode
+                      ? 'on the way'
+                      : 'to agree'
                   : ahead
                     ? 'done'
                     : gone

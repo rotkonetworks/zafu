@@ -165,6 +165,7 @@ export const keygensOf = (room: PeopleRoom): Keygen[] => {
           by: G.creator,
           at,
           agreed: rv.signed,
+          byCode: rv.r.G === genesisId(v.rec.G),
           bound: rv.bound,
           rival,
           ...roundsOf(room.frost?.msgs, rv.id, rv.r.members),

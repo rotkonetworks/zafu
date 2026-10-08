@@ -206,7 +206,7 @@ describe('a shared wallet made by codes, with no leader', () => {
     // every member signed the roster of all of them by itself: typing the code was the yes
     for (const w of ws) {
       const [c] = w.keygens(G);
-      expect(c).toMatchObject({ k, bound: true, rival: false });
+      expect(c).toMatchObject({ k, bound: true, rival: false, byCode: true });
       expect(c!.members).toEqual(sortKeys(keysOf(ws, G)));
       expect(c!.id).toBe(rosterId({ G: genesisId(c!.G), members: c!.members }));
     }
@@ -289,7 +289,7 @@ describe('a shared wallet made from a chat', () => {
     expect(await run(ws, G, 2)).toEqual(['idle', 'idle', 'idle']);
     for (const w of ws.slice(1)) {
       const [c] = w.keygens(G);
-      expect(c).toMatchObject({ bound: false, by: ws[0]!.me(G).pubkey });
+      expect(c).toMatchObject({ bound: false, byCode: false, by: ws[0]!.me(G).pubkey });
       expect([...c!.agreed]).toEqual([ws[0]!.me(G).pubkey]);
       expect(c!.r1.size).toBe(0);
     }
@@ -415,6 +415,7 @@ describe('what stops a key setup, with nothing saved', () => {
       at: 1,
       last: 1,
       agreed: new Set(members),
+      byCode: true,
       bound: true,
       rival: false,
       r1: new Map([
