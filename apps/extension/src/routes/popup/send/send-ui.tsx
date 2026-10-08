@@ -326,7 +326,7 @@ export function Proving({
 }
 
 /** what the reserved line under a running build says */
-export type SendingNote = 'leave' | 'slow' | 'stopping' | 'on-its-way';
+export type SendingNote = 'leave' | 'slow' | 'rerouting' | 'stopping' | 'on-its-way';
 
 const NOTE: Record<SendingNote, (stoppable: boolean) => string> = {
   leave: () => 'you can close this · it keeps going and shows on home',
@@ -334,6 +334,7 @@ const NOTE: Record<SendingNote, (stoppable: boolean) => string> = {
     stoppable
       ? 'this is taking longer than usual · keep waiting or stop it'
       : 'this is taking longer than usual · thank you for waiting',
+  rerouting: () => 'still sending over nym · trying another route',
   stopping: () => 'stopping this send',
   'on-its-way': () => 'it is already on its way',
 };

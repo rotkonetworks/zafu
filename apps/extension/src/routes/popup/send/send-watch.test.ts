@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { LIMITS, phaseOf, useSendWatch, watchOf, type Watch } from './send-watch';
+import { LIMITS, phaseOf, useSendWatch, watchNote, watchOf, type Watch } from './send-watch';
 import { NYM_ANSWER_MS, NYM_BUDGET_MS } from '../../../net/nym-bridge';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -21,6 +21,15 @@ describe('watchOf', () => {
 
   it('keeps a broadcast over nym inside its bound: routes tried, then the ask', () => {
     expect(LIMITS.broadcast.hardMs).toBeGreaterThan(NYM_BUDGET_MS + NYM_ANSWER_MS);
+  });
+
+  it('says only slow or another route on the note line', () => {
+    expect(['ok', 'slow', 'rerouting', 'timeout'].map(w => watchNote(w as Watch))).toEqual([
+      'leave',
+      'slow',
+      'rerouting',
+      'leave',
+    ]);
   });
 
   it('knows the phases', () => {
