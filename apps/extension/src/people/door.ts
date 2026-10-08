@@ -21,10 +21,17 @@
  *                           number (another zafu, the same hour) tell apart by
  *                           it, and a joiner tries each; the wrong one fails
  *   joiner  -> `wj` join    its SPAKE2 message for (salt, its own jid)
- *   founder -> `wa` answer  its own message for that run, a tag over it (a
- *                           wrong word is seen at once), and the invite
- *                           sealed under the run's key: the room secret, the
- *                           relay, the group, and a shared wallet's k of n
+ *   founder -> `wa` answer  its own message for that run and a tag over it, so
+ *                           a wrong word is seen at once
+ *   joiner  -> `wk` confirm its own tag: the words held on both sides
+ *   founder -> `wb` box     the invite sealed under that run's key (the room
+ *                           secret, the relay, the group, a shared wallet's k
+ *                           of n), to the first run whose confirmation held
+ *
+ * A code lets exactly one person in, the magic wormhole way: once a box has
+ * gone out the code is spent, and anyone else who typed it reads that in the
+ * mailbox and is told so. A wrong word, or a joiner trying a code that only
+ * shares the number, spends nothing: the box waits for words that held.
  *
  * Knowing the words is what lets a person in; there is no second "allow".
  * Both sides are shown two verify words from the run's key, passively, for
@@ -47,8 +54,8 @@ export const DOOR_SCOPE = 'zafu-door-v1';
 /** a door works for an hour (and the relay keeps a door an hour) */
 export const DOOR_MS = 60 * 60_000;
 /** the door protocol this zafu speaks; a hello with another is not answered */
-export const DOOR_VERSION = 1;
-/** runs a founder answers per code: the joiners a group may take, and a few wrong words */
+export const DOOR_VERSION = 2;
+/** runs a founder answers per code: the one who comes in, and a few wrong words */
 export const ANSWERS_PER_CODE = 12;
 /** hellos a joiner tries on one number: codes that collided within the hour */
 export const SALTS_TRIED = 4;
@@ -94,6 +101,10 @@ export const plateSecret = (plate: number): string =>
 /** one run's session, hex: the founder's salt and the joiner's id */
 export const sessionOf = (salt: string, jid: string): string => salt + jid;
 
+/** the founder's seed for one run, from its door's seed: a run is rebuilt, never kept */
+export const runSeed = (doorSeed: string, jid: string): string =>
+  bytesToHex(sha256(lpAll(['zafu-door-run-v1', hexToBytes(doorSeed), jid])));
+
 // -- the invite, sealed under a run's key ---------------------------------------
 
 /** what an answer carries: the long-lived room, never the code */
@@ -108,6 +119,8 @@ export interface InviteBody {
   /** a shared wallet: its seals and seats, fixed when the code was made */
   want?: { k: number; n: number };
   deal?: Deal;
+  /** the window the group was made in: a newcomer reads from there, not the relay's 48 h */
+  born?: number;
 }
 
 const boxKey = (key: Uint8Array) =>
@@ -170,6 +183,7 @@ export const openBox = async (key: Uint8Array, box: Uint8Array): Promise<InviteB
     from: String(v.from ?? '').slice(0, 32),
     ...(want ? { want: { k: want.k, n: want.n } } : {}),
     ...(v.deal ? { deal: v.deal } : {}),
+    ...(Number.isInteger(v.born) && v.born! >= 0 ? { born: v.born } : {}),
   };
 };
 
@@ -217,11 +231,14 @@ const unLp = (b: Uint8Array): Uint8Array[] => {
 export type DoorWire =
   | { kind: 'wh'; v: number; salt: string }
   | { kind: 'wj'; v: number; salt: string; jid: string; y: string }
-  | { kind: 'wa'; v: number; salt: string; jid: string; x: string; tag: string; box: string };
+  | { kind: 'wa'; v: number; salt: string; jid: string; x: string; tag: string }
+  | { kind: 'wk'; v: number; salt: string; jid: string; tag: string }
+  | { kind: 'wb'; v: number; salt: string; jid: string; box: string };
 
 export type GroupWire =
   | DoorWire
-  | { kind: 'ask'; key: string; name: string; seal: string }
+  /** `t`: the door run that let them in, so the founder can say who came with which code */
+  | { kind: 'ask'; key: string; name: string; seal: string; t?: string }
   | { kind: 'log'; entry: ChannelGenesis | ChannelRecord }
   | { kind: 'names'; names: Record<string, string> }
   /** one piece of a FROST message (people/frost-room): `i` of `n`, all sharing `mid` */
@@ -243,16 +260,20 @@ export const encodeWire = (r: GroupWire): string => {
       : r.kind === 'wj'
         ? [String(r.v), r.salt, r.jid, r.y]
         : r.kind === 'wa'
-          ? [String(r.v), r.salt, r.jid, r.x, r.tag, r.box]
-          : r.kind === 'ask'
-            ? [r.key, r.name, hexToBytes(r.seal)]
-            : r.kind === 'log'
-              ? [JSON.stringify(r.entry)]
-              : r.kind === 'kc'
-                ? [r.mid, String(r.i), String(r.n), r.data]
-                : r.kind === 'dj'
-                  ? [r.code, r.group]
-                  : [JSON.stringify(r.names)];
+          ? [String(r.v), r.salt, r.jid, r.x, r.tag]
+          : r.kind === 'wk'
+            ? [String(r.v), r.salt, r.jid, r.tag]
+            : r.kind === 'wb'
+              ? [String(r.v), r.salt, r.jid, r.box]
+              : r.kind === 'ask'
+                ? [r.key, r.name, hexToBytes(r.seal), ...(r.t ? [r.t] : [])]
+                : r.kind === 'log'
+                  ? [JSON.stringify(r.entry)]
+                  : r.kind === 'kc'
+                    ? [r.mid, String(r.i), String(r.n), r.data]
+                    : r.kind === 'dj'
+                      ? [r.code, r.group]
+                      : [JSON.stringify(r.names)];
   return `zg1:${r.kind}:${b64url(lpAll(fields))}`;
 };
 
@@ -279,14 +300,30 @@ export const decodeWire = (body: string): GroupWire | undefined => {
           SALT.test(t(1)) &&
           JID.test(t(2)) &&
           MSG.test(t(3)) &&
-          TAG.test(t(4)) &&
-          B64.test(t(5)) &&
-          t(5).length <= 3000
-          ? { kind: 'wa', v, salt: t(1), jid: t(2), x: t(3), tag: t(4), box: t(5) }
+          TAG.test(t(4))
+          ? { kind: 'wa', v, salt: t(1), jid: t(2), x: t(3), tag: t(4) }
+          : undefined;
+      case 'wk':
+        return Number.isInteger(v) && SALT.test(t(1)) && JID.test(t(2)) && TAG.test(t(3))
+          ? { kind: 'wk', v, salt: t(1), jid: t(2), tag: t(3) }
+          : undefined;
+      case 'wb':
+        return Number.isInteger(v) &&
+          SALT.test(t(1)) &&
+          JID.test(t(2)) &&
+          B64.test(t(3)) &&
+          t(3).length <= 3000
+          ? { kind: 'wb', v, salt: t(1), jid: t(2), box: t(3) }
           : undefined;
       case 'ask':
         return HEX64.test(t(0)) && f[2]?.length === 1216
-          ? { kind: 'ask', key: t(0), name: t(1).slice(0, 32), seal: bytesToHex(f[2]) }
+          ? {
+              kind: 'ask',
+              key: t(0),
+              name: t(1).slice(0, 32),
+              seal: bytesToHex(f[2]),
+              ...(JID.test(t(3)) ? { t: t(3) } : {}),
+            }
           : undefined;
       case 'log':
         return { kind: 'log', entry: JSON.parse(t(0)) as ChannelGenesis | ChannelRecord };

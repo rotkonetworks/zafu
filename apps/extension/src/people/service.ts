@@ -5,7 +5,9 @@
  * The no-autoconnect contract (design-social 2.10), as code:
  *  - T1 `open()` (the person opened people): one catch-up pass over the rooms
  *    this wallet joined, each from where it last read (`Room.syncSince`).
- *  - T2 `watch(id)` (a thread is on screen): that room every ROOM_POLL_MS.
+ *  - T2 `watch(id)` (a thread is on screen, or someone waits on that room:
+ *    people/keeper): that room every ROOM_POLL_MS, or every FAST_MS while
+ *    someone waits on it (people/hurry).
  *  - T3 after T1, while a zafu window is open: the T1 pass every 5 minutes.
  *  - T4 `check()` ("check again"): the T1 pass, now.
  *  - sending: the write, now. A line that did not leave waits in its thread
@@ -18,8 +20,9 @@
  * away, and how many rooms you read, never which rooms belong together.
  * `close()` runs when the last zafu window closes: every timer stops and every
  * request in flight is aborted. There is no alarm, nothing runs at install,
- * unlock, popup open or worker start, and a pass with no rooms makes no
- * request at all.
+ * unlock or worker start; at popup open only the rooms someone waits on are
+ * read (an open code, a shared wallet filling or making keys), and a pass
+ * with no rooms makes no request at all.
  *
  * Every relay is gated before the first byte: unless the `people-relay`
  * destination allows it, no transport is even built. Asking happens in the
@@ -41,6 +44,7 @@ import {
   type RelayTransport,
 } from '@zafu/zid';
 import { pairShard } from './shard';
+import { FAST_MS, hurried } from './hurry';
 import { RELAY_NOT_ON, RELAY_OFF } from './protocol';
 import {
   landed,
@@ -207,7 +211,7 @@ export const createPeopleService = (
     t3?: ReturnType<typeof setInterval>;
     /** whose turn a pass starts with */
     turn: number;
-    watches: Map<string, { timer: ReturnType<typeof setInterval>; n: number }>;
+    watches: Map<string, { timer?: ReturnType<typeof setTimeout>; n: number }>;
   }
   let session: Session | undefined;
   const busy = new Map<string, Promise<PeopleSlot>>();
@@ -599,29 +603,35 @@ export const createPeopleService = (
       ensure();
       return pass();
     },
-    /** T2: a thread is on screen. Returns the stop. */
+    /** T2: a room is on screen or waited on. Returns the stop. */
     watch: (roomId: string): (() => void) => {
       const s = ensure();
       const w = s.watches.get(roomId);
-      // what the screen shows comes from its own room's reads too
-      const tick = () =>
-        void sync(roomId)
-          .then(
-            slot => slot !== 'idle' && status(slot),
-            (e: unknown) => status(unreadable(e)),
-          )
-          .then(() => flush(roomId))
-          .catch(() => undefined);
       if (w) {
         w.n++;
       } else {
-        tick();
-        s.watches.set(roomId, { n: 1, timer: setInterval(tick, ROOM_POLL_MS) });
+        const entry: { timer?: ReturnType<typeof setTimeout>; n: number } = { n: 1 };
+        s.watches.set(roomId, entry);
+        // what the screen shows comes from its own room's reads too
+        const tick = async () => {
+          await sync(roomId)
+            .then(
+              slot => slot !== 'idle' && status(slot),
+              (e: unknown) => status(unreadable(e)),
+            )
+            .then(() => flush(roomId))
+            .catch(() => undefined);
+          if (session?.watches.get(roomId) === entry) {
+            const fast = hurried((await mine().catch(() => null)) ?? [], now()).has(roomId);
+            entry.timer = setTimeout(() => void tick(), fast ? FAST_MS : ROOM_POLL_MS);
+          }
+        };
+        void tick();
       }
       return () => {
         const cur = session?.watches.get(roomId);
         if (cur && --cur.n <= 0) {
-          clearInterval(cur.timer);
+          clearTimeout(cur.timer);
           session?.watches.delete(roomId);
         }
       };
@@ -698,7 +708,7 @@ export const createPeopleService = (
       session.abort.abort();
       clearInterval(session.t3);
       for (const w of session.watches.values()) {
-        clearInterval(w.timer);
+        clearTimeout(w.timer);
       }
       session = undefined;
     },

@@ -11,12 +11,11 @@ import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { ScreenHeader } from '../../../components/screen-header';
 import { viaLine } from '../../../links/land';
-import { peopleAsk, useMyRooms, useWatchRoom } from '../../../people/client';
+import { peopleAsk, useMyRooms } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import { CODE_RE, OLD_CODE_RE, isRelayGated, normalizeCode } from '../../../people/protocol';
 import { OLDER_CODE } from '../../../people/groups';
 import { doorView, type DoorView } from '../../../people/door-run';
-import { useDoors } from '../../../people/use-door';
 import { PopupPath, groupPath } from '../paths';
 import { looksLikeLink, parseLink } from '../../../links/router';
 import { NickField } from './nick-field';
@@ -31,13 +30,14 @@ const codeIn = (text: string): string | undefined => {
   return CODE_RE.test(c) || OLD_CODE_RE.test(c) ? c : undefined;
 };
 
-const SAY: Record<DoorView | 'older' | 'no-relay' | 'failed', string> = {
+const SAY: Record<DoorView | 'no-relay' | 'failed', string> = {
   reading: 'reading the code',
-  waiting: 'waiting for them · zafu lets you in when they next open zafu, within the hour',
+  waiting: 'waiting for them to open zafu · the code works for an hour',
   nothing:
     'nothing answers this code yet. a code works for an hour; one from an older zafu needs them to update.',
   newer: 'their zafu is newer than this one. please update zafu, then try the code again.',
   wrong: "those words don't match this code. nothing was shared · please check them and try again.",
+  used: 'this code has already let someone in. each code is for one person · please ask for a new one.',
   closed: 'this code has closed. please ask for a new one.',
   in: 'you are in',
   older: 'this code is from an older zafu. the other side needs a newer zafu.',
@@ -58,8 +58,6 @@ export function GroupJoinPage() {
   const rooms = useMyRooms();
   const door = rooms.find(r => r.id === roomId);
   const view = doorView(door, Date.now());
-  useWatchRoom(roomId && view !== 'in' ? roomId : undefined);
-  useDoors();
 
   useEffect(() => {
     const G = door?.door?.G;
@@ -151,7 +149,7 @@ export function GroupJoinPage() {
                 join
               </Button>
             )}
-            {(shown === 'wrong' || shown === 'closed' || fail) && (
+            {(shown === 'wrong' || shown === 'used' || shown === 'closed' || fail) && (
               <Button
                 className='flex-1'
                 disabled={busy}

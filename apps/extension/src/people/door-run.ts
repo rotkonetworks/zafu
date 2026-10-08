@@ -1,19 +1,21 @@
 /**
  * A door's SPAKE2 side (people/door), the part that needs zafu-wasm and so
- * runs where a screen is open: the founder answering each joiner with a run
- * of its own, a joiner speaking to the founder's hello and opening the
- * answer. The worker only carries records; every step here is safe to run
+ * runs where a zafu window is open (people/keeper): the founder answering
+ * each joiner with a run of its own, a joiner speaking to the founder's hello
+ * and opening the box. The worker only carries records; every step here is safe to run
  * again, since what the room kept decides what was done.
  */
 
 import { hexToBytes } from '@noble/hashes/utils';
-import type { DoorAnswer, DoorPakeCall } from '../workers/door-pake';
+import { presenceEpoch } from '@zafu/zid';
+import type { DoorAnswer, DoorFinish, DoorPakeCall } from '../workers/door-pake';
 import {
   ANSWERS_PER_CODE,
   DOOR_VERSION,
   SALTS_TRIED,
   b64,
   openBox,
+  runSeed,
   sealBox,
   sessionOf,
   splitCode,
@@ -28,7 +30,9 @@ export type DoorCall = (op: string, args: Record<string, unknown>) => Promise<un
 
 const wiresOf = <K extends DoorWire['kind']>(door: PeopleRoom, kind: K) =>
   (door.door?.heard ?? []).flatMap(h =>
-    h.wire.kind === kind ? [{ ...h, wire: h.wire as Extract<DoorWire, { kind: K }> }] : [],
+    h.wire.kind === kind && h.wire.v === DOOR_VERSION
+      ? [{ ...h, wire: h.wire as Extract<DoorWire, { kind: K }> }]
+      : [],
   );
 
 /** what the founder's group hands a joiner, read from the group as it is now */
@@ -42,10 +46,14 @@ export const inviteOf = (group: PeopleRoom): InviteBody => {
     founder: g.founder,
     from: g.names?.[g.founder] ?? '',
     ...(g.want ? { want: { k: g.want.k, n: g.want.n } } : {}),
+    born: presenceEpoch(Math.floor(group.createdAt / 1000)),
   };
 };
 
-/** the founder: one fresh run per joiner who spoke to this code, until the door is full */
+/**
+ * The founder: answer each run that spoke to this code, then send the
+ * invite to the first whose confirmation holds. One box, and the code is spent.
+ */
 export const hostStep = async (
   door: PeopleRoom,
   group: PeopleRoom | undefined,
@@ -54,96 +62,123 @@ export const hostStep = async (
 ): Promise<void> => {
   const d = door.door;
   const words = d && splitCode(d.code)?.words;
-  if (d?.role !== 'host' || !words || !group?.group?.mine) {
+  if (d?.role !== 'host' || !words || !d.seed || d.admitted || !group?.group?.mine) {
     return;
   }
   const want = group.group.want;
+  if (want && (want.started || group.group.members.length >= want.n)) {
+    return;
+  }
+  const run = (jid: string) => ({
+    words,
+    session: sessionOf(d.salt!, jid),
+    seed: runSeed(d.seed!, jid),
+  });
+  const said = new Map(
+    wiresOf(door, 'wj')
+      .filter(h => h.wire.salt === d.salt)
+      .map(h => [h.wire.jid, h.wire.y]),
+  );
   const done = new Set((d.answered ?? []).map(a => a.jid));
-  for (const { wire } of wiresOf(door, 'wj')) {
-    const full = want && (want.started || group.group.members.length >= want.n);
-    if (full || done.size >= ANSWERS_PER_CODE) {
-      return;
-    }
-    if (wire.v !== DOOR_VERSION || wire.salt !== d.salt || done.has(wire.jid)) {
+  for (const { wire } of wiresOf(door, 'wk')) {
+    const y = said.get(wire.jid);
+    if (wire.salt !== d.salt || !done.has(wire.jid) || !y) {
       continue;
     }
-    done.add(wire.jid);
-    const a = await pake<DoorAnswer>({
-      step: 'answer',
-      words,
-      session: sessionOf(wire.salt, wire.jid),
-      y: wire.y,
-    });
-    const box = await sealBox(hexToBytes(a.key), inviteOf(group));
-    await call('door-answer', {
-      roomId: door.id,
-      jid: wire.jid,
-      salt: wire.salt,
-      x: a.x,
-      tag: a.tag,
-      box: b64(box),
-      words: a.words,
-    });
+    const key = await pake<string | null>({ step: 'admit', ...run(wire.jid), y, tag: wire.tag });
+    if (key) {
+      const box = await sealBox(hexToBytes(key), inviteOf(group));
+      await call('door-admit', { roomId: door.id, jid: wire.jid, box: b64(box) });
+      return;
+    }
+  }
+  for (const [jid, y] of said) {
+    if (done.size >= ANSWERS_PER_CODE) {
+      return;
+    }
+    if (done.has(jid)) {
+      continue;
+    }
+    done.add(jid);
+    const a = await pake<DoorAnswer | null>({ step: 'answer', ...run(jid), y });
+    if (a) {
+      await call('door-answer', { roomId: door.id, jid, salt: d.salt, ...a });
+    }
   }
 };
 
 /**
  * A joiner: speak to each founder's hello on this number (a few, newest
- * first: codes that share a number tell apart by their words), then open
- * the first answer whose tag holds. Every founder spoken to answered and
- * none held: the words differ.
+ * first: codes that share a number tell apart by their words), say back to
+ * the answer whose tag holds, and open the box it sends. A box that went to
+ * someone else: the code was used. Every founder answered and none held: the
+ * words differ.
  */
 export const joinStep = async (door: PeopleRoom, pake: DoorPake, call: DoorCall): Promise<void> => {
   const d = door.door;
   const words = d && splitCode(d.code)?.words;
-  if (d?.role !== 'join' || !words || !d.jid || !d.seed || d.G || d.wrong) {
+  if (d?.role !== 'join' || !words || !d.jid || !d.seed || d.G || d.wrong || d.used) {
     return;
   }
-  const session = (salt: string) => sessionOf(salt, d.jid!);
+  const run = (salt: string) => ({ words, session: sessionOf(salt, d.jid!), seed: d.seed! });
   const salts = [
     ...new Set(
       wiresOf(door, 'wh')
-        .filter(h => h.wire.v === DOOR_VERSION)
         .sort((a, b) => b.at - a.at)
         .map(h => h.wire.salt),
     ),
   ].slice(0, SALTS_TRIED);
   for (const salt of salts.filter(s => !d.sent?.includes(s))) {
-    const y = await pake<string>({ step: 'speak', words, session: session(salt), seed: d.seed });
+    const y = await pake<string>({ step: 'speak', ...run(salt) });
     await call('door-join', { roomId: door.id, salt, y });
   }
+  const boxes = wiresOf(door, 'wb').filter(b => d.sent?.includes(b.wire.salt));
   const answers = wiresOf(door, 'wa').filter(
-    a => a.wire.v === DOOR_VERSION && a.wire.jid === d.jid && d.sent?.includes(a.wire.salt),
+    a => a.wire.jid === d.jid && d.sent?.includes(a.wire.salt),
   );
+  const held = new Set<string>();
   for (const { wire } of answers) {
-    const r = await pake<{ key: string; words: string } | null>({
+    const r = await pake<DoorFinish | null>({
       step: 'finish',
-      words,
-      session: session(wire.salt),
-      seed: d.seed,
+      ...run(wire.salt),
       x: wire.x,
       tag: wire.tag,
     });
-    const invite = r && (await openBox(hexToBytes(r.key), unb64(wire.box)).catch(() => undefined));
-    if (r && invite) {
+    if (!r) {
+      continue;
+    }
+    held.add(wire.salt);
+    const box = boxes.find(b => b.wire.salt === wire.salt && b.wire.jid === d.jid);
+    const invite =
+      box && (await openBox(hexToBytes(r.key), unb64(box.wire.box)).catch(() => undefined));
+    if (invite) {
       await call('door-enter', { roomId: door.id, invite, words: r.words });
       return;
     }
+    if (!d.confirmed?.includes(wire.salt)) {
+      await call('door-confirm', { roomId: door.id, salt: wire.salt, tag: r.tag });
+    }
   }
+  const taken = new Set(boxes.filter(b => b.wire.jid !== d.jid).map(b => b.wire.salt));
   const answeredBy = new Set(answers.map(a => a.wire.salt));
-  if (d.sent?.length && d.sent.every(s => answeredBy.has(s))) {
-    await call('door-wrong', { roomId: door.id });
+  const settled = (s: string) => taken.has(s) || (answeredBy.has(s) && !held.has(s));
+  if (!d.sent?.length || !d.sent.every(settled)) {
+    return;
   }
+  await call(d.sent.some(s => taken.has(s)) ? 'door-used' : 'door-wrong', { roomId: door.id });
 };
 
 /** what a joiner's door shows */
 export type DoorView =
   | 'reading'
   | 'nothing'
-  /** the founder's zafu speaks a newer door */
+  /** the founder's zafu speaks a newer door, or an older one */
   | 'newer'
+  | 'older'
   | 'waiting'
   | 'wrong'
+  /** the code had already let someone else in */
+  | 'used'
   | 'closed'
   | 'in';
 
@@ -158,15 +193,21 @@ export const doorView = (door: PeopleRoom | undefined, nowMs: number): DoorView 
   if (d.wrong) {
     return 'wrong';
   }
+  if (d.used) {
+    return 'used';
+  }
   if ((door.until ?? 0) <= nowMs) {
     return 'closed';
   }
-  const hellos = wiresOf(door, 'wh');
   if (d.sent?.length) {
     return 'waiting';
   }
-  if (hellos.some(h => h.wire.v === DOOR_VERSION)) {
-    return 'reading';
-  }
-  return hellos.some(h => h.wire.v > DOOR_VERSION) ? 'newer' : 'nothing';
+  const hellos = d.heard.flatMap(h => (h.wire.kind === 'wh' ? [h.wire.v] : []));
+  return hellos.includes(DOOR_VERSION)
+    ? 'reading'
+    : hellos.some(v => v > DOOR_VERSION)
+      ? 'newer'
+      : hellos.length
+        ? 'older'
+        : 'nothing';
 };

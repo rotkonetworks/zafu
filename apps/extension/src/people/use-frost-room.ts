@@ -28,6 +28,7 @@ import { peopleAsk, peopleCall } from './client';
 import {
   advance,
   allowedIn,
+  cameFor,
   ceremonyOf,
   packFrost,
   propId,
@@ -220,16 +221,6 @@ const kick = (walletId: string, roomId: string) => {
       runs.delete(key);
     }
   })();
-};
-
-/**
- * A shared wallet you came into by its code: the founder's start with the k
- * of n the code named. Typing the words was your yes to those terms, so
- * nothing more is asked.
- */
-const cameFor = (room: PeopleRoom, c: Ceremony): boolean => {
-  const want = room.group?.want;
-  return !!want && c.by === room.group?.founder && c.k === want.k && c.members.length === want.n;
 };
 
 /** the seat a room's ceremony left in this wallet, if it finished here */

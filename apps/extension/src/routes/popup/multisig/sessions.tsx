@@ -267,7 +267,7 @@ const AppManagedRow = (props: {
         <button
           onClick={props.onRecover}
           className='flex flex-1 items-center justify-center gap-1.5 border border-border-soft px-2 py-1.5 text-xs text-fg-muted transition-colors hover:bg-elev-2 hover:text-zigner-gold'
-          title='make this a normal, selectable multisig you can co-sign'
+          title='make this a normal, selectable shared wallet you can co-sign'
         >
           <span className='i-ph-arrow-up-right h-3.5 w-3.5' />
           recover
@@ -449,18 +449,14 @@ export const MultisigPage = () => {
   // either the active multisig is airgap, or the active single-sig is zigner-imported.
   const useAirgap =
     activeMs?.multisig?.custody === 'airgapSigner' || selectedKeyInfo?.type === 'zigner-zafu';
-  // Route surface is unified: one /multisig/create and one /multisig/join.
-  // The flow dispatches internally on `?mode=zigner` OR on the active
-  // wallet being zigner-imported.
+  // a zigner makes its keys over the frost relay; a hot wallet's are made in people, by a code
   const createPath = useAirgap
-    ? (`${PopupPath.MULTISIG_CREATE}?mode=zigner` as PopupPath)
-    : PopupPath.MULTISIG_CREATE;
-  const joinPath = useAirgap
-    ? (`${PopupPath.MULTISIG_JOIN}?mode=zigner` as PopupPath)
-    : PopupPath.MULTISIG_JOIN;
+    ? `${PopupPath.MULTISIG_CREATE}?mode=zigner`
+    : `${PopupPath.INBOX_NEW_GROUP}?wallet=1`;
+  const joinPath = useAirgap ? `${PopupPath.MULTISIG_JOIN}?mode=zigner` : PopupPath.INBOX_JOIN;
 
   if (!hasFeature(activeNetwork, 'multisig')) {
-    return <NetworkUnavailable feature='multisig' iconClass='i-ph-shield' />;
+    return <NetworkUnavailable feature='shared wallet' iconClass='i-ph-shield' />;
   }
 
   return (
@@ -481,7 +477,7 @@ export const MultisigPage = () => {
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
           <span className='i-ph-shield h-5 w-5 text-zigner-gold' />
-          <h2 className='text-lg'>multisig</h2>
+          <h2 className='text-lg'>shared wallets</h2>
         </div>
         {walletsWithIndex.length > 0 && (
           <Sensitive className='text-sm font-mono text-fg-muted'>
@@ -572,7 +568,7 @@ export const MultisigPage = () => {
           ) : (
             <div className='flex flex-col items-center gap-2 py-8 text-center text-fg-muted'>
               <span className='i-ph-shield-slash h-8 w-8 opacity-50' />
-              <p className='text-sm'>no multisig wallets yet</p>
+              <p className='text-sm'>no shared wallets yet</p>
             </div>
           )}
 

@@ -18,6 +18,7 @@ import { chain } from './service';
 import { groupId } from './groups';
 import { comeIn, peopleWallet, realPake, relayBoard } from './door.test-util';
 import {
+  cameFor,
   advance,
   allowedIn,
   ceremonyOf,
@@ -128,8 +129,10 @@ const group = async (n: number) => {
   };
   const G = id.slice(2);
   const pake = await realPake();
-  for (const w of rest) {
-    await comeIn(founder!, w, code, G, clock, pake);
+  // one code per person
+  for (const [i, w] of rest.entries()) {
+    const next = i ? ((await founder!.op('group-renew', { G })) as { code: string }).code : code;
+    await comeIn(founder!, w, next, G, clock, pake);
   }
   for (const w of ws) {
     await w.service.check();
@@ -191,7 +194,8 @@ describe('a shared wallet made in its group room', () => {
       ws.map(w => w.me(G).pubkey),
       k,
     );
-    // nobody's device joins until its person agrees
+    // a chat made into a wallet: nobody's device joins until its person agrees, in the thread
+    expect(ws.slice(1).some(w => cameFor(w.room(G), current(w, G)))).toBe(false);
     expect(await run(ws, G, 2)).toEqual(ws.map(() => 'waiting'));
     expect(ws.slice(1).every(w => !current(w, G).r1.has(w.me(G).pubkey))).toBe(true);
     await agreeAll(ws, G);

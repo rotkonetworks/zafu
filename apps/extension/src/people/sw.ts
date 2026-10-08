@@ -148,19 +148,16 @@ const deals = createDeals({
 });
 
 /**
- * People waiting at your open doors, as counts (the tab's badge reads these):
- * they typed the code, and your zafu answers once people is open.
+ * People waiting at your open codes, as counts (the tab's badge reads these):
+ * someone typed a code and is not in yet. A code lets one person in, so
+ * each counts once, however many runs spoke to it.
  */
 export const askingOf = (rooms: PeopleRoom[]): PeopleAsking[] =>
   rooms.flatMap(r => {
     const d = r.kind === 'door' && r.door?.role === 'host' ? r.door : undefined;
-    const done = new Set(d?.answered?.map(a => a.jid));
-    const n = new Set(
-      d?.heard.flatMap(h =>
-        h.wire.kind === 'wj' && h.wire.salt === d.salt && !done.has(h.wire.jid) ? [h.wire.jid] : [],
-      ),
-    ).size;
-    return n && r.until ? [{ walletId: r.walletId, n, until: r.until }] : [];
+    const waiting =
+      d && !d.admitted && d.heard.some(h => h.wire.kind === 'wj' && h.wire.salt === d.salt);
+    return waiting && r.until ? [{ walletId: r.walletId, n: 1, until: r.until }] : [];
   });
 
 export const peopleDeps: PeopleDeps = {

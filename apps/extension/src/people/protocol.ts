@@ -47,3 +47,6 @@ export const normalizeCode = (raw: string): string => raw.trim().toLowerCase().r
 
 /** a person's pair room, by their contact id */
 export const pairId = (contactId: string) => `p:${contactId}`;
+
+/** a group's room, by its id */
+export const groupId = (G: string) => `g:${G}`;
