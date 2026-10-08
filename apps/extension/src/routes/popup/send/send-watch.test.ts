@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LIMITS, phaseOf, useSendWatch, watchOf, type Watch } from './send-watch';
+import { NYM_ANSWER_MS, NYM_BUDGET_MS } from '../../../net/nym-bridge';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -16,6 +17,10 @@ describe('watchOf', () => {
     expect(
       watchOf('building, proving & signing ironwood tx (halo2)', 0, LIMITS.proving.hardMs),
     ).toBe('timeout');
+  });
+
+  it('keeps a broadcast over nym inside its bound: routes tried, then the ask', () => {
+    expect(LIMITS.broadcast.hardMs).toBeGreaterThan(NYM_BUDGET_MS + NYM_ANSWER_MS);
   });
 
   it('knows the phases', () => {

@@ -253,8 +253,7 @@ const getOrCreateZcashWorker = (): Worker => {
 function proveInBuildWorker(raw: unknown): Promise<unknown> {
   // a proof means a broadcast is coming: start nym now, so the 10-60 s of
   // proving hide most of its cold start
-  console.info('[nym] proof started');
-  void startNymTunnel();
+  void startNymTunnel('proof started');
   return trackJob(() => proveZcash(raw));
 }
 
