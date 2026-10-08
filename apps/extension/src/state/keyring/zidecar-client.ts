@@ -745,47 +745,11 @@ export class ZidecarClient {
   private parseUtxoList(buf: Uint8Array): Utxo[] {
     // GetAddressUtxosReplyList: field 1 repeated GetAddressUtxosReply
     const utxos: Utxo[] = [];
-    let pos = 0;
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        if (field === 1) {
-          utxos.push(this.parseUtxo(buf.subarray(pos, pos + len)));
-        }
-        pos += len;
-      } else if (wire === 0) {
-        // skip varint
-        while (pos < buf.length && buf[pos++]! & 0x80) {
-          /* skip */
-        }
-      } else {
-        break;
+    eachField(buf, (field, wire, val) => {
+      if (wire === WIRE_LEN && field === 1) {
+        utxos.push(this.parseUtxo(val as Uint8Array));
       }
-    }
-
+    });
     return utxos;
   }
 
@@ -795,7 +759,7 @@ export class ZidecarClient {
     //   field 2: bytes txid
     //   field 3: int32 output_index (index)
     //   field 4: bytes script
-    //   field 5: uint64 value_zat
+    //   field 5: uint64 value_zat (kept as bigint)
     //   field 6: uint64 height
     const utxo: Utxo = {
       address: '',
@@ -805,26 +769,10 @@ export class ZidecarClient {
       valueZat: 0n,
       height: 0,
     };
-    let pos = 0;
     const decoder = new TextDecoder();
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 0) {
-        // varint - need to handle uint64 for valueZat
-        let v = 0n;
-        let s = 0n;
-        while (pos < buf.length) {
-          const b = buf[pos++]!;
-          v |= BigInt(b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7n;
-        }
+    eachField(buf, (field, wire, val) => {
+      if (wire === WIRE_VARINT) {
+        const v = val as bigint;
         if (field === 3) {
           utxo.outputIndex = Number(v);
         } else if (field === 5) {
@@ -832,27 +780,8 @@ export class ZidecarClient {
         } else if (field === 6) {
           utxo.height = Number(v);
         }
-      } else if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        const data = buf.subarray(pos, pos + len);
+      } else if (wire === WIRE_LEN) {
+        const data = val as Uint8Array;
         if (field === 1) {
           utxo.address = decoder.decode(data);
         } else if (field === 2) {
@@ -860,12 +789,8 @@ export class ZidecarClient {
         } else if (field === 4) {
           utxo.script = data;
         }
-        pos += len;
-      } else {
-        break;
       }
-    }
-
+    });
     return utxo;
   }
 
