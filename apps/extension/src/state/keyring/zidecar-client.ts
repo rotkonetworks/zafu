@@ -622,43 +622,14 @@ export class ZidecarClient {
   async getBlockTime(height: number): Promise<number> {
     const parts: number[] = [0x08, ...this.varint(height)];
     const resp = await this.grpcCall('GetBlock', new Uint8Array(parts));
-    // CompactBlock proto: field 5 = time (varint)
-    let pos = 0;
-    while (pos < resp.length) {
-      const tag = resp[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-      if (wire === 0) {
-        let v = 0,
-          s = 0;
-        while (pos < resp.length) {
-          const b = resp[pos++]!;
-          v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (field === 5) {
-          return v;
-        }
-      } else if (wire === 2) {
-        let len = 0,
-          s = 0;
-        while (pos < resp.length) {
-          const b = resp[pos++]!;
-          len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        pos += len;
-      } else {
-        break;
+    // CompactBlock proto: field 5 = time (varint); the first one wins
+    let time: number | undefined;
+    eachField(resp, (field, wire, val) => {
+      if (wire === WIRE_VARINT && field === 5 && time === undefined) {
+        time = Number(val as bigint);
       }
-    }
-    return 0;
+    });
+    return time ?? 0;
   }
 
   /** get transparent address UTXOs */
