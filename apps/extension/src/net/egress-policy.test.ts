@@ -608,6 +608,26 @@ describe('send over nym: the choice per network', () => {
     expect(route(optIns, url)).toBe(expected);
   });
 
+  it('says which networks send over nym, and whether to keep it ready', () => {
+    const base = { enabledNetworks: ['zcash', 'penumbra', 'noble'] };
+    expect(compileEgress(base)).toMatchObject({
+      nymGroups: ['zcash', 'cosmos'],
+      nymKeepReady: true,
+    });
+    const optIns = {
+      'nym:zcash': 'blocked',
+      'nym:penumbra': 'allowed',
+      'nym-ready': 'blocked',
+    } as const;
+    expect(compileEgress({ ...base, netEgress: { optIns } })).toMatchObject({
+      nymGroups: ['penumbra', 'cosmos'],
+      nymKeepReady: false,
+    });
+    expect(compileEgress({ ...base, netEgress: { optIns: { nym: 'blocked' } } }).nymGroups).toEqual(
+      [],
+    );
+  });
+
   it('a network turned off does not stop nym itself, the master does', () => {
     const optIns = { 'nym:zcash': 'blocked' as const };
     expect(compileEgress({ ...ZCASH_ONLY, netEgress: { optIns } }).nym).toBe(true);

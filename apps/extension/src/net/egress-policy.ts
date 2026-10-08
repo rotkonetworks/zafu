@@ -47,6 +47,7 @@ import {
 } from './egress-table';
 import type { NetPurpose } from './purpose';
 import { NYM } from './nym-bridge';
+import { transportFor } from './nym-plan';
 
 export type { EgressDecision, EgressRealm, EgressReason, EgressTable } from './egress-table';
 
@@ -282,18 +283,26 @@ export const NYM_GROUPS: {
 
 export const nymGroupKey = (id: string): string => `${NYM}:${id}`;
 
-/** whether this group's requests go over nym, the master switch aside */
-export const nymGroupOn = (i: EgressInputs, group: (typeof NYM_GROUPS)[number]): boolean => {
-  const choice = i.netEgress?.optIns?.[nymGroupKey(group.id)];
-  return choice ? choice === 'allowed' : group.on;
-};
+/** "keep nym ready while unlocked", per device: on unless set off */
+export const NYM_KEEP_READY = 'nym-ready';
 
-const nymRoutes = (i: EgressInputs, spec: DestinationSpec): boolean => {
-  const group = NYM_GROUPS.find(
+type NymGroup = (typeof NYM_GROUPS)[number];
+
+/** a network's own choice, everything else aside: what its sheet row shows */
+export const nymGroupOn = (i: EgressInputs, group: NymGroup): boolean =>
+  transportFor({
+    groupDefault: group.on,
+    choice: i.netEgress?.optIns?.[nymGroupKey(group.id)],
+    names: true,
+    exitPort: true,
+    master: true,
+    destinationOn: true,
+  }) === 'nym';
+
+const groupOf = (spec: DestinationSpec): NymGroup | undefined =>
+  NYM_GROUPS.find(
     g => g.members.includes(spec.id) || (!!spec.family && g.members.includes(spec.family)),
   );
-  return !!group && nymGroupOn(i, group);
-};
 
 /** nym's exits only open these ports: a node on any other stays direct rather than unreachable */
 const NYM_EXIT_PORTS = new Set(['443', '80', '81', '9001']);
@@ -678,9 +687,10 @@ export const describeEgress = (i: EgressInputs): DestinationView[] => {
 export const compileEgress = (i: EgressInputs): EgressTable => {
   const rules: EgressRule[] = [];
   const nym = stateOf(destinationSpec(NYM)!, i).on;
+  const carrying = new Set<string>();
   for (const spec of DESTINATIONS) {
     const { on, why } = stateOf(spec, i);
-    const route = nym && nymRoutes(i, spec);
+    const group = groupOf(spec);
     // one malformed input must not cost every other destination its row
     let urls: (string | undefined)[];
     try {
@@ -702,9 +712,18 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
           ...(spec.realm ? { realm: spec.realm } : {}),
         };
         rules.push(rule);
-        if (!route || !on || !NYM_EXIT_PORTS.has(portOf(url!))) {
+        const transport = transportFor({
+          groupDefault: group?.on,
+          choice: group && i.netEgress?.optIns?.[nymGroupKey(group.id)],
+          names: true,
+          exitPort: NYM_EXIT_PORTS.has(portOf(url!)),
+          master: nym,
+          destinationOn: on,
+        });
+        if (transport !== 'nym') {
           continue;
         }
+        carrying.add(group!.id);
         const ours = NYM_CLASSES.filter(
           c => c.destination === spec.id || c.destination === spec.family,
         );
@@ -735,5 +754,12 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
       hosts[host] = record.state;
     }
   }
-  return { rules, hosts, adhoc: i.keplrCompat === true, nym };
+  return {
+    rules,
+    hosts,
+    adhoc: i.keplrCompat === true,
+    nym,
+    nymGroups: [...carrying],
+    nymKeepReady: i.netEgress?.optIns?.[NYM_KEEP_READY] !== 'blocked',
+  };
 };
