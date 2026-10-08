@@ -12,7 +12,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { ScreenHeader } from '../../../components/screen-header';
 import { toUri, toWebUri } from '../../../links/router';
-import { peopleAsk, peopleCall, useMyRooms } from '../../../people/client';
+import { peopleAsk, useMyRooms } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import { PopupPath, groupPath } from '../paths';
 import { useStore } from '../../../state';
@@ -229,7 +229,9 @@ export function GroupInvitePage() {
                       !you && (
                         <button
                           type='button'
-                          onClick={() => void peopleCall('group-remove', { G, key: m.key })}
+                          onClick={() =>
+                            void peopleAsk('group-remove', { G, key: m.key }).catch(() => undefined)
+                          }
                           className='h-8 px-2 text-xs text-fg-muted hover:underline'
                         >
                           remove
