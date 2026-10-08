@@ -52,6 +52,12 @@ export const readVarintNumber = (buf: Uint8Array, pos: number): [number, number]
   return undefined;
 };
 
+/**
+ * A varint read as a protobuf `int32`: negatives are sign-extended to ten
+ * bytes on the wire, so keep the low 32 bits, signed.
+ */
+export const int32 = (v: bigint): number => Number(BigInt.asIntN(32, v));
+
 export interface Tag {
   field: number;
   wire: number;

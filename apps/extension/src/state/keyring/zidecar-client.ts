@@ -6,7 +6,7 @@
  * uses raw protobuf encoding (no grpc-web library needed)
  */
 
-import { eachField, WIRE_LEN, WIRE_VARINT } from '../../net/proto-reader';
+import { eachField, int32, WIRE_LEN, WIRE_VARINT } from '../../net/proto-reader';
 import { decodeLightdInfo, type LightdInfo } from './lightd-info';
 import type { FlyProof } from '../../workers/fly-verify';
 import {
@@ -219,53 +219,19 @@ export class ZidecarClient {
     const parts: number[] = [0x0a, ...this.lengthDelimited(txData)];
     const resp = await this.grpcCall('SendTransaction', new Uint8Array(parts));
 
-    // parse SendResponse
+    // parse SendResponse { txid=1; int32 errorCode=2; errorMessage=3 }
     let txid = new Uint8Array(0);
     let errorCode = 0;
     let errorMessage = '';
-    let pos = 0;
-
-    while (pos < resp.length) {
-      const tag = resp[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 0) {
-        let v = 0,
-          s = 0;
-        while (pos < resp.length) {
-          const b = resp[pos++]!;
-          v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (field === 2) {
-          errorCode = v;
-        }
-      } else if (wire === 2) {
-        let len = 0,
-          s = 0;
-        while (pos < resp.length) {
-          const b = resp[pos++]!;
-          len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        const data = resp.slice(pos, pos + len);
-        if (field === 1) {
-          txid = data;
-        } else if (field === 3) {
-          errorMessage = new TextDecoder().decode(data);
-        }
-        pos += len;
-      } else {
-        break;
+    eachField(resp, (field, wire, val) => {
+      if (wire === WIRE_VARINT && field === 2) {
+        errorCode = int32(val as bigint);
+      } else if (wire === WIRE_LEN && field === 1) {
+        txid = (val as Uint8Array).slice();
+      } else if (wire === WIRE_LEN && field === 3) {
+        errorMessage = new TextDecoder().decode(val as Uint8Array);
       }
-    }
+    });
 
     return { txid, errorCode, errorMessage };
   }
