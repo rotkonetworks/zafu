@@ -6,6 +6,7 @@
  * uses raw protobuf encoding (no grpc-web library needed)
  */
 
+import { grpcWebFetch, grpcWebUnaryMessage } from '../../net/grpc-web';
 import { eachField, int32, WIRE_LEN, WIRE_VARINT } from '../../net/proto-reader';
 import { decodeLightdInfo, type LightdInfo } from './lightd-info';
 import type { FlyProof } from '../../workers/fly-verify';
@@ -66,35 +67,6 @@ export interface LicenseInfo {
   signature: string;
   totalPaidZat: number;
 }
-
-/** the response body, read no further than `maxBytes` */
-const readCapped = async (resp: Response, method: string, maxBytes: number) => {
-  if (maxBytes === Infinity || !resp.body) {
-    return new Uint8Array(await resp.arrayBuffer());
-  }
-  const reader = resp.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    size += value.length;
-    if (size > maxBytes) {
-      void reader.cancel();
-      throw new Error(`gRPC ${method}: response over ${maxBytes} bytes`);
-    }
-    chunks.push(value);
-  }
-  const out = new Uint8Array(size);
-  let at = 0;
-  for (const c of chunks) {
-    out.set(c, at);
-    at += c.length;
-  }
-  return out;
-};
 
 export class ZidecarClient {
   private serverUrl: string;
@@ -329,71 +301,12 @@ export class ZidecarClient {
       onHeaders?: (headers: Headers) => void;
     } = {},
   ): Promise<Uint8Array> {
-    const path = `${this.serverUrl}/${service}/${method}`;
-
-    // wrap message in grpc-web frame
-    const body = new Uint8Array(5 + msg.length);
-    body[0] = 0; // not compressed
-    body[1] = (msg.length >> 24) & 0xff;
-    body[2] = (msg.length >> 16) & 0xff;
-    body[3] = (msg.length >> 8) & 0xff;
-    body[4] = msg.length & 0xff;
-    body.set(msg, 5);
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/grpc-web+proto',
-      Accept: 'application/grpc-web+proto',
-      'x-grpc-web': '1',
-      ...(bare ? {} : (ZidecarClient.extraHeaders?.() ?? {})),
-    };
-
-    const resp = await fetch(path, { method: 'POST', headers, body });
-
-    if (!resp.ok) {
-      throw Object.assign(new Error(`gRPC ${method}: HTTP ${resp.status}`), {
-        httpStatus: resp.status,
-      });
-    }
-    onHeaders?.(resp.headers);
-
-    const buf = await readCapped(resp, method, maxBytes);
-
-    if (buf.length < 5) {
-      // check HTTP headers for grpc-status (trailer-only response)
-      const grpcStatus = resp.headers.get('grpc-status');
-      const grpcMessage = resp.headers.get('grpc-message');
-      if (grpcStatus && grpcStatus !== '0') {
-        throw Object.assign(
-          new Error(`gRPC ${method}: ${decodeURIComponent(grpcMessage ?? `status ${grpcStatus}`)}`),
-          { grpcStatus: Number(grpcStatus) },
-        );
-      }
-      throw new Error(`gRPC ${method}: empty response from ${this.serverUrl}`);
-    }
-
-    const flags = buf[0]!;
-
-    // if first frame is a trailer frame (flags & 0x80), parse grpc-status from it
-    if (flags & 0x80) {
-      const trailerLen = (buf[1]! << 24) | (buf[2]! << 16) | (buf[3]! << 8) | buf[4]!;
-      const trailerText = new TextDecoder().decode(buf.subarray(5, 5 + trailerLen));
-      const statusMatch = /grpc-status:\s*(\d+)/.exec(trailerText);
-      const messageMatch = /grpc-message:\s*(.+)/.exec(trailerText);
-      const status = statusMatch?.[1] ?? '0';
-      if (status !== '0') {
-        const msg = messageMatch?.[1]?.trim();
-        throw Object.assign(
-          new Error(`gRPC ${method}: ${decodeURIComponent(msg ?? `status ${status}`)}`),
-          { grpcStatus: Number(status) },
-        );
-      }
-      // status 0 but no data frame - treat as empty success
-      return new Uint8Array(0);
-    }
-
-    // extract first data frame (unary RPCs only)
-    const len = (buf[1]! << 24) | (buf[2]! << 16) | (buf[3]! << 8) | buf[4]!;
-    return buf.subarray(5, 5 + len);
+    const { resp, body } = await grpcWebFetch(this.serverUrl, service, method, msg, {
+      headers: bare ? {} : (ZidecarClient.extraHeaders?.() ?? {}),
+      maxBytes,
+      onHeaders,
+    });
+    return grpcWebUnaryMessage(resp, body, method, this.serverUrl);
   }
 
   /** raw gRPC-web call for server-streaming RPCs - returns full response with frame headers */
@@ -403,29 +316,11 @@ export class ZidecarClient {
     signal?: AbortSignal,
     service = 'zidecar.v1.Zidecar',
   ): Promise<Uint8Array> {
-    const path = `${this.serverUrl}/${service}/${method}`;
-
-    const body = new Uint8Array(5 + msg.length);
-    body[0] = 0;
-    body[1] = (msg.length >> 24) & 0xff;
-    body[2] = (msg.length >> 16) & 0xff;
-    body[3] = (msg.length >> 8) & 0xff;
-    body[4] = msg.length & 0xff;
-    body.set(msg, 5);
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/grpc-web+proto',
-      Accept: 'application/grpc-web+proto',
-      'x-grpc-web': '1',
-      ...(ZidecarClient.extraHeaders?.() ?? {}),
-    };
-
-    const resp = await fetch(path, { method: 'POST', headers, body, signal });
-
-    if (!resp.ok) {
-      throw new Error(`gRPC HTTP ${resp.status}`);
-    }
-    return new Uint8Array(await resp.arrayBuffer());
+    const { body } = await grpcWebFetch(this.serverUrl, service, method, msg, {
+      headers: ZidecarClient.extraHeaders?.() ?? {},
+      signal,
+    });
+    return body;
   }
 
   private varint(n: number): number[] {
