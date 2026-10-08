@@ -16,6 +16,7 @@ import type { ChannelGenesis, ChannelRecord } from '@zafu/zirc';
 import type { MemoDoorRead } from './memo-door';
 import type { Deal, FrostRoom } from './frost-room';
 import type { DoorWire } from './door';
+import type { Genesis } from '@zafu/zirc/leaderless';
 import { readEncrypted, writeEncrypted } from '../state/encrypted-storage';
 
 export type PeopleRoomKind = 'group' | 'door' | 'pair' | 'card';
@@ -39,14 +40,14 @@ export interface DoorHeard {
 }
 
 /**
- * A door (people/door): the founder's, answering whoever types its words, or
+ * A door (people/door): an inviter's, answering whoever types its words, or
  * a joiner's, waiting for an answer. Its mailbox is public; what is secret
  * here is the code and the joiner's seed, sealed with the rest of the vault.
  */
 export interface DoorState {
   code: string;
   role: 'host' | 'join';
-  /** the founder's salt for this code */
+  /** the inviter's salt for this code */
   salt?: string;
   /** a joiner: its run id */
   jid?: string;
@@ -56,12 +57,12 @@ export interface DoorState {
   sent?: string[];
   confirmed?: string[];
   heard: DoorHeard[];
-  /** the founder: whom it answered, with the run's verify words */
-  answered?: { jid: string; words: string; at: number }[];
-  /** the founder: the one run this code let in; the code is spent */
+  /** the inviter: its room key, the invite's owner */
+  owner?: string;
+  /** the inviter: whom it answered, with the run's verify words and its own SPAKE2 message */
+  answered?: { jid: string; words: string; at: number; x?: string }[];
+  /** the inviter: the one run this code let in; the code is spent */
   admitted?: string;
-  /** the founder: whose ask that run brought onto the roster */
-  came?: string;
   /** a joiner: the answer said the words differ */
   wrong?: boolean;
   /** a joiner: the code had already let someone else in */
@@ -69,6 +70,11 @@ export interface DoorState {
   /** a joiner: the group it opened, and the verify words */
   G?: string;
   words?: string;
+  /** the inviter: the run it let in, as a transcript hash, and that run's key (for the joiner's proof) */
+  th?: string;
+  mk?: string;
+  /** the inviter: the one join it co-signed with this code, kept before the signature left */
+  cosigned?: string;
 }
 
 export interface PeopleRoom {
@@ -102,14 +108,24 @@ export interface PeopleRoom {
   /** groups */
   group?: {
     G: string;
-    /** the founder's room pubkey */
+    /** the room pubkey of whoever made it */
     founder: string;
-    /** true when this wallet founded it */
+    /** true when this wallet made it */
     mine: boolean;
     members: GroupMember[];
-    /** a shared wallet: its seals and seats, from the code; the founder starts its keys when all are in */
-    want?: { k: number; n: number; started?: string };
-    /** the roster log as far as it verifies from genesis */
+    /** a shared wallet: its seals and seats, from its genesis */
+    want?: { k: number; n: number };
+    /** a leaderless group (#110): its genesis. A group an older zafu made has none. */
+    g?: Genesis;
+    /** X-Wing keys members said (`ask`): what a new room secret is sealed to */
+    seals?: Record<string, string>;
+    /** a rotation this device proposed: the new secret, until it binds */
+    next?: { rot: string; secret: string };
+    /** seats this device last said hello for */
+    told?: number;
+    /** a rotation bound without you: you are no longer in it */
+    gone?: boolean;
+    /** a group an older zafu made: its roster log as far as it verifies from genesis */
     log?: { genesis: ChannelGenesis; records: ChannelRecord[] };
     /** what members call themselves, as the founder last posted it */
     names?: Record<string, string>;
@@ -123,6 +139,13 @@ export interface PeopleRoom {
   card?: CardRoom;
   /** shared wallets made in this room: the FROST messages read so far (people/frost-room) */
   frost?: FrostRoom;
+  /**
+   * what this device signed in this room (by room id), kept before it left:
+   * the roster per genesis, the rotation, and the upgrade (people/lx)
+   */
+  signed?: { room: string; r?: Record<string, string>; rot?: string; up?: string };
+  /** removals this member said "not now" to, by rotation id */
+  notNow?: string[];
   /** pair rooms */
   pair?: {
     personId: string;

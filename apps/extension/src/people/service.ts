@@ -288,7 +288,9 @@ export const createPeopleService = (
   /** the Room for a vault record, built once per session; never before the gate */
   const roomFor = async (rec: PeopleRoom) => {
     const s = ensure();
-    const cached = s.rooms.get(threadKey(rec));
+    // a room that moved to a new secret is a new Room
+    const key = `${threadKey(rec)}:${rec.secret}`;
+    const cached = s.rooms.get(key);
     if (cached) {
       return cached;
     }
@@ -313,7 +315,7 @@ export const createPeopleService = (
       },
     );
     const made = { room, me: identity.pubkey };
-    s.rooms.set(threadKey(rec), made);
+    s.rooms.set(key, made);
     return made;
   };
 
@@ -382,7 +384,10 @@ export const createPeopleService = (
       d.kind === 'unreachable' ? [Number(d.hash.slice('window:'.length))] : [],
     );
     const since = failed.length ? Math.min(...failed) : until < current ? until + 1 : current;
-    await updateRoom(rec.id, r => ({ ...(patch ? patch(r) : r), head, since }));
+    // a room that moved to a new secret in this pass reads its new room from the start
+    await updateRoom(rec.id, r =>
+      r.secret !== rec.secret ? r : { ...(patch ? patch(r) : r), head, since },
+    );
     return unreachable ? 'unreachable' : oversize ? 'oversize' : 'checked';
   };
 
@@ -651,7 +656,7 @@ export const createPeopleService = (
       if (nick) {
         // your name in this room from the next line on; the room is rebuilt to carry it
         await updateRoom(roomId, r => ({ ...r, nick: nick[1] }));
-        session?.rooms.delete(threadKey(rec));
+        session?.rooms.delete(`${threadKey(rec)}:${rec.secret}`);
         return 'sent';
       }
       const action = text.startsWith('/me ');

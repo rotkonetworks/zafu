@@ -1,10 +1,12 @@
 /**
- * the founder's door (GroupInvite.dc.html): a code, ways to hand it on, and
- * the people in the group. A code lets one person in, within its hour, and
- * both sides see the same two words to compare; "invite another" makes the
- * next. Until a shared wallet's keys are made the founder can take someone
- * off. A shared wallet says how many it still waits for, and opens its
- * thread once full.
+ * a member's door (GroupInvite.dc.html): a code, ways to hand it on, and the
+ * people in the group. Anyone in it invites (#110): a code lets one person
+ * in, within its hour, answered by the zafu that made it, and both sides see
+ * the same two words to compare; "invite another" makes the next. Until a
+ * shared wallet's keys are being made, anyone can take someone off: everyone
+ * left signs it, and the group moves to a room the removed one cannot read.
+ * A shared wallet says how many it still waits for, and opens its thread
+ * once full.
  */
 
 import { useEffect, useState } from 'react';
@@ -21,6 +23,7 @@ import type { PeopleRoom } from '../../../people/vault';
 import { DEFAULT_PEOPLE_RELAY } from '../../../config/people-relay';
 import { QrCode } from '../../../components/qr-code';
 import { doorOpen, doorsOf } from '../../../people/groups';
+import { useFrostRoom } from '../../../people/use-frost-room';
 import { peopleCount, waitingLine } from './group';
 import { useMemberName } from './use-member-name';
 import { ShareWays, type ShareWay } from './share-ways';
@@ -64,13 +67,13 @@ const Person = ({
 
 /**
  * someone you already have an address for: the invite goes in a memo, which
- * is end-to-end encrypted to them, so it carries the room itself (the memo
- * door). No code, no relay round trip, and no allow step: sending it is yours.
+ * is end-to-end encrypted to them. It carries an ordinary code, made now:
+ * they tap it and come in through the same door, answered by your zafu.
  */
-const ByMemo = ({ room }: { room: PeopleRoom }) => {
+const ByMemo = ({ room, me }: { room: PeopleRoom; me?: string }) => {
   const navigate = useNavigate();
   const contacts = useStore(s => s.contacts.contacts);
-  const [fail, setFail] = useState(false);
+  const [fail, setFail] = useState('');
   const reachable = (Array.isArray(contacts) ? contacts : []).flatMap(c => {
     const a = c.addresses.find(x => x.network === 'zcash');
     return a ? [{ c, address: a.address }] : [];
@@ -79,15 +82,15 @@ const ByMemo = ({ room }: { room: PeopleRoom }) => {
     return null;
   }
   const g = room.group;
-  const send = (address: string) => {
+  const send = async (address: string) => {
+    setFail('');
     try {
+      const { code } = await peopleAsk<{ code: string }>('group-renew', { G: g.G });
       const memo = encodeMemoInvite({
-        kind: 'group',
-        secret: room.secret,
-        G: g.G,
-        founder: g.founder,
+        kind: 'code',
+        code,
         group: room.name,
-        from: g.names?.[g.founder] ?? '',
+        from: (me && g.names?.[me]) ?? room.nick ?? '',
         // '' is the built-in relay; anything else travels with the invite
         relay: room.relay === DEFAULT_PEOPLE_RELAY ? '' : room.relay,
       });
@@ -95,7 +98,7 @@ const ByMemo = ({ room }: { room: PeopleRoom }) => {
         state: { prefillRecipient: address, prefillMemo: memo, network: 'zcash' },
       });
     } catch {
-      setFail(true);
+      setFail('sorry, this invite did not fit in a memo. please share the code instead.');
     }
   };
   return (
@@ -110,7 +113,7 @@ const ByMemo = ({ room }: { room: PeopleRoom }) => {
             action={
               <button
                 type='button'
-                onClick={() => send(address)}
+                onClick={() => void send(address)}
                 className='h-8 px-2 text-xs text-zigner-gold hover:underline'
               >
                 send
@@ -119,11 +122,7 @@ const ByMemo = ({ room }: { room: PeopleRoom }) => {
           />
         ))}
       </div>
-      {fail && (
-        <span className='text-[11px] text-hanko-light'>
-          sorry, this invite does not fit in a memo. please share the code instead.
-        </span>
-      )}
+      <span className='h-4 text-[11px] text-hanko-light'>{fail}</span>
     </section>
   );
 };
@@ -137,7 +136,9 @@ export function GroupInvitePage() {
   // the newest code that can still let someone in; earlier open ones are listed under it
   const [door, ...earlier] = doorsOf(rooms, G).filter(r => doorOpen(r, now));
   const nameFor = useMemberName(room);
+  const { me, seat } = useFrostRoom(room);
   const [busy, setBusy] = useState(false);
+  const [why, setWhy] = useState('');
   const g = room?.group;
   const members = g?.members ?? [];
   const full = !!g?.want && members.length >= g.want.n;
@@ -154,9 +155,16 @@ export function GroupInvitePage() {
       .catch(() => undefined)
       .finally(() => setBusy(false));
   };
+  const remove = (key: string) => {
+    setWhy('');
+    void peopleAsk('group-remove', { G, key }).catch((e: unknown) =>
+      setWhy(e instanceof Error ? e.message : 'this did not leave · please try again'),
+    );
+  };
 
   const code = door?.door?.code;
-  const canRemove = g?.mine && !g.want?.started;
+  // a shared wallet made by codes: after its keys, taking someone off means a new wallet
+  const canRemove = !!g?.g && !g.gone && !(g.g.purpose === 'wallet' && seat);
 
   return (
     <div className='flex h-full flex-col'>
@@ -170,9 +178,9 @@ export function GroupInvitePage() {
         }
       />
       <RelaySlot />
-      {!g?.mine ? (
+      {!g?.g || g.gone ? (
         <p className='px-4 py-6 text-sm text-fg-muted'>
-          only the person who made the group invites
+          {g?.gone ? "you're no longer in this group" : 'upgrading · waits for everyone here'}
         </p>
       ) : (
         <div className='flex grow flex-col gap-[18px] overflow-y-auto px-4 pb-4 pt-3.5'>
@@ -216,22 +224,20 @@ export function GroupInvitePage() {
             <h2 className='text-xs tracking-[0.04em] text-fg-muted'>people</h2>
             <div className='flex flex-col'>
               {members.map(m => {
-                const you = m.key === g.founder;
+                const you = m.key === me;
                 const name = you ? 'you' : nameFor(m.key);
                 return (
                   <Person
                     key={m.key}
                     initial={name.charAt(0)}
                     name={name}
-                    line={you ? 'created' : 'joined'}
+                    line={m.key === g.founder ? 'created' : 'joined'}
                     action={
                       canRemove &&
                       !you && (
                         <button
                           type='button'
-                          onClick={() =>
-                            void peopleAsk('group-remove', { G, key: m.key }).catch(() => undefined)
-                          }
+                          onClick={() => remove(m.key)}
                           className='h-8 px-2 text-xs text-fg-muted hover:underline'
                         >
                           remove
@@ -242,8 +248,9 @@ export function GroupInvitePage() {
                 );
               })}
             </div>
+            <span className='h-4 text-[11px] text-fg-muted'>{why}</span>
           </section>
-          {room && <ByMemo room={room} />}
+          {room && <ByMemo room={room} me={me} />}
           <Button variant='secondary' onClick={() => navigate(groupPath(G))}>
             open the group
           </Button>

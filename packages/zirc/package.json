@@ -24,17 +24,19 @@
   "sideEffects": false,
   "files": [
     "dist",
+    "vectors",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/room/index.ts --format esm --dts --clean --treeshake",
+    "build": "tsup src/index.ts src/room/index.ts src/leaderless/index.ts --format esm --dts --clean --treeshake",
     "lint": "eslint \"**/*.ts*\"",
     "test": "vitest run"
   },
   "exports": {
     ".": "./src/index.ts",
-    "./room": "./src/room/index.ts"
+    "./room": "./src/room/index.ts",
+    "./leaderless": "./src/leaderless/index.ts"
   },
   "publishConfig": {
     "access": "public",
@@ -49,6 +51,10 @@
       "./room": {
         "types": "./dist/room/index.d.ts",
         "import": "./dist/room/index.js"
+      },
+      "./leaderless": {
+        "types": "./dist/leaderless/index.d.ts",
+        "import": "./dist/leaderless/index.js"
       }
     }
   },

@@ -309,6 +309,25 @@ describe('a chat invite in a memo', () => {
     expect(relay.calls()).toBe(0);
   });
 
+  test('a code in a memo: accepting hands the door its code and relay, and opens no room by itself', async () => {
+    const relay = relayBoard();
+    const memo = encodeMemoInvite({
+      kind: 'code',
+      code: '7-fern-dusk',
+      group: 'treasury',
+      from: 'alice',
+      relay: 'https://relay.somewhere.example',
+    });
+    const bob = device('wb', BOB, [], relay.transport, { t: 0 });
+    await bob.op('memo-ingest', { network: 'zcash', txId: 'tx3', content: memo });
+    expect(await bob.op('invite-accept', { id: 'tx3' })).toEqual({
+      code: '7-fern-dusk',
+      relay: 'https://relay.somewhere.example',
+    });
+    expect(bob.invites()[0]!.state).toBe('accepted');
+    expect(relay.calls()).toBe(0);
+  });
+
   test('a memo with no invite, or one this zafu cannot read, is kept as such', async () => {
     const bob = device('wb', BOB, [], relayBoard().transport, { t: 0 });
     expect(await bob.op('memo-ingest', { txId: 'n', content: 'just a memo' })).toEqual({

@@ -53,6 +53,20 @@ describe('memo invite vectors', () => {
     expect(readMemoInvite(line)).toEqual({ ok: true, invite: group });
   });
 
+  test('a group invite is an ordinary door code (#110): it reads back, and a non-code is refused', () => {
+    const code: MemoInvite = {
+      kind: 'code',
+      code: '7-fern-dusk',
+      group: 'treasury',
+      from: 'bob',
+      relay: 'https://relay.example',
+    };
+    const line = encodeMemoInvite(code, PENUMBRA_MEMO_TEXT_BYTES);
+    expect(readMemoInvite(line)).toEqual({ ok: true, invite: code });
+    const bad = encodeMemoInvite({ ...code, code: 'not a code' });
+    expect(readMemoInvite(bad)).toEqual({ ok: false, reason: 'unreadable' });
+  });
+
   test('found inside a memo that also carries text', () => {
     const memo = `final logo files are up\n${encodeMemoInvite(pair)}`;
     expect(hasMemoInvite(memo)).toBe(true);

@@ -8,9 +8,14 @@
  *   zafu:m1/<base64url(payload)>
  *
  *   payload, version 1 (every string is u8 length + UTF-8):
- *     0x01 version | kind (0x01 pair, 0x02 group) | fields
+ *     0x01 version | kind (0x01 pair, 0x02 group, 0x03 code) | fields
  *     pair:  secret[32] inception[32] pairKa[32] name address relay
- *     group: secret[32] G[16] founder[32] group from relay
+ *     group: secret[32] G[16] founder[32] group from relay   (an older zafu's)
+ *     code:  code group from relay
+ *
+ * A group invite carries an ordinary door code (#110): the invitee runs the
+ * same door, answered by the member who sent it, so a seat is a join that
+ * member co-signs. The memo only saves typing the code.
  *
  * A pair invite carries the sender's card for this one person: their
  * relationship's inception key, its pair key and the address they gave you.
@@ -24,6 +29,7 @@
 
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { relayBase } from '../config/people-relay';
+import { CODE_RE } from './protocol';
 
 export const MEMO_DOOR_PREFIX = 'zafu:m1/';
 export const MEMO_DOOR_VERSION = 0x01;
@@ -32,6 +38,7 @@ export const PENUMBRA_MEMO_TEXT_BYTES = 432;
 
 const KIND_PAIR = 0x01;
 const KIND_GROUP = 0x02;
+const KIND_CODE = 0x03;
 
 export type MemoInvite =
   | {
@@ -53,7 +60,8 @@ export type MemoInvite =
       group: string;
       from: string;
       relay: string;
-    };
+    }
+  | { kind: 'code'; code: string; group: string; from: string; relay: string };
 
 export type MemoDoorRead =
   | { ok: true; invite: MemoInvite }
@@ -104,15 +112,23 @@ export const encodeMemoInvite = (i: MemoInvite, limit = ZCASH_MEMO_BYTES): strin
           ...str(i.address, 200, 'address'),
           ...str(relay, 64, 'relay'),
         ]
-      : [
-          KIND_GROUP,
-          ...key(i.secret, 32, 'room secret'),
-          ...key(i.G, 16, 'group id'),
-          ...key(i.founder, 32, 'founder key'),
-          ...str(i.group, 48, 'group name'),
-          ...str(i.from, 24, 'name'),
-          ...str(relay, 64, 'relay'),
-        ];
+      : i.kind === 'code'
+        ? [
+            KIND_CODE,
+            ...str(i.code, 40, 'code'),
+            ...str(i.group, 48, 'group name'),
+            ...str(i.from, 24, 'name'),
+            ...str(relay, 64, 'relay'),
+          ]
+        : [
+            KIND_GROUP,
+            ...key(i.secret, 32, 'room secret'),
+            ...key(i.G, 16, 'group id'),
+            ...key(i.founder, 32, 'founder key'),
+            ...str(i.group, 48, 'group name'),
+            ...str(i.from, 24, 'name'),
+            ...str(relay, 64, 'relay'),
+          ];
   const line = MEMO_DOOR_PREFIX + b64url(new Uint8Array([MEMO_DOOR_VERSION, ...body]));
   if (enc.encode(line).length > limit) {
     throw new Error(`this invite needs ${enc.encode(line).length} bytes; a memo holds ${limit}`);
@@ -169,8 +185,15 @@ export const readMemoInvite = (text: string): MemoDoorRead | undefined => {
               from: text_(),
               relay: text_(),
             }
-          : undefined;
-    if (!invite || at !== b.length || (invite.relay && relayBase(invite.relay) !== invite.relay)) {
+          : kind === KIND_CODE
+            ? { kind: 'code', code: text_(), group: text_(), from: text_(), relay: text_() }
+            : undefined;
+    if (
+      (invite?.kind === 'code' && !CODE_RE.test(invite.code)) ||
+      !invite ||
+      at !== b.length ||
+      (invite.relay && relayBase(invite.relay) !== invite.relay)
+    ) {
       return { ok: false, reason: 'unreadable' };
     }
     return { ok: true, invite };

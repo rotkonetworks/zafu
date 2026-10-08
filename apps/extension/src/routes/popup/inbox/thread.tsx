@@ -530,10 +530,14 @@ export function ThreadPage() {
       [
         ...messages.map(m => ({ key: m.id, t: m.timestamp, m })),
         ...(relay ?? []).map(it => ({ key: it.hash || it.local!, t: it.ts * 1000, it })),
-        ...(shared.ceremony ? [{ key: shared.ceremony.id, t: shared.ceremony.at * 1000 }] : []),
+        // each deal being made here, and a wallet whose setup records were let go: its seat
+        ...shared.keygens.map(c => ({ key: c.id, t: c.at * 1000, c })),
+        ...(shared.seat && !shared.keygens.some(c => c.id === shared.seat?.multisig?.room?.ceremony)
+          ? [{ key: 'seat', t: 0 }]
+          : []),
         ...shared.payments.map(p => ({ key: p.id, t: p.at * 1000, p })),
       ].sort((a, b) => a.t - b.t),
-    [messages, relay, shared.ceremony, shared.payments],
+    [messages, relay, shared.seat, shared.keygens, shared.payments],
   );
 
   const lastRow = rows.at(-1);
@@ -664,7 +668,9 @@ export function ThreadPage() {
             ) : !('it' in r) ? (
               room && (
                 <KeyCard
-                  view={shared}
+                  c={'c' in r ? r.c : undefined}
+                  seat={shared.seat}
+                  me={shared.me}
                   roomId={room.id}
                   nameOf={() => name}
                   onSend={() => setSending(true)}
@@ -777,7 +783,7 @@ export function ThreadPage() {
         onPay={() => send()}
         onRequest={network === 'zcash' ? (zat, note) => void request(zat, note) : undefined}
         onDeal={
-          room?.pair?.peer && shared.me && !shared.ceremony
+          room?.pair?.peer && shared.me && !shared.seat && !shared.keygens.length
             ? () => {
                 setMoney(false);
                 setDealing(true);

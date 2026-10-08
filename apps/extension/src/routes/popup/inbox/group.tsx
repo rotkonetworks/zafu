@@ -14,7 +14,9 @@ import { useBackNav } from '../../../utils/navigate';
 import { peopleCall, peopleSay, useMyRooms, useThread, useWatchRoom } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import type { ThreadItem } from '../../../people/vault';
-import { useFrostRoom } from '../../../people/use-frost-room';
+import { answerRemoval, useFrostRoom, withdrawJoin } from '../../../people/use-frost-room';
+import type { Removal } from '../../../people/lx';
+import { Button } from '@repo/ui/components/ui/button';
 import { useSharedBalance } from '../../../hooks/use-shared-balance';
 import { useStickToBottom } from '../../../hooks/use-stick-to-bottom';
 import { fmtZec } from '../home/format';
@@ -95,27 +97,29 @@ export function GroupPage() {
   const nameOf = (i: ThreadItem) => (i.mine ? 'you' : nameFor(i.author, i.name));
   const last = items[items.length - 1];
   const memberName = (k: string) => nameFor(k);
-  // the key card and each payment sit in the thread where they started
-  const c = shared.ceremony;
-  const { seat, me } = shared;
+  // each wallet's card and each payment sit in the thread where they started
+  const { seat, me, keygens } = shared;
+  const card = (c?: (typeof keygens)[number]) => (
+    <KeyCard
+      key={c?.id ?? 'seat'}
+      c={c}
+      seat={seat}
+      me={me}
+      roomId={roomId}
+      nameOf={memberName}
+      onMessage={k => setDraft(`@${memberName(k)} `)}
+      onSend={() => setSending(true)}
+    />
+  );
+  const made = seat && keygens.some(c => c.id === seat.multisig?.room?.ceremony);
   const cards = [
-    ...(c
-      ? [
-          {
-            at: c.at,
-            node: (
-              <KeyCard
-                key={c.id}
-                view={shared}
-                roomId={roomId}
-                nameOf={memberName}
-                onMessage={k => setDraft(`@${memberName(k)} `)}
-                onSend={() => setSending(true)}
-              />
-            ),
-          },
-        ]
-      : []),
+    ...keygens.map(c => ({ at: c.at, node: card(c) })),
+    // a wallet whose setup records were let go, or an older zafu made: its card from the seat
+    ...(seat && !made ? [{ at: -Infinity, node: card() }] : []),
+    ...shared.removals.map(x => ({
+      at: x.at,
+      node: <RemovalCard key={x.id} roomId={roomId} x={x} nameOf={memberName} />,
+    })),
     ...(room && seat && me
       ? shared.payments.map(p => ({
           at: p.at,
@@ -168,7 +172,9 @@ export function GroupPage() {
             ? `${ms.threshold} of ${ms.maxSigners} · ${held === undefined ? '…' : held ? fmtZec(Number(held) / 1e8, 4) : '0.00'} zec shared`
             : (waitingLine(room) ?? `group chat · ${peopleCount(room.group?.members.length || 1)}`)
         }
-        onInvite={room.group?.mine ? () => navigate(groupInvitePath(G)) : undefined}
+        onInvite={
+          room.group?.g && !room.group.gone ? () => navigate(groupInvitePath(G)) : undefined
+        }
       />
       <RelaySlot />
       <div
@@ -176,7 +182,7 @@ export function GroupPage() {
         onScroll={scroll.onScroll}
         className='flex grow flex-col gap-3 overflow-y-auto px-3.5 pb-2 pt-3.5'
       >
-        {items.length === 0 && !c && (
+        {items.length === 0 && !cards.length && (
           <span className='self-center text-[11px] text-fg-dim'>no messages yet</span>
         )}
         {items.map((it, i) => {
@@ -202,39 +208,70 @@ export function GroupPage() {
         })}
         {cardsIn(last?.ts ?? -Infinity, Infinity)}
       </div>
-      <form
-        className='flex shrink-0 gap-2 border-t border-border-soft px-3 pb-3 pt-2.5'
-        onSubmit={e => {
-          e.preventDefault();
-          const text = draft.trim();
-          if (text) {
-            setDraft('');
-            say(text);
-          }
-        }}
-      >
-        {!shared.ceremony &&
-          !shared.seat &&
-          !room.group?.want &&
-          (room.group?.members.length ?? 0) >= 2 && (
+      {shared.upgrading && (
+        <span className='shrink-0 border-t border-border-soft px-4 py-2 text-[11px] text-fg-muted'>
+          upgrading · waits for everyone here
+        </span>
+      )}
+      {shared.over && (
+        <div className='flex h-11 shrink-0 items-center justify-between gap-3 border-t border-border-soft px-4 text-[11px] text-fg-muted'>
+          <span>the group filled up · this code wasn&apos;t needed</span>
+          {shared.over.owner === me && (
             <button
               type='button'
-              aria-label='make it a shared wallet'
-              onClick={() => setMaking(true)}
-              className='grid size-11 shrink-0 place-items-center border border-border-soft bg-elev-2 text-zigner-gold hover:bg-border-soft'
+              onClick={() => void withdrawJoin(roomId, shared.over!.join).catch(() => undefined)}
+              className='shrink-0 text-zigner-gold hover:underline'
             >
-              <span className='i-lucide-plus size-[18px]' aria-hidden='true' />
+              withdraw my code
             </button>
           )}
-        <Input
-          aria-label='message'
-          placeholder='message the group'
-          value={draft}
-          maxLength={2000}
-          onChange={e => setDraft(e.target.value)}
-          className='h-11 min-w-0 grow'
-        />
-      </form>
+        </div>
+      )}
+      {shared.older && (
+        <span className='shrink-0 border-t border-border-soft px-4 py-2 text-[11px] text-fg-muted'>
+          the other side needs a newer zafu to make keys together
+        </span>
+      )}
+      {room.group?.gone ? (
+        <span className='shrink-0 border-t border-border-soft px-4 py-3 text-xs text-fg-muted'>
+          you&apos;re no longer in this group
+        </span>
+      ) : (
+        <form
+          className='flex shrink-0 gap-2 border-t border-border-soft px-3 pb-3 pt-2.5'
+          onSubmit={e => {
+            e.preventDefault();
+            const text = draft.trim();
+            if (text) {
+              setDraft('');
+              say(text);
+            }
+          }}
+        >
+          {room.group?.g?.purpose === 'chat' &&
+            !room.group.deal &&
+            !seat &&
+            !keygens.some(c => !shared.kept[c.id]?.saved) &&
+            (room.group.members.length ?? 0) >= 2 && (
+              <button
+                type='button'
+                aria-label='make it a shared wallet'
+                onClick={() => setMaking(true)}
+                className='grid size-11 shrink-0 place-items-center border border-border-soft bg-elev-2 text-zigner-gold hover:bg-border-soft'
+              >
+                <span className='i-lucide-plus size-[18px]' aria-hidden='true' />
+              </button>
+            )}
+          <Input
+            aria-label='message'
+            placeholder='message the group'
+            value={draft}
+            maxLength={2000}
+            onChange={e => setDraft(e.target.value)}
+            className='h-11 min-w-0 grow'
+          />
+        </form>
+      )}
       {PasswordModal}
       {seat && (
         <ProposeSheet
@@ -250,8 +287,6 @@ export function GroupPage() {
           open={making}
           onClose={() => setMaking(false)}
           roomId={roomId}
-          label={room.name}
-          deal={room.group?.deal}
           members={(room.group?.members ?? []).map(m => ({
             key: m.key,
             name: m.key === shared.me ? 'you' : nameFor(m.key),
@@ -261,6 +296,46 @@ export function GroupPage() {
     </div>
   );
 }
+
+/** "x wants to remove y": one tap for each member left, never automatic */
+const RemovalCard = ({
+  roomId,
+  x,
+  nameOf,
+}: {
+  roomId: string;
+  x: Removal;
+  nameOf: (key: string) => string;
+}) => {
+  const [busy, setBusy] = useState(false);
+  const answer = (yes: boolean) => {
+    setBusy(true);
+    void answerRemoval(roomId, x.id, yes)
+      .catch(() => undefined)
+      .finally(() => setBusy(false));
+  };
+  return (
+    <article className='flex flex-col gap-2 self-stretch border border-border-hard bg-elev-1 px-3.5 py-3'>
+      <span className='text-xs text-fg'>
+        {x.by ? nameOf(x.by) : 'someone'} wants to remove {x.out.map(nameOf).join(', ')}
+      </span>
+      <div className='flex gap-2'>
+        <Button size='sm' className='flex-1' disabled={busy} onClick={() => answer(true)}>
+          agree
+        </Button>
+        <Button
+          variant='secondary'
+          size='sm'
+          className='flex-1'
+          disabled={busy}
+          onClick={() => answer(false)}
+        >
+          not now
+        </Button>
+      </div>
+    </article>
+  );
+};
 
 const Header = ({
   onBack,

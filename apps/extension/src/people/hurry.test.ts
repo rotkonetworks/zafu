@@ -83,7 +83,7 @@ describe('read fast only while someone waits', () => {
     expect(hurried([filling(2 * 3600_000)], NOW).size).toBe(0);
   });
 
-  test('keys being made: fast while the ceremony moves, not once saved or gone quiet', () => {
+  test('keys being made: fast while the setup moves, not once saved or gone quiet', () => {
     const keys = (lastAgoS: number, saved = false) =>
       base({
         frost: {
@@ -92,7 +92,7 @@ describe('read fast only while someone waits', () => {
               from: 'a',
               at: NOW / 1000 - lastAgoS,
               mid: '0',
-              body: { t: 'start', id: 'c1', k: 2, m: ['a', 'b', 'c'], label: '' },
+              body: { t: 'r1', v: 2, id: 'c1', b: 'aa', x: 'bb', c: 'cc' },
             },
           ],
           ...(saved ? { mine: { c1: { saved: true } } } : {}),

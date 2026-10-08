@@ -1,9 +1,9 @@
 /**
  * The screens' side of a shared wallet made in a room (see ./frost-room):
- * while a thread is open, this device does its part of the ceremony with the
- * FROST worker, keeps its round state in the room (sealed at rest, so the
- * popup can close mid-ceremony and pick up where it was), and saves its seat
- * once every member's keys match.
+ * while a thread is open, this device does its part of each key setup whose
+ * roster bound, with the FROST worker, keeps its round state in the room
+ * (sealed at rest, so the popup can close mid-setup and pick up where it
+ * was), and saves its seat once every member's keys match.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -18,7 +18,6 @@ import {
   frostDkgPart1InWorker,
   frostDkgPart2InWorker,
   frostDkgPart3InWorker,
-  frostSampleFvkSkInWorker,
   frostSignRound1InWorker,
   frostSpendAggregateInWorker,
   frostSpendSignInWorker,
@@ -27,19 +26,17 @@ import type { ZcashWalletJson } from '../state/wallets';
 import { peopleAsk, peopleCall } from './client';
 import {
   advance,
-  allowedIn,
-  cameFor,
-  ceremonyOf,
   packFrost,
   propId,
-  startBody,
-  type Ceremony,
+  readMsgs,
   type Deal,
   type FrostCalls,
   type FrostIo,
   type FrostMine,
+  type Keygen,
   type Seat,
 } from './frost-room';
+import { isLegacy, keygensOf, overOf, removalsFor, type Removal } from './lx';
 import {
   advanceSign,
   decline,
@@ -57,7 +54,6 @@ const frost: FrostCalls = {
   part1: frostDkgPart1InWorker,
   part2: frostDkgPart2InWorker,
   part3: frostDkgPart3InWorker,
-  sampleSk: frostSampleFvkSkInWorker,
   ufvk: (pkp, sk) => frostDeriveUfvkInWorker(pkp, sk, true),
   address: async (pkp, sk) =>
     encodeOrchardUnifiedAddress(
@@ -177,12 +173,9 @@ const step = async (walletId: string, roomId: string) => {
   }
   const me = await roomKeysOf(room);
   const io = ioFor(room);
-  const c = ceremonyOf(room.frost.msgs, allowedIn(room, me.pubkey));
-  let kept = c && room.frost.mine?.[c.id];
-  if (c && !kept?.ok && cameFor(room, c)) {
-    kept = await io.keep(c.id, { ok: true });
+  for (const c of keygensOf(room, me.pubkey)) {
+    await advance(c, room.frost.mine?.[c.id], me, frost, io, c.deal?.what ?? room.name);
   }
-  await advance(c, kept, me, frost, io);
   // payments this device sealed: name the signers, release shares, finish
   const seat = seatOf(useStore.getState().wallets.zcashWallets, room);
   const w = walletOf(seat);
@@ -236,9 +229,16 @@ export const seatOf = (
 
 export interface FrostView {
   me?: string;
-  ceremony?: Ceremony;
-  /** what this device did in it */
-  mine?: FrostMine;
+  /** the wallets being made here, oldest first */
+  keygens: Keygen[];
+  /** a key setup an older zafu started here: the other side needs a newer zafu */
+  older: boolean;
+  /** a group an older zafu made, until everyone in it signed its upgrade */
+  upgrading: boolean;
+  /** removals someone asked for that wait on this member's "agree" */
+  removals: Removal[];
+  /** a shared wallet that filled up twice, and whose code is asked to step back */
+  over?: { join: string; owner: string };
   seat?: ZcashWalletJson;
   /** payments proposed from the seat's wallet, oldest first */
   payments: Proposal[];
@@ -252,10 +252,7 @@ export const useFrostRoom = (room: PeopleRoom | undefined): FrostView => {
   const seat = seatOf(wallets, room);
   const msgs = room?.frost?.msgs;
   const me = useMe(room);
-  const ceremony = useMemo(
-    () => (room && me ? ceremonyOf(msgs, allowedIn(room, me)) : undefined),
-    [room, me, msgs],
-  );
+  const keygens = useMemo(() => (room ? keygensOf(room, me) : []), [room, me]);
   const w = walletOf(seat);
   const payments = useMemo(() => (w ? proposalsOf(msgs, w) : []), [msgs, w?.ceremony]);
   const kept = room?.frost?.mine ?? {};
@@ -263,12 +260,20 @@ export const useFrostRoom = (room: PeopleRoom | undefined): FrostView => {
   const live =
     !!room &&
     !!me &&
-    ((!!ceremony?.members.includes(me) && !seat) || payments.some(p => !p.sent && kept[p.id]?.cm));
+    (keygens.some(c => c.bound && c.members.includes(me) && !kept[c.id]?.saved) ||
+      payments.some(p => !p.sent && kept[p.id]?.cm));
   useEffect(() => {
     if (live) {
       kick(room.walletId, room.id);
     }
   }, [live, room, msgs?.length]);
+  // a group an older zafu made: opening it is this member's part of its upgrade
+  const legacy = !!room && isLegacy(room);
+  useEffect(() => {
+    if (legacy) {
+      void peopleCall('lx-upgrade', { roomId: room.id }).catch(() => undefined);
+    }
+  }, [legacy, room?.id]);
   // a step that failed (the relay did not answer) is tried again while this is on screen
   useEffect(() => {
     if (!live) {
@@ -277,11 +282,13 @@ export const useFrostRoom = (room: PeopleRoom | undefined): FrostView => {
     const t = setInterval(() => kick(room.walletId, room.id), 10_000);
     return () => clearInterval(t);
   }, [live, room?.walletId, room?.id]);
-  const mine = ceremony && kept[ceremony.id];
   return {
     me,
-    ceremony,
-    mine: ceremony && room && cameFor(room, ceremony) ? { ...mine, ok: true } : mine,
+    keygens,
+    older: !seat && readMsgs(msgs).some(m => m.body.t === 'old'),
+    upgrading: !!room && isLegacy(room),
+    removals: room && me ? removalsFor(room, me, Date.now()) : [],
+    ...(room && overOf(room) ? { over: overOf(room) } : {}),
     seat,
     payments,
     kept,
@@ -347,9 +354,8 @@ export const sealPayment = async (room: PeopleRoom, seat: ZcashWalletJson, p: Pr
 
 export const declinePayment = (room: PeopleRoom, p: Proposal) => decline(p, ioFor(room));
 
-/** agree to a deal someone proposed: this device then makes its share */
-export const agree = (roomId: string, id: string) =>
-  peopleCall<FrostMine>('frost-keep', { roomId, id, patch: { ok: true } });
+/** "agree and make keys": this member signs the wallet's roster */
+export const agree = (roomId: string, id: string) => peopleAsk('lx-agree', { roomId, id });
 
 /** this wallet's key in a room: derived from the seed, so it waits for the derivation */
 const useMe = (room: PeopleRoom | undefined): string | undefined => {
@@ -367,12 +373,14 @@ const useMe = (room: PeopleRoom | undefined): string | undefined => {
   return me && me.id === id ? me.key : undefined;
 };
 
-/** say "make keys together": a start with the members fixed now */
-export const startKeys = async (
-  roomId: string,
-  members: string[],
-  k: number,
-  label: string,
-  more?: { deal?: Deal; replaces?: string },
-) =>
-  peopleAsk('frost-post', { roomId, bodies: await packFrost(startBody(members, k, label, more)) });
+/** "make keys together", or a deal: a wallet for these members, its roster signed by this one */
+export const proposeWallet = (roomId: string, members: string[], k: number, deal?: Deal) =>
+  peopleAsk('lx-wallet', { roomId, members, k, ...(deal ? { deal } : {}) });
+
+/** a removal someone asked for: "agree" signs it, "not now" sets it aside here */
+export const answerRemoval = (roomId: string, id: string, yes: boolean) =>
+  peopleAsk(yes ? 'lx-agree-remove' : 'lx-not-now', { roomId, id });
+
+/** "withdraw my code": the wallet filled up twice, and this member's join steps back */
+export const withdrawJoin = (roomId: string, join: string) =>
+  peopleAsk('lx-withdraw', { roomId, join });

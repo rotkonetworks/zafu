@@ -28,7 +28,8 @@ import { createInvites } from './invites';
 import { createGroups } from './groups';
 import { createCards } from './cards';
 import { foldFrost, frostOps } from './frost-room';
-import { createDeals } from './deal';
+import { onDealAsk } from './deal';
+import { createLeaderless } from './lx';
 import { compileEgress, describeEgress, type EgressInputs } from '../net/egress-policy';
 import { decideEgress } from '../net/egress-table';
 import { readEgressInputs } from '../net/egress-opt-in';
@@ -143,9 +144,7 @@ const cards = createCards({
   gate: relay => peopleDeps.gate(relay),
 });
 
-const deals = createDeals({
-  group: (svc, name) => groups.ops['group-create']({ name }, svc),
-});
+const lx = createLeaderless({ keys: room => keysFor(room), now: () => Date.now() });
 
 /**
  * People waiting at your open codes, as counts (the tab's badge reads these):
@@ -199,13 +198,8 @@ export const startPeopleRelay = (
     ...groups.handlers,
     card: cards.handlers.card,
     ...handlers,
-    group: chain(handlers.group ?? groups.handlers.group, foldFrost),
-    pair: chain(
-      handlers.pair ?? invites.handlers.pair,
-      cards.handlers.pair,
-      foldFrost,
-      deals.onPair,
-    ),
+    group: chain(handlers.group ?? groups.handlers.group, lx.handler(foldFrost)),
+    pair: chain(handlers.pair ?? invites.handlers.pair, cards.handlers.pair, foldFrost, onDealAsk),
   });
   const all: Record<string, PeopleOp> = {
     open: async (_, s) => {
@@ -225,7 +219,7 @@ export const startPeopleRelay = (
     ...invites.ops,
     ...cards.ops,
     ...frostOps,
-    ...deals.ops,
+    ...lx.ops,
     ...ops,
   };
 
