@@ -6,7 +6,7 @@ import {
   setDestinationDecision,
   setDestinationOptIn,
 } from './ledger';
-import { compileEgress, nymGroupKey } from './egress-policy';
+import { compileEgress, NYM_KEEP_READY, nymGroupKey } from './egress-policy';
 import { NYM } from './nym-bridge';
 
 describe('egress choices in the personal-data backup', () => {
@@ -64,9 +64,10 @@ describe('egress choices in the personal-data backup', () => {
     await setDestinationOptIn(NYM, undefined);
   });
 
-  it('carries the per-network nym choice through a backup and its restore', async () => {
+  it('carries the per-network nym choice and keep-ready through a backup and its restore', async () => {
     await setDestinationOptIn(nymGroupKey('zcash'), 'blocked');
     await setDestinationOptIn(nymGroupKey('penumbra'), 'allowed');
+    await setDestinationOptIn(NYM_KEEP_READY, 'blocked');
     const backup = JSON.parse(JSON.stringify(await exportEgressChoices())) as Awaited<
       ReturnType<typeof exportEgressChoices>
     >;
@@ -75,6 +76,7 @@ describe('egress choices in the personal-data backup', () => {
     expect((await readNetEgress()).optIns).toMatchObject({
       'nym:zcash': 'blocked',
       'nym:penumbra': 'allowed',
+      'nym-ready': 'blocked',
     });
   });
 });
