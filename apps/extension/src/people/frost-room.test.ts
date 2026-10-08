@@ -648,6 +648,33 @@ describe('room records a peer can write', () => {
     ['no id', { t: 'no' }],
     ['null', null],
     ['an array', [rs]],
+    [
+      'an invite under an id that is not its own',
+      {
+        t: 'i',
+        v: 2,
+        id: 'e'.repeat(64),
+        i: { G: key, owner: key, plate: 7, salt: 'a'.repeat(32), expiry: 1 },
+        sig,
+      },
+    ],
+    [
+      'a rotation whose roster is not the one it names',
+      {
+        t: 'rot',
+        v: 2,
+        id: 'e'.repeat(64),
+        rot: { R: 'e'.repeat(64), from: key, to: key },
+        r: roster,
+        k: key,
+        sig,
+      },
+    ],
+    [
+      'a join whose proof is not hex',
+      { t: 'join', v: 2, id: key, j: { I: key, joiner: key, th: key }, js: sig, jm: 'zz' },
+    ],
+    ['a bundle with nothing readable in it', { t: 'all', v: 2, id: 'a'.repeat(32), items: [{}] }],
   ])('%s is not read', (_name, body) => {
     expect(readBody(body)).toBeUndefined();
   });
