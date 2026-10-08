@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   eachField,
+  int32,
   readBytes,
   readTag,
   readVarint,
@@ -74,6 +75,17 @@ describe('readVarintNumber', () => {
     expect(
       readVarintNumber(Uint8Array.from([...Array<number>(10).fill(0x80), 0]), 0),
     ).toBeUndefined();
+  });
+});
+
+describe('int32', () => {
+  test('negatives arrive as ten-byte varints', () => {
+    const neg = readVarint(Uint8Array.from(varint(2n ** 64n - 26n)), 0)!;
+    expect(neg[1]).toBe(10);
+    expect(int32(neg[0])).toBe(-26);
+    expect(int32(2n ** 64n - 1n)).toBe(-1);
+    expect(int32(0n)).toBe(0);
+    expect(int32(2n ** 31n - 1n)).toBe(2 ** 31 - 1);
   });
 });
 

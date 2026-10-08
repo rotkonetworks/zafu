@@ -224,6 +224,12 @@ describe('ZidecarClient decoding', () => {
       errorMessage: 'bad-txns',
     });
     expect(isCopy(got.txid)).toBe(true);
+    // int32 error codes from the node's rpc are negative: ten bytes on the wire
+    serve(frame(msg(vField(2, 2n ** 64n - 26n), lField(3, 'rejected'))));
+    await expect(client().sendTransaction(Uint8Array.from([1]))).resolves.toMatchObject({
+      errorCode: -26,
+      errorMessage: 'rejected',
+    });
   });
 
   test('SignAnchor: signature=1, verifierKey=2 (hex), available=3', async () => {
