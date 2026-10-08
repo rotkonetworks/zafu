@@ -553,66 +553,30 @@ export class ZidecarClient {
 
   private parseBlock(buf: Uint8Array): CompactBlock {
     const block: CompactBlock = { height: 0, hash: new Uint8Array(0), actions: [] };
-    let pos = 0;
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 0) {
-        let v = 0,
-          s = 0;
-        while (pos < buf.length) {
-          const b = buf[pos++]!;
-          v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
+    eachField(buf, (field, wire, val) => {
+      if (wire === WIRE_VARINT) {
         if (field === 1) {
-          block.height = v;
+          block.height = Number(val as bigint);
         }
-      } else if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        const data = buf.subarray(pos, pos + len);
-        if (field === 2) {
-          block.hash = data;
-        } else if (field === 3) {
-          block.actions.push(this.parseAction(data));
-        } else if (field === 4) {
-          block.actionsRoot = buf.slice(pos, pos + len);
-        } else if (field === 5) {
-          // ironwood_actions - same wire shape as orchard actions. Without
-          // this the wallet downloads its own ironwood notes and discards
-          // them, showing zero after a turnstile migration.
-          (block.ironwoodActions ??= []).push(this.parseAction(data));
-        }
-        pos += len;
-      } else {
-        break;
+        return;
       }
-    }
-
+      if (wire !== WIRE_LEN) {
+        return;
+      }
+      const data = val as Uint8Array;
+      if (field === 2) {
+        block.hash = data;
+      } else if (field === 3) {
+        block.actions.push(this.parseAction(data));
+      } else if (field === 4) {
+        block.actionsRoot = data.slice();
+      } else if (field === 5) {
+        // ironwood_actions - same wire shape as orchard actions. Without
+        // this the wallet downloads its own ironwood notes and discards
+        // them, showing zero after a turnstile migration.
+        (block.ironwoodActions ??= []).push(this.parseAction(data));
+      }
+    });
     return block;
   }
 
@@ -624,51 +588,23 @@ export class ZidecarClient {
       nullifier: new Uint8Array(0),
       txid: new Uint8Array(0),
     };
-    let pos = 0;
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        const data = buf.subarray(pos, pos + len);
-        if (field === 1) {
-          a.cmx = data;
-        } else if (field === 2) {
-          a.ephemeralKey = data;
-        } else if (field === 3) {
-          a.ciphertext = data;
-        } else if (field === 4) {
-          a.nullifier = data;
-        } else if (field === 5) {
-          a.txid = data;
-        }
-        pos += len;
-      } else {
-        break;
+    eachField(buf, (field, wire, val) => {
+      if (wire !== WIRE_LEN) {
+        return;
       }
-    }
-
+      const data = val as Uint8Array;
+      if (field === 1) {
+        a.cmx = data;
+      } else if (field === 2) {
+        a.ephemeralKey = data;
+      } else if (field === 3) {
+        a.ciphertext = data;
+      } else if (field === 4) {
+        a.nullifier = data;
+      } else if (field === 5) {
+        a.txid = data;
+      }
+    });
     return a;
   }
 
