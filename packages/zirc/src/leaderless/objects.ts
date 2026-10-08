@@ -40,6 +40,8 @@ export const DOMAIN = {
   reveal: 'zafu-dkg-s-v1',
   sk: 'zafu-fvk-v1',
   fvk: 'zafu-fvk-hash-v1',
+  withdraw: 'zafu-withdraw-v1',
+  upgrade: 'zafu-upgrade-v1',
 } as const;
 
 /** what a group is for; fixed at creation */
@@ -78,6 +80,26 @@ export interface Join {
 
 /** `R`: who is in, binding only with every member's signature */
 export interface Roster {
+  G: string;
+  /** sorted ascending, no repeats */
+  members: string[];
+  /**
+   * the roster this one replaces before keys (a removal after R was signed):
+   * a third field, so a superseding roster never shares bytes with a plain one
+   */
+  supersedes?: string;
+}
+
+/** `withdraw`: the owner of an invite takes back the seat its join gave, when a wallet filled up twice */
+export interface Withdraw {
+  join: string;
+}
+
+/**
+ * `upgrade`: a group an older zafu made becomes leaderless. Every member it
+ * names signs it; nothing from the old founder log counts as evidence.
+ */
+export interface Upgrade {
   G: string;
   /** sorted ascending, no repeats */
   members: string[];
@@ -156,12 +178,24 @@ export const joinBytes = (j: Join): Uint8Array =>
 /** a roster's members in their one canonical order */
 export const sortKeys = (ks: string[]): string[] => [...new Set(ks)].sort();
 
-export const rosterBytes = (r: Roster): Uint8Array => {
-  if (r.members.join() !== sortKeys(r.members).join() || r.members.length < 1) {
-    throw new Error('a roster is sorted, with no repeats');
+const sorted = (ks: string[]) => {
+  if (ks.join() !== sortKeys(ks).join() || ks.length < 1) {
+    throw new Error('members are sorted, with no repeats');
   }
-  return frame(DOMAIN.roster, [key(r.G), list(r.members.map(key))]);
+  return list(ks.map(key));
 };
+
+export const rosterBytes = (r: Roster): Uint8Array =>
+  frame(DOMAIN.roster, [
+    key(r.G),
+    sorted(r.members),
+    ...(r.supersedes !== undefined ? [key(r.supersedes)] : []),
+  ]);
+
+export const withdrawBytes = (w: Withdraw): Uint8Array => frame(DOMAIN.withdraw, [key(w.join)]);
+
+export const upgradeBytes = (u: Upgrade): Uint8Array =>
+  frame(DOMAIN.upgrade, [key(u.G), sorted(u.members)]);
 
 export const rotateBytes = (r: Rotate): Uint8Array =>
   frame(DOMAIN.rotate, [key(r.R), key(r.from), key(r.to)]);
@@ -172,6 +206,8 @@ export const inviteId = (i: Invite) => idOf(inviteBytes(i));
 export const joinId = (j: Join) => idOf(joinBytes(j));
 export const rosterId = (r: Roster) => idOf(rosterBytes(r));
 export const rotateId = (r: Rotate) => idOf(rotateBytes(r));
+export const withdrawId = (w: Withdraw) => idOf(withdrawBytes(w));
+export const upgradeId = (u: Upgrade) => idOf(upgradeBytes(u));
 
 /** what a member signs to say yes to an object: its id, under one domain */
 export const sigMessage = (id: string): Uint8Array => frame(DOMAIN.sig, [key(id)]);

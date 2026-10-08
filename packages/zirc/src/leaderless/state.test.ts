@@ -17,6 +17,8 @@ import {
   rotateId,
   sigMessage,
   sortKeys,
+  upgradeId,
+  withdrawId,
   type Genesis,
   type Invite,
   type Roster,
@@ -308,5 +310,81 @@ describe('removal before keys rotates the room', () => {
     expect(maySignRotate(rot, Rr, C, ROOM, undefined, undefined)).toBe(false);
     expect(maySignRotate(other, Rr, C, ROOM, rosterId(Rr), rotateId(rot))).toBe(false);
     expect(maySignRotate(rot, Rr, B, ROOM, rosterId(Rr), undefined)).toBe(false);
+  });
+});
+
+describe('the founder decisions of 2026-10-08', () => {
+  test('a removal after the roster was signed: a roster that supersedes it binds, and the first stops', () => {
+    const parts = [letIn(A, B), letIn(A, C)];
+    const R: Roster = { G: Gid, members: sortKeys([A, B, C]) };
+    const Rp: Roster = { G: Gid, members: sortKeys([A, B]), supersedes: rosterId(R) };
+    const m = membershipOf(withAll(parts), verify);
+    // everyone signed R; the two left may sign R' because it names R
+    expect(maySignRoster(Rp, A, m, rosterId(R))).toBe(true);
+    // a roster that does not name R is still refused
+    expect(maySignRoster({ G: Gid, members: sortKeys([A, B]) }, A, m, rosterId(R))).toBe(false);
+    const rec = {
+      ...withAll(parts),
+      rosterSigs: [...R.members.map(k => rosterSig(R, k)), rosterSig(Rp, A), rosterSig(Rp, B)],
+    };
+    const v = rostersOf(rec, m, verify);
+    const [r, rp] = [v.find(x => x.id === rosterId(R))!, v.find(x => x.id === rosterId(Rp))!];
+    expect(rp.bound).toBe(true);
+    expect(r).toMatchObject({ superseded: true, bound: false });
+    expect(r.twice.size).toBe(0);
+    // once anyone said its wallet commitment for R, it is too late: R stands
+    const late = rostersOf(rec, m, verify, id => id === rosterId(R));
+    expect(late.find(x => x.id === rosterId(Rp))!.bound).toBe(false);
+    expect(late.find(x => x.id === rosterId(R))!.bound).toBe(true);
+    expect(maySignRoster(Rp, B, m, rosterId(R), id => id === rosterId(R))).toBe(false);
+  });
+
+  test('filled up twice: no roster until one owner withdraws its join, and only its owner can', () => {
+    const [ab, bc, ad] = [letIn(A, B), letIn(B, C), letIn(A, D)];
+    const full = withAll([ab, bc, ad]);
+    const m = membershipOf(full, verify);
+    expect(m.over).toBe(true);
+    expect(m.members.size).toBe(4);
+    const dJoin = joinId(ad.join.j);
+    expect(m.joins.get(dJoin)).toEqual({ owner: A, joiner: D });
+    const w = { join: dJoin };
+    // someone else withdrawing alice's join changes nothing
+    const forged = membershipOf(
+      { ...full, withdraws: [{ w, sig: sign('b', withdrawId(w)) }] },
+      verify,
+    );
+    expect(forged.over).toBe(true);
+    const done = membershipOf(
+      { ...full, withdraws: [{ w, sig: sign('a', withdrawId(w)) }] },
+      verify,
+    );
+    expect(done.over).toBe(false);
+    expect([...done.members].sort()).toEqual(sortKeys([A, B, C]));
+    // a withdraw in a wallet that is not over takes no seat away
+    const notOver = withAll([ab, bc]);
+    const bJoin = joinId(ab.join.j);
+    const kept = membershipOf(
+      {
+        ...notOver,
+        withdraws: [{ w: { join: bJoin }, sig: sign('a', withdrawId({ join: bJoin })) }],
+      },
+      verify,
+    );
+    expect(kept.members.has(B)).toBe(true);
+  });
+
+  test('a group an older zafu made: its upgrade seats its members once every one signed, and not before', () => {
+    const chat: Genesis = { purpose: 'chat', t: 0, n: 0, salt: hex(9, 16), creator: A };
+    const u = { G: genesisId(chat), members: sortKeys([A, B, C]) };
+    const up = (who: string) => ({ u, key: who, sig: sign(name(who), upgradeId(u)) });
+    const rec = { ...empty(), G: chat };
+    expect([...membershipOf({ ...rec, upgrades: [up(A), up(B)] }, verify).members]).toEqual([A]);
+    const all = membershipOf({ ...rec, upgrades: [up(C), up(A), up(B)] }, verify);
+    expect([...all.members].sort()).toEqual(sortKeys([A, B, C]));
+    // someone signing for another member is not that member
+    const fake = { u, key: C, sig: sign('a', upgradeId(u)) };
+    expect([...membershipOf({ ...rec, upgrades: [up(A), up(B), fake] }, verify).members]).toEqual([
+      A,
+    ]);
   });
 });

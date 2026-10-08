@@ -30,6 +30,10 @@ import {
   type Join,
   type Roster,
   type Rotate,
+  type Upgrade,
+  type Withdraw,
+  upgradeId,
+  withdrawId,
 } from './objects';
 
 /** ed25519 verify over a message, `sig` and `key` hex; never throws */
@@ -57,6 +61,16 @@ export interface RotateSig {
   sig: string;
 }
 
+export interface WithdrawSig {
+  w: Withdraw;
+  sig: string;
+}
+export interface UpgradeSig {
+  u: Upgrade;
+  key: string;
+  sig: string;
+}
+
 export interface RoomRecords {
   G: Genesis;
   /** this room's id (objects roomId) */
@@ -65,6 +79,8 @@ export interface RoomRecords {
   joins: SignedJoin[];
   rosterSigs: RosterSig[];
   rotateSigs: RotateSig[];
+  withdraws?: WithdrawSig[];
+  upgrades?: UpgradeSig[];
 }
 
 export interface Membership {
@@ -75,6 +91,10 @@ export interface Membership {
   by: Map<string, string>;
   /** invites their owner answered twice, with that owner: neither seat counts */
   twice: Map<string, string>;
+  /** the seats joins gave, by join id: who let whom in */
+  joins: Map<string, { owner: string; joiner: string }>;
+  /** a shared wallet with more seats than it has: no roster until an owner withdraws a join */
+  over: boolean;
 }
 
 export interface RosterView {
@@ -84,8 +104,10 @@ export interface RosterView {
   signed: Set<string>;
   /** every member of it holds a seat here */
   seated: boolean;
-  /** members of it who also signed another roster for its genesis: it stops */
+  /** members of it who also signed another roster for its genesis, not one superseding the other: it stops */
   twice: Set<string>;
+  /** a roster that binds replaces this one (a removal before keys) */
+  superseded: boolean;
   bound: boolean;
 }
 
@@ -123,18 +145,37 @@ const rotationsOf = (rotateSigs: RotateSig[], verify: Verify) => {
 };
 
 /**
- * The base of a room: its creator, or, in a room a rotation opened, the
- * members of that rotation's roster, once every one of them signed it. The
- * rotation records are posted into the room they open, so a newcomer reads
- * them like anyone else.
+ * The base of a room: its creator; in a room a rotation opened, the members
+ * of that rotation's roster, once every one of them signed it; in a group an
+ * older zafu made, the members of its upgrade, once every one of them signed
+ * it. The records are posted into the room, so a newcomer reads them like
+ * anyone else.
  */
 export const baseOf = (rec: RoomRecords, verify: Verify): string[] => {
   const G = genesisId(rec.G);
   const opened = [...rotationsOf(rec.rotateSigs, verify).values()].filter(
     v => v.rot.to === rec.room && v.r.G === G && v.r.members.every(m => v.signed.has(m)),
   );
-  // two rotations into one room cannot both be honest; such a room has only its creator
-  return opened.length === 1 ? opened[0]!.r.members : [rec.G.creator];
+  if (opened.length) {
+    // two rotations into one room cannot both be honest; such a room has only its creator
+    return opened.length === 1 ? opened[0]!.r.members : [rec.G.creator];
+  }
+  const ups = new Map<string, { u: Upgrade; signed: Set<string> }>();
+  for (const { u, key, sig } of rec.upgrades ?? []) {
+    let id: string;
+    try {
+      id = upgradeId(u);
+    } catch {
+      continue;
+    }
+    if (u.G === G && u.members.includes(key) && signs(verify, id, sig, key)) {
+      const v = ups.get(id) ?? { u, signed: new Set<string>() };
+      v.signed.add(key);
+      ups.set(id, v);
+    }
+  }
+  const upgraded = [...ups.values()].filter(v => v.u.members.every(k => v.signed.has(k)));
+  return upgraded.length === 1 ? upgraded[0]!.u.members : [rec.G.creator];
 };
 
 export const membershipOf = (rec: RoomRecords, verify: Verify): Membership => {
@@ -164,33 +205,66 @@ export const membershipOf = (rec: RoomRecords, verify: Verify): Membership => {
     }
   }
   const twice = new Map<string, string>();
-  const once: [Invite, Join][] = [];
+  const once: [Invite, Join, string][] = [];
   for (const [I, js] of answers) {
     if (js.size > 1) {
       twice.set(I, invites.get(I)!.owner);
     } else {
-      once.push([invites.get(I)!, [...js.values()][0]!]);
+      const [[id, j]] = [...js] as [[string, Join]];
+      once.push([invites.get(I)!, j, id]);
     }
   }
   const base = baseOf(rec, verify);
-  const members = new Set(base);
-  const by = new Map<string, string>();
   // a seat from a seat: whoever an owner with a seat let in, until nothing changes
-  for (let grew = true; grew; ) {
-    grew = false;
-    for (const [i, j] of once) {
-      if (members.has(i.owner) && !members.has(j.joiner)) {
-        members.add(j.joiner);
-        by.set(j.joiner, i.owner);
-        grew = true;
+  const seat = (without: Set<string>) => {
+    const members = new Set(base);
+    const by = new Map<string, string>();
+    const joins = new Map<string, { owner: string; joiner: string }>();
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const [i, j, id] of once) {
+        if (!without.has(id) && members.has(i.owner) && !members.has(j.joiner)) {
+          members.add(j.joiner);
+          by.set(j.joiner, i.owner);
+          joins.set(id, { owner: i.owner, joiner: j.joiner });
+          grew = true;
+        }
       }
     }
+    return { members, by, joins };
+  };
+  const all = seat(new Set());
+  const n = rec.G.purpose === 'wallet' ? rec.G.n : Infinity;
+  if (all.members.size <= n) {
+    return { base, ...all, twice, over: false };
   }
-  return { base, members, by, twice };
+  // filled up twice: a join its own owner withdrew no longer counts, and only then
+  const owners = new Map(once.map(([i, , id]) => [id, i.owner]));
+  const withdrawn = new Set(
+    (rec.withdraws ?? []).flatMap(({ w, sig }) => {
+      const owner = owners.get(w.join);
+      try {
+        return owner && signs(verify, withdrawId(w), sig, owner) ? [w.join] : [];
+      } catch {
+        return [];
+      }
+    }),
+  );
+  const left = seat(withdrawn);
+  return { base, ...left, twice, over: left.members.size > n };
 };
 
-/** every roster said in the room, with who signed it and whether it binds */
-export const rostersOf = (rec: RoomRecords, m: Membership, verify: Verify): RosterView[] => {
+/**
+ * Every roster said in the room, with who signed it and whether it binds.
+ * `made(R)`: some member already said its wallet commitment for R; a roster
+ * superseding R is then too late and never binds.
+ */
+export const rostersOf = (
+  rec: RoomRecords,
+  m: Membership,
+  verify: Verify,
+  made: (R: string) => boolean = () => false,
+): RosterView[] => {
   const out = new Map<string, RosterView>();
   for (const { r, key, sig } of rec.rosterSigs) {
     let id: string;
@@ -205,6 +279,7 @@ export const rostersOf = (rec: RoomRecords, m: Membership, verify: Verify): Rost
       signed: new Set<string>(),
       seated: r.members.every(k => m.members.has(k)),
       twice: new Set<string>(),
+      superseded: false,
       bound: false,
     };
     if (r.members.includes(key) && signs(verify, id, sig, key)) {
@@ -213,13 +288,23 @@ export const rostersOf = (rec: RoomRecords, m: Membership, verify: Verify): Rost
     out.set(id, v);
   }
   const all = [...out.values()];
+  const chained = (a: RosterView, b: RosterView) =>
+    a.r.supersedes === b.id || b.r.supersedes === a.id;
   for (const v of all) {
     for (const o of all) {
-      if (o !== v && o.r.G === v.r.G) {
+      if (o !== v && o.r.G === v.r.G && !chained(o, v)) {
         o.signed.forEach(k => v.signed.has(k) && v.twice.add(k));
       }
     }
-    v.bound = v.seated && !v.twice.size && v.r.members.every(k => v.signed.has(k));
+    v.bound =
+      v.seated &&
+      !v.twice.size &&
+      !(v.r.supersedes && made(v.r.supersedes)) &&
+      v.r.members.every(k => v.signed.has(k));
+  }
+  for (const v of all) {
+    v.superseded = all.some(o => o.bound && o.r.supersedes === v.id);
+    v.bound &&= !v.superseded;
   }
   return all;
 };
@@ -240,6 +325,7 @@ export const rotationsFrom = (
         signed: new Set<string>(),
         seated: false,
         twice: new Set<string>(),
+        superseded: false,
         bound: false,
       };
       return {
@@ -255,17 +341,20 @@ export const rotationsFrom = (
 /**
  * May `me` sign this roster: it names me, every member it names holds a seat
  * in my view, and I signed no other roster for its genesis in this room
- * (`before`: what I signed, kept before any signature leaves).
+ * (`before`: what I signed, kept before any signature leaves) unless this one
+ * supersedes it, before any wallet commitment for it exists (`made`).
  */
 export const maySignRoster = (
   r: Roster,
   me: string,
   m: Membership,
   before: string | undefined,
+  made: (R: string) => boolean = () => false,
 ): boolean =>
   r.members.includes(me) &&
   r.members.every(k => m.members.has(k)) &&
-  (before === undefined || before === rosterId(r));
+  (r.supersedes === undefined || !made(r.supersedes)) &&
+  (before === undefined || before === rosterId(r) || before === r.supersedes);
 
 /** May `me` sign this rotation: out of this room, to a roster I signed, and no other rotation of this room */
 export const maySignRotate = (

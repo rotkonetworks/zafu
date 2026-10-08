@@ -33,6 +33,10 @@ import {
   rotateBytes,
   rotateId,
   sigMessage,
+  upgradeBytes,
+  upgradeId,
+  withdrawBytes,
+  withdrawId,
   skOf,
   sortKeys,
   type Genesis,
@@ -103,6 +107,12 @@ const build = () => {
   const from = roomId(scope, fill(0x66, 32));
   const rotate: Rotate = { R: rosterId(remaining), from, to: roomId(scope, fill(0x77, 32)) };
   const obj = (bytes: Uint8Array, id: string) => ({ bytes: bytesToHex(bytes), id });
+  // carol is removed after the roster was signed, before keys: a roster that names the one it replaces
+  const superseding: Roster = { G, members: sortKeys([alice, bob]), supersedes: R };
+  // the wallet filled up twice: alice takes back the seat her code gave bob
+  const withdraw = { join: joinId(join) };
+  // a group an older zafu made, upgraded: its genesis is (chat, 0, 0, its tag, its founder)
+  const upgrade = { G: genesisId(chat), members: sortKeys([alice, bob, carol]) };
   return {
     about:
       'zafu #110 leaderless objects. lp = u32be length ‖ bytes; frame(D, f) = lp(utf8 D) ‖ lp(f1) ‖ ...; ' +
@@ -147,6 +157,23 @@ const build = () => {
       sk: skOf(R, s),
       fvk: { input: fvk, hash: fvkHash(fvk) },
     },
+    supersedingRoster: {
+      input: superseding,
+      ...obj(rosterBytes(superseding), rosterId(superseding)),
+      sigs: Object.fromEntries(['alice', 'bob'].map(n => [pub(n), sign(n, rosterId(superseding))])),
+    },
+    withdraw: {
+      input: withdraw,
+      ...obj(withdrawBytes(withdraw), withdrawId(withdraw)),
+      ownerSig: sign('alice', withdrawId(withdraw)),
+    },
+    upgrade: {
+      input: upgrade,
+      ...obj(upgradeBytes(upgrade), upgradeId(upgrade)),
+      sigs: Object.fromEntries(
+        ['alice', 'bob', 'carol'].map(n => [pub(n), sign(n, upgradeId(upgrade))]),
+      ),
+    },
     rotate: {
       room: { scope, secretFrom: fill(0x66, 32), secretTo: fill(0x77, 32) },
       roster: { input: remaining, ...obj(rosterBytes(remaining), rosterId(remaining)) },
@@ -183,6 +210,13 @@ describe('wire format vectors', () => {
     expect(genesisId({ ...g, purpose: 'wallet', t: 2, n: 2 })).not.toBe(
       genesisId({ ...g, purpose: 'wallet', t: 2, n: 3 }),
     );
+  });
+
+  test('a superseding roster never shares bytes with a plain one of the same members', () => {
+    const G = fill(1, 32);
+    const members = [pub('alice'), pub('bob')].sort();
+    expect(rosterId({ G, members, supersedes: fill(2, 32) })).not.toBe(rosterId({ G, members }));
+    expect(upgradeId({ G, members })).not.toBe(rosterId({ G, members }));
   });
 
   test('domains separate: the same fields under two objects never share an id', () => {
