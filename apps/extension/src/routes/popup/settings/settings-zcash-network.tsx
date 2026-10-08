@@ -350,7 +350,10 @@ const ZcashOn = () => {
             <Row
               type='value'
               label='server'
-              description={[node.fullNode && `on ${node.fullNode}`, node.codeUrl && 'tap to read its code']
+              description={[
+                node.fullNode && `on ${node.fullNode}`,
+                node.codeUrl && 'tap to read its code',
+              ]
                 .filter(Boolean)
                 .join(' · ')}
               value={nodeLabel(node)}
