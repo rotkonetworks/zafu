@@ -6,6 +6,7 @@
  * uses raw protobuf encoding (no grpc-web library needed)
  */
 
+import { eachField, WIRE_LEN, WIRE_VARINT } from '../../net/proto-reader';
 import { decodeLightdInfo, type LightdInfo } from './lightd-info';
 import type { FlyProof } from '../../workers/fly-verify';
 import {
@@ -509,56 +510,13 @@ export class ZidecarClient {
   private parseTip(buf: Uint8Array): ChainTip {
     let height = 0;
     let hash = new Uint8Array(0);
-    let pos = 0;
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 0) {
-        let v = 0,
-          s = 0;
-        while (pos < buf.length) {
-          const b = buf[pos++]!;
-          v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (field === 1) {
-          height = v;
-        }
-      } else if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        if (field === 2) {
-          hash = buf.slice(pos, pos + len);
-        }
-        pos += len;
-      } else {
-        break;
+    eachField(buf, (field, wire, val) => {
+      if (wire === WIRE_VARINT && field === 1) {
+        height = Number(val as bigint);
+      } else if (wire === WIRE_LEN && field === 2) {
+        hash = (val as Uint8Array).slice();
       }
-    }
-
+    });
     return { height, hash };
   }
 
