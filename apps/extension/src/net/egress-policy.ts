@@ -227,6 +227,8 @@ export const NYM_GROUPS: {
   id: string;
   label: string;
   on: boolean;
+  /** what goes over nym when on; everything else stays direct */
+  nym: string;
   direct: string;
   members: string[];
 }[] = [
@@ -234,6 +236,7 @@ export const NYM_GROUPS: {
     id: 'zcash',
     label: 'zcash',
     on: true,
+    nym: 'sends and your own lookups · sync direct',
     direct: 'the node sees your ip with the send',
     members: ['zcash'],
   },
@@ -241,6 +244,7 @@ export const NYM_GROUPS: {
     id: 'penumbra',
     label: 'penumbra',
     on: false,
+    nym: 'sends · sync direct',
     direct: 'the node sees your ip with the send',
     members: ['penumbra'],
   },
@@ -248,6 +252,7 @@ export const NYM_GROUPS: {
     id: 'cosmos',
     label: 'cosmos chains',
     on: true,
+    nym: 'sends and balance checks',
     direct: 'the node sees your ip and address',
     members: [COSMOS, 'sponsor'],
   },
@@ -255,6 +260,7 @@ export const NYM_GROUPS: {
     id: 'swaps',
     label: 'swaps',
     on: true,
+    nym: 'quotes and swap sends',
     direct: 'the swap sees your ip and address',
     members: ['thorchain', 'midgard', 'near-swap'],
   },
@@ -262,6 +268,7 @@ export const NYM_GROUPS: {
     id: 'voting',
     label: 'zcash voting',
     on: true,
+    nym: 'votes',
     direct: 'vote servers see your ip and vote',
     members: ['voting'],
   },
@@ -269,6 +276,7 @@ export const NYM_GROUPS: {
     id: 'zcash-me',
     label: 'zcash.me',
     on: true,
+    nym: 'lookups',
     direct: 'zcash.me sees your ip and lookup',
     members: ['zcash-me'],
   },
@@ -276,6 +284,7 @@ export const NYM_GROUPS: {
     id: 'buy',
     label: 'buying zec',
     on: true,
+    nym: 'everything it sends',
     direct: 'the apps see your ip and address',
     members: ['peer', 'base'],
   },
