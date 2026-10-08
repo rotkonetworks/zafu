@@ -108,7 +108,7 @@ export const SETTINGS_EXPLAIN = {
     on: 'your node sees each transaction arrive from a nym exit, not from you. sync stays direct',
     off: 'transactions go straight to your node, which sees where they come from',
     footer:
-      "on by default · nym's directory sees that you use nym, not what you send · a send waits up to a minute for nym to connect",
+      "on by default, penumbra aside · nym's directory sees that you use nym, not what you send · a send waits up to a minute for nym to connect",
   },
   'privacy.zcashMemoDecoys': {
     blurb: 'how zafu asks your node for the memos on your zcash transactions.',
