@@ -1,10 +1,11 @@
 /**
  * The records a group speaks in, and its door: a code, the magic wormhole way.
  *
- * A group is a sealed zirc room (`zafu-group-v1`, 4 KiB entries) whose roster
- * is a zirc channel log the founder writes: genesis, `+v` per member. The
- * room secret never goes into a code or a link. The code (`7-fern-dusk`) is a
- * number and two words:
+ * A group is a sealed zirc room (`zafu-group-v1`, 4 KiB entries) with no
+ * leader (#110): its seats are joins, each signed by the joiner and by the
+ * member whose invite it answers (people/lx). Any member invites; each invite
+ * is answered only by the member who made it. The room secret never goes into
+ * a code or a link. The code (`7-fern-dusk`) is a number and two words:
  *
  *   - the NUMBER is a nameplate. It is all the relay learns: it picks the
  *     door's mailbox, `zafu-door-v1` at shard HKDF(H(domain, N), window), a
@@ -13,25 +14,25 @@
  *     types it run SPAKE2 over them (RustCrypto spake2 in zafu-wasm, see
  *     people/door-run), so the relay, which sees every message, cannot test a
  *     guess offline. A guesser must take part, one guess per run, and the
- *     founder answers at most {@link ANSWERS_PER_CODE} runs per code.
+ *     inviter answers at most {@link ANSWERS_PER_CODE} runs per code.
  *
  * In the mailbox:
  *
- *   founder -> `wh` hello   a version and a random salt: two codes that share a
+ *   inviter -> `wh` hello   a version and a random salt: two codes that share a
  *                           number (another zafu, the same hour) tell apart by
  *                           it, and a joiner tries each; the wrong one fails
  *   joiner  -> `wj` join    its SPAKE2 message for (salt, its own jid)
- *   founder -> `wa` answer  its own message for that run and a tag over it, so
+ *   inviter -> `wa` answer  its own message for that run and a tag over it, so
  *                           a wrong word is seen at once
  *   joiner  -> `wk` confirm its own tag: the words held on both sides
- *   founder -> `wb` box     the invite sealed under that run's key (the room
- *                           secret, the relay, the group, a shared wallet's k
- *                           of n), to the first run whose confirmation held
+ *   inviter -> `wb` box     sealed under that run's key: the room secret, the
+ *                           relay, the group's genesis and this invite, to the
+ *                           first run whose confirmation held
  *
- * A code lets exactly one person in, the magic wormhole way: once a box has
- * gone out the code is spent, and anyone else who typed it reads that in the
- * mailbox and is told so. A wrong word, or a joiner trying a code that only
- * shares the number, spends nothing: the box waits for words that held.
+ * A code lets exactly one person in: once a box has gone out the code is
+ * spent, and the inviter co-signs one join for it, ever. Anyone else who
+ * typed it reads that in the mailbox and is told so. A wrong word, or a
+ * joiner trying a code that only shares the number, spends nothing.
  *
  * Knowing the words is what lets a person in; there is no second "allow".
  * Both sides are shown two verify words from the run's key, passively, for
@@ -47,14 +48,14 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { wordlists } from 'bip39';
 import type { ChannelGenesis, ChannelRecord } from '@zafu/zirc';
-import type { Deal } from './frost-room';
+import { genesisId, inviteId, type Genesis, type Invite } from '@zafu/zirc/leaderless';
 import { CODE_RE, normalizeCode } from './protocol';
 
 export const DOOR_SCOPE = 'zafu-door-v1';
 /** a door works for an hour (and the relay keeps a door an hour) */
 export const DOOR_MS = 60 * 60_000;
-/** the door protocol this zafu speaks; a hello with another is not answered */
-export const DOOR_VERSION = 2;
+/** the door protocol this zafu speaks; a hello with another is not answered (3: leaderless groups, #110) */
+export const DOOR_VERSION = 3;
 /** runs a founder answers per code: the one who comes in, and a few wrong words */
 export const ANSWERS_PER_CODE = 12;
 /** hellos a joiner tries on one number: codes that collided within the hour */
@@ -112,13 +113,14 @@ export interface InviteBody {
   secret: string;
   relay: string;
   group: string;
+  /** the room's tag: room keys are derived from it (it is also the genesis salt) */
   G: string;
-  founder: string;
-  /** what the founder calls themselves there */
+  /** the group's genesis: what it is for, and a shared wallet's t of n */
+  g: Genesis;
+  /** the invite this run answers, as its owner said it in the room */
+  I: Invite;
+  /** what the inviter calls themselves there */
   from: string;
-  /** a shared wallet: its seals and seats, fixed when the code was made */
-  want?: { k: number; n: number };
-  deal?: Deal;
   /** the window the group was made in: a newcomer reads from there, not the relay's 48 h */
   born?: number;
 }
@@ -148,6 +150,40 @@ export const sealBox = async (key: Uint8Array, body: InviteBody): Promise<Uint8A
 const HEX64 = /^[0-9a-f]{64}$/;
 const G_RE = /^[0-9a-f]{32}$/;
 
+const genesisOf = (v: unknown): Genesis | undefined => {
+  const g = v as Partial<Genesis> | undefined;
+  try {
+    const out = {
+      purpose: g?.purpose,
+      t: g?.t,
+      n: g?.n,
+      salt: g?.salt,
+      creator: g?.creator,
+    } as Genesis;
+    genesisId(out);
+    return out;
+  } catch {
+    return undefined;
+  }
+};
+
+const inviteOfBox = (v: unknown, G: string): Invite | undefined => {
+  const i = v as Partial<Invite> | undefined;
+  try {
+    const out = {
+      G: i?.G,
+      owner: i?.owner,
+      plate: i?.plate,
+      salt: i?.salt,
+      expiry: i?.expiry,
+    } as Invite;
+    inviteId(out);
+    return out.G === G ? out : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 /** throws unless it opens with this key and reads as an invite */
 export const openBox = async (key: Uint8Array, box: Uint8Array): Promise<InviteBody> => {
   const pt = await crypto.subtle.decrypt(
@@ -156,21 +192,16 @@ export const openBox = async (key: Uint8Array, box: Uint8Array): Promise<InviteB
     new Uint8Array(box.slice(12)),
   );
   const v = JSON.parse(dec.decode(pt)) as Partial<InviteBody> & { v?: number };
-  const want = v.want;
+  const g = genesisOf(v.g);
+  const I = g && inviteOfBox(v.I, genesisId(g));
   if (
     v.v !== DOOR_VERSION ||
     !HEX64.test(v.secret ?? '') ||
     !G_RE.test(v.G ?? '') ||
-    !HEX64.test(v.founder ?? '') ||
-    typeof v.relay !== 'string' ||
-    (want !== undefined &&
-      !(
-        Number.isInteger(want.k) &&
-        Number.isInteger(want.n) &&
-        want.k >= 2 &&
-        want.k <= want.n &&
-        want.n <= 32
-      ))
+    !g ||
+    !I ||
+    g.salt !== v.G ||
+    typeof v.relay !== 'string'
   ) {
     throw new Error('not an invite');
   }
@@ -178,11 +209,10 @@ export const openBox = async (key: Uint8Array, box: Uint8Array): Promise<InviteB
     secret: v.secret!,
     relay: v.relay,
     group: String(v.group ?? '').slice(0, 48),
-    G: v.G!,
-    founder: v.founder!,
+    G: v.G,
+    g,
+    I,
     from: String(v.from ?? '').slice(0, 32),
-    ...(want ? { want: { k: want.k, n: want.n } } : {}),
-    ...(v.deal ? { deal: v.deal } : {}),
     ...(Number.isInteger(v.born) && v.born! >= 0 ? { born: v.born } : {}),
   };
 };
@@ -237,8 +267,9 @@ export type DoorWire =
 
 export type GroupWire =
   | DoorWire
-  /** `t`: the door run that let them in, so the founder can say who came with which code */
+  /** a member's hello: the name it goes by, and its X-Wing key (`t`: an older zafu's door run) */
   | { kind: 'ask'; key: string; name: string; seal: string; t?: string }
+  /** a group an older zafu made: its founder's roster log */
   | { kind: 'log'; entry: ChannelGenesis | ChannelRecord }
   | { kind: 'names'; names: Record<string, string> }
   /** one piece of a FROST message (people/frost-room): `i` of `n`, all sharing `mid` */

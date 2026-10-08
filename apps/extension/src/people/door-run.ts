@@ -1,7 +1,7 @@
 /**
  * A door's SPAKE2 side (people/door), the part that needs zafu-wasm and so
- * runs where a zafu window is open (people/keeper): the founder answering
- * each joiner with a run of its own, a joiner speaking to the founder's hello
+ * runs where a zafu window is open (people/keeper): the inviter answering
+ * each joiner with a run of its own, a joiner speaking to the inviter's hello
  * and opening the box. The worker only carries records; every step here is safe to run
  * again, since what the room kept decides what was done.
  */
@@ -24,6 +24,7 @@ import {
   type InviteBody,
 } from './door';
 import type { PeopleRoom } from './vault';
+import { genesisId, pakeHash, type Invite } from '@zafu/zirc/leaderless';
 
 export type DoorPake = <T>(call: DoorPakeCall) => Promise<T>;
 export type DoorCall = (op: string, args: Record<string, unknown>) => Promise<unknown>;
@@ -35,24 +36,35 @@ const wiresOf = <K extends DoorWire['kind']>(door: PeopleRoom, kind: K) =>
       : [],
   );
 
-/** what the founder's group hands a joiner, read from the group as it is now */
-export const inviteOf = (group: PeopleRoom): InviteBody => {
+/** the invite a door answers, as its owner says it in the room (lx) */
+export const inviteFor = (door: PeopleRoom, group: PeopleRoom, owner: string): Invite => ({
+  G: genesisId(group.group!.g!),
+  owner,
+  plate: splitCode(door.door!.code)!.plate,
+  salt: door.door!.salt!,
+  expiry: Math.floor((door.until ?? 0) / 1000),
+});
+
+/** what the inviter's group hands a joiner, read from the group as it is now */
+export const inviteOf = (group: PeopleRoom, I: Invite): InviteBody => {
   const g = group.group!;
   return {
     secret: group.secret,
     relay: group.relay,
     group: group.name,
     G: g.G,
-    founder: g.founder,
-    from: g.names?.[g.founder] ?? '',
-    ...(g.want ? { want: { k: g.want.k, n: g.want.n } } : {}),
+    g: g.g!,
+    I,
+    from: g.names?.[I.owner] ?? group.nick ?? '',
     born: presenceEpoch(Math.floor(group.createdAt / 1000)),
   };
 };
 
 /**
- * The founder: answer each run that spoke to this code, then send the
- * invite to the first whose confirmation holds. One box, and the code is spent.
+ * The inviter: answer each run that spoke to this code, then send the invite
+ * to the first whose confirmation holds. One box, and the code is spent: the
+ * run it went to is kept (its transcript and key), so the one join that
+ * comes through it is the one this device co-signs.
  */
 export const hostStep = async (
   door: PeopleRoom,
@@ -62,11 +74,13 @@ export const hostStep = async (
 ): Promise<void> => {
   const d = door.door;
   const words = d && splitCode(d.code)?.words;
-  if (d?.role !== 'host' || !words || !d.seed || d.admitted || !group?.group?.mine) {
+  const g = group?.group;
+  const owner = d?.owner;
+  if (d?.role !== 'host' || !owner || !words || !d.seed || d.admitted || !g?.g || g.gone) {
     return;
   }
-  const want = group.group.want;
-  if (want && (want.started || group.group.members.length >= want.n)) {
+  // a shared wallet with every seat taken lets nobody else in
+  if (g.g.purpose === 'wallet' && g.members.length >= g.g.n) {
     return;
   }
   const run = (jid: string) => ({
@@ -82,13 +96,20 @@ export const hostStep = async (
   const done = new Set((d.answered ?? []).map(a => a.jid));
   for (const { wire } of wiresOf(door, 'wk')) {
     const y = said.get(wire.jid);
-    if (wire.salt !== d.salt || !done.has(wire.jid) || !y) {
+    const x = d.answered?.find(a => a.jid === wire.jid)?.x;
+    if (wire.salt !== d.salt || !done.has(wire.jid) || !y || !x) {
       continue;
     }
     const key = await pake<string | null>({ step: 'admit', ...run(wire.jid), y, tag: wire.tag });
     if (key) {
-      const box = await sealBox(hexToBytes(key), inviteOf(group));
-      await call('door-admit', { roomId: door.id, jid: wire.jid, box: b64(box) });
+      const box = await sealBox(hexToBytes(key), inviteOf(group!, inviteFor(door, group!, owner)));
+      await call('door-admit', {
+        roomId: door.id,
+        jid: wire.jid,
+        box: b64(box),
+        th: pakeHash(d.salt, wire.jid, x, y),
+        mk: key,
+      });
       return;
     }
   }
@@ -108,10 +129,10 @@ export const hostStep = async (
 };
 
 /**
- * A joiner: speak to each founder's hello on this number (a few, newest
+ * A joiner: speak to each inviter's hello on this number (a few, newest
  * first: codes that share a number tell apart by their words), say back to
  * the answer whose tag holds, and open the box it sends. A box that went to
- * someone else: the code was used. Every founder answered and none held: the
+ * someone else: the code was used. Every inviter answered and none held: the
  * words differ.
  */
 export const joinStep = async (door: PeopleRoom, pake: DoorPake, call: DoorCall): Promise<void> => {
@@ -152,7 +173,15 @@ export const joinStep = async (door: PeopleRoom, pake: DoorPake, call: DoorCall)
     const invite =
       box && (await openBox(hexToBytes(r.key), unb64(box.wire.box)).catch(() => undefined));
     if (invite) {
-      await call('door-enter', { roomId: door.id, invite, words: r.words });
+      // this run's transcript, as the inviter holds it too: the join it co-signs names it
+      const y = await pake<string>({ step: 'speak', ...run(wire.salt) });
+      await call('door-enter', {
+        roomId: door.id,
+        invite,
+        words: r.words,
+        th: pakeHash(wire.salt, d.jid, wire.x, y),
+        mk: r.key,
+      });
       return;
     }
     if (!d.confirmed?.includes(wire.salt)) {
@@ -172,7 +201,7 @@ export const joinStep = async (door: PeopleRoom, pake: DoorPake, call: DoorCall)
 export type DoorView =
   | 'reading'
   | 'nothing'
-  /** the founder's zafu speaks a newer door, or an older one */
+  /** the inviter's zafu speaks a newer door, or an older one */
   | 'newer'
   | 'older'
   | 'waiting'

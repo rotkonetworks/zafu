@@ -1,8 +1,8 @@
 /**
  * A shared wallet in a chat (Cv2GroupMake, Cv2Keygen, Cv2KeygenWait,
- * Cv2GroupDone, Cv2DealKeys): the sheet that starts one, and the card in the
- * thread that shows each member's step, who is missing, and the wallet once
- * every device holds its key. The ceremony itself is people/frost-room.
+ * Cv2GroupDone): the sheet that proposes one, and the card in the thread that
+ * shows who agreed, each member's step, who is missing, and the wallet once
+ * every device holds its key. The key setup itself is people/frost-room.
  */
 
 import { useEffect, useState } from 'react';
@@ -11,18 +11,17 @@ import { Button } from '@repo/ui/components/ui/button';
 import { CopyButton } from '@repo/ui/components/ui/copy-button';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { cn } from '@repo/ui/lib/utils';
-import { formatZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import {
-  COURT,
   majority,
   missingOf,
   mismatched,
   restartOf,
   roundOf,
   stepOf,
-  type Deal,
+  type Keygen,
 } from '../../../people/frost-room';
-import { agree, startKeys, type FrostView } from '../../../people/use-frost-room';
+import { agree, proposeWallet } from '../../../people/use-frost-room';
+import type { ZcashWalletJson } from '../../../state/wallets';
 import { PopupPath } from '../paths';
 import { shortAddress } from './threads';
 
@@ -65,12 +64,11 @@ const Box = ({ state }: { state: 'done' | 'live' | 'missing' }) => (
   />
 );
 
-/** "3 of 4", or "2 of 3 · zafu court" for a deal with the court */
-export const seatsLine = (k: number, members: string[]) =>
-  `${k} of ${members.length}${members.includes(COURT) ? ' · zafu court' : ''}`;
-
 interface CardProps {
-  view: FrostView;
+  /** a wallet being made; none for a seat an older zafu made */
+  c?: Keygen;
+  seat?: ZcashWalletJson;
+  me?: string;
   roomId: string;
   nameOf: (key: string) => string;
   /** reach a missing member: "message dan" */
@@ -79,71 +77,41 @@ interface CardProps {
   onSend?: () => void;
 }
 
-/** the card a ceremony draws in its thread, from "making keys" to "ready" */
-export const KeyCard = ({ view, roomId, nameOf, onMessage, onSend }: CardProps) => {
+const Head = ({ title, k, n, step }: { title: string; k: number; n: number; step?: number }) => (
+  <div className='flex flex-col gap-1.5 px-3.5 py-3'>
+    <span className='flex items-center gap-2 text-[11px] text-fg-muted'>
+      <Hanko ch='蔵' />
+      <span className='grow'>shared wallet · {title}</span>
+      {step !== undefined && <span>step {step} of 3</span>}
+    </span>
+    <span className='text-xs text-fg-muted'>
+      {k} of {n}
+    </span>
+  </div>
+);
+
+/** the card a wallet draws in its thread, from "agree" to "ready" */
+export const KeyCard = ({ c, seat, me, roomId, nameOf, onMessage, onSend }: CardProps) => {
   const now = useNow(15_000);
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
-  const { ceremony: c, seat, me, mine: kept } = view;
-  if (!c || !me) {
-    return null;
-  }
-  const mine = c.members.includes(me);
-  const round = roundOf(c);
-  const missing = missingOf(c, now / 1000);
-  const bad = mismatched(c);
-  const label = c.deal ? 'deal' : 'shared wallet';
-  const again = (gone: string[]) => {
-    const next = restartOf(c, gone);
-    if (next) {
-      setBusy(true);
-      void startKeys(roomId, next.members, next.k, c.label, {
-        deal: c.deal,
-        replaces: c.id,
-      }).finally(() => setBusy(false));
-    }
-  };
-  const rest = restartOf(c, missing);
-  const who = (m: string) => (m === me ? 'you' : m === COURT ? 'zafu court' : nameOf(m));
-
-  const head = (title: string) => (
-    <div className='flex flex-col gap-1.5 px-3.5 py-3'>
-      <span className='flex items-center gap-2 text-[11px] text-fg-muted'>
-        <Hanko ch={c.deal ? '契' : '蔵'} />
-        <span className='grow'>
-          {label} · {title}
-        </span>
-        {!seat && !bad && <span>step {round} of 3</span>}
-      </span>
-      {c.deal && (
-        <span className='font-display text-[26px] text-fg-high'>
-          {formatZecAmount(BigInt(c.deal.amount))}{' '}
-          <span className='text-sm text-zigner-gold'>zec</span>
-        </span>
-      )}
-      <span className='text-xs text-fg-muted'>
-        {c.deal ? `${c.deal.what} · ` : ''}
-        {seatsLine(c.k, c.members)}
-      </span>
-    </div>
-  );
-
-  if (seat) {
+  const ms = seat?.multisig;
+  if (seat && ms && (!c || c.id === ms.room?.ceremony)) {
     return (
       <article className='flex flex-col self-stretch border border-border-hard bg-elev-1'>
-        {head(`ready · ${new Date(c.last * 1000).toTimeString().slice(0, 5)}`)}
+        <Head title='ready' k={ms.threshold} n={ms.maxSigners} />
         <div className='flex flex-col gap-2 border-t border-border-soft px-3.5 py-3'>
           <span className='flex gap-1.5' aria-hidden='true'>
-            {Array.from({ length: c.k }, (_, i) => (
+            {Array.from({ length: ms.threshold }, (_, i) => (
               <Hanko key={i} ch='判' />
             ))}
           </span>
           <span className='text-xs text-fg'>
-            any {c.k} of you {c.members.length} can send · each holds one key
+            any {ms.threshold} of you {ms.maxSigners} can send · each holds one key
           </span>
           <span className='font-mono text-[11px] text-fg-muted'>{shortAddress(seat.address)}</span>
         </div>
-        {!seat.multisig?.backedUpAt && (
+        {!ms.backedUpAt && (
           <button
             type='button'
             onClick={() => navigate(PopupPath.SETTINGS_MULTISIG_BACKUP)}
@@ -180,20 +148,42 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage, onSend }: CardProps) 
       </article>
     );
   }
+  if (!c || !me) {
+    return null;
+  }
+  const mine = c.members.includes(me);
+  const round = roundOf(c);
+  const missing = missingOf(c, now / 1000);
+  const bad = mismatched(c);
+  const n = c.members.length;
+  const again = (members: string[], k: number) => {
+    setBusy(true);
+    void proposeWallet(roomId, members, k).finally(() => setBusy(false));
+  };
+  const rest = restartOf(c, missing);
+  const who = (m: string) => (m === me ? 'you' : nameOf(m));
+  const toAgree = mine && !c.bound && !c.agreed.has(me) && !c.rival;
 
   return (
     <article className='flex flex-col self-stretch border border-border-hard bg-elev-1'>
-      {head(
-        bad
-          ? 'the keys do not match'
-          : missing.length
-            ? `waiting for ${missing.map(who).join(', ')}`
-            : 'making keys',
-      )}
+      <Head
+        title={
+          bad
+            ? 'the keys do not match'
+            : c.rival
+              ? 'two rosters were proposed'
+              : missing.length
+                ? `waiting for ${missing.map(who).join(', ')}`
+                : 'making keys'
+        }
+        k={c.k}
+        n={n}
+        step={c.bound && !bad ? round : undefined}
+      />
       <div className='border-t border-border-soft'>
         {c.members.map(m => {
           const step = stepOf(c, m);
-          const ahead = step >= round || (bad && step === 3);
+          const ahead = c.bound ? step >= round || (bad && step === 3) : c.agreed.has(m);
           const gone = missing.includes(m);
           return (
             <div
@@ -203,28 +193,24 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage, onSend }: CardProps) 
               <Box state={ahead ? 'done' : gone ? 'missing' : 'live'} />
               <span className='grow truncate text-[13px] text-fg-high'>{who(m)}</span>
               <span className='text-[11px] text-fg-muted'>
-                {ahead
-                  ? 'done'
-                  : gone
-                    ? m === COURT
-                      ? 'opens later'
-                      : 'not here yet'
-                    : step === 0 && m !== c.by
-                      ? 'to agree'
+                {!c.bound
+                  ? c.agreed.has(m)
+                    ? 'agreed'
+                    : 'to agree'
+                  : ahead
+                    ? 'done'
+                    : gone
+                      ? 'not here yet'
                       : 'making a share'}
               </span>
             </div>
           );
         })}
       </div>
-      {!bad && mine && c.by !== me && !kept?.ok ? (
+      {toAgree ? (
         <div className='flex flex-col gap-2 border-t border-border-soft px-3.5 py-3'>
           <span className='text-xs text-fg'>
-            {!c.deal
-              ? `${who(c.by)} asks to make ${c.label || 'a shared wallet'} together · any ${c.k} of ${c.members.length} can send`
-              : c.k === c.members.length
-                ? 'both of you sign to release it. if one of you stops answering, it stays locked.'
-                : 'you both sign to release it, or one of you with the one who decides.'}
+            {who(c.by)} asks to make a shared wallet together · any {c.k} of {n} can send
           </span>
           <Button
             size='sm'
@@ -237,13 +223,17 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage, onSend }: CardProps) 
             agree and make keys
           </Button>
         </div>
+      ) : c.rival ? (
+        <span className='border-t border-border-soft px-3.5 py-2 text-[11px] text-fg-dim'>
+          two rosters were proposed · we&apos;ll settle on one
+        </span>
       ) : bad ? (
         <div className='flex flex-col gap-2 border-t border-border-soft px-3.5 py-3'>
           <span className='text-xs text-fg'>
             nothing was saved. please make the keys again together.
           </span>
           {mine && (
-            <Button size='sm' disabled={busy} onClick={() => again([])}>
+            <Button size='sm' disabled={busy} onClick={() => again(c.members, c.k)}>
               make them again
             </Button>
           )}
@@ -252,18 +242,18 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage, onSend }: CardProps) 
         <div className='flex flex-col gap-2 border-t border-border-soft px-3.5 py-3'>
           <span className='text-xs text-fg'>
             it waits for {missing.map(who).join(', ')} · nothing is lost ·{' '}
-            {clock(now / 1000 - c.last)}
+            {clock(now / 1000 - Math.max(c.at, c.last))}
           </span>
           {mine && (
             <div className='flex gap-2'>
-              {onMessage && missing.some(m => m !== COURT && m !== me) && (
+              {onMessage && missing.some(m => m !== me) && (
                 <Button
                   variant='secondary'
                   size='sm'
                   className='flex-1'
-                  onClick={() => onMessage(missing.find(m => m !== COURT && m !== me)!)}
+                  onClick={() => onMessage(missing.find(m => m !== me)!)}
                 >
-                  message {who(missing.find(m => m !== COURT && m !== me)!)}
+                  message {who(missing.find(m => m !== me)!)}
                 </Button>
               )}
               {rest?.members.includes(me) && (
@@ -272,7 +262,7 @@ export const KeyCard = ({ view, roomId, nameOf, onMessage, onSend }: CardProps) 
                   size='sm'
                   className='flex-1'
                   disabled={busy}
-                  onClick={() => again(missing)}
+                  onClick={() => again(rest.members, rest.k)}
                 >
                   start again without {missing.length > 1 ? 'them' : who(missing[0]!)}
                 </Button>
@@ -332,17 +322,12 @@ export const MakeSharedSheet = ({
   open,
   onClose,
   roomId,
-  label,
   members,
-  deal,
 }: {
   open: boolean;
   onClose: () => void;
   roomId: string;
-  label: string;
   members: { key: string; name: string }[];
-  /** a deal group's terms, carried into the start */
-  deal?: Deal;
 }) => {
   const n = members.length;
   const [k, setK] = useState(majority(n));
@@ -350,11 +335,7 @@ export const MakeSharedSheet = ({
   const [error, setError] = useState('');
   const kk = Math.min(Math.max(2, k), n);
   return (
-    <Sheet
-      open={open}
-      onOpenChange={o => !o && onClose()}
-      title={deal ? 'make the deal keys' : 'make it a shared wallet'}
-    >
+    <Sheet open={open} onOpenChange={o => !o && onClose()} title='make it a shared wallet'>
       <div className='flex flex-col gap-1.5'>
         <span className='text-[11px] text-fg-muted'>members · everyone in this room · fixed</span>
         <div className='flex flex-wrap gap-1.5'>
@@ -378,12 +359,10 @@ export const MakeSharedSheet = ({
         onClick={() => {
           setBusy(true);
           setError('');
-          void startKeys(
+          void proposeWallet(
             roomId,
             members.map(m => m.key),
             kk,
-            label,
-            { deal },
           ).then(
             () => {
               setBusy(false);

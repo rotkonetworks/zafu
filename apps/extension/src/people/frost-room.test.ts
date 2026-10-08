@@ -1,8 +1,12 @@
 /**
- * Shared wallets made inside a group room, with the real FROST wasm: three and
- * four members on a fake relay make one wallet and all derive the same
- * address; a member who never comes is left out by starting again without
- * them; a threshold changed after the first start replaces it.
+ * Shared wallets made inside a group room with no leader (#110), with the
+ * real FROST wasm on a fake relay: a roster binds only with every member's
+ * signature, the viewing-key secret comes from every member's
+ * commit-then-reveal, and every member derives the same wallet. A member who
+ * says two things, reveals what it did not commit to, or is shown
+ * differently to different devices stops it, and nothing is saved. A relay
+ * that withholds or reorders only costs time. A wallet an older zafu made
+ * still signs.
  *
  * @vitest-environment node
  */
@@ -12,42 +16,38 @@ import { createRequire } from 'node:module';
 import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { RelayTransport } from '@zafu/zid';
+import { commitOf, genesisId, r1Id, rosterId, sortKeys } from '@zafu/zirc/leaderless';
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { deriveRoomKeys } from '../state/identity';
-import { chain } from './service';
 import { groupId } from './groups';
 import { comeIn, peopleWallet, realPake, relayBoard } from './door.test-util';
 import {
-  cameFor,
   advance,
-  allowedIn,
-  ceremonyOf,
-  COURT,
   frostOps,
   keepMine,
   majority,
   mismatched,
   packFrost,
-  startBody,
   foldFrost,
   missingOf,
   MISSING_S,
   restartOf,
-  type Ceremony,
   type FrostCalls,
   type FrostIo,
+  type Keygen,
   propId,
   readBody,
   type FrostBody,
   type FrostStatus,
   type Seat,
 } from './frost-room';
-import type { PeopleRoom, Thread } from './vault';
+import { keygensOf } from './lx';
+import type { PeopleRoom } from './vault';
 import { advanceSign, decline, proposalsOf, seal, type SignCalls } from './room-sign';
 
 // Real FROST rounds and real sealed room messages: several seconds per test on
 // a busy CI runner, well past the 5s default.
-vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+vi.setConfig({ testTimeout: 90_000, hookTimeout: 60_000 });
 
 type Wasm = typeof import('@repo/zcash-wasm');
 let W: Wasm;
@@ -64,7 +64,6 @@ beforeAll(async () => {
     part2: async (s, b) => JSON.parse(W.frost_dkg_part2(s, JSON.stringify(b))),
     part3: async (s, b, p) =>
       JSON.parse(W.frost_dkg_part3(s, JSON.stringify(b), JSON.stringify(p))),
-    sampleSk: async () => W.frost_sample_fvk_sk(),
     ufvk: async (pkp, sk) => W.frost_derive_ufvk(pkp, sk, true),
     address: async (pkp, sk) =>
       encodeOrchardUnifiedAddress(hexToBytes(W.frost_derive_address_from_sk(pkp, sk, 0)), true),
@@ -83,66 +82,72 @@ const PHRASES = [
 ];
 
 const wallet = (n: number, transport: () => RelayTransport, clock: { t: number }) => {
-  const base = peopleWallet(`w${n}`, PHRASES[n]!, transport, clock, h => ({
-    ...h,
-    group: chain(h.group, foldFrost),
-  }));
-  const { service, op, me } = base;
+  const base = peopleWallet(`w${n}`, PHRASES[n]!, transport, clock);
+  const { service, me } = base;
   const seats: Seat[] = [];
   const room = (G: string) => base.room(groupId(G))!;
+  const io = (G: string): FrostIo => ({
+    post: bodies => frostOps['frost-post']({ roomId: groupId(G), bodies }, service),
+    keep: (id, patch) => frostOps['frost-keep']({ roomId: groupId(G), id, patch }, service),
+    save: async seat => void seats.push(seat),
+  });
   return {
     ...base,
     seats,
-    me,
     room,
+    io,
     post: async (G: string, bodies: string[]) =>
       frostOps['frost-post']({ roomId: groupId(G), bodies }, service),
-    io: (G: string): FrostIo => ({
-      post: bodies => frostOps['frost-post']({ roomId: groupId(G), bodies }, service),
-      keep: (id, patch) => frostOps['frost-keep']({ roomId: groupId(G), id, patch }, service),
-      save: async seat => void seats.push(seat),
-    }),
-    /** this member's turn: read the room, do what can be done now */
+    /** the wallets being made in the room, as this member reads them */
+    keygens: (G: string) => keygensOf(room(G)),
+    /** this member's turn: read the room, do what can be done now, in the newest setup it is in */
     turn: async (G: string): Promise<FrostStatus> => {
       await service.check();
       const r = room(G);
       const k = me(G);
-      const c = ceremonyOf(r.frost?.msgs, allowedIn(r, k.pubkey));
-      return advance(c, c && r.frost?.mine?.[c.id], k, frost, {
-        post: bodies => frostOps['frost-post']({ roomId: r.id, bodies }, service),
-        keep: (id, patch) => frostOps['frost-keep']({ roomId: r.id, id, patch }, service),
-        save: async seat => void seats.push(seat),
-      });
+      let last: FrostStatus = 'idle';
+      for (const c of keygensOf(r)) {
+        const s = await advance(c, r.frost?.mine?.[c.id], k, frost, io(G), r.name);
+        if (c.members.includes(k.pubkey)) {
+          last = s;
+        }
+      }
+      return last;
     },
   };
 };
+type Member = ReturnType<typeof wallet>;
 
-/** a founder and `n - 1` people who came in by its code, all reading the same group */
-const group = async (n: number) => {
-  const transport = relayBoard();
-  const clock = { t: Date.UTC(2026, 9, 4, 12) };
-  const ws = Array.from({ length: n }, (_, i) => wallet(i, transport, clock));
-  const [founder, ...rest] = ws;
-  const { id, code } = (await founder!.op('group-create', { name: 'studio' })) as unknown as {
-    id: string;
-    code: string;
-  };
+const clockAt = () => ({ t: Date.UTC(2026, 9, 8, 12) });
+
+/** a creator and `n - 1` people who came in by codes; `want`: made as a k-of-n shared wallet */
+const group = async (n: number, want?: { k: number }, transports?: (() => RelayTransport)[]) => {
+  const board = relayBoard();
+  const clock = clockAt();
+  const ws = Array.from({ length: n }, (_, i) => wallet(i, transports?.[i] ?? board, clock));
+  const [first, ...rest] = ws;
+  const { id, code } = (await first!.op('group-create', {
+    name: 'studio',
+    ...(want ? { k: want.k, n } : {}),
+  })) as unknown as { id: string; code: string };
   const G = id.slice(2);
   const pake = await realPake();
   // one code per person
   for (const [i, w] of rest.entries()) {
-    const next = i ? ((await founder!.op('group-renew', { G })) as { code: string }).code : code;
-    await comeIn(founder!, w, next, G, clock, pake);
+    const next = i ? ((await first!.op('group-renew', { G })) as { code: string }).code : code;
+    await comeIn(first!, w, next, G, clock, pake);
   }
-  for (const w of ws) {
-    await w.service.check();
+  for (let i = 0; i < 2; i++) {
+    for (const w of ws) {
+      await w.service.check();
+    }
   }
-  expect(founder!.room(G).group?.members).toHaveLength(n);
+  expect(first!.room(G).group?.members).toHaveLength(n);
   return { ws, G, clock };
 };
 
 /** everyone takes turns until nobody can do more */
-const run = async (ws: ReturnType<typeof wallet>[], G: string, rounds = 8) => {
+const run = async (ws: Member[], G: string, rounds = 8) => {
   let last: FrostStatus[] = [];
   for (let i = 0; i < rounds; i++) {
     last = [];
@@ -156,348 +161,275 @@ const run = async (ws: ReturnType<typeof wallet>[], G: string, rounds = 8) => {
   return last;
 };
 
-const start = async (
-  w: ReturnType<typeof wallet>,
-  G: string,
-  members: string[],
-  k: number,
-  replaces?: string,
-) => w.post(G, await packFrost(startBody(members, k, 'studio', { replaces })));
+const keysOf = (ws: Member[], G: string) => ws.map(w => w.me(G).pubkey);
 
-const current = (w: ReturnType<typeof wallet>, G: string) =>
-  ceremonyOf(w.room(G).frost?.msgs, allowedIn(w.room(G), w.me(G).pubkey))!;
+/** "make it a shared wallet" from a chat: a fresh genesis and its roster, signed by its proposer */
+const propose = async (w: Member, G: string, members: string[], k: number) => {
+  await w.op('lx-wallet', { roomId: groupId(G), members, k });
+};
 
-/** every member but the starter taps "agree and make keys" for the ceremony it now sees */
-const agreeAll = async (ws: ReturnType<typeof wallet>[], G: string) => {
+/** each other member taps "agree and make keys" on the newest wallet it is asked into */
+const agreeAll = async (ws: Member[], G: string) => {
   for (const w of ws) {
     await w.service.check();
-    const c = current(w, G);
-    if (c && c.by !== w.me(G).pubkey && c.members.includes(w.me(G).pubkey)) {
-      await frostOps['frost-keep'](
-        { roomId: groupId(G), id: c.id, patch: { ok: true } },
-        w.service,
-      );
+    const c = w.keygens(G).at(-1);
+    if (c && !c.agreed.has(w.me(G).pubkey) && c.members.includes(w.me(G).pubkey)) {
+      await w.op('lx-agree', { roomId: groupId(G), id: c.id });
     }
   }
 };
 
-describe('a shared wallet made in its group room', () => {
+const expectOneWallet = (ws: Member[], k: number) => {
+  const seats = ws.map(w => w.seats);
+  seats.forEach(s => expect(s).toHaveLength(1));
+  const [first] = seats[0]!;
+  for (const [s] of seats) {
+    expect(s!.address).toBe(first!.address);
+    expect(s!.publicKeyPackage).toBe(first!.publicKeyPackage);
+    // the viewing key is derived from sk: the same key on every device is the same sk
+    expect(s!.orchardFvk).toBe(first!.orchardFvk);
+    expect(s).toMatchObject({ threshold: k, maxSigners: ws.length, label: 'studio' });
+  }
+  expect(first!.address).toMatch(/^u1/);
+  // each device holds its own share
+  expect(new Set(seats.map(([s]) => s!.keyPackage)).size).toBe(ws.length);
+  return first!;
+};
+
+describe('a shared wallet made by codes, with no leader', () => {
   test.each([
     [3, 2],
     [4, 3],
-  ])('%i members, %i to send: one wallet, the same address everywhere', async (n, k) => {
-    const { ws, G } = await group(n);
+  ])('%i members, %i to send: nobody taps, one wallet, the same sk everywhere', async (n, k) => {
+    const { ws, G } = await group(n, { k });
     expect(majority(n)).toBe(k);
-    await start(
-      ws[0]!,
-      G,
-      ws.map(w => w.me(G).pubkey),
-      k,
-    );
-    // a chat made into a wallet: nobody's device joins until its person agrees, in the thread
-    expect(ws.slice(1).some(w => cameFor(w.room(G), current(w, G)))).toBe(false);
-    expect(await run(ws, G, 2)).toEqual(ws.map(() => 'waiting'));
-    expect(ws.slice(1).every(w => !current(w, G).r1.has(w.me(G).pubkey))).toBe(true);
-    await agreeAll(ws, G);
-    expect(await run(ws, G)).toEqual(ws.map(() => 'done'));
-
-    const seats = ws.map(w => w.seats);
-    seats.forEach(s => expect(s).toHaveLength(1));
-    const [first] = seats[0]!;
-    for (const [s] of seats) {
-      expect(s!.address).toBe(first!.address);
-      expect(s!.publicKeyPackage).toBe(first!.publicKeyPackage);
-      expect(s!.orchardFvk).toBe(first!.orchardFvk);
-      expect(s).toMatchObject({ threshold: k, maxSigners: n, label: 'studio' });
+    // every member signed the roster of all of them by itself: typing the code was the yes
+    for (const w of ws) {
+      const [c] = w.keygens(G);
+      expect(c).toMatchObject({ k, bound: true, rival: false });
+      expect(c!.members).toEqual(sortKeys(keysOf(ws, G)));
+      expect(c!.id).toBe(rosterId({ G: genesisId(c!.G), members: c!.members }));
     }
-    expect(first!.address).toMatch(/^u1/);
-    // each device holds its own share
-    expect(new Set(seats.map(([s]) => s!.keyPackage)).size).toBe(n);
+    expect(await run(ws, G)).toEqual(ws.map(() => 'done'));
+    expectOneWallet(ws, k);
     // the round secrets leave the room once the seat is saved
     for (const w of ws) {
       const mine = Object.values(w.room(G).frost?.mine ?? {})[0];
       expect(mine).toMatchObject({ saved: true });
-      expect(mine).not.toHaveProperty('s1');
-      expect(mine).not.toHaveProperty('kp');
+      for (const secret of ['s1', 'si', 'kp', 'bx']) {
+        expect(mine).not.toHaveProperty(secret);
+      }
     }
   });
 
-  test('someone who never comes: start again without them', async () => {
-    const { ws, G } = await group(3);
-    const [a, b, gone] = ws;
-    await start(
-      a!,
-      G,
-      ws.map(w => w.me(G).pubkey),
-      2,
-    );
-    await agreeAll([a!, b!], G);
-    // the third member never opens zafu: the other two wait, nothing is lost
-    expect(await run([a!, b!], G, 3)).toEqual(['waiting', 'waiting']);
-    const c = ceremonyOf(a!.room(G).frost?.msgs, () => true)!;
-    expect(c.members.filter(m => !c.r1.has(m))).toEqual([gone!.me(G).pubkey]);
-
-    await start(a!, G, [a!.me(G).pubkey, b!.me(G).pubkey], 2, c.id);
-    await agreeAll([a!, b!], G);
-    expect(await run([a!, b!], G)).toEqual(['done', 'done']);
-    expect(a!.seats[0]!.address).toBe(b!.seats[0]!.address);
-    expect(a!.seats[0]).toMatchObject({ threshold: 2, maxSigners: 2 });
-    // when they come back, the wallet is not theirs to join
-    expect(await gone!.turn(G)).toBe('idle');
-    expect(gone!.seats).toEqual([]);
+  test('out of order: members take their turns in any order and make one wallet', async () => {
+    const { ws, G } = await group(3, { k: 2 });
+    const orders = [
+      [2, 0, 1],
+      [1, 2, 0],
+      [0, 2, 1],
+      [2, 1, 0],
+    ];
+    let last: FrostStatus[] = ['idle'];
+    for (let i = 0; i < 8 && !last.every(s => s === 'done'); i++) {
+      last = [];
+      for (const j of orders[i % orders.length]!) {
+        last.push(await ws[j]!.turn(G));
+      }
+    }
+    expect(last).toEqual(['done', 'done', 'done']);
+    expectOneWallet(ws, 2);
   });
 
-  test('the starter goes quiet after round one: another member starts again without them', async () => {
+  test('a relay that withholds one member from another only costs time', async () => {
+    const board = relayBoard();
+    const held = new Set<string>();
+    let holding = false;
+    const member: () => RelayTransport = () => {
+      const t = board();
+      return {
+        ...t,
+        putBucket: async req => {
+          if (holding) {
+            req.entries.forEach(e => held.add(bytesToHex(e.tag)));
+          }
+          return t.putBucket(req);
+        },
+      };
+    };
+    const reader: () => RelayTransport = () => {
+      const t = board();
+      return {
+        ...t,
+        getBucket: async req => (await t.getBucket(req)).filter(e => !held.has(bytesToHex(e.tag))),
+      };
+    };
+    // the relay shows member 0 everything except what member 2 says while held
+    const { ws, G } = await group(3, { k: 2 }, [reader, board, member]);
+    const [a, b, m] = ws as [Member, Member, Member];
+    expect(await run([a, b], G, 1)).toEqual(['waiting', 'waiting']);
+    holding = true;
+    expect(await m.turn(G)).toBe('waiting');
+    holding = false;
+    // a never sees m's round two: it waits, and so does everyone who needs a's word
+    expect(await run(ws, G, 4)).toEqual(['waiting', 'waiting', 'waiting']);
+    expect(ws.every(w => w.seats.length === 0)).toBe(true);
+    void b;
+    // the relay hands it over at last: the same wallet everywhere, nothing forked
+    held.clear();
+    expect(await run([a, ...ws.slice(1)], G)).toEqual(['done', 'done', 'done']);
+    expectOneWallet(ws, 2);
+  });
+});
+
+describe('a shared wallet made from a chat', () => {
+  test("nobody's device makes a share until its person agrees: agreeing is signing the roster", async () => {
     const { ws, G } = await group(3);
-    const [a, b, c] = ws;
-    await start(
-      a!,
-      G,
-      ws.map(w => w.me(G).pubkey),
-      2,
-    );
-    await agreeAll(ws, G);
-    // the starter answers its own start, then never comes back: no viewing key is sent
-    expect(await a!.turn(G)).toBe('waiting');
-    expect(await run([b!, c!], G, 2)).toEqual(['waiting', 'waiting']);
-    await b!.service.check();
-    const cer = current(b!, G);
-    expect(cer.sk).toBeUndefined();
-    // the card shows the ones behind once the ceremony stands still
-    expect(missingOf(cer, cer.last + 10)).toEqual([]);
-    const gone = missingOf(cer, cer.last + MISSING_S + 1);
-    // only the starter holds it up: the others did all they could without it
-    expect(gone).toEqual([a!.me(G).pubkey]);
-    const next = restartOf(cer, gone)!;
-    expect(next).toEqual({ members: [b!.me(G).pubkey, c!.me(G).pubkey], k: 2 });
-    await b!.post(
-      G,
-      await packFrost(startBody(next.members, next.k, 'studio', { replaces: cer.id })),
-    );
-    await agreeAll([b!, c!], G);
-    expect(await run([b!, c!], G)).toEqual(['done', 'done']);
-    expect(b!.seats[0]!.address).toBe(c!.seats[0]!.address);
-    expect(await a!.turn(G)).toBe('idle');
+    await propose(ws[0]!, G, keysOf(ws, G), 2);
+    expect(await run(ws, G, 2)).toEqual(['idle', 'idle', 'idle']);
+    for (const w of ws.slice(1)) {
+      const [c] = w.keygens(G);
+      expect(c).toMatchObject({ bound: false, by: ws[0]!.me(G).pubkey });
+      expect([...c!.agreed]).toEqual([ws[0]!.me(G).pubkey]);
+      expect(c!.r1.size).toBe(0);
+    }
+    await agreeAll(ws.slice(1, 2), G);
+    expect(await run(ws, G, 2)).toEqual(['idle', 'idle', 'idle']);
+    await agreeAll(ws.slice(2), G);
+    expect(await run(ws, G)).toEqual(['done', 'done', 'done']);
+    expectOneWallet(ws, 2);
+  });
+
+  test('a member agrees to one roster per wallet, never two', async () => {
+    const { ws, G } = await group(3);
+    const [a, b] = ws as [Member, Member];
+    await propose(a, G, keysOf(ws, G), 2);
+    await agreeAll([b], G);
+    const c = b.keygens(G)[0]!;
+    // the same wallet with another roster: b already signed one for it
+    await expect(
+      b.op('lx-agree', {
+        roomId: groupId(G),
+        id: rosterId({ G: genesisId(c.G), members: [b.me(G).pubkey] }),
+      }),
+    ).rejects.toThrow();
+    expect(b.room(G).group?.signed?.r?.[genesisId(c.G)]).toBe(c.id);
+  });
+
+  test('someone who never comes: start again without them, as a new wallet', async () => {
+    const { ws, G } = await group(3);
+    const [a, b, gone] = ws as [Member, Member, Member];
+    await propose(a, G, keysOf(ws, G), 2);
+    await agreeAll([b], G);
+    // the third never opens zafu: the roster waits for their word, nothing is lost
+    expect(await run([a, b], G, 3)).toEqual(['idle', 'idle']);
+    const c = a.keygens(G)[0]!;
+    expect(missingOf(c, c.at + 10)).toEqual([]);
+    expect(missingOf(c, c.at + MISSING_S + 1)).toEqual([gone.me(G).pubkey]);
+    const next = restartOf(c, [gone.me(G).pubkey])!;
+    expect(next.k).toBe(2);
+    await propose(a, G, next.members, next.k);
+    await agreeAll([b], G);
+    expect(await run([a, b], G)).toEqual(['done', 'done']);
+    expect(a.seats[0]!.address).toBe(b.seats[0]!.address);
+    expect(a.seats[0]).toMatchObject({ threshold: 2, maxSigners: 2 });
+    // when they come back, the wallet is not theirs to join, and the first one never binds
+    expect(await gone.turn(G)).toBe('idle');
+    expect(gone.seats).toEqual([]);
   });
 
   test('starting again keeps the threshold where it fits, never below two', () => {
-    const c = { k: 3, members: ['a', 'b', 'c', 'd'] } as Ceremony;
+    const c = { k: 3, members: ['a', 'b', 'c', 'd'] };
     expect(restartOf(c, ['d'])).toEqual({ members: ['a', 'b', 'c'], k: 3 });
     expect(restartOf(c, ['c', 'd'])).toEqual({ members: ['a', 'b'], k: 2 });
     expect(restartOf(c, ['b', 'c', 'd'])).toBeUndefined();
-    expect(restartOf({ k: 2, members: ['a', 'b', COURT] } as Ceremony, [COURT])).toEqual({
-      members: ['a', 'b'],
-      k: 2,
-    });
   });
+});
 
-  test('the threshold changed after the first start: the new start replaces it', async () => {
-    const { ws, G } = await group(3);
-    const members = ws.map(w => w.me(G).pubkey);
-    await start(ws[0]!, G, members, 2);
-    await agreeAll(ws, G);
-    // one member already answered the first start
-    expect(await ws[1]!.turn(G)).toBe('waiting');
-    await start(ws[0]!, G, members, 3, current(ws[1]!, G).id);
-    // another threshold is another thing to agree to
-    expect(await run(ws, G, 2)).toEqual(['waiting', 'waiting', 'waiting']);
-    await agreeAll(ws, G);
-    expect(await run(ws, G)).toEqual(['done', 'done', 'done']);
-    for (const w of ws) {
-      expect(w.seats).toHaveLength(1);
-      expect(w.seats[0]).toMatchObject({ threshold: 3, maxSigners: 3 });
-    }
-    expect(new Set(ws.map(w => w.seats[0]!.address)).size).toBe(1);
-  });
-
-  test('a deal waits for the other side to agree to its terms', async () => {
-    const { ws, G } = await group(2);
-    const [a, b] = ws;
-    const deal = { amount: '125000000', what: 'logo design', payer: 'proposer' as const };
-    await a!.post(
-      G,
-      await packFrost(startBody([a!.me(G).pubkey, b!.me(G).pubkey], 2, deal.what, { deal })),
-    );
-    expect(await run(ws, G, 2)).toEqual(['waiting', 'waiting']);
-    const c = current(b!, G);
-    expect(c.deal).toEqual(deal);
-    expect(c.r1.has(b!.me(G).pubkey)).toBe(false);
-    await frostOps['frost-keep']({ roomId: groupId(G), id: c.id, patch: { ok: true } }, b!.service);
-    expect(await run(ws, G)).toEqual(['done', 'done']);
-    expect(a!.seats[0]).toMatchObject({ threshold: 2, maxSigners: 2, label: 'logo design' });
-    expect(a!.seats[0]!.address).toBe(b!.seats[0]!.address);
-  });
-
-  test('a start naming someone outside the room, or zafu court, is read as such', async () => {
-    const { ws, G } = await group(2);
-    const [a, b] = ws;
-    const outsider = deriveRoomKeys(PHRASES[3]!, 0, G).pubkey;
-    await start(a!, G, [a!.me(G).pubkey, outsider], 2);
-    expect(ceremonyOf(b!.room(G).frost?.msgs, allowedIn(b!.room(G), b!.me(G).pubkey))).toBe(
-      undefined,
-    );
-    await b!.service.check();
-    expect(
-      ceremonyOf(b!.room(G).frost?.msgs, allowedIn(b!.room(G), b!.me(G).pubkey)),
-    ).toBeUndefined();
-
-    // the court is a seat that waits for its service: nobody finishes without it
-    await start(a!, G, [a!.me(G).pubkey, b!.me(G).pubkey, COURT], 2);
-    await agreeAll(ws, G);
-    expect(await run(ws, G, 3)).toEqual(['waiting', 'waiting']);
-  });
-
-  test('a payment from it: proposed, sealed by two, declined by one, signed in the room', async () => {
-    const { ws, G } = await group(3);
-    const [a, b, c] = ws;
-    await start(
-      a!,
-      G,
-      ws.map(w => w.me(G).pubkey),
-      2,
-    );
-    await agreeAll(ws, G);
-    expect(await run(ws, G)).toEqual(['done', 'done', 'done']);
-    const seat = a!.seats[0]!;
-    const wallet = { ceremony: seat.ceremony, members: seat.members, threshold: 2 };
-    const sent: string[][] = [];
-    const callsOf = (s: Seat): SignCalls => ({
-      round1: async () => JSON.parse(W.frost_sign_round1(s.ephemeralSeed, s.keyPackage)),
-      sign: async (n, h, alpha, cm) =>
-        W.frost_spend_sign_round2_signed(
-          s.ephemeralSeed,
-          s.keyPackage,
-          n,
-          h,
-          alpha,
-          JSON.stringify(cm),
-        ),
-      aggregate: async (h, alpha, cm, sh) =>
-        W.frost_spend_aggregate(
-          s.publicKeyPackage,
-          h,
-          alpha,
-          JSON.stringify(cm),
-          JSON.stringify(sh),
-        ),
-      complete: async (_p, sigs) => (sent.push(sigs), 'ab'.repeat(32)),
-    });
-    // two spends: two alphas, one share each per signer
-    const alphas = ['01'.padEnd(64, '0'), '02'.padEnd(64, '0')];
-    const prop = propOf({
-      w: seat.ceremony,
-      by: a!.me(G).pubkey,
-      to: 'u1someone',
-      amt: '125000000',
-      fee: '10000',
-      sighash: bytesToHex(crypto.getRandomValues(new Uint8Array(32))),
-      alphas,
-      si: [0, 1],
-      pczt: 'aa',
-    });
-    await a!.post(G, await packFrost(prop));
-    await seal(prop, callsOf(seat), a!.io(G));
-    const view = async (w: ReturnType<typeof wallet>) => {
-      await w.service.check();
-      const r = w.room(G);
-      return { p: proposalsOf(r.frost?.msgs, wallet)[0]!, mine: r.frost?.mine?.[prop.id] };
-    };
-    {
-      const { p } = await view(b!);
-      expect(p).toMatchObject({ by: a!.me(G).pubkey, amt: '125000000' });
-      expect([...p.commits.keys()]).toEqual([a!.me(G).pubkey]);
-      await seal(p, callsOf(b!.seats[0]!), b!.io(G));
-      await decline((await view(c!)).p, c!.io(G));
-    }
-    let status = '';
-    for (let i = 0; i < 6 && status !== 'sent'; i++) {
-      for (const w of [a!, b!, c!]) {
-        const { p, mine } = await view(w);
-        const s = await advanceSign(p, wallet, mine, w.me(G).pubkey, callsOf(w.seats[0]!), w.io(G));
-        if (w === a) {
-          status = s;
-        }
-      }
-    }
-    expect(status).toBe('sent');
-    // one aggregated signature per spend, each verified by frost against the group key
-    expect(sent).toHaveLength(1);
-    expect(sent[0]!.map(x => x.length)).toEqual([128, 128]);
-    const { p, mine: bMine } = await view(b!);
-    expect(p.set).toEqual([a!.me(G).pubkey, b!.me(G).pubkey]);
-    expect(p.no).toEqual(new Set([c!.me(G).pubkey]));
-    expect(p.sent).toBe('ab'.repeat(32));
-    // a nonce signs once: gone from the device the moment its share left
-    expect(bMine).toMatchObject({ released: true });
-    expect(bMine).not.toHaveProperty('n');
-    expect((await view(c!)).mine).toMatchObject({ no: true });
-  });
-
-  test('a member who says two round-one broadcasts stops the ceremony, and nothing is saved', async () => {
-    const { ws, G } = await group(3);
-    const [a, b, m] = ws;
-    await start(
-      a!,
-      G,
-      ws.map(w => w.me(G).pubkey),
-      2,
-    );
-    await agreeAll(ws, G);
-    for (const w of ws) {
-      expect(await w.turn(G)).toBe('waiting');
-    }
+describe('what stops a key setup, with nothing saved', () => {
+  test('a member who says two round-one broadcasts stops it', async () => {
+    const { ws, G } = await group(3, { k: 2 });
+    const m = ws[2]!;
+    expect(await run(ws, G, 1)).toEqual(['waiting', 'waiting', 'waiting']);
     // m says round one again, with another polynomial, for the slower ones to use
-    const c = current(m!, G);
+    await m.service.check();
+    const c = m.keygens(G)[0]!;
     const other = await frost.part1(3, 2);
-    await m!.post(
+    const own = c.r1.get(m.me(G).pubkey)!;
+    await m.post(
       G,
-      await packFrost({ t: 'r1', id: c.id, b: other.broadcast, x: m!.me(G).xwingPublicKey }),
+      await packFrost({ t: 'r1', v: 2, id: c.id, b: other.broadcast, x: own.x, c: own.c }),
     );
-    const last = await run(ws, G);
-    expect(last).toEqual(['mismatch', 'mismatch', 'mismatch']);
+    expect(await run(ws, G)).toEqual(['mismatch', 'mismatch', 'mismatch']);
     for (const w of ws) {
       expect(w.seats).toEqual([]);
-      const seen = current(w, G);
-      expect([...seen.split]).toEqual([m!.me(G).pubkey]);
+      const seen = w.keygens(G)[0]!;
+      expect([...seen.split]).toEqual([m.me(G).pubkey]);
       expect(mismatched(seen)).toBe(true);
-      // the first broadcast is the one read; the second never replaces it
-      expect(seen.r1.get(m!.me(G).pubkey)!.b).not.toBe(other.broadcast);
     }
-    void b;
   });
 
-  test('a member who shows two devices two round-one broadcasts: they never make keys from it', async () => {
-    // the relay (or the member) hands A one broadcast from M and B another;
-    // neither of them ever sees both, so only the round-one hash can tell
+  test('a member who reveals an s_i other than the one it committed to stops it', async () => {
+    const { ws, G } = await group(3, { k: 2 });
+    const m = ws[2]!;
+    expect(await run(ws, G, 1)).toEqual(['waiting', 'waiting', 'waiting']);
+    // m's device lies about its share of the viewing-key secret after committing
+    const c = m.keygens(G)[0]!;
+    await m.service.api.updateRoom(groupId(G), r => ({
+      ...r,
+      frost: {
+        ...r.frost!,
+        mine: { ...r.frost!.mine, [c.id]: { ...r.frost!.mine![c.id], si: 'ee'.repeat(32) } },
+      },
+    }));
+    const last = await run(ws, G);
+    expect(last.slice(0, 2)).toEqual(['mismatch', 'mismatch']);
+    for (const w of ws) {
+      expect(w.seats).toEqual([]);
+    }
+  });
+
+  test('a member shown differently to two devices: they never make keys from it', async () => {
+    // A is handed one round one from M, B another; neither sees both, so only h1 tells
     const [A, B, M] = PHRASES.slice(0, 3).map(ph => deriveRoomKeys(ph, 0, 'aa'.repeat(16)));
-    const members = [A!.pubkey, B!.pubkey, M!.pubkey];
-    const id = 'c'.repeat(32);
+    const members = sortKeys([A!.pubkey, B!.pubkey, M!.pubkey]);
+    const R = 'c'.repeat(64);
+    const at = (k: string) => members.indexOf(k);
+    const s = { a: 'a1'.repeat(32), b: 'b1'.repeat(32), m: 'c1'.repeat(32) };
     const [pa, pb, x, y] = [
       await frost.part1(3, 2),
       await frost.part1(3, 2),
       await frost.part1(3, 2),
       await frost.part1(3, 2),
     ];
-    const r1 = (mb: string) =>
-      new Map([
-        [A!.pubkey, { b: pa!.broadcast, x: A!.xwingPublicKey }],
-        [B!.pubkey, { b: pb!.broadcast, x: B!.xwingPublicKey }],
-        [M!.pubkey, { b: mb, x: M!.xwingPublicKey }],
-      ]);
-    const ceremony = (mb: string): Ceremony => ({
-      id,
-      by: A!.pubkey,
+    const rec = (k: string, b: string, xw: string, si: string) => {
+      const r = { b, x: xw, c: commitOf(R, at(k), si) };
+      return { ...r, id: r1Id({ R, member: k, ...r }) };
+    };
+    const keygen = (mb: string): Keygen => ({
+      id: R,
+      G: { purpose: 'wallet', t: 2, n: 3, salt: 'aa'.repeat(16), creator: A!.pubkey },
       k: 2,
       members,
-      label: 'studio',
+      by: A!.pubkey,
       at: 1,
       last: 1,
-      r1: r1(mb),
+      agreed: new Set(members),
+      bound: true,
+      rival: false,
+      r1: new Map([
+        [A!.pubkey, rec(A!.pubkey, pa!.broadcast, A!.xwingPublicKey, s.a)],
+        [B!.pubkey, rec(B!.pubkey, pb!.broadcast, B!.xwingPublicKey, s.b)],
+        [M!.pubkey, rec(M!.pubkey, mb, M!.xwingPublicKey, s.m)],
+      ]),
       r2: new Map(),
       fvk: new Map(),
       split: new Set(),
     });
-    const kept: Record<string, Record<string, unknown>> = { a: {}, b: {} };
+    const kept: Record<string, Record<string, unknown>> = {
+      a: { s1: pa!.secret, b1: pa!.broadcast, si: s.a },
+      b: { s1: pb!.secret, b1: pb!.broadcast, si: s.b },
+    };
     const saved: Seat[] = [];
     const part3 = vi.fn(frost.part3);
     const calls = { ...frost, part3 };
@@ -506,67 +438,46 @@ describe('a shared wallet made in its group room', () => {
       keep: async (_id, patch) => (kept[who] = keepMine(kept[who], patch) as never),
       save: async seat => void saved.push(seat),
     });
-    kept['a'] = { s1: pa!.secret, b1: pa!.broadcast };
-    kept['b'] = { s1: pb!.secret, b1: pb!.broadcast, ok: true };
-    const ca = ceremony(x!.broadcast);
-    const cb = ceremony(y!.broadcast);
-    // the starter seals the viewing-key secret and makes its round two from X
-    expect(await advance(ca, kept['a'], A!, calls, ioOf('a'))).toBe('waiting');
-    // B makes its round two from Y
-    expect(await advance(cb, kept['b'], B!, calls, ioOf('b'))).toBe('waiting');
+    const ca = keygen(x!.broadcast);
+    const cb = keygen(y!.broadcast);
+    expect(await advance(ca, kept['a'], A!, calls, ioOf('a'), 'studio')).toBe('waiting');
+    expect(await advance(cb, kept['b'], B!, calls, ioOf('b'), 'studio')).toBe('waiting');
     const ha = kept['a']!['h1'] as string;
     const hb = kept['b']!['h1'] as string;
-    expect(ha).toMatch(/^[0-9a-f]{64}$/);
     expect(hb).not.toBe(ha);
-    // each sees the other's round two, and M's, which M tailored to each
     const r2 = (who: 'a' | 'b') => ({
       p: kept[who]!['p2'] as string[],
+      s: kept[who]!['bx'] as string[],
       h1: kept[who]!['h1'] as string,
+      id: 'r2',
     });
-    ca.r2.set(B!.pubkey, r2('b')).set(M!.pubkey, { p: ['00'], h1: ha });
-    cb.r2.set(A!.pubkey, r2('a')).set(M!.pubkey, { p: ['00'], h1: hb });
-    ca.sk = {};
-    expect(await advance(ca, kept['a'], A!, calls, ioOf('a'))).toBe('mismatch');
+    ca.r2.set(B!.pubkey, r2('b')).set(M!.pubkey, { p: ['00'], s: ['', '', ''], h1: ha, id: 'm' });
+    cb.r2.set(A!.pubkey, r2('a')).set(M!.pubkey, { p: ['00'], s: ['', '', ''], h1: hb, id: 'm' });
+    expect(await advance(ca, kept['a'], A!, calls, ioOf('a'), 'studio')).toBe('mismatch');
+    expect(await advance(cb, kept['b'], B!, calls, ioOf('b'), 'studio')).toBe('mismatch');
     expect(mismatched(ca)).toBe(true);
-    // B is not given the viewing-key secret here; with it, B stops the same way
-    cb.sk = { [B!.pubkey]: 'AA==' };
-    expect(await advance(cb, kept['b'], B!, calls, ioOf('b'))).toBe('mismatch');
     expect(part3).not.toHaveBeenCalled();
     expect(saved).toEqual([]);
   });
 
-  test('another start under the same id does not take over its consent: it stops it', async () => {
+  test('an unbound roster makes no keys at all', async () => {
     const { ws, G } = await group(3);
-    const [a, b, m] = ws;
-    const members = ws.map(w => w.me(G).pubkey);
-    const honest = startBody(members, 2, 'studio') as Extract<FrostBody, { t: 'start' }>;
-    await a!.post(G, await packFrost(honest));
-    await agreeAll(ws, G);
-    // m says a start of its own under that id, with another threshold
-    await m!.post(G, await packFrost({ ...honest, k: 3, label: 'studio' }));
-    // whichever of the two starts a device reads as the ceremony (their ids
-    // tie, their message ids are random), every member stops, the starter too,
-    // and nobody is asked to agree to it again
-    expect(await run(ws, G)).toEqual(['mismatch', 'mismatch', 'mismatch']);
-    for (const w of ws) {
-      expect(await w.turn(G)).toBe('mismatch');
-    }
-    for (const w of ws) {
-      expect(w.seats).toEqual([]);
-      expect(current(w, G).split).toEqual(new Set([a!.me(G).pubkey, m!.me(G).pubkey]));
-    }
-    void b;
-  });
-
-  test('the wallet is compared as a commitment: the viewing key is never said in the room', async () => {
-    const { ws, G } = await group(2);
-    await start(
-      ws[0]!,
-      G,
-      ws.map(w => w.me(G).pubkey),
-      2,
+    await propose(ws[0]!, G, keysOf(ws, G), 2);
+    await ws[0]!.service.check();
+    const c = ws[0]!.keygens(G)[0]!;
+    expect(c.bound).toBe(false);
+    const io = ws[0]!.io(G);
+    const part1 = vi.fn(frost.part1);
+    expect(await advance(c, undefined, ws[0]!.me(G), { ...frost, part1 }, io, 'studio')).toBe(
+      'idle',
     );
-    await agreeAll(ws, G);
+    expect(part1).not.toHaveBeenCalled();
+  });
+});
+
+describe('the wallet it makes', () => {
+  test('is compared as a commitment: the viewing key and the s_i are never said in the room', async () => {
+    const { ws, G } = await group(2, { k: 2 });
     expect(await run(ws, G)).toEqual(['done', 'done']);
     const ufvk = ws[0]!.seats[0]!.orchardFvk;
     expect(ufvk).toMatch(/^uview/);
@@ -579,73 +490,184 @@ describe('a shared wallet made in its group room', () => {
     }
   });
 
-  test('the viewing-key secret opens only for its member, in its ceremony', async () => {
-    const { ws, G } = await group(2);
-    const [a, b] = ws;
-    await start(a!, G, [a!.me(G).pubkey, b!.me(G).pubkey], 2);
-    await agreeAll(ws, G);
-    await a!.turn(G);
-    await b!.turn(G);
-    await a!.turn(G);
-    await b!.service.check();
-    const c = current(b!, G);
-    expect(c.sk?.[b!.me(G).pubkey]).toBeDefined();
-    // the same box under another ceremony's id does not open: B stops instead of using it
-    const moved = { ...c, id: 'd'.repeat(32) };
-    const mine = { ...b!.room(G).frost!.mine![c.id]!, s2: 'x', h1: 'e'.repeat(64) };
-    expect(await advance(moved, mine, b!.me(G), frost, b!.io(G))).toBe('mismatch');
+  test('signs a payment: proposed, sealed by two, declined by one, signed in the room', async () => {
+    const { ws, G } = await group(3, { k: 2 });
+    expect(await run(ws, G)).toEqual(['done', 'done', 'done']);
+    await pay(
+      ws,
+      G,
+      ws.map(w => w.seats[0]!),
+    );
+  });
+});
+
+const callsOf = (s: Seat, sent: string[][]): SignCalls => ({
+  round1: async () => JSON.parse(W.frost_sign_round1(s.ephemeralSeed, s.keyPackage)),
+  sign: async (n, h, alpha, cm) =>
+    W.frost_spend_sign_round2_signed(
+      s.ephemeralSeed,
+      s.keyPackage,
+      n,
+      h,
+      alpha,
+      JSON.stringify(cm),
+    ),
+  aggregate: async (h, alpha, cm, sh) =>
+    W.frost_spend_aggregate(s.publicKeyPackage, h, alpha, JSON.stringify(cm), JSON.stringify(sh)),
+  complete: async (_p, sigs) => (sent.push(sigs), 'ab'.repeat(32)),
+});
+
+/** a 2-of-3 payment through the room's records, from these seats */
+const pay = async (ws: Member[], G: string, seats: Seat[]) => {
+  const [a, b, c] = ws as [Member, Member, Member];
+  const seat = seats[0]!;
+  const wallet = { ceremony: seat.ceremony, members: seat.members, threshold: 2 };
+  const sent: string[][] = [];
+  // two spends: two alphas, one share each per signer
+  const alphas = ['01'.padEnd(64, '0'), '02'.padEnd(64, '0')];
+  const prop = propOf({
+    w: seat.ceremony,
+    by: a.me(G).pubkey,
+    to: 'u1someone',
+    amt: '125000000',
+    fee: '10000',
+    sighash: bytesToHex(crypto.getRandomValues(new Uint8Array(32))),
+    alphas,
+    si: [0, 1],
+    pczt: 'aa',
+  });
+  await a.post(G, await packFrost(prop));
+  await seal(prop, callsOf(seat, sent), a.io(G));
+  const view = async (w: Member) => {
+    await w.service.check();
+    const r = w.room(G);
+    return { p: proposalsOf(r.frost?.msgs, wallet)[0]!, mine: r.frost?.mine?.[prop.id] };
+  };
+  {
+    const { p } = await view(b);
+    expect(p).toMatchObject({ by: a.me(G).pubkey, amt: '125000000' });
+    await seal(p, callsOf(seats[1]!, sent), b.io(G));
+    await decline((await view(c)).p, c.io(G));
+  }
+  let status = '';
+  for (let i = 0; i < 6 && status !== 'sent'; i++) {
+    for (const [j, w] of [a, b, c].entries()) {
+      const { p, mine } = await view(w);
+      const s = await advanceSign(
+        p,
+        wallet,
+        mine,
+        w.me(G).pubkey,
+        callsOf(seats[j]!, sent),
+        w.io(G),
+      );
+      if (w === a) {
+        status = s;
+      }
+    }
+  }
+  expect(status).toBe('sent');
+  // one aggregated signature per spend, each verified by frost against the group key
+  expect(sent).toHaveLength(1);
+  expect(sent[0]!.map(x => x.length)).toEqual([128, 128]);
+  const { p, mine: bMine } = await view(b);
+  expect(p.set).toEqual([a.me(G).pubkey, b.me(G).pubkey]);
+  expect(p.no).toEqual(new Set([c.me(G).pubkey]));
+  expect(p.sent).toBe('ab'.repeat(32));
+  // a nonce signs once: gone from the device the moment its share left
+  expect(bMine).toMatchObject({ released: true });
+  expect(bMine).not.toHaveProperty('n');
+};
+
+describe('a wallet an older zafu made', () => {
+  test('still signs: payments read the saved seat, never how its keys were made', async () => {
+    const { ws, G } = await group(3);
+    // keys made the old way: a 16-byte ceremony id, a viewing-key secret one member sampled
+    const ceremony = 'ce'.repeat(16);
+    const members = keysOf(ws, G);
+    const r1 = await Promise.all(ws.map(() => frost.part1(3, 2)));
+    const r2 = await Promise.all(
+      r1.map((r, i) =>
+        frost.part2(
+          r.secret,
+          r1.filter((_, j) => j !== i).map(x => x.broadcast),
+        ),
+      ),
+    );
+    const sk = W.frost_sample_fvk_sk();
+    const seats: Seat[] = await Promise.all(
+      ws.map(async (_, i) => {
+        const r = await frost.part3(
+          r2[i]!.secret,
+          r1.filter((_, j) => j !== i).map(x => x.broadcast),
+          r2.filter((_, j) => j !== i).flatMap(x => x.peer_packages),
+        );
+        return {
+          ceremony,
+          members,
+          label: 'studio',
+          threshold: 2,
+          maxSigners: 3,
+          address: await frost.address(r.public_key_package, sk),
+          orchardFvk: await frost.ufvk(r.public_key_package, sk),
+          keyPackage: r.key_package,
+          publicKeyPackage: r.public_key_package,
+          ephemeralSeed: r.ephemeral_seed,
+        };
+      }),
+    );
+    // an older zafu's key records still in the room are read only as "older"
+    await ws[0]!.post(
+      G,
+      await packFrost({ t: 'start', id: ceremony, k: 2, m: members, label: 'x' } as never),
+    );
+    await ws[1]!.service.check();
+    expect(ws[1]!.room(G).frost!.msgs.some(m => m.body.t === 'old')).toBe(true);
+    expect(ws[1]!.keygens(G)).toEqual([]);
+    await pay(ws, G, seats);
   });
 });
 
 describe('room records a peer can write', () => {
-  const id = 'a'.repeat(32);
   const key = 'b'.repeat(64);
-  const start = { t: 'start', id, k: 2, m: [key, 'c'.repeat(64)], label: 'studio' };
+  const sig = 'a'.repeat(128);
+  const roster = { G: 'd'.repeat(64), members: sortKeys([key, 'c'.repeat(64)]) };
+  const rs = { t: 'rs', v: 2, id: rosterId(roster), r: roster, k: key, sig };
 
   test.each([
-    ['a label that is not text', { ...start, label: {} }],
-    ['a label too long', { ...start, label: 'x'.repeat(49) }],
-    [
-      'a deal amount that is not whole zatoshi',
-      { ...start, deal: { amount: '1.5', what: 'x', payer: 'other' } },
-    ],
-    [
-      'a deal amount that is a number',
-      { ...start, deal: { amount: 15, what: 'x', payer: 'other' } },
-    ],
-    ['a deal without what', { ...start, deal: { amount: '15', payer: 'other' } }],
-    [
-      'a deal whose what is not text',
-      { ...start, deal: { amount: '15', what: { a: 1 }, payer: 'other' } },
-    ],
-    ['a deal with another payer', { ...start, deal: { amount: '15', what: 'x', payer: 'court' } }],
-    ['a deal that is a string', { ...start, deal: 'all of it' }],
-    ['a replaced id that is not one', { ...start, r: 7 }],
-    ['a member twice', { ...start, m: [key, key] }],
-    ['a threshold above the members', { ...start, k: 3 }],
-    ['an r1 without an X-Wing key', { t: 'r1', id, b: 'aa', x: 'bb' }],
-    ['an sk box that is not base64', { t: 'sk', id, s: { [key]: '<script>' } }],
-    ['an sk box for someone who is not a key', { t: 'sk', id, s: { bob: 'AA==' } }],
-    ['an r2 without its round-one hash', { t: 'r2', id, p: ['aa'] }],
-    ['an fvk with the viewing key in it', { t: 'fvk', id, u: 'uview1...', a: 'u1...' }],
-    ['a set naming someone twice', { t: 'set', id, m: [key, key] }],
-    ['a sent that is not a txid', { t: 'sent', id, tx: 'nope' }],
+    ['a roster under an id that is not its own', { ...rs, id: 'e'.repeat(64) }],
+    ['a roster out of order', { ...rs, r: { ...roster, members: [...roster.members].reverse() } }],
+    ['a roster signature that is not hex', { ...rs, sig: 'x'.repeat(128) }],
+    ['a genesis under an id that is not its own', { t: 'g', v: 2, id: 'e'.repeat(64), g: {} }],
+    ['a join whose id is not its invite', { t: 'join', v: 2, id: 'e'.repeat(64), j: {}, js: sig }],
+    ['an r1 without its commitment', { t: 'r1', v: 2, id: 'e'.repeat(64), b: 'aa', x: 'bb' }],
+    ['an r2 without its reveals', { t: 'r2', v: 2, id: 'e'.repeat(64), p: ['aa'], h1: key }],
+    ['an fvk with the viewing key in it', { t: 'fvk', v: 2, id: key, u: 'uview1...' }],
+    ['a set naming someone twice', { t: 'set', id: 'a'.repeat(32), m: [key, key] }],
+    ['a sent that is not a txid', { t: 'sent', id: 'a'.repeat(32), tx: 'nope' }],
     ['no id', { t: 'no' }],
     ['null', null],
-    ['an array', [start]],
+    ['an array', [rs]],
   ])('%s is not read', (_name, body) => {
     expect(readBody(body)).toBeUndefined();
   });
 
   test('what is read is built again from the checked fields only', () => {
-    const deal = { amount: '15', what: 'logo', payer: 'other', extra: { evil: 1 } };
-    const read = readBody({ ...start, deal, more: '<b>' });
-    expect(read).toEqual({ ...start, deal: { amount: '15', what: 'logo', payer: 'other' } });
+    expect(readBody({ ...rs, more: '<b>', r: { ...roster, evil: 1 } })).toEqual(rs);
+  });
+
+  test("an older zafu's key records are read as that, and nothing more", () => {
+    for (const t of ['start', 'sk', 'r1', 'r2', 'fvk']) {
+      expect(readBody({ t, id: 'a'.repeat(32), m: [key] })).toEqual({
+        t: 'old',
+        id: 'a'.repeat(32),
+      });
+    }
   });
 
   test('a payment said under an id that is not its own is not read', () => {
     const p = propOf({
-      w: id,
+      w: 'a'.repeat(64),
       by: key,
       to: 'u1someone',
       amt: '100',
@@ -658,25 +680,17 @@ describe('room records a peer can write', () => {
     expect(readBody(p)).toEqual(p);
     expect(readBody({ ...p, to: 'u1mallory' })).toBeUndefined();
     expect(readBody({ ...p, by: 'c'.repeat(64) })).toBeUndefined();
-    expect(readBody({ ...p, pczt: 'bb' })).toBeUndefined();
   });
 
-  test('malformed records are dropped as they arrive, and ones already kept are never shown', async () => {
+  test('malformed records are dropped as they arrive', async () => {
     const room = { id: 'g:x', kind: 'group' } as PeopleRoom;
     const records = (
-      await Promise.all([
-        packFrost({ ...start, label: {} } as never),
-        packFrost({ ...start, deal: { amount: '1.5', what: 'x', payer: 'other' } } as never),
-      ])
+      await Promise.all([packFrost({ ...rs, id: 'e'.repeat(64) } as never), packFrost(rs as never)])
     ).flat();
     const fold = await foldFrost(
       room,
       records.map((body, i) => ({ author: key, ts: 1, body, hash: String(i) }) as never),
     );
-    expect(fold!(room).frost!.msgs).toEqual([]);
-    // a start an older build kept, label and all: the ceremony reads as none
-    const kept = [{ from: key, at: 1, mid: '1', body: { ...start, label: {} } as never }];
-    expect(ceremonyOf(kept, () => true)).toBeUndefined();
-    expect(ceremonyOf([{ ...kept[0]!, body: start as never }], () => true)?.label).toBe('studio');
+    expect(fold!(room).frost!.msgs.map(m => m.body)).toEqual([rs]);
   });
 });

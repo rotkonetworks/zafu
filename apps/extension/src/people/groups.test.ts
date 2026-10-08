@@ -1,26 +1,27 @@
 /**
- * Groups through the door, on a fake relay and the real SPAKE2: the founder
- * makes a group, others type its code and come in, the roster comes from the
- * founder's log, and they talk. A code lets one person in; a wrong word is
- * seen at once, opens nothing and spends nothing; the relay's mailbox never
- * holds the words; two codes that share a number stay apart; the founder can
- * take someone off until the keys are made; and a roster record nobody
- * authorised is refused.
+ * Groups through the door with no leader (#110), on a fake relay and the
+ * real SPAKE2: someone makes a group, others type a code and come in, each
+ * seat a join co-signed by the invite's owner, and they talk. Anyone seated
+ * invites. A code lets one person in, and its owner co-signs one join for it;
+ * an owner who co-signs two seats neither. A wrong word is seen at once,
+ * opens nothing and spends nothing; the relay's mailbox never holds the
+ * words; two codes that share a number stay apart. Removing someone before
+ * keys moves the rest to a room the removed one cannot read.
  *
  * @vitest-environment node
  */
 
 import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { hexToBytes } from '@noble/hashes/utils';
-import { appendRecord } from '@zafu/zirc';
-import { GROUP_ROOM_PLAINTEXT_BYTES, Room, ZAFU_GROUP_APP_SCOPE } from '@zafu/zirc/room';
+import { ed25519 } from '@noble/curves/ed25519';
+import { bytesToHex } from '@noble/hashes/utils';
+import { joinId, sigMessage } from '@zafu/zirc/leaderless';
 import { deriveRoomKeys } from '../state/identity';
 import { groupId, OLDER_CODE } from './groups';
 import { ANSWERS_PER_CODE, CODE_RE, DOOR_VERSION, encodeWire, makeCode, splitCode } from './door';
 import { doorView, hostStep, joinStep, type DoorPake } from './door-run';
-import { allowedIn, cameFor, ceremonyOf, foldFrost } from './frost-room';
-import { identityOf } from './keys';
-import { chain } from './service';
+import { frostOps, packFrost, type FrostBody } from './frost-room';
+import { joinMac, keygensOf, viewOf } from './lx';
 import { wordName } from './word-name';
 import { comeIn, hostDoor, peopleWallet, realPake, relayBoard } from './door.test-util';
 
@@ -43,12 +44,7 @@ const setup = (...phrases: string[]) => {
   return {
     transport,
     clock,
-    ws: phrases.map((p, i) =>
-      peopleWallet(`w${i}`, p, transport, clock, h => ({
-        ...h,
-        group: chain(h.group, foldFrost),
-      })),
-    ),
+    ws: phrases.map((p, i) => withPost(peopleWallet(`w${i}`, p, transport, clock))),
   };
 };
 
@@ -56,6 +52,13 @@ const make = async (w: ReturnType<typeof setup>['ws'][number], args: Record<stri
   const { id, code } = (await w.op('group-create', args)) as { id: string; code: string };
   return { G: id.slice(2), code };
 };
+
+/** say one leaderless record in a room, as this wallet */
+const withPost = <T extends ReturnType<typeof setup>['ws'][number]>(w: T) =>
+  Object.assign(w, {
+    post: async (roomId: string, body: FrostBody) =>
+      frostOps['frost-post']({ roomId, bodies: await packFrost(body) }, w.service),
+  });
 
 describe('a group through its door', () => {
   test('make, type the code, come in, talk: no allow step, the same words on both sides', async () => {
@@ -213,33 +216,33 @@ describe('a group through its door', () => {
     expect(ANSWERS_PER_CODE).toBe(12);
   });
 
-  test('a shared wallet: once n are in, the founder starts its keys, by itself, for the n', async () => {
+  test('a shared wallet: once n are in, every member signs the roster of all of them, by itself', async () => {
     const { ws, clock, transport } = setup(ALICE, BOB, CAROL);
     const [a, b, c] = ws as [(typeof ws)[0], (typeof ws)[0], (typeof ws)[0]];
     const { G, code } = await make(a, { name: 'savings', k: 2, n: 3 });
     expect(a.room(groupId(G))?.group?.want).toEqual({ k: 2, n: 3 });
 
     await comeIn(a, b, code, G, clock, pake);
-    expect(a.room(groupId(G))?.group?.want?.started).toBeUndefined();
+    expect(keygensOf(a.room(groupId(G))!)).toEqual([]);
     expect(b.room(groupId(G))?.group?.want).toEqual({ k: 2, n: 3 });
 
     clock.t += 10 * 60_000;
     const { code: second } = (await a.op('group-renew', { G })) as { code: string };
     await comeIn(a, c, second, G, clock, pake);
-    await a.service.check();
-    await b.service.check();
-    await c.service.check();
-    const started = a.room(groupId(G))?.group?.want?.started;
-    expect(started).toBeTruthy();
-    for (const w of [a, b, c]) {
-      const r = w.room(groupId(G))!;
-      const cer = ceremonyOf(r.frost?.msgs, allowedIn(r, w.me(G).pubkey));
-      expect(cer?.id).toBe(started);
-      expect(cer?.k).toBe(2);
-      expect(cer?.members).toHaveLength(3);
-      // typing the code was the yes: nothing more is asked of anyone
-      expect(cameFor(r, cer!)).toBe(true);
+    for (let i = 0; i < 2; i++) {
+      for (const w of [a, b, c]) {
+        await w.service.check();
+      }
     }
+    const ids = new Set<string>();
+    for (const w of [a, b, c]) {
+      const [kg] = keygensOf(w.room(groupId(G))!);
+      expect(kg).toMatchObject({ k: 2, bound: true });
+      expect(kg!.members).toHaveLength(3);
+      ids.add(kg!.id);
+    }
+    // the same roster everywhere, signed by all three, and nobody tapped anything
+    expect(ids.size).toBe(1);
 
     // full: a fourth who types a fresh code is not answered
     const { code: third } = (await a.op('group-renew', { G })) as { code: string };
@@ -251,72 +254,202 @@ describe('a group through its door', () => {
     expect(hostDoor(a, third).door?.answered ?? []).toHaveLength(0);
   });
 
-  test('the founder can take someone off until the keys are made; they stay off', async () => {
+  test('a member who is not the founder invites: their own zafu answers, the founder closed', async () => {
     const { ws, clock } = setup(ALICE, BOB, CAROL);
     const [a, b, c] = ws as [(typeof ws)[0], (typeof ws)[0], (typeof ws)[0]];
     const { G, code } = await make(a, { name: 'savings', k: 2, n: 3 });
     await comeIn(a, b, code, G, clock, pake);
-    const bobKey = deriveRoomKeys(BOB, 0, G).pubkey;
-
-    await a.op('group-remove', { G, key: bobKey });
-    expect(a.room(groupId(G))?.group?.members).toHaveLength(1);
-    expect(a.lines(groupId(G))).toContain(`: ${wordName(bobKey)} is no longer in the group`);
-    // bob still holds the room: his ask again is not voiced
-    await b.service.api.send(
-      groupId(G),
-      encodeWire({
-        kind: 'ask',
-        key: bobKey,
-        name: 'bob',
-        seal: deriveRoomKeys(BOB, 0, G).xwingPublicKey,
-      }),
-      'action',
-    );
-    clock.t += 5_000;
-    await a.service.check();
-    expect(a.room(groupId(G))?.group?.members).toHaveLength(1);
-    clock.t += 5_000;
-    await b.service.check();
-    expect(b.room(groupId(G))?.group?.members.map(m => m.key)).not.toContain(bobKey);
-
-    // invited again, with a new code: bob is back; then carol, and the keys start
+    // alice closes zafu; bob invites carol, and bob's zafu answers
+    const { code: bobs } = (await b.op('group-renew', { G })) as { code: string };
+    const door = await comeIn(b, c, bobs, G, clock, pake);
+    expect(doorView(door, clock.t)).toBe('in');
+    const keys = [ALICE, BOB, CAROL].map(p => deriveRoomKeys(p, 0, G).pubkey);
     for (const w of [b, c]) {
-      const { code: next } = (await a.op('group-renew', { G })) as { code: string };
-      await comeIn(a, w, next, G, clock, pake);
+      expect(
+        w
+          .room(groupId(G))
+          ?.group?.members.map(m => m.key)
+          .sort(),
+      ).toEqual([...keys].sort());
+    }
+    expect(b.lines(groupId(G))).toContain(
+      `: ${wordName(keys[2]!)} joined with your code · words to compare: ${door.door?.words}`,
+    );
+    // the roster waits for alice's word: it never binds without her
+    expect(keygensOf(c.room(groupId(G))!)[0]).toMatchObject({ bound: false });
+    // alice opens zafu: she reads bob's invite and carol's join, seats her, and signs
+    clock.t += 1_000;
+    await a.service.check();
+    await a.service.check();
+    for (const w of [b, c]) {
+      await w.service.check();
     }
     expect(a.room(groupId(G))?.group?.members).toHaveLength(3);
-    expect(a.room(groupId(G))?.group?.want?.started).toBeTruthy();
-    // no one can be taken off once the keys are being made
-    await expect(a.op('group-remove', { G, key: bobKey })).rejects.toThrow();
+    expect(keygensOf(c.room(groupId(G))!)[0]).toMatchObject({ bound: true });
   });
 
-  test('a roster record the founder did not write is refused', async () => {
-    const { ws, clock, transport } = setup(ALICE, BOB);
+  test('a code is single use: its owner co-signs one join for it, ever', async () => {
+    const { ws, clock } = setup(ALICE, BOB);
     const [a, b] = ws as [(typeof ws)[0], (typeof ws)[0]];
     const { G, code } = await make(a, { name: 'treasury' });
     await comeIn(a, b, code, G, clock, pake);
-
-    // bob, a member, voices someone himself and posts it as the next log record
     const room = b.room(groupId(G))!;
-    const bobId = identityOf(deriveRoomKeys(BOB, 0, G));
-    const forged = await appendRecord({
-      genesis: room.group!.log!.genesis,
-      records: room.group!.log!.records,
-      author: bobId,
-      body: { kind: 'mode', mode: '+v', subject: 'ee'.repeat(32) },
+    const half = room.frost!.msgs.find(m => m.body.t === 'join')!.body as Extract<
+      FrostBody,
+      { t: 'join' }
+    >;
+    // the joiner, who holds the run's key, tries a second seat on the same invite
+    const other = deriveRoomKeys(EVE, 0, G);
+    const j = { I: half.id, joiner: other.pubkey, th: half.j.th };
+    const id = joinId(j);
+    const door = hostDoor(a, code).door!;
+    await b.post(groupId(G), {
+      t: 'join',
+      v: 2,
+      id: half.id,
+      j,
+      js: bytesToHex(ed25519.sign(sigMessage(id), other.seed)),
+      jm: joinMac(door.mk!, id),
     });
-    const member = new Room(bobId, {
-      appScope: ZAFU_GROUP_APP_SCOPE,
-      roomSecret: hexToBytes(room.secret),
-      relay: transport(),
-      plaintextBytes: GROUP_ROOM_PLAINTEXT_BYTES,
-      now: () => Math.floor(clock.t / 1000),
-      head: { seq: 100, hash: '' },
-    });
-    await member.send(encodeWire({ kind: 'log', entry: forged }), { kind: 'action' });
-    clock.t += 10_000;
-    await a.service.check();
+    for (let i = 0; i < 2; i++) {
+      clock.t += 1_000;
+      await a.service.check();
+      await b.service.check();
+    }
+    expect(hostDoor(a, code).door?.cosigned).not.toBe(id);
+    const v = viewOf(a.room(groupId(G))!)!;
+    expect(v.m.members.has(other.pubkey)).toBe(false);
+    expect(v.m.twice.size).toBe(0);
+  });
+
+  test('an owner who answers one invite twice: everyone is shown, and neither seat counts', async () => {
+    const { ws, clock } = setup(ALICE, BOB, CAROL);
+    const [a, b, c] = ws as [(typeof ws)[0], (typeof ws)[0], (typeof ws)[0]];
+    const { G, code } = await make(a, { name: 'treasury' });
+    await comeIn(a, b, code, G, clock, pake);
+    // alice's device misbehaves: it co-signs a second join for the code bob used
+    const I = viewOf(a.room(groupId(G))!)!.rec.joins[0]!.j.I;
+    const eve = deriveRoomKeys(EVE, 0, G);
+    const alice = deriveRoomKeys(ALICE, 0, G);
+    const j = { I, joiner: eve.pubkey, th: 'ee'.repeat(32) };
+    const id = joinId(j);
+    const sign = (k: { seed: Uint8Array }) => bytesToHex(ed25519.sign(sigMessage(id), k.seed));
+    await a.post(groupId(G), { t: 'join', v: 2, id: I, j, js: sign(eve), os: sign(alice) });
+    for (let i = 0; i < 2; i++) {
+      clock.t += 1_000;
+      for (const w of [a, b, c]) {
+        await w.service.check();
+      }
+    }
+    for (const w of [a, b]) {
+      const v = viewOf(w.room(groupId(G))!)!;
+      expect([...v.m.members]).toEqual([alice.pubkey]);
+      expect(w.lines(groupId(G))?.some(l => l.includes('let two people in with one code'))).toBe(
+        true,
+      );
+    }
+  });
+
+  test('removed before keys: the room rotates, and the removed member cannot read it', async () => {
+    const { ws, clock } = setup(ALICE, BOB);
+    const [a, b] = ws as [(typeof ws)[0], (typeof ws)[0]];
+    const { G, code } = await make(a, { name: 'savings', k: 2, n: 3 });
+    await comeIn(a, b, code, G, clock, pake);
+    const bobKey = deriveRoomKeys(BOB, 0, G).pubkey;
+    const old = a.room(groupId(G))!.secret;
+
+    await a.op('group-remove', { G, key: bobKey });
+    for (let i = 0; i < 2; i++) {
+      clock.t += 1_000;
+      await a.service.check();
+      await b.service.check();
+    }
+    const moved = a.room(groupId(G))!;
+    expect(moved.secret).not.toBe(old);
+    expect(moved.group?.members.map(m => m.key)).toEqual([deriveRoomKeys(ALICE, 0, G).pubkey]);
+    expect(a.lines(groupId(G))).toContain(`: ${wordName(bobKey)} is no longer in the group`);
+    // bob is told, calmly, and keeps the old room only
+    expect(b.room(groupId(G))?.group?.gone).toBe(true);
+    expect(b.room(groupId(G))?.secret).toBe(old);
+    expect(b.lines(groupId(G))).toContain(": you're no longer in this group");
+    // alice speaks in the new room: bob never reads it
+    expect(await a.service.say(groupId(G), 'only for the ones still here')).toBe('sent');
+    clock.t += 5_000;
+    await b.service.check();
+    expect(b.lines(groupId(G))?.some(l => l.includes('only for the ones still here'))).toBe(false);
+
+    // invited again, with a new code: bob comes into the new room
+    const { code: next } = (await a.op('group-renew', { G })) as { code: string };
+    await comeIn(a, b, next, G, clock, pake);
+    expect(b.room(groupId(G))?.secret).toBe(moved.secret);
+    expect(b.room(groupId(G))?.group?.gone).toBeFalsy();
     expect(a.room(groupId(G))?.group?.members).toHaveLength(2);
-    expect(a.room(groupId(G))?.group?.log?.records).toHaveLength(2);
+  });
+
+  test('removing someone with others left waits for every one of them, and then all move', async () => {
+    const { ws, clock } = setup(ALICE, BOB, CAROL);
+    const [a, b, c] = ws as [(typeof ws)[0], (typeof ws)[0], (typeof ws)[0]];
+    const { G, code } = await make(a, { name: 'studio' });
+    await comeIn(a, b, code, G, clock, pake);
+    const { code: second } = (await a.op('group-renew', { G })) as { code: string };
+    await comeIn(a, c, second, G, clock, pake);
+    for (const w of [a, b, c]) {
+      await w.service.check();
+    }
+    const carol = deriveRoomKeys(CAROL, 0, G).pubkey;
+    const old = a.room(groupId(G))!.secret;
+    await a.op('group-remove', { G, key: carol });
+    for (let i = 0; i < 2; i++) {
+      clock.t += 1_000;
+      for (const w of [a, b, c]) {
+        await w.service.check();
+      }
+    }
+    // bob has not signed: nobody moved, and bob is shown what is asked of him
+    expect(a.room(groupId(G))!.secret).toBe(old);
+    expect(b.lines(groupId(G))?.some(l => l.includes('asked to remove'))).toBe(true);
+    // bob signs both (how bob says yes is still open in #110; here his device does it directly)
+    const v = viewOf(b.room(groupId(G))!)!;
+    const rot = v.rotations[0]!;
+    const bob = deriveRoomKeys(BOB, 0, G);
+    const sign = (id: string) => bytesToHex(ed25519.sign(sigMessage(id), bob.seed));
+    const r = rot.roster.r;
+    await b.post(groupId(G), {
+      t: 'rs',
+      v: 2,
+      id: rot.rot.R,
+      r,
+      k: bob.pubkey,
+      sig: sign(rot.rot.R),
+    });
+    await b.post(groupId(G), {
+      t: 'rot',
+      v: 2,
+      id: rot.id,
+      rot: rot.rot,
+      r,
+      k: bob.pubkey,
+      sig: sign(rot.id),
+    });
+    for (let i = 0; i < 3; i++) {
+      clock.t += 1_000;
+      for (const w of [a, b, c]) {
+        await w.service.check();
+      }
+    }
+    // alice and bob are in one new room; carol is told and cannot read it
+    expect(a.room(groupId(G))!.secret).not.toBe(old);
+    expect(b.room(groupId(G))!.secret).toBe(a.room(groupId(G))!.secret);
+    expect(c.room(groupId(G))?.group?.gone).toBe(true);
+    expect(await b.service.say(groupId(G), 'just us two now')).toBe('sent');
+    clock.t += 5_000;
+    await a.service.check();
+    await c.service.check();
+    expect(a.lines(groupId(G))?.some(l => l.endsWith('just us two now'))).toBe(true);
+    expect(c.lines(groupId(G))?.some(l => l.endsWith('just us two now'))).toBe(false);
+    // the new room seats exactly the two, from the rotation they both signed
+    expect(viewOf(a.room(groupId(G))!)!.m.members).toEqual(
+      new Set([deriveRoomKeys(ALICE, 0, G).pubkey, bob.pubkey]),
+    );
   });
 });

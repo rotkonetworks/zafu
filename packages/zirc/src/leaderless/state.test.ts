@@ -44,7 +44,13 @@ const verify: Verify = (m, s, k) => {
 };
 const hex = (b: number, n: number) => bytesToHex(new Uint8Array(n).fill(b));
 
-const [A, B, C, D, E] = ['a', 'b', 'c', 'd', 'e'].map(pub) as [string, string, string, string, string];
+const [A, B, C, D, E] = ['a', 'b', 'c', 'd', 'e'].map(pub) as [
+  string,
+  string,
+  string,
+  string,
+  string,
+];
 const name = (k: string) => 'abcde'[[A, B, C, D, E].indexOf(k)]!;
 
 const G: Genesis = { purpose: 'wallet', t: 2, n: 3, salt: hex(1, 16), creator: A };

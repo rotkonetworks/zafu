@@ -7,9 +7,8 @@
 
 import { describe, expect, test } from 'vitest';
 import type { RoomMessage } from '@zafu/zirc/room';
-import { createDeals } from './deal';
+import { onDealAsk as onPair } from './deal';
 import { decodeWire, encodeWire } from './door';
-import { allowedIn, COURT } from './frost-room';
 import type { PeopleApi } from './service';
 import type { PeopleRoom } from './vault';
 
@@ -55,7 +54,6 @@ describe('a deal between two people', () => {
   });
 
   test('an invite into a deal group counts only from the other person', async () => {
-    const { onPair } = createDeals({ group: async () => ({ id: 'g:x', code: CODE }) });
     const body = encodeWire({ kind: 'dj', code: CODE, group: 'logo design' });
     const api = {} as PeopleApi;
     expect(await onPair(pair, [record('c'.repeat(64), body)], api)).toBe(undefined);
@@ -63,10 +61,5 @@ describe('a deal between two people', () => {
     expect(patch?.(pair).pair?.deal).toEqual({ code: CODE, group: 'logo design', at: 200 });
     // the same invite read again changes nothing
     expect(await onPair(patch!(pair), [record(KEN, body, 200)], api)).toBe(undefined);
-  });
-
-  test('a pair room lets its two people take part, and the court as a seat', () => {
-    const ok = allowedIn(pair, ME);
-    expect([ME, KEN, 'c'.repeat(64), COURT].map(ok)).toEqual([true, true, false, false]);
   });
 });

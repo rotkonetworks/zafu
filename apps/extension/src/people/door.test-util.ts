@@ -12,9 +12,11 @@ import { deriveRoomKeys } from '../state/identity';
 import { doorPake, type DoorPakeWasm } from '../workers/door-pake';
 import { hostStep, joinStep, type DoorPake } from './door-run';
 import { createGroups, groupId } from './groups';
+import { foldFrost } from './frost-room';
+import { createLeaderless } from './lx';
 import { splitCode } from './door';
 import { identityOf } from './keys';
-import { createPeopleService, threadKey, type RecordHandler } from './service';
+import { chain, createPeopleService, threadKey, type RecordHandler } from './service';
 import type { PeopleRoom, Thread } from './vault';
 
 export const relayBoard = () => {
@@ -70,6 +72,11 @@ export const peopleWallet = (
     gate: async () => 'on',
     now: () => clock.t,
   });
+  const lx = createLeaderless({
+    keys: room => Promise.resolve(deriveRoomKeys(phrase, room.signer.gen, room.signer.G!)),
+    now: () => clock.t,
+  });
+  const base = { ...groups.handlers, group: chain(groups.handlers.group, lx.handler(foldFrost)) };
   const service = createPeopleService(
     {
       readRooms: async () => structuredClone(rooms),
@@ -83,10 +90,14 @@ export const peopleWallet = (
       status: () => undefined,
       now: () => clock.t,
     },
-    handlers ? handlers(groups.handlers) : groups.handlers,
+    handlers ? handlers(base) : base,
   );
+  const ops: Record<string, (r: Record<string, unknown>, s: typeof service) => Promise<unknown>> = {
+    ...groups.ops,
+    ...lx.ops,
+  };
   const call = (name: string, args: Record<string, unknown>) =>
-    groups.ops[name as keyof typeof groups.ops](args, service) as Promise<never>;
+    ops[name]!(args, service) as Promise<never>;
   return {
     service,
     groups,
@@ -104,7 +115,7 @@ export type PeopleWallet = ReturnType<typeof peopleWallet>;
 
 const at = (w: PeopleWallet, id: string) => w.rooms().find(r => r.id === id)!;
 
-/** the founder's door a typed code reaches: the one on its number */
+/** the inviter's door a typed code reaches: the one on its number */
 export const hostDoor = (w: PeopleWallet, code: string) =>
   w
     .rooms()
@@ -114,9 +125,9 @@ export const hostDoor = (w: PeopleWallet, code: string) =>
 
 /**
  * The door, as the keeper walks it: the joiner types the code and speaks,
- * the founder (`host`) answers, the joiner confirms its words, the founder
- * sends the box, the joiner opens it and asks in the room, the founder voices
- * the ask. Returns the joiner's door.
+ * the inviter (`host`) answers, the joiner confirms its words, the inviter
+ * sends the box, the joiner opens it and says its half of the join, the
+ * inviter co-signs it. Returns the joiner's door.
  */
 export const comeIn = async (
   host: PeopleWallet,
@@ -144,8 +155,11 @@ export const comeIn = async (
   await hostTurn();
   await joinTurn();
   await joiner.service.settled();
-  clock.t += 1_000;
-  await host.service.check();
-  await joiner.service.check();
+  // the inviter co-signs the join, then both read the seat it makes
+  for (let i = 0; i < 3; i++) {
+    clock.t += 1_000;
+    await host.service.check();
+    await joiner.service.check();
+  }
   return at(joiner, id);
 };

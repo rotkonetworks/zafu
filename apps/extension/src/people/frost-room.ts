@@ -1,52 +1,68 @@
 /**
  * Shared wallets made inside a room: FROST key making over the room's own
- * records instead of a frostd session with its own code.
+ * records, with no leader and no starter (zafu #110).
  *
  * Why no frostd: frostd exists to carry ceremony messages between devices
- * that share nothing else. A group (or a pair room) already is that: a sealed
- * zirc room only its members can read, where every record is signed by its
- * author's room key. frost-spend already seals each round-2 package to its
- * recipient (X25519 to the round-1 `epk`, bound to the ceremony transcript),
- * so broadcasting packages to the whole room hides each share from the other
- * members as well as from the relay. Nothing is left for frostd to do.
+ * that share nothing else. A group already is that: a sealed zirc room only
+ * its members can read, where every record is signed by its author's room
+ * key. frost-spend seals each round-2 package to its recipient, so
+ * broadcasting packages to the whole room hides each share from the other
+ * members as well as from the relay.
  *
- * One message is one JSON body, deflated and cut into `kc` records (people/door)
- * that share a message id. The records of one ceremony:
+ * One message is one JSON body, deflated and cut into `kc` records (people/
+ * door) that share a message id. Version 2 bodies (`v: 2`) are the leaderless
+ * objects of `@zafu/zirc/leaderless`, carried as JSON with every field the
+ * canonical encoding hashes:
  *
- *   start  {id, k, m, label}   whoever taps "make keys together": the threshold
- *                              and the members, fixed from the room's roster
- *   r1     {id, b, x}          each member's signed round-1 broadcast and
- *                              their X-Wing key for this room
- *   sk     {id, s}             the starter: the viewing-key secret, X-Wing
- *                              sealed to each member, bound to this ceremony
- *                              and to that member (never readable by a later
- *                              member of the room or by the relay)
- *   r2     {id, p, h1}         each member's round-2 packages, sealed by frost,
- *                              and a hash of every round-1 record it used
- *   fvk    {id, h}             each member's commitment to the wallet it made:
- *                              a hash of the ceremony, both rounds as it saw
- *                              them, the group key, viewing key and address.
- *                              The viewing key itself is never said: each
- *                              device derives it from the group key and `sk`
+ *   g     {g}               a wallet's genesis, proposed from a chat
+ *   i     {i, sig}          an invite, signed by its owner
+ *   join  {j, js, os?}      a join, signed by the joiner and then its owner
+ *   rs    {r, k, sig}       member k signs roster r: that is its "agree"
+ *   rot   {rot, r, k, sig, box?}  member k signs a rotation; the proposer's
+ *                           copy carries the new secret sealed to each member
+ *   all   {items}           a bundle of the above, said again for newcomers
+ *   r1    {b, x, c}         round one, an X-Wing key, and c_i = H(R, i, s_i)
+ *   r2    {p, s, h1}        round-two packages, s_i sealed to each member, and
+ *                           h1 = H(every round-one record it used)
+ *   fvk   {h}               a hash of R, both rounds, the group key, the
+ *                           viewing key and the address
  *
- * Every member other than the starter agrees on their own device before it
- * takes part. The latest valid `start` is the ceremony: a new one (another
- * threshold, or "start again without them") replaces the one before, and its
- * records are then ignored. The relay can withhold records (the ceremony
- * waits) but cannot forge one: authors are checked against the members the
- * start names.
+ * A key setup's context is its roster's id: it runs once that roster binds
+ * (every member signed it, see people/lx). The viewing-key secret is
+ * sk = H("zafu-fvk-v1" ‖ R ‖ s_1 ‖ … ‖ s_n): each member committed to its s_i
+ * before anyone revealed one, so nobody chooses it. The wallet exists only
+ * when all n fvk hashes match; a member who says two different things in one
+ * setup, reveals an s_i that does not open its commitment, or ends with
+ * another wallet stops it, and nothing is saved. No rule here reads "first",
+ * "latest" or record order.
  *
- * One record per author, kind and ceremony counts, and a second, different
- * one is never taken in its place: a member who says two different things in
- * one ceremony (two round-one broadcasts, say, to split the others' views)
- * stops it, and so does any member whose round-one or wallet hash differs
- * from this device's. Nothing is saved from a ceremony whose members did not
- * all see the same records.
+ * Records an older zafu said (a `start`, an `sk`, round records without a
+ * version) are read only to say that the other side needs a newer zafu.
+ * Wallets made that way keep signing: a payment reads the saved seat.
  */
 
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { openXWing, sealXWing, XWING_LENGTHS } from '@zafu/pq';
+import {
+  commitOf,
+  fvkHash,
+  genesisId,
+  h1Of,
+  inviteId,
+  r1Id,
+  r2Id,
+  revealAad,
+  rosterId,
+  rotateId,
+  skOf,
+  sortKeys,
+  type Genesis,
+  type Invite,
+  type Join,
+  type Roster,
+  type Rotate,
+} from '@zafu/zirc/leaderless';
 import type { RoomMessage } from '@zafu/zirc/room';
 import { decodeWire, encodeWire } from './door';
 import type { PeopleService } from './service';
@@ -65,21 +81,32 @@ export interface Deal {
   payer: 'proposer' | 'other';
 }
 
-export type FrostBody =
+/** the leaderless objects, as the room carries them */
+export type LxBody =
+  | { t: 'g'; v: 2; id: string; g: Genesis }
+  | { t: 'i'; v: 2; id: string; i: Invite; sig: string }
+  /** `jm`: the joiner's proof to the owner that its door run let it in (lx joinMac) */
+  | { t: 'join'; v: 2; id: string; j: Join; js: string; jm?: string; os?: string }
+  | { t: 'rs'; v: 2; id: string; r: Roster; k: string; sig: string }
   | {
-      t: 'start';
+      t: 'rot';
+      v: 2;
       id: string;
-      k: number;
-      m: string[];
-      label: string;
-      deal?: Deal;
-      /** the ceremony this one replaces: another threshold, or someone left out */
-      r?: string;
-    }
-  | { t: 'r1'; id: string; b: string; x: string }
-  | { t: 'sk'; id: string; s: Record<string, string> }
-  | { t: 'r2'; id: string; p: string[]; h1: string }
-  | { t: 'fvk'; id: string; h: string }
+      rot: Rotate;
+      r: Roster;
+      k: string;
+      sig: string;
+      box?: Record<string, string>;
+    };
+
+export type FrostBody =
+  | LxBody
+  | { t: 'all'; v: 2; id: string; items: LxBody[] }
+  | { t: 'r1'; v: 2; id: string; b: string; x: string; c: string }
+  | { t: 'r2'; v: 2; id: string; p: string[]; s: string[]; h1: string }
+  | { t: 'fvk'; v: 2; id: string; h: string }
+  /** a key-setup record an older zafu said: read only to say so */
+  | { t: 'old'; id: string }
   // -- spending from it (people/room-sign) --
   /**
    * a payment from the shared wallet `w`, built by `by`: what every member
@@ -118,11 +145,13 @@ export interface FrostMsg {
   body: FrostBody;
 }
 
-/** this device's own state in one ceremony; secrets leave once the seat is saved */
+/** this device's own state in one setup or payment; secrets leave once the seat is saved */
 export interface FrostMine {
   s1?: string;
   b1?: string;
-  sk?: string;
+  /** s_i, this member's share of the viewing-key secret, and the boxes it went out in */
+  si?: string;
+  bx?: string[];
   s2?: string;
   p2?: string[];
   kp?: string;
@@ -132,10 +161,8 @@ export interface FrostMine {
   a?: string;
   /** the round-one records this device made its round two from, hashed */
   h1?: string;
-  /** this device's commitment to the wallet it made (see {@link fvkHash}) */
+  /** this device's commitment to the wallet it made (objects fvkHash) */
   fh?: string;
-  /** a ceremony someone else started: you agreed to make its keys */
-  ok?: boolean;
   saved?: boolean;
   /** a payment: this member's round-one nonces (secret) and commitments, per spend */
   n?: string[];
@@ -169,12 +196,13 @@ export interface FrostRoom {
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-const HEX = /^[0-9a-f]+$/;
+const HEX = /^(?:[0-9a-f]{2})+$/;
 const KEY = /^[0-9a-f]{64}$/;
+const SIG = /^[0-9a-f]{128}$/;
 /** raw bytes per record: base64 of this plus framing stays under a group room's body */
 const CHUNK = 2600;
-/** ceremonies a room keeps the messages of: the current one and those it replaced */
-const KEEP_CEREMONIES = 4;
+/** key setups a room keeps the round records of */
+const KEEP_SETUPS = 4;
 /** payments a room keeps the messages of */
 const KEEP_PROPOSALS = 12;
 
@@ -197,20 +225,24 @@ export const packFrost = async (body: FrostBody): Promise<string[]> => {
 };
 
 const ID = /^[0-9a-f]{32}$/;
-const H256 = /^[0-9a-f]{64}$/;
+/** a payment's wallet: an older setup's 16-byte id, or a roster's 32 */
+const WALLET = /^[0-9a-f]{32}(?:[0-9a-f]{32})?$/;
+const H256 = KEY;
 const DIGITS = /^\d{1,16}$/;
-const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
 /** an address as a payment names it: bech32 or base58, nothing else */
 const ADDRESS = /^[A-Za-z0-9]{1,1024}$/;
 /** an X-Wing public key, hex */
 const XWING_HEX = new RegExp(`^[0-9a-f]{${XWING_LENGTHS.publicKey * 2}}$`);
 
 const str = (v: unknown, re = HEX): v is string => typeof v === 'string' && re.test(v);
-const text = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
 const list = (v: unknown, max: number, re = HEX): v is string[] =>
   Array.isArray(v) && v.length >= 1 && v.length <= max && v.every(x => str(x, re));
 const keys = (v: unknown, max = 32): v is string[] =>
   list(v, max, KEY) && new Set(v).size === v.length;
+const int = (v: unknown, max: number): v is number =>
+  typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= max;
+const obj = (v: unknown): Record<string, unknown> | undefined =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined;
 
 const sha = (parts: unknown[]) => bytesToHex(sha256(enc.encode(JSON.stringify(parts))));
 
@@ -229,83 +261,185 @@ export const propId = (p: Omit<Extract<FrostBody, { t: 'prop' }>, 'id' | 't'>): 
     p.pczt,
   ]).slice(0, 32);
 
-const readDeal = (v: unknown): Deal | undefined => {
-  const d = v as Record<string, unknown> | null;
-  return d &&
-    typeof d === 'object' &&
-    str(d['amount'], DIGITS) &&
-    text(d['what'], 48) &&
-    (d['payer'] === 'proposer' || d['payer'] === 'other')
-    ? { amount: d['amount'], what: d['what'], payer: d['payer'] }
+/** an id that is a hash of the object it names, or nothing */
+const named = <T>(id: unknown, v: T, idOf: (v: T) => string): boolean => {
+  try {
+    return id === idOf(v);
+  } catch {
+    return false;
+  }
+};
+
+const readGenesis = (v: unknown): Genesis | undefined => {
+  const g = obj(v);
+  return g &&
+    (g['purpose'] === 'chat' || g['purpose'] === 'wallet') &&
+    int(g['t'], 32) &&
+    int(g['n'], 32) &&
+    str(g['salt'], ID) &&
+    str(g['creator'], KEY)
+    ? { purpose: g['purpose'], t: g['t'], n: g['n'], salt: g['salt'], creator: g['creator'] }
     : undefined;
+};
+
+const readRoster = (v: unknown): Roster | undefined => {
+  const r = obj(v);
+  return r && str(r['G'], KEY) && keys(r['members'])
+    ? { G: r['G'], members: [...r['members']] }
+    : undefined;
+};
+
+/** a leaderless object, built again from its checked fields, under its own id */
+const readLx = (x: Record<string, unknown>): LxBody | undefined => {
+  const id = x['id'];
+  switch (x['t']) {
+    case 'g': {
+      const g = readGenesis(x['g']);
+      return g && g.purpose === 'wallet' && named(id, g, genesisId)
+        ? { t: 'g', v: 2, id: id as string, g }
+        : undefined;
+    }
+    case 'i': {
+      const i = obj(x['i']);
+      const inv = i &&
+        str(i['G'], KEY) &&
+        str(i['owner'], KEY) &&
+        int(i['plate'], 0xffff_ffff) &&
+        str(i['salt'], ID) &&
+        int(i['expiry'], 0xffff_ffff) && {
+          G: i['G'],
+          owner: i['owner'],
+          plate: i['plate'],
+          salt: i['salt'],
+          expiry: i['expiry'],
+        };
+      return inv && str(x['sig'], SIG) && named(id, inv, inviteId)
+        ? { t: 'i', v: 2, id: id as string, i: inv, sig: x['sig'] }
+        : undefined;
+    }
+    case 'join': {
+      const j = obj(x['j']);
+      const jn = j &&
+        str(j['I'], KEY) &&
+        str(j['joiner'], KEY) &&
+        str(j['th'], KEY) && { I: j['I'], joiner: j['joiner'], th: j['th'] };
+      const opt = (k: 'os' | 'jm', re: RegExp) =>
+        x[k] === undefined || str(x[k], re) ? {} : undefined;
+      return jn && id === jn.I && str(x['js'], SIG) && opt('os', SIG) && opt('jm', KEY)
+        ? {
+            t: 'join',
+            v: 2,
+            id: jn.I,
+            j: jn,
+            js: x['js'],
+            ...(x['jm'] !== undefined ? { jm: x['jm'] as string } : {}),
+            ...(x['os'] !== undefined ? { os: x['os'] as string } : {}),
+          }
+        : undefined;
+    }
+    case 'rs': {
+      const r = readRoster(x['r']);
+      return r && str(x['k'], KEY) && str(x['sig'], SIG) && named(id, r, rosterId)
+        ? { t: 'rs', v: 2, id: id as string, r, k: x['k'], sig: x['sig'] }
+        : undefined;
+    }
+    case 'rot': {
+      const rot = obj(x['rot']);
+      const rt = rot &&
+        str(rot['R'], KEY) &&
+        str(rot['from'], KEY) &&
+        str(rot['to'], KEY) && { R: rot['R'], from: rot['from'], to: rot['to'] };
+      const r = readRoster(x['r']);
+      const box = obj(x['box']);
+      const boxes = box ? Object.entries(box) : [];
+      const boxOk =
+        x['box'] === undefined ||
+        (boxes.length <= 32 && boxes.every(([k, b]) => KEY.test(k) && str(b) && b.length <= 4096));
+      return rt &&
+        r &&
+        rt.R === rosterId(r) &&
+        str(x['k'], KEY) &&
+        str(x['sig'], SIG) &&
+        boxOk &&
+        named(id, rt, rotateId)
+        ? {
+            t: 'rot',
+            v: 2,
+            id: id as string,
+            rot: rt,
+            r,
+            k: x['k'],
+            sig: x['sig'],
+            ...(box ? { box: Object.fromEntries(boxes) as Record<string, string> } : {}),
+          }
+        : undefined;
+    }
+    default:
+      return undefined;
+  }
 };
 
 /**
  * A body as one we read, or undefined. Every field is checked and the body is
- * built again from the checked fields only, so nothing a peer adds (a label
- * that is not text, a deal amount that is not a number) reaches a screen.
+ * built again from the checked fields only, so nothing a peer adds reaches a
+ * screen; an object is read only under its own content id.
  */
 export const readBody = (v: unknown): FrostBody | undefined => {
-  const x = v as Record<string, unknown> | null;
-  if (!x || typeof x !== 'object' || !str(x['id'], ID)) {
+  const x = obj(v);
+  if (!x) {
     return undefined;
   }
-  const id = x['id'];
-  switch (x['t']) {
-    case 'start': {
-      const m = x['m'];
-      const k = x['k'];
-      const ok =
-        Array.isArray(m) &&
-        m.length >= 2 &&
-        m.length <= 32 &&
-        new Set(m).size === m.length &&
-        m.every(p => p === COURT || str(p, KEY)) &&
-        typeof k === 'number' &&
-        Number.isInteger(k) &&
-        k >= 2 &&
-        k <= m.length &&
-        text(x['label'], 48) &&
-        (x['deal'] === undefined || !!readDeal(x['deal'])) &&
-        (x['r'] === undefined || str(x['r'], ID));
-      if (!ok) {
-        return undefined;
+  if (x['v'] === 2) {
+    const id = x['id'];
+    switch (x['t']) {
+      case 'all': {
+        const items = Array.isArray(x['items']) ? x['items'].slice(0, 400) : [];
+        const read = items.flatMap(i => {
+          const o = obj(i);
+          const b = o && o['v'] === 2 ? readLx(o) : undefined;
+          return b ? [b] : [];
+        });
+        return str(id, ID) && read.length ? { t: 'all', v: 2, id, items: read } : undefined;
       }
-      const deal = readDeal(x['deal']);
-      return {
-        t: 'start',
-        id,
-        k,
-        m: [...(m as string[])],
-        label: x['label'] as string,
-        ...(deal ? { deal } : {}),
-        ...(x['r'] !== undefined ? { r: x['r'] as string } : {}),
-      };
+      case 'r1':
+        return str(id, KEY) && str(x['b']) && str(x['x'], XWING_HEX) && str(x['c'], KEY)
+          ? { t: 'r1', v: 2, id, b: x['b'], x: x['x'], c: x['c'] }
+          : undefined;
+      case 'r2': {
+        const s = x['s'];
+        return str(id, KEY) &&
+          list(x['p'], 32) &&
+          Array.isArray(s) &&
+          s.length >= 2 &&
+          s.length <= 32 &&
+          s.every(b => b === '' || (str(b) && b.length <= 8192)) &&
+          str(x['h1'], KEY)
+          ? { t: 'r2', v: 2, id, p: [...x['p']], s: [...(s as string[])], h1: x['h1'] }
+          : undefined;
+      }
+      case 'fvk':
+        return str(id, KEY) && str(x['h'], KEY) ? { t: 'fvk', v: 2, id, h: x['h'] } : undefined;
+      default:
+        return readLx(x);
     }
+  }
+  const id = x['id'];
+  if (!str(id, ID)) {
+    return undefined;
+  }
+  switch (x['t']) {
+    case 'old':
+    case 'start':
+    case 'sk':
     case 'r1':
-      return str(x['b']) && str(x['x'], XWING_HEX)
-        ? { t: 'r1', id, b: x['b'], x: x['x'] }
-        : undefined;
-    case 'sk': {
-      const s = x['s'] as Record<string, unknown> | null;
-      const e = s && typeof s === 'object' && !Array.isArray(s) ? Object.entries(s) : [];
-      return e.length >= 1 &&
-        e.length <= 32 &&
-        e.every(([k, b]) => KEY.test(k) && str(b, B64) && b.length <= 8192)
-        ? { t: 'sk', id, s: Object.fromEntries(e) as Record<string, string> }
-        : undefined;
-    }
     case 'r2':
-      return list(x['p'], 32) && str(x['h1'], H256)
-        ? { t: 'r2', id, p: [...x['p']], h1: x['h1'] }
-        : undefined;
     case 'fvk':
-      return str(x['h'], H256) ? { t: 'fvk', id, h: x['h'] } : undefined;
+      return { t: 'old', id };
     case 'prop': {
       const si = x['si'];
       if (
         !(
-          str(x['w'], ID) &&
+          str(x['w'], WALLET) &&
           str(x['by'], KEY) &&
           str(x['to'], ADDRESS) &&
           str(x['amt'], DIGITS) &&
@@ -359,9 +493,9 @@ export const readMsgs = (msgs: FrostMsg[] | undefined): FrostMsg[] =>
   });
 
 /**
- * The room handler: fold `kc` records into whole messages. Pieces that have
- * not all arrived wait in `parts`; a pass never writes back what the popup
- * keeps in `mine`.
+ * The room handler: fold `kc` records into whole messages, a bundle into the
+ * objects it carries. Pieces that have not all arrived wait in `parts`; a
+ * pass never writes back what the popup keeps in `mine`.
  */
 export const foldFrost = async (
   room: PeopleRoom,
@@ -401,8 +535,11 @@ export const foldFrost = async (
       raw.reduce((at, r) => (all.set(r, at), at + r.length), 0);
       const json = dec.decode(await pipe(all, new DecompressionStream('deflate-raw')));
       const body = readBody(JSON.parse(json));
-      if (body) {
-        added.push({ from: p.from, at: p.at, mid: key.split(':')[1]!, body });
+      const mid = key.split(':')[1]!;
+      if (body?.t === 'all') {
+        added.push(...body.items.map(b => ({ from: p.from, at: p.at, mid, body: b })));
+      } else if (body) {
+        added.push({ from: p.from, at: p.at, mid, body });
       }
     } catch {
       // a message that does not open is dropped, never half-read
@@ -421,18 +558,36 @@ export const foldFrost = async (
   };
 };
 
+/** what keeps one copy of a message: an object is itself; a round record is its author's word */
+const slotOf = (m: FrostMsg): string => {
+  const b = m.body;
+  switch (b.t) {
+    case 'g':
+    case 'i':
+      return `${b.t}:${b.id}`;
+    case 'join':
+      return `join:${b.id}:${b.j.joiner}:${b.j.th}:${b.os ? 'both' : 'half'}`;
+    case 'rs':
+    case 'rot':
+      return `${b.t}:${b.id}:${b.k}`;
+    default:
+      return `${m.from}:${b.t}:${b.id}`;
+  }
+};
+
 /**
- * What a room keeps: the first message per author, kind and ceremony (a
- * repeat of the same message is dropped), and only the last few ceremonies
- * and payments. A later message that differs from the first is never taken
- * in its place: one such copy is kept beside it, so every reader sees that its
- * author said two things (see {@link ceremonyOf} and room-sign proposalsOf).
+ * What a room keeps. Every leaderless object stays: seats rest on them, and a
+ * newcomer is shown them again. A round or payment record a member said
+ * twice, differently, is kept beside the first (at most two), so every
+ * reader sees that its author said two things; and only the last few key
+ * setups and payments keep their round records. Keeping is storage, never
+ * a rule: a setup whose records were let go waits, it never decides.
  */
 const pruneMsgs = (all: FrostMsg[]): FrostMsg[] => {
   const seen = new Map<string, string[]>();
   const msgs: FrostMsg[] = [];
   for (const m of readMsgs(all).sort((a, b) => a.at - b.at)) {
-    const key = `${m.from}:${m.body.t}:${m.body.id}`;
+    const key = slotOf(m);
     const said = JSON.stringify(m.body);
     const before = seen.get(key) ?? [];
     if (before.includes(said) || before.length >= 2) {
@@ -441,143 +596,140 @@ const pruneMsgs = (all: FrostMsg[]): FrostMsg[] => {
     seen.set(key, [...before, said]);
     msgs.push(m);
   }
-  const last = (t: FrostBody['t'], n: number) =>
-    [...new Set(msgs.filter(m => m.body.t === t).map(m => m.body.id))].slice(-n);
-  const keep = new Set([...last('start', KEEP_CEREMONIES), ...last('prop', KEEP_PROPOSALS)]);
-  return msgs.filter(m => keep.has(m.body.id));
+  const last = (ts: FrostBody['t'][], n: number) =>
+    [...new Set(msgs.filter(m => ts.includes(m.body.t)).map(m => m.body.id))].slice(-n);
+  const keep = new Set([
+    ...last(['r1', 'r2', 'fvk'], KEEP_SETUPS),
+    ...last(['prop'], KEEP_PROPOSALS),
+    ...last(['old'], 1),
+  ]);
+  const lx = new Set<FrostBody['t']>(['g', 'i', 'join', 'rs', 'rot']);
+  return msgs.filter(m => lx.has(m.body.t) || keep.has(m.body.id));
 };
 
-// -- what the messages say ----------------------------------------------------
+// -- one key setup -------------------------------------------------------------
 
-export interface Ceremony {
+export interface R1Rec {
+  b: string;
+  x: string;
+  c: string;
+  /** its id (objects r1Id) */
   id: string;
-  by: string;
+}
+export interface R2Rec {
+  p: string[];
+  s: string[];
+  h1: string;
+  id: string;
+}
+
+/** one wallet being made: a roster for a wallet genesis, and its rounds */
+export interface Keygen {
+  /** the roster's id: the setup's context */
+  id: string;
+  G: Genesis;
   k: number;
+  /** the roster, in its order */
   members: string[];
-  label: string;
-  /** seconds: when it started, and its latest record */
+  /** who proposed the wallet (its genesis creator) */
+  by: string;
+  /** seconds: when it was proposed, and its latest record */
   at: number;
   last: number;
-  deal?: Deal;
-  r1: Map<string, { b: string; x: string }>;
-  sk?: Record<string, string>;
-  r2: Map<string, { p: string[]; h1: string }>;
+  /** members whose signature on the roster holds: their "agree" */
+  agreed: Set<string>;
+  bound: boolean;
+  /** another roster for the same wallet has signatures too: it waits until one is settled */
+  rival: boolean;
+  r1: Map<string, R1Rec>;
+  r2: Map<string, R2Rec>;
   /** each member's commitment to the wallet it made */
   fvk: Map<string, string>;
   /** members who said two different things of one kind in it: it cannot finish */
   split: Set<string>;
 }
 
-/** how far a member got: 0 nothing yet, 1 round one, 2 round two, 3 their keys checked */
-export const stepOf = (c: Ceremony, member: string): number =>
-  c.fvk.has(member) ? 3 : c.r2.has(member) ? 2 : c.r1.has(member) ? 1 : 0;
-
-/**
- * The ceremony a room is in: the latest start by someone allowed, naming only
- * people allowed, and the records its members wrote for it. The first record
- * of each kind per member counts; a second, different one marks that member
- * as split, and the ceremony then stops.
- */
-export const ceremonyOf = (
+/** the rounds said for one roster, read from its members only; a second, different record marks its author */
+export const roundsOf = (
   msgs: FrostMsg[] | undefined,
-  allowed: (key: string) => boolean,
-): Ceremony | undefined => {
-  const all = readMsgs(msgs);
-  const starts = all.filter(
-    (m): m is FrostMsg & { body: Extract<FrostBody, { t: 'start' }> } =>
-      m.body.t === 'start' &&
-      m.body.m.includes(m.from) &&
-      allowed(m.from) &&
-      m.body.m.every(p => p === COURT || allowed(p)),
-  );
-  const replaced = new Set(starts.map(m => m.body.r));
-  const start = starts
-    .filter(m => !replaced.has(m.body.id))
-    .sort((a, b) => a.at - b.at || (a.mid < b.mid ? -1 : 1))
-    .at(-1);
-  if (!start) {
-    return undefined;
-  }
-  const s = start.body;
-  const c: Ceremony = {
-    id: s.id,
-    by: start.from,
-    k: s.k,
-    members: s.m,
-    label: s.label,
-    at: start.at,
-    last: start.at,
-    deal: s.deal,
-    r1: new Map(),
-    r2: new Map(),
-    fvk: new Map(),
-    split: new Set(),
+  R: string,
+  members: string[],
+): Pick<Keygen, 'r1' | 'r2' | 'fvk' | 'split' | 'last'> => {
+  const out = {
+    r1: new Map<string, R1Rec>(),
+    r2: new Map<string, R2Rec>(),
+    fvk: new Map<string, string>(),
+    split: new Set<string>(),
+    last: 0,
   };
-  // a start's id belongs to one start: another under it (another author, or
-  // other terms) would take over its consent, so both stop it instead
-  const said = JSON.stringify(s);
-  for (const m of all) {
-    const twin = m.body.t === 'start' && m.body.id === s.id;
-    if (twin && (m.from !== start.from || JSON.stringify(m.body) !== said)) {
-      c.split.add(start.from).add(m.from);
-    }
-  }
-  const first = new Map<string, string>();
-  for (const { from, at, body } of all) {
-    if (body.id !== c.id || !c.members.includes(from)) {
+  const said = new Map<string, string>();
+  for (const { from, at, body } of readMsgs(msgs)) {
+    if (body.id !== R || !members.includes(from)) {
       continue;
     }
-    if (body.t === 'start' && from !== c.by) {
+    if (body.t !== 'r1' && body.t !== 'r2' && body.t !== 'fvk') {
       continue;
     }
     const key = `${from}:${body.t}`;
-    const said = JSON.stringify(body);
-    const before = first.get(key);
+    const now = JSON.stringify(body);
+    const before = said.get(key);
     if (before !== undefined) {
-      if (before !== said) {
-        c.split.add(from);
+      if (before !== now) {
+        out.split.add(from);
       }
       continue;
     }
-    first.set(key, said);
-    c.last = Math.max(c.last, at);
+    said.set(key, now);
+    out.last = Math.max(out.last, at);
     if (body.t === 'r1') {
-      c.r1.set(from, { b: body.b, x: body.x });
+      out.r1.set(from, { b: body.b, x: body.x, c: body.c, id: r1Id({ R, member: from, ...body }) });
     } else if (body.t === 'r2') {
-      c.r2.set(from, { p: body.p, h1: body.h1 });
-    } else if (body.t === 'fvk') {
-      c.fvk.set(from, body.h);
-    } else if (body.t === 'sk' && from === c.by) {
-      c.sk = body.s;
+      const r: R2Rec = { p: body.p, s: body.s, h1: body.h1, id: '' };
+      try {
+        r.id = r2Id({ R, member: from, ...r });
+      } catch {
+        out.split.add(from);
+        continue;
+      }
+      out.r2.set(from, r);
+    } else {
+      out.fvk.set(from, body.h);
     }
   }
-  return c;
+  return out;
 };
 
-/** the ceremony's step (1 to 3): the furthest every member has reached, plus one */
-export const roundOf = (c: Ceremony): number =>
+/** how far a member got: 0 nothing yet, 1 round one, 2 round two, 3 their keys checked */
+export const stepOf = (c: Keygen, member: string): number =>
+  c.fvk.has(member) ? 3 : c.r2.has(member) ? 2 : c.r1.has(member) ? 1 : 0;
+
+/** the setup's step (1 to 3): the furthest every member has reached, plus one */
+export const roundOf = (c: Keygen): number =>
   Math.min(3, 1 + Math.min(...c.members.map(m => stepOf(c, m))));
 
-/** members still to do the current step */
-export const behind = (c: Ceremony): string[] => {
+/** members still to do the current step: to agree, or to make a share */
+export const behind = (c: Keygen): string[] => {
+  if (!c.bound) {
+    return c.members.filter(m => !c.agreed.has(m));
+  }
   const low = Math.min(...c.members.map(m => stepOf(c, m)));
   return c.members.filter(m => stepOf(c, m) === low && low < 3);
 };
 
-/** how long a ceremony may stand still before the ones behind are shown as missing */
+/** how long a setup may stand still before the ones behind are shown as missing */
 export const MISSING_S = 120;
 
-/** the members holding a ceremony up: behind, and nothing heard for {@link MISSING_S} */
-export const missingOf = (c: Ceremony, nowS: number): string[] =>
-  nowS - c.last > MISSING_S ? behind(c) : [];
+/** the members holding a setup up: behind, and nothing heard for {@link MISSING_S} */
+export const missingOf = (c: Keygen, nowS: number): string[] =>
+  nowS - Math.max(c.at, c.last) > MISSING_S ? behind(c) : [];
 
 /**
- * "start again without them": new keys for the members left, the threshold
- * kept where it still fits (never below two). Undefined when fewer than two
- * would be left, since one person is not a shared wallet.
+ * "start again without them": a new wallet for the members left, the
+ * threshold kept where it still fits (never below two). Undefined when fewer
+ * than two would be left, since one person is not a shared wallet.
  */
 export const restartOf = (
-  c: Ceremony,
+  c: Pick<Keygen, 'k' | 'members'>,
   gone: string[],
 ): { members: string[]; k: number } | undefined => {
   const members = c.members.filter(m => !gone.includes(m));
@@ -587,51 +739,15 @@ export const restartOf = (
 };
 
 /**
- * The ceremony cannot finish as it stands: someone said two different
- * things in it, members made round two from different round-one records, or
- * every member checked their keys and they do not match.
+ * The setup cannot finish as it stands: someone said two different things in
+ * it, members made round two from different round-one records, or every
+ * member checked their keys and they do not match. (A bad reveal is seen
+ * only by the member it was sealed to; {@link advance} stops there.)
  */
-export const mismatched = (c: Ceremony): boolean =>
+export const mismatched = (c: Keygen): boolean =>
   c.split.size > 0 ||
   new Set([...c.r2.values()].map(r => r.h1)).size > 1 ||
   (c.members.every(m => c.fvk.has(m)) && new Set(c.fvk.values()).size > 1);
-
-/** who a room lets take part: a group's roster, or the two people of a pair room */
-/**
- * A shared wallet you came into by its code: the founder's start with the k
- * of n the code named. Typing the words was your yes to those terms, so
- * nothing more is asked. A wallet made from a chat asks each member once,
- * in the thread: they joined a chat, not a wallet.
- */
-export const cameFor = (room: PeopleRoom, c: Ceremony): boolean => {
-  const want = room.group?.want;
-  return !!want && c.by === room.group?.founder && c.k === want.k && c.members.length === want.n;
-};
-
-export const allowedIn = (room: PeopleRoom, me: string): ((key: string) => boolean) => {
-  if (room.kind === 'pair') {
-    return k => k === me || k === room.pair?.peer;
-  }
-  const g = room.group;
-  const roster = new Set([g?.founder, ...(g?.members ?? []).map(m => m.key)]);
-  return k => roster.has(k);
-};
-
-/** a fresh ceremony's start: the members fixed now, the threshold chosen */
-export const startBody = (
-  members: string[],
-  k: number,
-  label: string,
-  more: { deal?: Deal; replaces?: string } = {},
-): FrostBody => ({
-  t: 'start',
-  id: bytesToHex(crypto.getRandomValues(new Uint8Array(16))),
-  k,
-  m: members,
-  label: label.slice(0, 48),
-  ...(more.deal ? { deal: more.deal } : {}),
-  ...(more.replaces ? { r: more.replaces } : {}),
-});
 
 /** the default threshold: a majority */
 export const majority = (n: number) => Math.max(2, Math.floor(n / 2) + 1);
@@ -657,7 +773,8 @@ export const keepMine = (cur: FrostMine | undefined, patch: FrostMine): FrostMin
     delete next.s2;
     delete next.kp;
     delete next.seed;
-    delete next.sk;
+    delete next.si;
+    delete next.bx;
   }
   return next;
 };
@@ -672,13 +789,13 @@ export interface FrostCalls {
     broadcasts: string[],
     packages: string[],
   ): Promise<{ key_package: string; public_key_package: string; ephemeral_seed: string }>;
-  sampleSk(): Promise<string>;
   ufvk(pkp: string, sk: string): Promise<string>;
   address(pkp: string, sk: string): Promise<string>;
 }
 
-/** what a finished ceremony leaves on this device */
+/** what a finished setup leaves on this device */
 export interface Seat {
+  /** the roster's id: the wallet payments name */
   ceremony: string;
   /** every member's room key: who may propose and seal payments from it */
   members: string[];
@@ -693,7 +810,7 @@ export interface Seat {
 }
 
 export interface FrostIo {
-  /** one message's records; `key` names it (`r1:<ceremony>`), so a caller can pace repeats */
+  /** one message's records; `key` names it (`r1:<roster>`), so a caller can pace repeats */
   post(bodies: string[], key: string): Promise<unknown>;
   /** {@link keepMine} applied where the room lives; returns what is kept */
   keep(id: string, patch: FrostMine): Promise<FrostMine>;
@@ -709,130 +826,80 @@ export interface Me {
 export type FrostStatus = 'idle' | 'waiting' | 'mismatch' | 'done';
 
 /**
- * The round-one records a member makes its round two from, hashed with the
- * ceremony they belong to: every member must arrive at the same one, or some
- * member showed different devices different round-one broadcasts.
- */
-export const r1Hash = (c: Ceremony, me: string, own: { b: string; x: string }): string =>
-  sha([
-    'zafu-frost-r1-v1',
-    c.id,
-    c.k,
-    c.members,
-    c.members.map(m => {
-      const r = m === me ? own : c.r1.get(m);
-      return [m, r?.b ?? '', r?.x ?? ''];
-    }),
-  ]);
-
-/**
- * What a member commits to once its keys are made: the ceremony, both rounds
- * as this device saw them, the group key, and the viewing key and address it
- * derived. Members compare this, never the viewing key itself.
- */
-export const fvkHash = (
-  c: Ceremony,
-  me: string,
-  own: { h1: string; p: string[] },
-  pkp: string,
-  u: string,
-  a: string,
-): string =>
-  sha([
-    'zafu-frost-fvk-v1',
-    c.id,
-    own.h1,
-    c.members.map(m => {
-      const r = m === me ? own : c.r2.get(m);
-      return [m, r?.h1 ?? '', r?.p ?? []];
-    }),
-    pkp,
-    u,
-    a,
-  ]);
-
-/** the viewing-key secret's box for one member: bound to this ceremony and to them */
-const skAad = (c: Ceremony, member: string) => enc.encode(`zafu-frost-sk-v1:${c.id}:${member}`);
-
-/**
  * Do every step this device can do now, and say where it stands. Safe to call
- * again at any time: what is kept decides what was done, never memory.
+ * again at any time: what is kept decides what was done, never memory. Runs
+ * only on a bound roster: signing it was this member's agreement.
  */
 export const advance = async (
-  c: Ceremony | undefined,
+  c: Keygen | undefined,
   mine0: FrostMine | undefined,
   me: Me,
   frost: FrostCalls,
   io: FrostIo,
+  label: string,
 ): Promise<FrostStatus> => {
-  if (!c?.members.includes(me.pubkey)) {
+  if (!c?.bound || !c.members.includes(me.pubkey)) {
     return 'idle';
   }
+  const R = c.id;
+  const at = c.members.indexOf(me.pubkey);
   const others = c.members.filter(m => m !== me.pubkey);
   let mine = mine0 ?? {};
   if (mine.saved) {
     return 'done';
   }
-  // a ceremony that cannot finish stops for everyone, before anyone is asked to agree to it
   if (mismatched(c)) {
     return 'mismatch';
   }
-  // keys are made once this member agreed, on this device, to what the start says
-  if (c.by !== me.pubkey && !mine.ok) {
-    return 'waiting';
-  }
   const send = async (body: FrostBody) => io.post(await packFrost(body), `${body.t}:${body.id}`);
+  const commit = () => commitOf(R, at, mine.si!);
+  const r1 = () =>
+    ({ t: 'r1', v: 2, id: R, b: mine.b1!, x: me.xwingPublicKey, c: commit() }) as const;
   // what this device said before and the room does not show: a post that
-  // failed, or a record the relay let go. Said again (the caller paces it).
-  if (mine.b1 && !c.r1.has(me.pubkey)) {
-    await send({ t: 'r1', id: c.id, b: mine.b1, x: me.xwingPublicKey });
+  // failed, or a record the relay let go. Said again, the same (the caller paces it).
+  if (mine.b1 && mine.si && !c.r1.has(me.pubkey)) {
+    await send(r1());
   }
-  if (mine.p2 && mine.h1 && !c.r2.has(me.pubkey)) {
-    await send({ t: 'r2', id: c.id, p: mine.p2, h1: mine.h1 });
+  if (mine.p2 && mine.h1 && mine.bx && !c.r2.has(me.pubkey)) {
+    await send({ t: 'r2', v: 2, id: R, p: mine.p2, s: mine.bx, h1: mine.h1 });
   }
   if (mine.fh && !c.fvk.has(me.pubkey)) {
-    await send({ t: 'fvk', id: c.id, h: mine.fh });
+    await send({ t: 'fvk', v: 2, id: R, h: mine.fh });
   }
 
   if (!mine.b1) {
     const r = await frost.part1(c.members.length, c.k);
-    mine = await io.keep(c.id, { s1: r.secret, b1: r.broadcast });
-    await send({ t: 'r1', id: c.id, b: mine.b1!, x: me.xwingPublicKey });
+    const si = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
+    mine = await io.keep(R, { s1: r.secret, b1: r.broadcast, si });
+    await send(r1());
   }
   if (!others.every(m => c.r1.has(m))) {
     return 'waiting';
   }
+  // this device's own round one, as the room should show it
+  const own: R1Rec = { b: mine.b1!, x: me.xwingPublicKey, c: commit(), id: '' };
+  own.id = r1Id({ R, member: me.pubkey, ...own });
+  const r1s = c.members.map(m => (m === me.pubkey ? own : c.r1.get(m)!));
   const theirB = others.map(m => c.r1.get(m)!.b);
 
-  if (c.by === me.pubkey && !c.sk) {
-    mine = await io.keep(c.id, { sk: mine.sk ?? (await frost.sampleSk()) });
-    const s = Object.fromEntries(
-      others.map(m => [
-        m,
-        b64(sealXWing(hexToBytes(c.r1.get(m)!.x), hexToBytes(mine.sk!), skAad(c, m))),
-      ]),
-    );
-    await send({ t: 'sk', id: c.id, s });
-  }
   if (!mine.s2) {
-    const h1 = r1Hash(c, me.pubkey, { b: mine.b1!, x: me.xwingPublicKey });
+    const h1 = h1Of(
+      R,
+      r1s.map(r => r.id),
+    );
     const r = await frost.part2(mine.s1!, theirB);
-    mine = await io.keep(c.id, { s2: r.secret, p2: r.peer_packages, h1 });
-    await send({ t: 'r2', id: c.id, p: mine.p2!, h1: mine.h1! });
+    // s_i is revealed only now, after every commitment is in: sealed to each member, bound to them
+    const bx = c.members.map(m =>
+      m === me.pubkey
+        ? ''
+        : bytesToHex(
+            sealXWing(hexToBytes(c.r1.get(m)!.x), hexToBytes(mine.si!), revealAad(R, me.pubkey, m)),
+          ),
+    );
+    mine = await io.keep(R, { s2: r.secret, p2: r.peer_packages, h1, bx });
+    await send({ t: 'r2', v: 2, id: R, p: mine.p2!, s: mine.bx!, h1: mine.h1! });
   }
-  // a round two made before its round-one records were hashed cannot be checked
-  if (!mine.h1) {
-    return 'mismatch';
-  }
-  let sk = mine.sk;
-  if (!sk && c.sk?.[me.pubkey]) {
-    try {
-      sk = bytesToHex(openXWing(me.xwingSeed, unb64(c.sk[me.pubkey]!), skAad(c, me.pubkey)));
-    } catch {
-      return 'mismatch';
-    }
-  }
-  if (!sk || !others.every(m => c.r2.has(m))) {
+  if (!others.every(m => c.r2.has(m))) {
     return 'waiting';
   }
   // every member made its round two from the same round-one records as this device
@@ -840,6 +907,26 @@ export const advance = async (
     return 'mismatch';
   }
   if (!mine.fh) {
+    // each reveal must open the commitment its member made before any was revealed
+    const s: string[] = [];
+    for (const [i, m] of c.members.entries()) {
+      if (m === me.pubkey) {
+        s.push(mine.si!);
+        continue;
+      }
+      let si: string;
+      try {
+        const box = c.r2.get(m)!.s[at];
+        si = bytesToHex(openXWing(me.xwingSeed, hexToBytes(box ?? ''), revealAad(R, m, me.pubkey)));
+      } catch {
+        return 'mismatch';
+      }
+      if (commitOf(R, i, si) !== c.r1.get(m)!.c) {
+        return 'mismatch';
+      }
+      s.push(si);
+    }
+    const sk = skOf(R, s);
     const r = await frost.part3(
       mine.s2!,
       theirB,
@@ -847,9 +934,16 @@ export const advance = async (
     );
     const u = await frost.ufvk(r.public_key_package, sk);
     const a = await frost.address(r.public_key_package, sk);
-    const fh = fvkHash(c, me.pubkey, { h1: mine.h1, p: mine.p2! }, r.public_key_package, u, a);
-    mine = await io.keep(c.id, {
-      sk,
+    const ownR2 = r2Id({ R, member: me.pubkey, p: mine.p2!, s: mine.bx!, h1: mine.h1! });
+    const fh = fvkHash({
+      R,
+      r1: r1s.map(x => x.id),
+      r2: c.members.map(m => (m === me.pubkey ? ownR2 : c.r2.get(m)!.id)),
+      pkp: r.public_key_package,
+      ufvk: u,
+      address: a,
+    });
+    mine = await io.keep(R, {
       kp: r.key_package,
       pkp: r.public_key_package,
       seed: r.ephemeral_seed,
@@ -857,7 +951,7 @@ export const advance = async (
       a,
       fh,
     });
-    await send({ t: 'fvk', id: c.id, h: mine.fh! });
+    await send({ t: 'fvk', v: 2, id: R, h: mine.fh! });
   }
   if (!others.every(m => c.fvk.has(m))) {
     return 'waiting';
@@ -866,9 +960,9 @@ export const advance = async (
     return 'mismatch';
   }
   await io.save({
-    ceremony: c.id,
+    ceremony: R,
     members: c.members,
-    label: c.label,
+    label,
     threshold: c.k,
     maxSigners: c.members.length,
     address: mine.a!,
@@ -877,9 +971,18 @@ export const advance = async (
     publicKeyPackage: mine.pkp!,
     ephemeralSeed: mine.seed!,
   });
-  await io.keep(c.id, { saved: true });
+  await io.keep(R, { saved: true });
   return 'done';
 };
+
+/** a fresh genesis for a wallet proposed in a room: its own salt, so each proposal is its own */
+export const walletGenesis = (members: string[], t: number, creator: string): Genesis => ({
+  purpose: 'wallet',
+  t,
+  n: sortKeys(members).length,
+  salt: bytesToHex(crypto.getRandomValues(new Uint8Array(16))),
+  creator,
+});
 
 // -- the worker's side ---------------------------------------------------------
 
@@ -894,7 +997,7 @@ export const frostOps = {
       await s.api.send(String(r['roomId']), b, 'action');
     }
   },
-  /** what this device did in a ceremony, written once per field (see keepMine) */
+  /** what this device did in a setup or payment, written once per field (see keepMine) */
   'frost-keep': async (r: Record<string, unknown>, s: PeopleService) => {
     const id = String(r['id']);
     let kept: FrostMine | undefined;

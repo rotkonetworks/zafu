@@ -5,11 +5,13 @@
  * a contact you both can reach, in a small deal group. zafu court is the
  * other choice once its escrow service answers (COURT_OPEN); until then it is
  * not offered, since its keys could never be made.
+ *
+ * Proposing waits (#110): a deal's terms have no agreed object yet, and a
+ * pair room has no joins to make a roster from. Nothing is sent until then.
  */
 
 import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { Segmented } from '@repo/ui/components/ui/segmented';
@@ -19,10 +21,7 @@ import { parseZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import { useStore } from '../../../state';
 import { isMutual } from '../../../state/contacts';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
-import { peopleAsk } from '../../../people/client';
-import { COURT, COURT_OPEN, type Deal } from '../../../people/frost-room';
-import { startKeys } from '../../../people/use-frost-room';
-import { groupInvitePath } from '../paths';
+import { COURT_OPEN, type Deal } from '../../../people/frost-room';
 
 type Who = 'two' | 'court' | 'person';
 
@@ -69,21 +68,14 @@ const Choice = ({
 export const DealSheet = ({
   open,
   onClose,
-  roomId,
   contactId,
   name,
-  me,
-  peer,
 }: {
   open: boolean;
   onClose: () => void;
-  roomId: string;
   contactId: string;
   name: string;
-  me: string;
-  peer: string;
 }) => {
-  const navigate = useNavigate();
   const walletId = useStore(s => selectEffectiveKeyInfo(s)?.id);
   const contacts = useStore(s => s.contacts.contacts);
   const [amount, setAmount] = useState('');
@@ -91,29 +83,12 @@ export const DealSheet = ({
   const [payer, setPayer] = useState<Deal['payer']>('proposer');
   const [who, setWho] = useState<Who>('two');
   const [arbiter, setArbiter] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
   const zat = parseZecAmount(amount);
   const others = (Array.isArray(contacts) ? contacts : []).filter(
     c => c.id !== contactId && isMutual(c, walletId),
   );
   const chosen = others.find(c => c.id === arbiter);
   const ready = !!zat && !!what.trim() && (who !== 'person' || !!chosen);
-
-  const propose = async () => {
-    const deal: Deal = { amount: String(zat), what: what.trim().slice(0, 48), payer };
-    if (who === 'person') {
-      const { G } = await peopleAsk<{ G: string }>('deal-group', {
-        contactIds: [contactId, arbiter],
-        deal,
-      });
-      navigate(groupInvitePath(G));
-      return;
-    }
-    await startKeys(roomId, who === 'court' ? [me, peer, COURT] : [me, peer], 2, deal.what, {
-      deal,
-    });
-  };
 
   return (
     <Sheet open={open} onOpenChange={o => !o && onClose()} title={`a deal with ${name}`}>
@@ -198,24 +173,10 @@ export const DealSheet = ({
             ? 'zafu court answers once its service opens'
             : `${chosen?.name ?? 'they'} and ${name} both agree first`}
       </div>
-      <span className='h-4 text-[11px] text-hanko-light'>{error}</span>
-      <Button
-        disabled={!ready || busy}
-        onClick={() => {
-          setBusy(true);
-          setError('');
-          void propose().then(
-            () => {
-              setBusy(false);
-              onClose();
-            },
-            (e: unknown) => {
-              setBusy(false);
-              setError(e instanceof Error ? e.message : 'this did not leave. please try again.');
-            },
-          );
-        }}
-      >
+      <span className='h-4 text-[11px] text-fg-muted'>
+        {ready ? 'making a deal waits for a newer zafu · nothing was sent' : ''}
+      </span>
+      <Button disabled>
         {who === 'person' ? `ask ${chosen?.name ?? 'them'}` : `propose to ${name}`}
       </Button>
     </Sheet>
