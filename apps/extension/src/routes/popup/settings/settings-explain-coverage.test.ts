@@ -34,7 +34,7 @@ const WRAPPER_TAGS = [
   'ZcashNodeSheet',
   'DestinationRow',
   'ZcashMeRow',
-  'SendOverNymRow',
+  'SendOverNymRows',
   'ContactDiscoverySection',
   'ChainRow',
 ];

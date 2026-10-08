@@ -6,7 +6,7 @@ import { privacySelector, type ExplorerLinks, type PrivacySettings } from '../..
 import { OptionsRow } from './sheet-options';
 import { selectEnabledNetworks } from '../../../state/keyring';
 import { Section, SettingsScreen } from './settings-screen';
-import { Row } from '@repo/ui/components/ui/row';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { selectConnectedSiteCount } from './settings-status';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { PopupPath } from '../paths';
@@ -21,6 +21,8 @@ import { usePopupNav } from '../../../utils/navigate';
 import { useZcashMeMode, ZCASHME_MODE_LABEL } from '../../../services/zcashme/config';
 import { readNetEgress, setDestinationOptIn } from '../../../net/ledger';
 import { NYM } from '../../../net/nym-bridge';
+import { NYM_GROUPS, nymGroupKey, nymGroupOn } from '../../../net/egress-policy';
+import type { NetEgressState } from '../../../net/destination';
 import { useExplain, type ExplainId } from './settings-explain';
 import { ZCASH_BACKENDS } from '../../../state/keyring/zcash-backend';
 import {
@@ -108,29 +110,63 @@ export const ExplorerLinksRow = ({ onExplain }: { onExplain?: (label: string) =>
   );
 };
 
-/** send over nym: on unless the person blocked the nym destination (stored with the egress choices) */
-function SendOverNymRow({ onExplain }: { onExplain?: (label: string) => void }) {
-  const [on, setOn] = useState<boolean>();
+/** send over nym: on unless the person blocked the nym destination; each
+ *  network's own choice sits on a sheet (both stored with the egress choices) */
+function SendOverNymRows({ onExplain }: { onExplain?: (label: string) => void }) {
+  const [optIns, setOptIns] = useState<NetEgressState['optIns']>();
+  const [open, setOpen] = useState(false);
   useEffect(() => {
-    const load = () => void readNetEgress().then(s => setOn(s.optIns[NYM] !== 'blocked'));
+    const load = () => void readNetEgress().then(s => setOptIns(s.optIns));
     const onChanged = (changes: Record<string, unknown>, area: string) =>
       area === 'local' && 'netEgress' in changes && load();
     load();
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);
   }, []);
-  if (on === undefined) {
+  if (optIns === undefined) {
     return null;
   }
+  const master = optIns[NYM] !== 'blocked';
+  const groupOn = (g: (typeof NYM_GROUPS)[number]) => nymGroupOn({ netEgress: { optIns } }, g);
   return (
-    <Row
-      type='toggle'
-      label='send over nym'
-      description="slower · nym's directory sees that you use nym"
-      checked={on}
-      onChange={v => void setDestinationOptIn(NYM, v ? undefined : 'blocked')}
-      onExplain={onExplain}
-    />
+    <>
+      <Row
+        type='toggle'
+        label='send over nym'
+        description="slower · nym's directory sees that you use nym"
+        checked={master}
+        onChange={v => void setDestinationOptIn(NYM, v ? undefined : 'blocked')}
+        onExplain={onExplain}
+      />
+      <Row
+        type='value'
+        label='nym, per network'
+        value={`${NYM_GROUPS.filter(groupOn).length} of ${NYM_GROUPS.length}`}
+        disabled={!master}
+        onPress={() => setOpen(true)}
+        onExplain={onExplain}
+      />
+      <Sheet open={open} onOpenChange={setOpen} title='nym, per network'>
+        <RowGroup>
+          {NYM_GROUPS.map(g => (
+            // no-explain: each row says what going direct shows
+            <Row
+              key={g.id}
+              type='toggle'
+              label={g.label}
+              description={groupOn(g) ? 'over nym' : `direct · ${g.direct}`}
+              checked={groupOn(g)}
+              onChange={v =>
+                void setDestinationOptIn(
+                  nymGroupKey(g.id),
+                  v === g.on ? undefined : v ? 'allowed' : 'blocked',
+                )
+              }
+            />
+          ))}
+        </RowGroup>
+      </Sheet>
+    </>
   );
 }
 
@@ -377,7 +413,7 @@ export function SettingsPrivacy() {
       <div className='flex flex-col gap-4'>
         <Section title='on screen'>{rows('on screen')}</Section>
         <Section title='network'>
-          <SendOverNymRow {...explainProps('privacy.sendOverNym')} />
+          <SendOverNymRows {...explainProps('privacy.sendOverNym')} />
           {rows('network')}
           {zcashOn && <ExplorerLinksRow {...explainProps('privacy.explorerLinks')} />}
           {zcashOn && <ZcashWireRows explainProps={explainProps} />}
