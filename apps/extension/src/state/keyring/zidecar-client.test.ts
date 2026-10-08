@@ -306,3 +306,75 @@ describe('ZidecarClient decoding', () => {
     });
   });
 });
+
+describe('ZidecarClient grpc-web framing', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    ZidecarClient.extraHeaders = null;
+  });
+
+  const headersOf = (init: RequestInit) => init.headers as Record<string, string>;
+
+  test('unary: framed request, grpc-web and extra headers, first data frame back', async () => {
+    ZidecarClient.extraHeaders = () => ({ 'x-ring-proof': 'p' });
+    const fetch = serve(concat(frame(msg(vField(1, 9))), trailer));
+    await expect(client().getTip()).resolves.toEqual({ height: 9, hash: new Uint8Array(0) });
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe('https://zidecar.example/zidecar.v1.Zidecar/GetTip');
+    expect(init.method).toBe('POST');
+    expect(new Uint8Array(init.body as Uint8Array)).toEqual(Uint8Array.from([0, 0, 0, 0, 0]));
+    expect(headersOf(init)).toEqual({
+      'Content-Type': 'application/grpc-web+proto',
+      Accept: 'application/grpc-web+proto',
+      'x-grpc-web': '1',
+      'x-ring-proof': 'p',
+    });
+  });
+
+  test('bare: only the grpc-web headers, on the CompactTxStreamer service', async () => {
+    ZidecarClient.extraHeaders = () => ({ 'x-ring-proof': 'p' });
+    const fetch = serve(frame(msg(lField(2, 'zidecar/rotkonetworks'))));
+    await expect(client().getLightdInfo({ bare: true })).resolves.toMatchObject({
+      vendor: 'zidecar/rotkonetworks',
+    });
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe(
+      'https://zidecar.example/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetLightdInfo',
+    );
+    expect(headersOf(init)['x-ring-proof']).toBeUndefined();
+  });
+
+  test('stream: extra headers and the abort signal, the whole body back', async () => {
+    ZidecarClient.extraHeaders = () => ({ 'x-ring-proof': 'p' });
+    const fetch = serve(concat(frame(msg(vField(1, 1))), trailer));
+    const signal = new AbortController().signal;
+    await expect(client().getMempoolStream(signal)).resolves.toHaveLength(1);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe('https://zidecar.example/zidecar.v1.Zidecar/GetMempoolStream');
+    expect(init.signal).toBe(signal);
+    expect(headersOf(init)['x-ring-proof']).toBe('p');
+  });
+
+  test('HTTP errors carry the status', async () => {
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response('', { status: 404 })));
+    await expect(client().getTip()).rejects.toMatchObject({
+      message: 'gRPC GetTip: HTTP 404',
+      httpStatus: 404,
+    });
+    await expect(client().getMempoolStream()).rejects.toThrow(/HTTP 404/);
+  });
+
+  test('a trailer with an error status throws it; an ok trailer alone is an empty message', async () => {
+    serve(frame(new TextEncoder().encode('grpc-status: 5\r\ngrpc-message: not%20found'), 0x80));
+    await expect(client().getTip()).rejects.toMatchObject({
+      message: 'gRPC GetTip: not found',
+      grpcStatus: 5,
+    });
+    serve(trailer);
+    await expect(client().getTip()).resolves.toEqual({ height: 0, hash: new Uint8Array(0) });
+    serve(new Uint8Array(0));
+    await expect(client().getTip()).rejects.toThrow(
+      'gRPC GetTip: empty response from https://zidecar.example',
+    );
+  });
+});
