@@ -1570,7 +1570,8 @@ const resolveBroadcastTxid = async (
   txHex: string,
   serverUrl: string,
 ): Promise<string> => {
-  if (ZCASH_BACKENDS[lookupBackend(serverUrl)].echoesTxid) {
+  // a node that already held this transaction answers without its txid
+  if (ZCASH_BACKENDS[lookupBackend(serverUrl)].echoesTxid && result.txid.length) {
     return new TextDecoder().decode(result.txid);
   }
   await initWasm();
@@ -6626,7 +6627,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             );
           }
 
-          const outputTxid = new TextDecoder().decode(broadcastResult.txid);
+          const outputTxid = await resolveBroadcastTxid(
+            broadcastResult,
+            txHex,
+            multiPayload.serverUrl,
+          );
           txids.push(outputTxid);
           fees.push(fee.toString());
 
@@ -6997,7 +7002,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           );
         }
 
-        const shieldCompleteTxid = new TextDecoder().decode(shieldCompleteResult.txid);
+        const shieldCompleteTxid = await resolveBroadcastTxid(
+          shieldCompleteResult,
+          shieldCompleteTxHex,
+          shieldCompletePayload.serverUrl,
+        );
         workerSelf.postMessage({
           type: 'tx-result',
           id,

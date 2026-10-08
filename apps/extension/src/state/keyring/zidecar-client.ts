@@ -18,6 +18,16 @@ import {
 } from './subtree-roots';
 import type { ChainTip, CompactAction, CompactBlock, Utxo } from './zcash-types';
 
+/**
+ * zebra's answer to a transaction it already has: in its mempool, queued, or
+ * mined. A broadcast sent again (nym took another route after the first try
+ * went unanswered) hears this, and it means the send went through.
+ */
+const ALREADY_SENT = /already exists in mempool|already queued for download|already in state/;
+
+/** a SendResponse error that is the node already holding this very transaction */
+export const alreadySent = (errorMessage: string): boolean => ALREADY_SENT.test(errorMessage);
+
 export type { ChainTip, CompactAction, CompactBlock, Utxo } from './zcash-types';
 
 export interface ProRing {
@@ -173,7 +183,9 @@ export class ZidecarClient {
       }
     });
 
-    return { txid, errorCode, errorMessage };
+    return alreadySent(errorMessage)
+      ? { txid: new Uint8Array(0), errorCode: 0, errorMessage: '' }
+      : { txid, errorCode, errorMessage };
   }
 
   /** request an ed25519 anchor attestation from zidecar's verifier (SignAnchor).
