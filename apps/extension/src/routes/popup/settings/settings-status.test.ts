@@ -65,6 +65,7 @@ describe('settings status lines', () => {
       '2 wallets · zigner paired · zcash, penumbra on',
     );
     expect(devicesStatus(1, false, []).text).toBe('1 wallet · no networks on');
+    expect(networkNames(['zcash', 'penumbra', 'noble', 'osmosis'])).toEqual(['zcash', 'penumbra']);
   });
 
   const state = (
