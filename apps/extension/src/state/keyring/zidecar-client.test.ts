@@ -284,6 +284,12 @@ describe('ZidecarClient decoding', () => {
       signature: hex(fill(64, 0xcd)),
       totalPaidZat: 100_000_000,
     });
+    // past int32: 30 ZEC paid is 3e9 zatoshi, which `<<` decoding wrapped negative
+    serve(frame(msg(vField(5, 3_000_000_000), vField(3, 2 ** 32 + 1))));
+    await expect(client().checkLicense('zid1')).resolves.toMatchObject({
+      totalPaidZat: 3_000_000_000,
+      expires: 2 ** 32 + 1,
+    });
     serve(frame(new Uint8Array(0)));
     await expect(client().checkLicense('zid1')).resolves.toEqual({
       zid: '',
