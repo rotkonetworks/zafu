@@ -28,7 +28,7 @@ import {
 } from '../../../state/keyring/network-worker';
 import { BuildStopped, isBuildStopped } from '../../../workers/build-abort';
 import { SendRun } from './send-run';
-import { isHeartbeat, phaseOf, useSendWatch } from './send-watch';
+import { isHeartbeat, phaseOf, useSendWatch, watchNote } from './send-watch';
 import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { nu63ActivationHeight } from '../../../config/feature-flags';
@@ -177,7 +177,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // this attempt, and the one way to cancel it (see send-run.ts)
   const runRef = useRef<SendRun | null>(null);
   // the reserved line under a running build, beyond what the clock says
-  const [sendNote, setSendNote] = useState<Exclude<SendingNote, 'slow'>>('leave');
+  const [sendNote, setSendNote] = useState<Exclude<SendingNote, 'slow' | 'rerouting'>>('leave');
 
   /** promote the optimistic record to the real txid and mark it broadcasted. */
   const promoteToBroadcasted = useCallback(
@@ -1550,8 +1550,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           sendStage(STAGES.zcash, sendSteps) < 3
             ? () => void stopSend()
             : undefined;
-        const note: SendingNote =
-          sendNote !== 'leave' ? sendNote : watch === 'slow' ? 'slow' : 'leave';
+        const note: SendingNote = sendNote !== 'leave' ? sendNote : watchNote(watch);
         // a catch-up of this build, said the moment it starts
         return catchUp &&
           step === 'building' &&

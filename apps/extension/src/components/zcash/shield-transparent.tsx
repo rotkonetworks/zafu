@@ -57,7 +57,7 @@ import {
 import { LedgerSteps } from '../../routes/popup/send/send-states';
 import { Proving, SendingFooter, type SendingNote } from '../../routes/popup/send/send-ui';
 import { STAGES, sendStage, type SendProgress } from '../../routes/popup/send/send-stage';
-import { isHeartbeat, phaseOf, useSendWatch } from '../../routes/popup/send/send-watch';
+import { isHeartbeat, phaseOf, useSendWatch, watchNote } from '../../routes/popup/send/send-watch';
 import { stopBuildInWorker } from '../../state/keyring/network-worker';
 import { isBuildStopped } from '../../workers/build-abort';
 
@@ -137,7 +137,7 @@ export const ShieldTransparent = ({
   const buildKeyRef = useRef<string | null>(null);
   const [buildSteps, setBuildSteps] = useState<SendProgress[]>([]);
   const [buildSince, setBuildSince] = useState(0);
-  const [buildNote, setBuildNote] = useState<Exclude<SendingNote, 'slow'>>('leave');
+  const [buildNote, setBuildNote] = useState<Exclude<SendingNote, 'slow' | 'rerouting'>>('leave');
   const building = shielding || zignerStep === 'building';
   const startBuild = () => {
     const key = crypto.randomUUID();
@@ -408,7 +408,7 @@ export const ShieldTransparent = ({
           hot={method === 'hot'}
         />
         <SendingFooter
-          note={buildNote !== 'leave' ? buildNote : watch === 'slow' ? 'slow' : 'leave'}
+          note={buildNote !== 'leave' ? buildNote : watchNote(watch)}
           onStop={
             buildNote !== 'on-its-way' && sendStage(STAGES.zcash, buildSteps) < 3
               ? () => void stopBuild()

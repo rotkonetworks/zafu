@@ -31,7 +31,7 @@ import {
 import { isBuildStopped } from '../../../workers/build-abort';
 import { Sending, type SendingNote } from './send-ui';
 import { STAGES, sendStage } from './send-stage';
-import { isHeartbeat, phaseOf, useSendWatch } from './send-watch';
+import { isHeartbeat, phaseOf, useSendWatch, watchNote } from './send-watch';
 import {
   parsePreludeSinglePcztResponse,
   unwrapCborSinglePczt,
@@ -157,7 +157,7 @@ export function IronwoodMigrate({
   // the build in the worker, stoppable under this key until it broadcasts
   const buildKeyRef = useRef<string | null>(null);
   const buildSinceRef = useRef(0);
-  const [buildNote, setBuildNote] = useState<Exclude<SendingNote, 'slow'>>('leave');
+  const [buildNote, setBuildNote] = useState<Exclude<SendingNote, 'slow' | 'rerouting'>>('leave');
   const watch = useSendWatch(progressSteps, buildSinceRef.current, step === 'building');
 
   /** stop the build; the worker says if it is already broadcasting */
@@ -479,7 +479,7 @@ export function IronwoodMigrate({
               floor={0}
               since={buildSinceRef.current}
               hot={!!isHotWallet}
-              note={buildNote !== 'leave' ? buildNote : watch === 'slow' ? 'slow' : 'leave'}
+              note={buildNote !== 'leave' ? buildNote : watchNote(watch)}
               onStop={
                 buildNote !== 'on-its-way' && sendStage(STAGES.zcash, progressSteps) < 3
                   ? () => void stopBuild()

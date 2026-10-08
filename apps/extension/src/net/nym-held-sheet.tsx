@@ -6,10 +6,22 @@
  * The answer never touches the "send over nym" setting.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
 import { onNymMessage, postNym } from './nym-bridge';
+
+let rerouteAt = 0;
+const onReroute = (changed: () => void) =>
+  onNymMessage(m => {
+    if (m.type === 'reroute') {
+      rerouteAt = Date.now();
+      changed();
+    }
+  });
+
+/** when nym last dropped a route that did not answer, as this window heard it */
+export const useNymRerouteAt = (): number => useSyncExternalStore(onReroute, () => rerouteAt);
 
 export const NymHeldSheet = () => {
   const [held, setHeld] = useState<{ id: string; host: string; sent: boolean }>();
