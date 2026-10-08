@@ -37,6 +37,7 @@ const WRAPPER_TAGS = [
   'ContactDiscoveryRow',
   'PeopleRelayRow',
   'DiscoveryRelayRow',
+  'SendOverNymRows',
   'ChainRow',
 ];
 
