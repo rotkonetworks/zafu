@@ -10,10 +10,16 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useNymRerouteAt } from '../../../net/nym-held-sheet';
 
-export type Watch = 'ok' | 'slow' | 'timeout';
+/** `rerouting`: nym dropped a route that did not answer and is trying another */
+export type Watch = 'ok' | 'slow' | 'rerouting' | 'timeout';
 
 export type WatchPhase = 'default' | 'catch-up' | 'proving' | 'broadcast';
+
+/** what a watch says on a running build's note line */
+export const watchNote = (w: Watch): 'leave' | 'slow' | 'rerouting' =>
+  w === 'ok' || w === 'timeout' ? 'leave' : w;
 
 /** quiet this long reads as slow; this long ends it */
 export const LIMITS: Record<WatchPhase, { slowMs: number; hardMs: number }> = {
@@ -63,6 +69,7 @@ export function useSendWatch(
       at: real.length ? Date.now() : since,
     };
   }
+  const rerouted = useNymRerouteAt() > since;
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     if (!active) {
@@ -72,5 +79,6 @@ export function useSendWatch(
     const id = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(id);
   }, [active]);
-  return active ? watchOf(last.current.step, last.current.at, now) : 'ok';
+  const watch = active ? watchOf(last.current.step, last.current.at, now) : 'ok';
+  return active && rerouted && watch !== 'timeout' ? 'rerouting' : watch;
 }
