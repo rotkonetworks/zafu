@@ -46,7 +46,6 @@ import {
   checkAndBumpFreshAddressRateLimit,
 } from '@repo/storage-chrome/cosmos-chain-counters';
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
-import { isPro } from '../../state/license';
 import { isValidExternalSender, type ValidExternalSender } from '../../senders/external';
 import { isValidInternalSender } from '../../senders/internal';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
@@ -729,21 +728,10 @@ export const externalMessageListener = (
 
     case 'zafu_frost_create': {
       // open FROST DKG approval popup - user confirms creating a multisig.
-      // creation is a Pro-only capability; joining (zafu_frost_join) and
-      // signing (zafu_frost_sign) remain available to free users so they
-      // can participate in vaults / poker games hosted by Pro creators.
       void (async () => {
         try {
-          // Gate on the 'frost' capability FIRST (uniform 'denied', constant-time
-          // floor) so an origin that was never granted frost can't probe the user's
-          // Pro status by observing "pro subscription required" vs a popup.
           const gate = await requireCapability(sender, 'frost', sendResponse);
           if (!gate) {
-            return;
-          }
-          const { useStore } = await import('../../state');
-          if (!useStore.getState().license.license || !isPro(useStore.getState())) {
-            sendResponse({ error: 'pro subscription required to create multisig vaults / games' });
             return;
           }
           const threshold = Number(msg['threshold']) || 2;
