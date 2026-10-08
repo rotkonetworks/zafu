@@ -84,7 +84,7 @@ describe('installEgress', () => {
       new WebSocket('wss://zcash.rotko.net/ws');
       expect(batches).toEqual([]);
       vi.advanceTimersByTime(5000);
-      expect(batches).toEqual([{ zcash: { n: 3, at: expect.any(Number) } }]);
+      expect(batches).toEqual([{ zcash: { n: 3, nym: 0, at: expect.any(Number) } }]);
       expect(JSON.stringify(batches)).not.toMatch(/rotko|zidecar|coingecko/);
     } finally {
       vi.useRealTimers();
@@ -235,7 +235,9 @@ describe('send over nym', () => {
   };
 
   it('fails closed when nym is not reachable: transport-down, nothing sent directly', async () => {
-    const { isEgressBlocked } = await install(NYM_TABLE);
+    const { isEgressBlocked, onEgressContacted } = await install(NYM_TABLE);
+    const batches: unknown[] = [];
+    onEgressContacted(t => batches.push(t));
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
       const done = fetch('https://zcash.rotko.net/zidecar.v1.Zidecar/SendTransaction', {
@@ -250,8 +252,43 @@ describe('send over nym', () => {
       // the same host's sync is not held by nym
       await fetch('https://zcash.rotko.net/zidecar.v1.Zidecar/GetCompactBlocks');
       expect(nativeFetch).toHaveBeenCalledTimes(1);
+      // the refused send went nowhere, so only the sync is counted
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(batches).toEqual([{ zcash: { n: 1, nym: 0, at: expect.any(Number) } }]);
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('counts each request by the way it went: over nym, or direct when the user let it go', async () => {
+    const answer = { over: true };
+    vi.doMock('./nym-bridge', async importOriginal => ({
+      ...(await importOriginal<typeof import('./nym-bridge')>()),
+      viaNym: (
+        _i: unknown,
+        _init: unknown,
+        _cls: unknown,
+        next: () => Promise<Response>,
+      ): Promise<Response> => (answer.over ? Promise.resolve(new Response('ok')) : next()),
+    }));
+    try {
+      const egress = await install(NYM_TABLE);
+      const batches: unknown[] = [];
+      egress.onEgressContacted(t => batches.push(t));
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const send = () =>
+        fetch('https://zcash.rotko.net/zidecar.v1.Zidecar/SendTransaction', { method: 'POST' });
+      await send();
+      await send();
+      answer.over = false;
+      await send();
+      await fetch('https://zcash.rotko.net/zidecar.v1.Zidecar/GetCompactBlocks');
+      expect(nativeFetch).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(batches).toEqual([{ zcash: { n: 4, nym: 2, at: expect.any(Number) } }]);
+    } finally {
+      vi.useRealTimers();
+      vi.doUnmock('./nym-bridge');
     }
   });
 });

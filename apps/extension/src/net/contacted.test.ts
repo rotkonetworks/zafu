@@ -12,6 +12,7 @@ import {
   parseContacted,
   pruneContacted,
   readContacted,
+  totalContacted,
 } from './contacted';
 
 const DAY = 86_400_000;
@@ -31,8 +32,11 @@ describe('what zafu contacted lately', () => {
 
   it('keeps counts and times per destination, nothing else', async () => {
     await unlock();
-    noteContacted({ 'zcash-servers': { n: 3, at: NOW - 1000 } });
-    noteContacted({ 'zcash-servers': { n: 2, at: NOW }, 'near-swap': { n: 1, at: NOW - 5000 } });
+    noteContacted({ 'zcash-servers': { n: 3, nym: 0, at: NOW - 1000 } });
+    noteContacted({
+      'zcash-servers': { n: 2, nym: 0, at: NOW },
+      'near-swap': { n: 1, nym: 0, at: NOW - 5000 },
+    });
     await flushContacted(NOW);
     const log = await readContacted(NOW);
     expect(log).toEqual({
@@ -53,7 +57,7 @@ describe('what zafu contacted lately', () => {
     };
     expect(pruneContacted(log, NOW)).toEqual({ b: { last: NOW, days: { [dayOf(NOW)]: 1 } } });
     await unlock();
-    noteContacted({ a: { n: 4, at: old } });
+    noteContacted({ a: { n: 4, nym: 0, at: old } });
     await flushContacted(old);
     expect(await readContacted(old)).not.toEqual({});
     expect(await readContacted(NOW)).toEqual({});
@@ -61,7 +65,7 @@ describe('what zafu contacted lately', () => {
 
   it('is sealed at rest, reads as empty while locked, and waits to write until unlocked', async () => {
     await unlock();
-    noteContacted({ 'zcash-servers': { n: 1, at: NOW } });
+    noteContacted({ 'zcash-servers': { n: 1, nym: 0, at: NOW } });
     await flushContacted(NOW);
     const raw = (await storage.local.get(CONTACTED_KEY))[CONTACTED_KEY] as Record<string, unknown>;
     expect(Object.keys(raw)).toEqual(['encrypted']);
@@ -69,7 +73,7 @@ describe('what zafu contacted lately', () => {
 
     await storage.session.clear();
     expect(await readContacted(NOW)).toEqual({});
-    noteContacted({ 'zcash-servers': { n: 2, at: NOW } });
+    noteContacted({ 'zcash-servers': { n: 2, nym: 0, at: NOW } });
     await flushContacted(NOW);
     expect((await storage.local.get(CONTACTED_KEY))[CONTACTED_KEY]).toEqual(raw);
   });
@@ -80,22 +84,22 @@ describe('what zafu contacted lately', () => {
     await storage.local.set({
       [CONTACTED_KEY]: { encrypted: (await key.seal('not json')).toJson() },
     });
-    noteContacted({ a: { n: 2, at: NOW } });
+    noteContacted({ a: { n: 2, nym: 0, at: NOW } });
     await flushContacted(NOW);
     expect(await readContacted(NOW)).toEqual({ a: { last: NOW, days: { [dayOf(NOW)]: 2 } } });
   });
 
   it('a clear drops what was not written yet, so nothing comes back on the next write', async () => {
     await unlock();
-    noteContacted({ a: { n: 1, at: NOW } });
+    noteContacted({ a: { n: 1, nym: 0, at: NOW } });
     await flushContacted(NOW);
-    noteContacted({ b: { n: 3, at: NOW } });
+    noteContacted({ b: { n: 3, nym: 0, at: NOW } });
     await clearContacted();
     await flushContacted(NOW);
     expect(await storage.local.get(CONTACTED_KEY)).toEqual({});
 
     // and a write already under way when the clear lands is dropped too
-    noteContacted({ c: { n: 2, at: NOW } });
+    noteContacted({ c: { n: 2, nym: 0, at: NOW } });
     const writing = flushContacted(NOW);
     await clearContacted();
     await writing;
@@ -111,7 +115,7 @@ describe('what zafu contacted lately', () => {
     });
     try {
       await unlock();
-      noteContacted({ a: { n: 1, at: NOW } });
+      noteContacted({ a: { n: 1, nym: 0, at: NOW } });
       await flushContacted(NOW);
       await clearContactedEverywhere();
       expect(send).toHaveBeenCalledWith({ type: 'zafu_contacted_clear' });
@@ -121,9 +125,61 @@ describe('what zafu contacted lately', () => {
     }
   });
 
+  it('keeps per day how many went over nym, and drops them with their day', async () => {
+    await unlock();
+    noteContacted({ zcash: { n: 3, nym: 1, at: NOW - 1000 } });
+    noteContacted({ zcash: { n: 2, nym: 2, at: NOW }, nym: { n: 1, nym: 0, at: NOW } });
+    await flushContacted(NOW);
+    const log = await readContacted(NOW);
+    expect(log).toEqual({
+      zcash: { last: NOW, days: { [dayOf(NOW)]: 5 }, nym: { [dayOf(NOW)]: 3 } },
+      nym: { last: NOW, days: { [dayOf(NOW)]: 1 } },
+    });
+    expect(totalContacted(log.zcash!)).toEqual({ n: 5, nym: 3 });
+    expect(totalContacted(log.nym!)).toEqual({ n: 1, nym: 0 });
+
+    const old = NOW - KEEP_DAYS * DAY;
+    expect(
+      pruneContacted(
+        {
+          a: {
+            last: NOW,
+            days: { [dayOf(old)]: 4, [dayOf(NOW)]: 1 },
+            nym: { [dayOf(old)]: 4 },
+          },
+        },
+        NOW,
+      ),
+    ).toEqual({ a: { last: NOW, days: { [dayOf(NOW)]: 1 } } });
+    // never more over nym than in all, and only well-formed counts
+    expect(
+      parseContacted({
+        a: { last: NOW, days: { '1': 2, '2': 2 }, nym: { '1': 3, '2': 1, '3': 1, x: 'y' } },
+      }),
+    ).toEqual({ a: { last: NOW, days: { '1': 2, '2': 2 }, nym: { '2': 1 } } });
+  });
+
+  it('reads a sealed log from before nym routing as all direct, and adds to it', async () => {
+    const key = (await Key.create('test-password')).key;
+    await storage.session.set({ passwordKey: await key.toJson() });
+    const before = { zcash: { last: NOW - 1000, days: { [dayOf(NOW)]: 4 } } };
+    await storage.local.set({
+      [CONTACTED_KEY]: { encrypted: (await key.seal(JSON.stringify(before))).toJson() },
+    });
+    const log = await readContacted(NOW);
+    expect(log).toEqual(before);
+    expect(totalContacted(log.zcash!)).toEqual({ n: 4, nym: 0 });
+
+    noteContacted({ zcash: { n: 2, nym: 1, at: NOW } });
+    await flushContacted(NOW);
+    expect(await readContacted(NOW)).toEqual({
+      zcash: { last: NOW, days: { [dayOf(NOW)]: 6 }, nym: { [dayOf(NOW)]: 1 } },
+    });
+  });
+
   it('clears', async () => {
     await unlock();
-    noteContacted({ a: { n: 1, at: NOW } });
+    noteContacted({ a: { n: 1, nym: 0, at: NOW } });
     await flushContacted(NOW);
     await clearContacted();
     expect(await storage.local.get(CONTACTED_KEY)).toEqual({});

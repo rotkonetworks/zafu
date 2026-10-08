@@ -88,8 +88,11 @@ export const isEgressBlockedCause = (e: unknown, depth = 0): boolean => {
     : false;
 };
 
-/** allowed contacts per destination id (or host), with the latest time: counts, never urls */
-export type ContactTally = Record<string, { n: number; at: number }>;
+/**
+ * allowed contacts per destination id (or host), how many of them went over
+ * nym, and the latest time: counts, never urls
+ */
+export type ContactTally = Record<string, { n: number; nym: number; at: number }>;
 
 type ChannelMessage =
   | { type: 'request' }
@@ -163,11 +166,12 @@ const sendTally = (): void => {
  * batches, so the hot path never waits and storage sees no write per request.
  * A device on this computer and urls without a host are not counted.
  */
-const tallyContact = (id: string | undefined): void => {
+const tallyContact = (id: string | undefined, overNym = false): void => {
   if (!id) {
     return;
   }
-  tally[id] = { n: (tally[id]?.n ?? 0) + 1, at: Date.now() };
+  const t = tally[id];
+  tally[id] = { n: (t?.n ?? 0) + 1, nym: (t?.nym ?? 0) + Number(overNym), at: Date.now() };
   tallyTimer ??= setTimeout(sendTally, TALLY_MS);
 };
 
@@ -285,23 +289,29 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
         if (!approved) {
           refuse(decision);
         }
-        tallyContact(decision.host);
-      } else {
-        tallyContact(contactIdOf(decision));
       }
+      // counted by the way it actually went: a nym request that was refused
+      // sent nothing, and a broadcast the user let go direct counts as direct
+      const id = decision.allow ? contactIdOf(decision) : decision.host;
+      let direct = false;
+      const sendDirect = () => {
+        direct = true;
+        tallyContact(id);
+        return send(input, init);
+      };
       // a request that names you goes through nym, or nowhere
       const nym = decision.allow && (decision.nym ?? classOfBody(decision.nymBody, init?.body));
       if (decision.allow && nym) {
         const { host: h = '', destination } = decision;
-        return viaNym(
-          input,
-          init,
-          nym,
-          () => send(input, init),
-          () => refuse({ allow: false, host: h, destination, reason: 'transport-down', nym }),
+        const res = await viaNym(input, init, nym, sendDirect, () =>
+          refuse({ allow: false, host: h, destination, reason: 'transport-down', nym }),
         );
+        if (!direct) {
+          tallyContact(id, true);
+        }
+        return res;
       }
-      return send(input, init);
+      return sendDirect();
     };
   }
 

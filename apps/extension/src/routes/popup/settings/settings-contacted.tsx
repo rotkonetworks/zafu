@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
-import { clearContactedEverywhere, dayOf, KEEP_DAYS, readContacted } from '../../../net/contacted';
+import {
+  clearContactedEverywhere,
+  dayOf,
+  KEEP_DAYS,
+  readContacted,
+  totalContacted,
+} from '../../../net/contacted';
 import { readEgressView } from '../../../net/egress-opt-in';
 import { clearNetEgressLog, readNetEgressLog } from '../../../net/ledger';
+import { NYM } from '../../../net/nym-bridge';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
 
@@ -11,8 +18,8 @@ interface Line {
   name: string;
   what: string;
   at: number;
-  /** contacts over the week; undefined for a refusal */
-  n?: number;
+  /** contacts over the week and how they went; undefined for a refusal */
+  count?: string;
 }
 
 const when = (at: number, now: number) =>
@@ -21,6 +28,10 @@ const when = (at: number, now: number) =>
     : new Date(at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).toLowerCase();
 
 const times = (n: number) => (n === 1 ? 'once' : `${n.toLocaleString()} times`);
+
+/** how a destination's contacts went: nym's own directory and gateways only set nym up */
+const how = (id: string, n: number, nym: number) =>
+  id === NYM ? "nym's own setup" : !nym ? 'direct' : nym === n ? 'over nym' : `${nym} over nym`;
 
 /** the log by destination, newest first, and what zafu did not contact this week */
 const load = async (now: number): Promise<{ contacted: Line[]; refused: Line[] }> => {
@@ -32,12 +43,13 @@ const load = async (now: number): Promise<{ contacted: Line[]; refused: Line[] }
   const byId = new Map(view.map(d => [d.id, d]));
   const contacted = Object.entries(log).map(([id, e]) => {
     const d = byId.get(id);
+    const { n, nym } = totalContacted(e);
     return {
       key: id,
       name: d?.hosts[0]?.split('/')[0] ?? id,
       what: d?.label ?? 'a host you allowed',
       at: e.last,
-      n: Object.values(e.days).reduce((a, b) => a + b, 0),
+      count: `${times(n)} · ${how(id, n, nym)}`,
     };
   });
   const oldest = (dayOf(now) - KEEP_DAYS + 1) * 86_400_000;
@@ -60,7 +72,7 @@ const LineRow = ({ line, now }: { line: Line; now: number }) => (
     </span>
     <span className='flex shrink-0 flex-col items-end gap-0.5'>
       <span className='text-xs text-fg'>{when(line.at, now)}</span>
-      {line.n !== undefined && <span className='text-[11px] text-fg-dim'>{times(line.n)}</span>}
+      {line.count && <span className='text-[11px] text-fg-dim'>{line.count}</span>}
     </span>
   </div>
 );
