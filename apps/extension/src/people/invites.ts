@@ -103,8 +103,9 @@ export const createInvites = (deps: InviteDeps) => {
   /**
    * Join what an invite opens. A pair: the room the sender made, under the
    * relationship you minted for them (the screen saved them as a contact
-   * first), then your card into it so they learn who answered. A group: its
-   * room, then an ask with your room key so the founder puts you on the roster.
+   * first), then your card into it so they learn who answered. A code: the
+   * door it opens, run by the screen. A group an older zafu sent: its room,
+   * then an ask with your room key.
    */
   const accept = async (svc: PeopleService, r: Record<string, unknown>) => {
     const stored = await find(String(r['id']));
@@ -115,6 +116,11 @@ export const createInvites = (deps: InviteDeps) => {
     // '' is the built-in relay, whatever this wallet's own default is
     const relay = invite.relay || DEFAULT_PEOPLE_RELAY;
     const at = now();
+    // a door code: the screen opens the door, as if it was typed
+    if (invite.kind === 'code') {
+      await settle(stored.id, 'accepted');
+      return { code: invite.code, relay };
+    }
     if (invite.kind === 'pair') {
       const contact = (await deps.contacts()).find(c => c.id === String(r['contactId']));
       if (!contact?.rel || typeof r['card'] !== 'string') {

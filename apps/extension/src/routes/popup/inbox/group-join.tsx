@@ -50,6 +50,8 @@ export function GroupJoinPage() {
   const [params, setParams] = useSearchParams();
   const code = normalizeCode(params.get('code') ?? '');
   const via = params.get('via');
+  // a code that came in a memo: its inviter's relay
+  const relay = params.get('relay') ?? undefined;
   const [typed, setTyped] = useState('');
   const [nick, setNick] = useState('');
   const [fail, setFail] = useState<'older' | 'no-relay' | 'failed'>();
@@ -69,7 +71,11 @@ export function GroupJoinPage() {
   const join = (c: string) => {
     setBusy(true);
     setFail(undefined);
-    void peopleAsk<{ id: string }>('door-open', { code: c, nick: nick.trim() })
+    void peopleAsk<{ id: string }>('door-open', {
+      code: c,
+      nick: nick.trim(),
+      ...(relay ? { relay } : {}),
+    })
       .then(
         ({ id }) => setRoomId(id),
         (e: unknown) =>

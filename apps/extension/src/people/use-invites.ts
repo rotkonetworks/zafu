@@ -82,6 +82,13 @@ export const useAnswerInvite = () => {
         return;
       }
       const i = inv.read.invite;
+      if (i.kind === 'code') {
+        const { code, relay } = await peopleAsk<{ code: string; relay: string }>('invite-accept', {
+          id: inv.id,
+        });
+        navigate(`${PopupPath.INBOX_JOIN}?${new URLSearchParams({ code, relay, via: 'typed' })}`);
+        return;
+      }
       if (i.kind === 'group') {
         const { id } = await peopleAsk<{ id: string }>('invite-accept', { id: inv.id });
         navigate(groupPath(id.slice(2)));
