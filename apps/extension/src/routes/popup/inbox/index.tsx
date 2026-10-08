@@ -29,20 +29,13 @@ import { PopupPath, groupPath, threadPath } from '../paths';
 import { useIdentity } from '../identity/use-identity';
 import { deriveThreads, previewOf, shortAddress, whenOf, type DirectThread } from './threads';
 import { useThreadName } from './use-thread-name';
-import {
-  useMyRooms,
-  useOpenPeople,
-  usePeople,
-  useThread,
-  useWatchRoom,
-} from '../../../people/client';
+import { useMyRooms, useOpenPeople, usePeople, useThread } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import { InviteRows } from '../../../people/invite-rows';
 import { usePairCards } from '../../../people/use-invites';
 import { useCardSync } from '../../../people/my-card';
 import { notePreview } from '../../../people/cards';
 import { WaitingCards } from './waiting-cards';
-import { useDoors } from '../../../people/use-door';
 import { doorView } from '../../../people/door-run';
 import { waitingLine } from './group';
 import { useMemberName } from './use-member-name';
@@ -181,12 +174,6 @@ const RoomRow = memo(({ room }: { room: PeopleRoom }) => {
 });
 RoomRow.displayName = 'RoomRow';
 
-/** an open door, read every 4 s while people is on screen, so whoever typed its code is answered at once */
-const DoorWatch = ({ id }: { id: string }) => {
-  useWatchRoom(id);
-  return null;
-};
-
 const Groups = () => {
   const navigate = useNavigate();
   const wallets = useStore(selectVisibleMultisigWallets);
@@ -194,10 +181,8 @@ const Groups = () => {
   const balances = useMultisigBalances(wallets, onZcash);
   const all = useMyRooms();
   const rooms = all.filter(r => r.kind === 'group' && r.joined);
-  // open doors: yours answer whoever types the code, and codes you typed wait for an answer
-  const doors = all.filter(r => r.door && (r.until ?? 0) > Date.now());
-  const joining = doors.filter(r => doorView(r, Date.now()) === 'waiting');
-  useDoors();
+  // codes you typed, waiting for an answer (people/keeper answers and reads them)
+  const joining = all.filter(r => r.door && doorView(r, Date.now()) === 'waiting');
   return (
     <section className='flex flex-col gap-1.5'>
       <div className='flex items-baseline justify-between'>
@@ -211,9 +196,6 @@ const Groups = () => {
           join a group
         </button>
       </div>
-      {doors.map(d => (
-        <DoorWatch key={d.id} id={d.id} />
-      ))}
       {joining.map(d => (
         <button
           key={d.id}

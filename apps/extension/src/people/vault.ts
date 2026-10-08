@@ -48,23 +48,31 @@ export interface DoorState {
   role: 'host' | 'join';
   /** the founder's salt for this code */
   salt?: string;
-  /** a joiner: its run id and the seed its SPAKE2 runs are rebuilt from */
+  /** a joiner: its run id */
   jid?: string;
+  /** the seed its SPAKE2 runs are rebuilt from (the founder's: one per run, see door runSeed) */
   seed?: string;
-  /** a joiner: the salts it has spoken to */
+  /** a joiner: the salts it has spoken to, and those it confirmed its words to */
   sent?: string[];
+  confirmed?: string[];
   heard: DoorHeard[];
   /** the founder: whom it answered, with the run's verify words */
   answered?: { jid: string; words: string; at: number }[];
+  /** the founder: the one run this code let in; the code is spent */
+  admitted?: string;
+  /** the founder: whose ask that run brought onto the roster */
+  came?: string;
   /** a joiner: the answer said the words differ */
   wrong?: boolean;
+  /** a joiner: the code had already let someone else in */
+  used?: boolean;
   /** a joiner: the group it opened, and the verify words */
   G?: string;
   words?: string;
 }
 
 export interface PeopleRoom {
-  /** `g:<G>` a group, `d:<G>` its door, `d:<jid>` a door you typed, `p:<personId>` a pair room, `c:<key>` a card's room */
+  /** `g:<G>` a group, `d:<G>:<salt>` one of its codes, `d:<jid>` a door you typed, `p:<personId>` a pair room, `c:<key>` a card's room */
   id: string;
   walletId: string;
   kind: PeopleRoomKind;

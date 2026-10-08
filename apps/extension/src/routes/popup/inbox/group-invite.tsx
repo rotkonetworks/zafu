@@ -1,8 +1,10 @@
 /**
- * the founder's door (GroupInvite.dc.html): the code, ways to hand it on,
- * and the people in the group. A code works for an hour; whoever types its
- * words comes in, and both sides see the same two words to compare. A shared
- * wallet says how many it still waits for, and opens its thread once full.
+ * the founder's door (GroupInvite.dc.html): a code, ways to hand it on, and
+ * the people in the group. A code lets one person in, within its hour, and
+ * both sides see the same two words to compare; "invite another" makes the
+ * next. Until a shared wallet's keys are made the founder can take someone
+ * off. A shared wallet says how many it still waits for, and opens its
+ * thread once full.
  */
 
 import { useEffect, useState } from 'react';
@@ -10,7 +12,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { ScreenHeader } from '../../../components/screen-header';
 import { toUri, toWebUri } from '../../../links/router';
-import { peopleAsk, useMyRooms, useWatchRoom } from '../../../people/client';
+import { peopleAsk, peopleCall, useMyRooms } from '../../../people/client';
 import { RelaySlot } from '../../../people/relay-slot';
 import { PopupPath, groupPath } from '../paths';
 import { useStore } from '../../../state';
@@ -18,9 +20,7 @@ import { encodeMemoInvite } from '../../../people/memo-door';
 import type { PeopleRoom } from '../../../people/vault';
 import { DEFAULT_PEOPLE_RELAY } from '../../../config/people-relay';
 import { QrCode } from '../../../components/qr-code';
-import { useDoors } from '../../../people/use-door';
-import { doorId } from '../../../people/groups';
-import { ANSWERS_PER_CODE } from '../../../people/door';
+import { doorOpen, doorsOf } from '../../../people/groups';
 import { peopleCount, waitingLine } from './group';
 import { useMemberName } from './use-member-name';
 import { ShareWays, type ShareWay } from './share-ways';
@@ -133,13 +133,11 @@ export function GroupInvitePage() {
   const G = useParams()['groupId'] ?? '';
   const rooms = useMyRooms();
   const room = rooms.find(r => r.id === `g:${G}`);
-  const door = rooms.find(r => r.id === doorId(G));
+  const now = Date.now();
+  // the newest code that can still let someone in; earlier open ones are listed under it
+  const [door, ...earlier] = doorsOf(rooms, G).filter(r => doorOpen(r, now));
   const nameFor = useMemberName(room);
   const [busy, setBusy] = useState(false);
-  const open = !!door?.door && (door.until ?? 0) > Date.now();
-  useWatchRoom(open ? door.id : undefined);
-  useWatchRoom(room?.id);
-  useDoors();
   const g = room?.group;
   const members = g?.members ?? [];
   const full = !!g?.want && members.length >= g.want.n;
@@ -157,10 +155,8 @@ export function GroupInvitePage() {
       .finally(() => setBusy(false));
   };
 
-  // a code answers a dozen runs: anyone with its number can spend them, so then it is closed too
-  const spent = (door?.door?.answered?.length ?? 0) >= ANSWERS_PER_CODE;
-  const code = open && !spent ? door.door!.code : undefined;
-  const words = door?.door?.answered ?? [];
+  const code = door?.door?.code;
+  const canRemove = g?.mine && !g.want?.started;
 
   return (
     <div className='flex h-full flex-col'>
@@ -181,7 +177,17 @@ export function GroupInvitePage() {
       ) : (
         <div className='flex grow flex-col gap-[18px] overflow-y-auto px-4 pb-4 pt-3.5'>
           <section className='flex flex-col gap-2'>
-            <h2 className='text-xs tracking-[0.04em] text-fg-muted'>invite people</h2>
+            <div className='flex items-baseline justify-between'>
+              <h2 className='text-xs tracking-[0.04em] text-fg-muted'>invite people</h2>
+              <button
+                type='button'
+                disabled={busy}
+                onClick={renew}
+                className='text-xs text-zigner-gold hover:underline'
+              >
+                invite another
+              </button>
+            </div>
             {code ? (
               <>
                 <span className='font-display text-[26px] text-fg-high'>{code}</span>
@@ -192,28 +198,19 @@ export function GroupInvitePage() {
                   ecLevel='L'
                 />
                 <ShareWays ways={shareWays(code)} />
-                <span className='text-[11px] text-fg-muted'>
-                  works for 1h · whoever types its words comes in
-                </span>
+                <span className='text-[11px] text-fg-muted'>lets one person in · works for 1h</span>
                 <span className='text-[11px] text-fg-dim'>
                   the relay sees the number, never the words
                 </span>
               </>
             ) : (
-              <div className='flex items-center justify-between gap-3'>
-                <span className='text-[13px] text-fg-muted'>
-                  {spent ? 'the last code answered all it can' : 'the last code has closed'}
-                </span>
-                <button
-                  type='button'
-                  disabled={busy}
-                  onClick={renew}
-                  className='text-xs text-zigner-gold hover:underline'
-                >
-                  make a new code
-                </button>
-              </div>
+              <span className='text-[13px] text-fg-muted'>each code lets one person in</span>
             )}
+            {earlier.map(d => (
+              <span key={d.id} className='text-[11px] text-fg-muted'>
+                also open · {d.door!.code}
+              </span>
+            ))}
           </section>
           <section className='flex flex-col gap-1.5'>
             <h2 className='text-xs tracking-[0.04em] text-fg-muted'>people</h2>
@@ -227,15 +224,22 @@ export function GroupInvitePage() {
                     initial={name.charAt(0)}
                     name={name}
                     line={you ? 'created' : 'joined'}
+                    action={
+                      canRemove &&
+                      !you && (
+                        <button
+                          type='button'
+                          onClick={() => void peopleCall('group-remove', { G, key: m.key })}
+                          className='h-8 px-2 text-xs text-fg-muted hover:underline'
+                        >
+                          remove
+                        </button>
+                      )
+                    }
                   />
                 );
               })}
             </div>
-            {words.length > 0 && (
-              <span className='text-[11px] text-fg-dim'>
-                words to compare, if you like: {words.map(w => w.words).join(' · ')}
-              </span>
-            )}
           </section>
           {room && <ByMemo room={room} />}
           <Button variant='secondary' onClick={() => navigate(groupPath(G))}>

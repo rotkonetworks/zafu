@@ -48,7 +48,7 @@ import type { Gate, PeopleApi, PeopleService, RecordHandler } from './service';
 import { PeopleNeedsRelay } from './service';
 import type { DoorHeard, GroupMember, PeopleRoom } from './vault';
 import { presenceEpoch } from '@zafu/zid';
-import { OLD_CODE_RE, normalizeCode } from './protocol';
+import { OLD_CODE_RE, groupId, normalizeCode } from './protocol';
 
 export interface GroupDeps {
   walletId: () => Promise<string | undefined>;
@@ -61,8 +61,19 @@ export interface GroupDeps {
   now?: () => number;
 }
 
-export const groupId = (G: string) => `g:${G}`;
-export const doorId = (G: string) => `d:${G}`;
+export { groupId } from './protocol';
+/** one code of a group: a group has as many as people it invited */
+export const doorId = (G: string, salt: string) => `d:${G}:${salt.slice(0, 8)}`;
+
+/** the founder's codes for a group, newest first */
+export const doorsOf = (rooms: PeopleRoom[], G: string): PeopleRoom[] =>
+  rooms
+    .filter(r => r.kind === 'door' && r.door?.role === 'host' && r.signer.G === G)
+    .sort((a, b) => b.createdAt - a.createdAt);
+
+/** a code that can still let someone in */
+export const doorOpen = (r: PeopleRoom, now: number): boolean =>
+  !!r.door && !r.door.admitted && (r.until ?? 0) > now;
 
 /** the door you type a code into says this when its maker needs a newer zafu */
 export const OLDER_CODE = 'this code is from an older zafu';
@@ -96,12 +107,14 @@ const wantOf = (r: Record<string, unknown>): { k: number; n: number } | undefine
     : undefined;
 };
 
+const DOOR_KINDS = new Set(['wh', 'wj', 'wa', 'wk', 'wb']);
+
 /** what a door's records add to what it heard: each record once, newest kept */
 const heardOf = (room: PeopleRoom, records: RoomMessage[]): DoorHeard[] => {
   const seen = new Set((room.door?.heard ?? []).map(h => `${h.from}:${JSON.stringify(h.wire)}`));
   const fresh = records.flatMap(m => {
     const w = decodeWire(m.body);
-    const wire = w?.kind === 'wh' || w?.kind === 'wj' || w?.kind === 'wa' ? w : undefined;
+    const wire = w && DOOR_KINDS.has(w.kind) ? (w as DoorHeard['wire']) : undefined;
     const key = wire && `${m.author}:${JSON.stringify(wire)}`;
     if (!wire || seen.has(key!)) {
       return [];
@@ -130,12 +143,12 @@ export const createGroups = (deps: GroupDeps) => {
     await api.send(room.id, encodeWire({ kind: 'names', names: g.names ?? {} }), 'action');
   };
 
-  /** a door this group answers at: a fresh code and salt, open an hour */
+  /** a door this group answers at: a fresh code and salt, open an hour, for one person */
   const openDoor = async (api: PeopleApi, room: PeopleRoom, at: number) => {
     const code = makeCode();
     const salt = randomHex(16);
     const door: PeopleRoom = {
-      id: doorId(room.group!.G),
+      id: doorId(room.group!.G, salt),
       walletId: room.walletId,
       kind: 'door',
       name: room.name,
@@ -149,7 +162,7 @@ export const createGroups = (deps: GroupDeps) => {
       // a new code is a new mailbox: nothing older to read
       since: presenceEpoch(Math.floor(at / 1000)),
       until: at + DOOR_MS,
-      door: { code, role: 'host', salt, heard: [], answered: [] },
+      door: { code, role: 'host', salt, seed: randomHex(32), heard: [], answered: [] },
     };
     await api.addRoom(door);
     await api.send(door.id, encodeWire({ kind: 'wh', v: DOOR_VERSION, salt }), 'action');
@@ -233,7 +246,7 @@ export const createGroups = (deps: GroupDeps) => {
     return { id: room.id, code };
   };
 
-  /** the founder: a fresh code when the hour is up */
+  /** the founder: another code, for another person (the ones before stay open) */
   const renew = async (svc: PeopleService, G: string) => {
     const room = await svc.api.room(groupId(G));
     if (!room?.group?.mine) {
@@ -243,7 +256,7 @@ export const createGroups = (deps: GroupDeps) => {
     return { code: await openDoor(svc.api, room, now()) };
   };
 
-  /** the founder answered one run: its record in the mailbox, and the words in the thread */
+  /** the founder answered one run: its record in the mailbox, and the run's words kept */
   const answer = async (svc: PeopleService, r: Record<string, unknown>) => {
     const door = await svc.api.room(String(r['roomId']));
     const d = door?.door;
@@ -255,15 +268,13 @@ export const createGroups = (deps: GroupDeps) => {
       jid,
       x: String(r['x']),
       tag: String(r['tag']),
-      box: String(r['box']),
     };
-    const ok = decodeWire(encodeWire(wire))?.kind === 'wa';
     if (
       !door ||
       d?.role !== 'host' ||
-      !ok ||
+      !doorOpen(door, now()) ||
+      decodeWire(encodeWire(wire))?.kind !== 'wa' ||
       wire.salt !== d.salt ||
-      (door.until ?? 0) < now() ||
       (d.answered ?? []).some(a => a.jid === jid) ||
       (d.answered ?? []).length >= ANSWERS_PER_CODE
     ) {
@@ -275,11 +286,48 @@ export const createGroups = (deps: GroupDeps) => {
       ...x,
       door: { ...x.door!, answered: [...(x.door!.answered ?? []), { jid, words, at: now() }] },
     }));
-    await svc.api.note(groupId(door.signer.G!), {
-      hash: `n:door:${jid}`,
-      body: `someone came in with the code · words to compare: ${words}`,
-      ts: Math.floor(now() / 1000),
+    return { ok: true };
+  };
+
+  /** the founder: the invite, to the one run whose words held. The code is spent. */
+  const admit = async (svc: PeopleService, r: Record<string, unknown>) => {
+    const jid = String(r['jid']);
+    const door = await svc.api.room(String(r['roomId']));
+    const d = door?.door;
+    const wire = {
+      kind: 'wb' as const,
+      v: DOOR_VERSION,
+      salt: d?.salt ?? '',
+      jid,
+      box: String(r['box']),
+    };
+    if (
+      !door ||
+      d?.role !== 'host' ||
+      !doorOpen(door, now()) ||
+      !(d.answered ?? []).some(a => a.jid === jid) ||
+      decodeWire(encodeWire(wire))?.kind !== 'wb'
+    ) {
+      throw new Error('this door does not answer that');
+    }
+    // spent before the box leaves, so two windows answering at once send one box
+    let won = false;
+    await svc.api.updateRoom(door.id, x => {
+      won = !x.door?.admitted;
+      return won ? { ...x, door: { ...x.door!, admitted: jid } } : x;
     });
+    if (!won) {
+      throw new Error('this code already let someone in');
+    }
+    try {
+      await svc.api.send(door.id, encodeWire(wire), 'action');
+    } catch (e) {
+      // the box did not leave: the code is open again for this run's next try
+      await svc.api.updateRoom(door.id, x =>
+        x.door?.admitted === jid ? { ...x, door: { ...x.door, admitted: undefined } } : x,
+      );
+      throw e;
+    }
     return { ok: true };
   };
 
@@ -364,6 +412,28 @@ export const createGroups = (deps: GroupDeps) => {
     return { ok: true };
   };
 
+  /** a joiner: the founder's tag held, so its own goes back */
+  const confirm = async (svc: PeopleService, r: Record<string, unknown>) => {
+    const door = await svc.api.room(String(r['roomId']));
+    const d = door?.door;
+    const wire = {
+      kind: 'wk' as const,
+      v: DOOR_VERSION,
+      salt: String(r['salt']),
+      jid: d?.jid ?? '',
+      tag: String(r['tag']),
+    };
+    if (!door || d?.role !== 'join' || decodeWire(encodeWire(wire))?.kind !== 'wk') {
+      throw new Error('this door does not say that');
+    }
+    await svc.api.send(door.id, encodeWire(wire), 'action');
+    await svc.api.updateRoom(door.id, x => ({
+      ...x,
+      door: { ...x.door!, confirmed: [...new Set([...(x.door!.confirmed ?? []), wire.salt])] },
+    }));
+    return { ok: true };
+  };
+
   /** the answer opened: the group joins this wallet, and an ask puts you on its roster */
   const enter = async (svc: PeopleService, r: Record<string, unknown>) => {
     const door = await svc.api.room(String(r['roomId']));
@@ -383,9 +453,11 @@ export const createGroups = (deps: GroupDeps) => {
     const { G } = invite;
     const words = String(r['words'] ?? '').slice(0, 40);
     const want = wantOf({ ...invite.want });
-    if (!(await svc.api.room(groupId(G)))?.joined) {
-      const gen = await deps.generation(walletId);
-      const keys = await deps.keys(walletId, gen, G);
+    const was = await svc.api.room(groupId(G));
+    const gen = was?.joined ? was.signer.gen : await deps.generation(walletId);
+    const keys = await deps.keys(walletId, gen, G);
+    // someone taken off and invited again keeps their room, and asks again
+    if (!was?.joined) {
       await svc.api.addRoom({
         id: groupId(G),
         walletId,
@@ -399,6 +471,8 @@ export const createGroups = (deps: GroupDeps) => {
         signer: { gen, G },
         joined: true,
         createdAt: now(),
+        // from the window the group was made in, not the relay's whole 48 h
+        ...(invite.born !== undefined ? { since: invite.born } : {}),
         group: {
           G,
           founder: invite.founder,
@@ -408,23 +482,24 @@ export const createGroups = (deps: GroupDeps) => {
           ...(want ? { want } : {}),
         },
       });
-      await svc.api.send(
-        groupId(G),
-        encodeWire({
-          kind: 'ask',
-          key: keys.pubkey,
-          name: door.nick || wordName(keys.pubkey),
-          seal: keys.xwingPublicKey,
-        }),
-        'action',
-      );
-      await svc.api.note(groupId(G), {
-        hash: `n:door:${door.door.jid}`,
-        body: `you came in with the code · words to compare: ${words}`,
-        ts: Math.floor(now() / 1000),
-      });
-      void svc.api.sync(groupId(G)).catch(() => undefined);
     }
+    await svc.api.send(
+      groupId(G),
+      encodeWire({
+        kind: 'ask',
+        key: keys.pubkey,
+        name: door.nick || wordName(keys.pubkey),
+        seal: keys.xwingPublicKey,
+        ...(door.door.jid ? { t: door.door.jid } : {}),
+      }),
+      'action',
+    );
+    await svc.api.note(groupId(G), {
+      hash: `n:door:${door.door.jid}`,
+      body: `you came in with the code · words to compare: ${words}`,
+      ts: Math.floor(now() / 1000),
+    });
+    void svc.api.sync(groupId(G)).catch(() => undefined);
     await svc.api.updateRoom(door.id, x => ({
       ...x,
       until: now(),
@@ -433,10 +508,10 @@ export const createGroups = (deps: GroupDeps) => {
     return { G };
   };
 
-  /** every answer said the words differ */
-  const wrong = (svc: PeopleService, r: Record<string, unknown>) =>
+  /** every answer said the words differ, or (`used`) the code let someone else in */
+  const ended = (svc: PeopleService, r: Record<string, unknown>, why: 'wrong' | 'used') =>
     svc.api.updateRoom(String(r['roomId']), x =>
-      x.door?.role === 'join' ? { ...x, until: now(), door: { ...x.door, wrong: true } } : x,
+      x.door?.role === 'join' ? { ...x, until: now(), door: { ...x.door, [why]: true } } : x,
     );
 
   // -- what a pass does with the records it found ----------------------------
@@ -459,9 +534,25 @@ export const createGroups = (deps: GroupDeps) => {
       return undefined;
     }
     const roster = new Set(rosterOf(g.log).map(m => m.key));
+    // the codes that let someone in, and whether that someone came yet
+    const doors = (await api.rooms()).filter(
+      r => r.kind === 'door' && r.signer.G === g.G && r.door?.admitted,
+    );
+    const fresh = (t?: string) => doors.find(d => d.door!.admitted === t && !d.door!.came);
+    // someone the founder took off stays off, unless a new code let them in again
+    const removed = new Set(
+      g.log.records.flatMap(r =>
+        r.body.kind === 'mode' && r.body.mode === '-v' ? [r.body.subject] : [],
+      ),
+    );
     const asks = records.flatMap(m => {
       const w = decodeWire(m.body);
-      return w?.kind === 'ask' && w.key === m.author && !roster.has(w.key) ? [w] : [];
+      return w?.kind === 'ask' &&
+        w.key === m.author &&
+        !roster.has(w.key) &&
+        (!removed.has(w.key) || fresh(w.t))
+        ? [w]
+        : [];
     });
     if (!asks.length) {
       return undefined;
@@ -496,8 +587,63 @@ export const createGroups = (deps: GroupDeps) => {
     }));
     if (next) {
       await postRoster(api, next);
+      // each arrival, said in the founder's thread with the code's words to compare
+      for (const a of asks) {
+        const door = fresh(a.t);
+        const words = door?.door!.answered?.find(r => r.jid === a.t)?.words;
+        if (door) {
+          await api.updateRoom(door.id, r => ({ ...r, door: { ...r.door!, came: a.key } }));
+        }
+        await api.note(room.id, {
+          hash: `n:join:${a.key}`,
+          body: `${names[a.key]} joined${words ? ` with your code · words to compare: ${words}` : ''}`,
+          ts: Math.floor(now() / 1000),
+        });
+      }
     }
     return next;
+  };
+
+  /**
+   * The founder takes someone off the roster, until the keys of a shared
+   * wallet are being made (after that, its card can start again without them).
+   */
+  const remove = async (svc: PeopleService, G: string, key: string) => {
+    const room = await svc.api.room(groupId(G));
+    const g = room?.group;
+    if (!g?.mine || !g.log || g.want?.started || key === g.founder) {
+      throw new Error('only the founder can do that, before the keys are made');
+    }
+    if (!rosterOf(g.log).some(m => m.key === key)) {
+      return { ok: true };
+    }
+    const me = identityOf(await keysFor(room!));
+    const records = [
+      ...g.log.records,
+      await appendRecord({
+        genesis: g.log.genesis,
+        records: g.log.records,
+        author: me,
+        body: { kind: 'mode', mode: '-v', subject: key },
+      }),
+    ];
+    const next = await svc.api.updateRoom(room!.id, r => ({
+      ...r,
+      group: {
+        ...r.group!,
+        log: { genesis: g.log!.genesis, records },
+        members: rosterOf({ genesis: g.log!.genesis, records }, r.group!.names, r.createdAt),
+      },
+    }));
+    if (next) {
+      await postRoster(svc.api, next);
+      await svc.api.note(next.id, {
+        hash: `n:left:${key}:${records.length}`,
+        body: `${memberName(key, g.names?.[key])} is no longer in the group`,
+        ts: Math.floor(now() / 1000),
+      });
+    }
+    return { ok: true };
   };
 
   /**
@@ -602,7 +748,12 @@ export const createGroups = (deps: GroupDeps) => {
       'door-join': (r: Record<string, unknown>, s: PeopleService) => join(s, r),
       'door-answer': (r: Record<string, unknown>, s: PeopleService) => answer(s, r),
       'door-enter': (r: Record<string, unknown>, s: PeopleService) => enter(s, r),
-      'door-wrong': (r: Record<string, unknown>, s: PeopleService) => wrong(s, r),
+      'door-confirm': (r: Record<string, unknown>, s: PeopleService) => confirm(s, r),
+      'door-admit': (r: Record<string, unknown>, s: PeopleService) => admit(s, r),
+      'door-wrong': (r: Record<string, unknown>, s: PeopleService) => ended(s, r, 'wrong'),
+      'door-used': (r: Record<string, unknown>, s: PeopleService) => ended(s, r, 'used'),
+      'group-remove': (r: Record<string, unknown>, s: PeopleService) =>
+        remove(s, String(r['G']), String(r['key'])),
     },
     handlers: { door: onDoor, group: onGroup },
   };

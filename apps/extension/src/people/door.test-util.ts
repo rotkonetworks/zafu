@@ -11,7 +11,8 @@ import type { RelayTransport } from '@zafu/zid';
 import { deriveRoomKeys } from '../state/identity';
 import { doorPake, type DoorPakeWasm } from '../workers/door-pake';
 import { hostStep, joinStep, type DoorPake } from './door-run';
-import { createGroups, doorId, groupId } from './groups';
+import { createGroups, groupId } from './groups';
+import { splitCode } from './door';
 import { identityOf } from './keys';
 import { createPeopleService, threadKey, type RecordHandler } from './service';
 import type { PeopleRoom, Thread } from './vault';
@@ -103,10 +104,19 @@ export type PeopleWallet = ReturnType<typeof peopleWallet>;
 
 const at = (w: PeopleWallet, id: string) => w.rooms().find(r => r.id === id)!;
 
+/** the founder's door a typed code reaches: the one on its number */
+export const hostDoor = (w: PeopleWallet, code: string) =>
+  w
+    .rooms()
+    .find(
+      r => r.door?.role === 'host' && splitCode(r.door.code)?.plate === splitCode(code)?.plate,
+    )!;
+
 /**
- * The door, as the screens walk it: the joiner types the code and speaks,
- * the founder (`host`) answers, the joiner opens the answer and asks in the
- * room, the founder voices the ask. Returns the joiner's door.
+ * The door, as the keeper walks it: the joiner types the code and speaks,
+ * the founder (`host`) answers, the joiner confirms its words, the founder
+ * sends the box, the joiner opens it and asks in the room, the founder voices
+ * the ask. Returns the joiner's door.
  */
 export const comeIn = async (
   host: PeopleWallet,
@@ -118,21 +128,23 @@ export const comeIn = async (
   nick = '',
 ) => {
   const { id } = (await joiner.op('door-open', { code, nick })) as { id: string };
+  const hostTurn = async () => {
+    clock.t += 1_000;
+    await host.service.check();
+    await hostStep(hostDoor(host, code), at(host, groupId(G)), pake, host.call);
+  };
+  const joinTurn = async () => {
+    clock.t += 1_000;
+    await joiner.service.check();
+    await joinStep(at(joiner, id), pake, joiner.call);
+  };
   await joinStep(at(joiner, id), pake, joiner.call);
-  clock.t += 5_000;
-  await host.service.check();
-  await hostStep(
-    at(host, doorId(G)),
-    host.rooms().find(r => r.id === groupId(G)),
-    pake,
-    host.call,
-  );
-  clock.t += 5_000;
-  await joiner.service.check();
-  await joinStep(at(joiner, id), pake, joiner.call);
-  // entering starts a read of the group's 48 h; the next read waits for it
+  await hostTurn();
+  await joinTurn();
+  await hostTurn();
+  await joinTurn();
   await joiner.service.settled();
-  clock.t += 5_000;
+  clock.t += 1_000;
   await host.service.check();
   await joiner.service.check();
   return at(joiner, id);

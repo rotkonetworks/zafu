@@ -9,7 +9,8 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import type { RelayTransport } from '@zafu/zid';
-import { GROUP_ROOM_PLAINTEXT_BYTES } from '@zafu/zirc/room';
+import { GROUP_ROOM_PLAINTEXT_BYTES, ROOM_POLL_MS } from '@zafu/zirc/room';
+import { FAST_MS } from './hurry';
 import { presenceEpoch } from '@zafu/zid';
 import {
   createPeopleService,
@@ -144,6 +145,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/** a tick that is due runs to its end, and arms the next (setImmediate is never faked) */
+const armed = async (svc: { settled: () => Promise<void> }) => {
+  await svc.settled();
+  for (let i = 0; i < 500 && !vi.getTimerCount(); i++) {
+    await new Promise(r => setImmediate(r));
+  }
+};
+
 describe('nothing without a reason', () => {
   test('opening people with no rooms makes no request and asks nothing', async () => {
     const relay = fakeRelay();
@@ -248,26 +257,69 @@ describe('timers live only while a window is open', () => {
   });
 
   test('a thread on screen is read every 4 s, and not after it leaves', async () => {
-    // only the intervals are fake: WebCrypto settles on real time
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    // only the timers are fake: WebCrypto settles on real time
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const relay = fakeRelay();
     const clock = { t: Date.UTC(2026, 9, 3, 12) };
     // a room never read: a tick reads its share, oldest first, never all of it at once
     const a = device('a', relay, { clock });
     const stop = a.service.watch(roomRec('a').id);
-    await vi.waitFor(() => expect(relay.calls.length).toBe(TICK_WINDOWS));
-    await a.service.settled();
+    await armed(a.service);
+    expect(relay.calls.length).toBe(TICK_WINDOWS);
     const left = RETENTION_WINDOWS - TICK_WINDOWS;
     expect(a.rooms()[0]?.since).toBe(epochAt(clock.t) - left + 1);
     for (let i = 1; i <= 3; i++) {
-      await vi.advanceTimersByTimeAsync(4_000);
-      await a.service.settled();
+      await vi.advanceTimersByTimeAsync(ROOM_POLL_MS - 1);
+      expect(relay.calls.length).toBe(TICK_WINDOWS * i);
+      await vi.advanceTimersByTimeAsync(1);
+      await armed(a.service);
       expect(relay.calls.length).toBe(TICK_WINDOWS * (i + 1));
     }
     stop();
-    await vi.advanceTimersByTimeAsync(4_000 * 5);
-    await new Promise(r => setTimeout(r, 100));
+    await vi.advanceTimersByTimeAsync(ROOM_POLL_MS * 5);
     expect(relay.calls.length).toBe(TICK_WINDOWS * 4);
+    a.service.close();
+  });
+
+  test('a room someone waits on is read every second, and at the usual pace once nobody does', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const relay = fakeRelay();
+    const clock = { t: Date.UTC(2026, 9, 3, 12) };
+    // a code the founder opened a minute ago: someone may be typing it
+    const door: PeopleRoom = {
+      ...roomRec('a'),
+      id: 'd:00112233445566778899aabbccddeeff:6498600a',
+      kind: 'door',
+      joined: false,
+      createdAt: clock.t - 60_000,
+      since: epochAt(clock.t),
+      until: clock.t + HOUR - 60_000,
+      door: { code: '7-fern-dusk', role: 'host', salt: '6498600a'.repeat(4), heard: [] },
+    };
+    const a = device('a', relay, { clock, rooms: [door] });
+    a.service.watch(door.id);
+    await armed(a.service);
+    const reads = () => relay.calls.length;
+    const first = reads();
+    for (let i = 1; i <= 3; i++) {
+      await vi.advanceTimersByTimeAsync(FAST_MS);
+      await armed(a.service);
+    }
+    const perTick = (reads() - first) / 3;
+    expect(perTick).toBeGreaterThan(0);
+    // the code let someone in: the door is read at the usual pace again
+    a.store.rooms = a.store.rooms.map(r => ({
+      ...r,
+      door: { ...r.door!, admitted: 'aa'.repeat(8) },
+    }));
+    await vi.advanceTimersByTimeAsync(FAST_MS);
+    await armed(a.service);
+    const slow = reads();
+    await vi.advanceTimersByTimeAsync(ROOM_POLL_MS - 1);
+    expect(reads()).toBe(slow);
+    await vi.advanceTimersByTimeAsync(1);
+    await armed(a.service);
+    expect(reads()).toBeGreaterThan(slow);
     a.service.close();
   });
 

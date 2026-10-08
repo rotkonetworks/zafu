@@ -597,6 +597,17 @@ export const mismatched = (c: Ceremony): boolean =>
   (c.members.every(m => c.fvk.has(m)) && new Set(c.fvk.values()).size > 1);
 
 /** who a room lets take part: a group's roster, or the two people of a pair room */
+/**
+ * A shared wallet you came into by its code: the founder's start with the k
+ * of n the code named. Typing the words was your yes to those terms, so
+ * nothing more is asked. A wallet made from a chat asks each member once,
+ * in the thread: they joined a chat, not a wallet.
+ */
+export const cameFor = (room: PeopleRoom, c: Ceremony): boolean => {
+  const want = room.group?.want;
+  return !!want && c.by === room.group?.founder && c.k === want.k && c.members.length === want.n;
+};
+
 export const allowedIn = (room: PeopleRoom, me: string): ((key: string) => boolean) => {
   if (room.kind === 'pair') {
     return k => k === me || k === room.pair?.peer;

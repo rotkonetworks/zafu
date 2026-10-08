@@ -1,5 +1,5 @@
 import { PenumbraStartSheet } from '../../components/wallet/penumbra-start-sheet';
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { usePopupReady } from '../../hooks/popup-ready';
 import { useSidePanelDelivery } from '../../hooks/side-panel-delivery';
@@ -14,6 +14,11 @@ import { schedulePreloadTabRoots } from './route-modules';
 import { intentHandlers, navTimingOn, Painted } from './preload';
 import { useStore } from '../../state';
 import { selectActiveNetwork, selectPenumbraAccount } from '../../state/keyring';
+
+// its own chunk: the frost and door code it pulls in never delays the first paint
+const PeopleKeeper = lazy(() =>
+  import('../../people/keeper').then(m => ({ default: m.PeopleKeeper })),
+);
 
 export const PopupLayout = () => {
   usePopupReady();
@@ -62,6 +67,12 @@ export const PopupLayout = () => {
       {/* one toast per finished transaction, whichever page started it (the
           page may be gone after a side-panel approval reload) */}
       <TxTrackerWatcher />
+      {/* people waiting on you are answered on every screen, never with zafu closed */}
+      {showChrome && (
+        <Suspense fallback={null}>
+          <PeopleKeeper />
+        </Suspense>
+      )}
       <PenumbraStartSheet />
     </div>
   );

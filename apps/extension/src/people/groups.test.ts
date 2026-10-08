@@ -1,9 +1,11 @@
 /**
  * Groups through the door, on a fake relay and the real SPAKE2: the founder
  * makes a group, others type its code and come in, the roster comes from the
- * founder's log, and they talk. A wrong word is seen at once and opens
- * nothing, the relay's mailbox never holds the words, two codes that share a
- * number stay apart, and a roster record nobody authorised is refused.
+ * founder's log, and they talk. A code lets one person in; a wrong word is
+ * seen at once, opens nothing and spends nothing; the relay's mailbox never
+ * holds the words; two codes that share a number stay apart; the founder can
+ * take someone off until the keys are made; and a roster record nobody
+ * authorised is refused.
  *
  * @vitest-environment node
  */
@@ -13,14 +15,14 @@ import { hexToBytes } from '@noble/hashes/utils';
 import { appendRecord } from '@zafu/zirc';
 import { GROUP_ROOM_PLAINTEXT_BYTES, Room, ZAFU_GROUP_APP_SCOPE } from '@zafu/zirc/room';
 import { deriveRoomKeys } from '../state/identity';
-import { doorId, groupId, OLDER_CODE } from './groups';
-import { ANSWERS_PER_CODE, CODE_RE, encodeWire, makeCode, splitCode } from './door';
+import { groupId, OLDER_CODE } from './groups';
+import { ANSWERS_PER_CODE, CODE_RE, DOOR_VERSION, encodeWire, makeCode, splitCode } from './door';
 import { doorView, hostStep, joinStep, type DoorPake } from './door-run';
-import { allowedIn, ceremonyOf, foldFrost } from './frost-room';
+import { allowedIn, cameFor, ceremonyOf, foldFrost } from './frost-room';
 import { identityOf } from './keys';
 import { chain } from './service';
 import { wordName } from './word-name';
-import { comeIn, peopleWallet, realPake, relayBoard } from './door.test-util';
+import { comeIn, hostDoor, peopleWallet, realPake, relayBoard } from './door.test-util';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -73,10 +75,13 @@ describe('a group through its door', () => {
     expect(a.room(groupId(G))?.group?.names?.[bobKey]).toBe(wordName(bobKey));
 
     // both sides were shown the same two words, and nothing asked them to compare
-    const words = a.room(doorId(G))?.door?.answered?.[0]?.words;
+    const words = hostDoor(a, code).door?.answered?.[0]?.words;
     expect(words?.split(' ')).toHaveLength(2);
     expect(door.door?.words).toBe(words);
-    expect(a.lines(groupId(G))?.some(l => l.includes(words!))).toBe(true);
+    // the arrival, said in the founder's thread by name, with the words
+    expect(a.lines(groupId(G))).toContain(
+      `: ${wordName(bobKey)} joined with your code · words to compare: ${words}`,
+    );
     expect(b.lines(groupId(G))?.some(l => l.includes(words!))).toBe(true);
 
     expect(await a.service.say(groupId(G), 'alice sent the logo files')).toBe('sent');
@@ -104,8 +109,34 @@ describe('a group through its door', () => {
     expect(doorView(door, clock.t)).toBe('wrong');
     expect(e.room(groupId(G))).toBeUndefined();
     expect(a.room(groupId(G))?.group?.members).toHaveLength(1);
-    // the founder answered one run: the one guess it got
-    expect(a.room(doorId(G))?.door?.answered).toHaveLength(1);
+    // the founder answered one run, the one guess it got, and the code is not spent
+    expect(hostDoor(a, code).door?.answered).toHaveLength(1);
+    expect(hostDoor(a, code).door?.admitted).toBeUndefined();
+  });
+
+  test('a code lets one person in: whoever types it next is told so, calmly, and nothing opens', async () => {
+    const { ws, clock } = setup(ALICE, BOB, CAROL);
+    const [a, b, c] = ws as [(typeof ws)[0], (typeof ws)[0], (typeof ws)[0]];
+    const { G, code } = await make(a, { name: 'treasury' });
+    // a guess first: a wrong word spends nothing
+    const [n, w1] = code.split('-');
+    await comeIn(a, c, `${n}-${w1}-${w1 === 'zoo' ? 'abandon' : 'zoo'}`, G, clock, pake);
+    expect(doorView(await comeIn(a, b, code, G, clock, pake), clock.t)).toBe('in');
+
+    // the code forwarded: the right words, and still nothing
+    const again = await comeIn(a, c, code, G, clock, pake);
+    expect(doorView(again, clock.t)).toBe('used');
+    expect(c.room(groupId(G))).toBeUndefined();
+    expect(a.room(groupId(G))?.group?.members).toHaveLength(2);
+    // exactly one box went out
+    const boxes = hostDoor(a, code).door!.heard.filter(h => h.wire.kind === 'wb');
+    expect(boxes).toHaveLength(1);
+
+    // "invite another": a second code lets carol in
+    const { code: next } = (await a.op('group-renew', { G })) as { code: string };
+    expect(next).not.toBe(code);
+    expect(doorView(await comeIn(a, c, next, G, clock, pake), clock.t)).toBe('in');
+    expect(a.room(groupId(G))?.group?.members).toHaveLength(3);
   });
 
   test("the relay's mailbox holds the number's records, never the words", async () => {
@@ -113,9 +144,10 @@ describe('a group through its door', () => {
     const [a, b] = ws as [(typeof ws)[0], (typeof ws)[0]];
     const { G, code } = await make(a, { name: 'treasury' });
     await comeIn(a, b, code, G, clock, pake);
-    const said = JSON.stringify(a.room(doorId(G))?.door?.heard);
-    expect(said).toContain('"wj"');
-    expect(said).toContain('"wa"');
+    const said = JSON.stringify(hostDoor(a, code).door?.heard);
+    for (const kind of ['wh', 'wj', 'wa', 'wk', 'wb']) {
+      expect(said).toContain(`"${kind}"`);
+    }
     for (const w of splitCode(code)!.words.split('-')) {
       expect(said).not.toMatch(new RegExp(`\\b${w}\\b`));
     }
@@ -128,34 +160,39 @@ describe('a group through its door', () => {
     const two = await make(c, { name: 'studio' });
     // carol's door moved onto alice's number: the same mailbox, other words
     const moved = `${splitCode(one.code)!.plate}-${splitCode(two.code)!.words}`;
-    await c.service.api.updateRoom(doorId(two.G), r => ({
+    const twoId = hostDoor(c, two.code).id;
+    await c.service.api.updateRoom(twoId, r => ({
       ...r,
-      secret: a.room(doorId(one.G))!.secret,
+      secret: hostDoor(a, one.code).secret,
       door: { ...r.door!, code: moved },
     }));
     c.service.close();
     await c.service.api.send(
-      doorId(two.G),
-      encodeWire({ kind: 'wh', v: 1, salt: c.room(doorId(two.G))!.door!.salt! }),
+      twoId,
+      encodeWire({ kind: 'wh', v: DOOR_VERSION, salt: c.room(twoId)!.door!.salt! }),
       'action',
     );
 
     const { id } = (await b.op('door-open', { code: one.code })) as { id: string };
     await joinStep(b.room(id)!, pake, b.call);
     expect(b.room(id)?.door?.sent).toHaveLength(2);
-    for (const [w, G] of [
-      [a, one.G],
-      [c, two.G],
-    ] as const) {
-      await w.service.check();
-      await hostStep(w.room(doorId(G))!, w.room(groupId(G)), pake, w.call);
+    for (let turn = 0; turn < 2; turn++) {
+      for (const [w, G, code] of [
+        [a, one.G, one.code],
+        [c, two.G, moved],
+      ] as const) {
+        await w.service.check();
+        await hostStep(hostDoor(w, code), w.room(groupId(G)), pake, w.call);
+      }
+      await b.service.check();
+      await joinStep(b.room(id)!, pake, b.call);
     }
-    await b.service.check();
-    await joinStep(b.room(id)!, pake, b.call);
     const door = b.room(id)!;
     expect(doorView(door, clock.t)).toBe('in');
     expect(door.door?.G).toBe(one.G);
     expect(b.room(groupId(two.G))).toBeUndefined();
+    // speaking to carol's code by mistake spent nothing of hers
+    expect(c.room(twoId)?.door?.admitted).toBeUndefined();
   });
 
   test('a code from an older zafu says so', async () => {
@@ -187,7 +224,8 @@ describe('a group through its door', () => {
     expect(b.room(groupId(G))?.group?.want).toEqual({ k: 2, n: 3 });
 
     clock.t += 10 * 60_000;
-    await comeIn(a, c, code, G, clock, pake);
+    const { code: second } = (await a.op('group-renew', { G })) as { code: string };
+    await comeIn(a, c, second, G, clock, pake);
     await a.service.check();
     await b.service.check();
     await c.service.check();
@@ -199,15 +237,57 @@ describe('a group through its door', () => {
       expect(cer?.id).toBe(started);
       expect(cer?.k).toBe(2);
       expect(cer?.members).toHaveLength(3);
+      // typing the code was the yes: nothing more is asked of anyone
+      expect(cameFor(r, cer!)).toBe(true);
     }
 
-    // full: a fourth who types the code is not answered
+    // full: a fourth who types a fresh code is not answered
+    const { code: third } = (await a.op('group-renew', { G })) as { code: string };
     const e = peopleWallet('w9', EVE, transport, clock);
-    const { id } = (await e.op('door-open', { code })) as { id: string };
+    const { id } = (await e.op('door-open', { code: third })) as { id: string };
     await joinStep(e.room(id)!, pake, e.call);
     await a.service.check();
-    await hostStep(a.room(doorId(G))!, a.room(groupId(G)), pake, a.call);
-    expect(a.room(doorId(G))?.door?.answered).toHaveLength(2);
+    await hostStep(hostDoor(a, third), a.room(groupId(G)), pake, a.call);
+    expect(hostDoor(a, third).door?.answered ?? []).toHaveLength(0);
+  });
+
+  test('the founder can take someone off until the keys are made; they stay off', async () => {
+    const { ws, clock } = setup(ALICE, BOB, CAROL);
+    const [a, b, c] = ws as [(typeof ws)[0], (typeof ws)[0], (typeof ws)[0]];
+    const { G, code } = await make(a, { name: 'savings', k: 2, n: 3 });
+    await comeIn(a, b, code, G, clock, pake);
+    const bobKey = deriveRoomKeys(BOB, 0, G).pubkey;
+
+    await a.op('group-remove', { G, key: bobKey });
+    expect(a.room(groupId(G))?.group?.members).toHaveLength(1);
+    expect(a.lines(groupId(G))).toContain(`: ${wordName(bobKey)} is no longer in the group`);
+    // bob still holds the room: his ask again is not voiced
+    await b.service.api.send(
+      groupId(G),
+      encodeWire({
+        kind: 'ask',
+        key: bobKey,
+        name: 'bob',
+        seal: deriveRoomKeys(BOB, 0, G).xwingPublicKey,
+      }),
+      'action',
+    );
+    clock.t += 5_000;
+    await a.service.check();
+    expect(a.room(groupId(G))?.group?.members).toHaveLength(1);
+    clock.t += 5_000;
+    await b.service.check();
+    expect(b.room(groupId(G))?.group?.members.map(m => m.key)).not.toContain(bobKey);
+
+    // invited again, with a new code: bob is back; then carol, and the keys start
+    for (const w of [b, c]) {
+      const { code: next } = (await a.op('group-renew', { G })) as { code: string };
+      await comeIn(a, w, next, G, clock, pake);
+    }
+    expect(a.room(groupId(G))?.group?.members).toHaveLength(3);
+    expect(a.room(groupId(G))?.group?.want?.started).toBeTruthy();
+    // no one can be taken off once the keys are being made
+    await expect(a.op('group-remove', { G, key: bobKey })).rejects.toThrow();
   });
 
   test('a roster record the founder did not write is refused', async () => {
