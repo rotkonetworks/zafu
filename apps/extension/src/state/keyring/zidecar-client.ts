@@ -16,41 +16,9 @@ import {
   type SubtreePool,
   type SubtreeRoot,
 } from './subtree-roots';
-export interface CompactBlock {
-  height: number;
-  hash: Uint8Array;
-  actions: CompactAction[];
-  actionsRoot?: Uint8Array;
-  /**
-   * NU6.3 ironwood pool actions (same compact-action shape as orchard),
-   * decoded from `zidecar.v1 CompactBlock.ironwood_actions = 5`. Absent on
-   * servers predating ironwood; the sync worker consumes it defensively
-   * (`?? []`), so an old server simply yields no ironwood notes.
-   */
-  ironwoodActions?: CompactAction[];
-}
+import type { ChainTip, CompactAction, CompactBlock, Utxo } from './zcash-types';
 
-export interface CompactAction {
-  cmx: Uint8Array;
-  ephemeralKey: Uint8Array;
-  ciphertext: Uint8Array;
-  nullifier: Uint8Array;
-  txid: Uint8Array;
-}
-
-export interface ChainTip {
-  height: number;
-  hash: Uint8Array;
-}
-
-export interface Utxo {
-  address: string;
-  txid: Uint8Array;
-  outputIndex: number;
-  script: Uint8Array;
-  valueZat: bigint;
-  height: number;
-}
+export type { ChainTip, CompactAction, CompactBlock, Utxo } from './zcash-types';
 
 export interface ProRing {
   ringKeys: string[]; // hex-encoded 32-byte Bandersnatch pubkeys

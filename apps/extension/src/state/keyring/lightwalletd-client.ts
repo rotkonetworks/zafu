@@ -4,8 +4,7 @@
 
 import { eachField } from '../../net/proto-reader';
 import { decodeLightdInfo, type LightdInfo } from './lightd-info';
-import type { ChainTip, CompactAction, CompactBlock, Utxo } from './zidecar-client';
-import type { ZcashClient } from './zcash-backend';
+import type { ChainTip, CompactAction, CompactBlock, Utxo, ZcashClient } from './zcash-backend';
 import {
   encodeSubtreeRootsArg,
   parseSubtreeRootStream,
