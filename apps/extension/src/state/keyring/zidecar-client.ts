@@ -812,66 +812,26 @@ export class ZidecarClient {
     let time = 0;
     let orchardTree = '';
     let ironwoodTree = '';
-    let pos = 0;
     const decoder = new TextDecoder();
-
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-
-      if (wire === 0) {
-        let v = 0,
-          s = 0;
-        while (pos < buf.length) {
-          const b = buf[pos++]!;
-          v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
+    eachField(buf, (field, wire, val) => {
+      if (wire === WIRE_VARINT) {
         if (field === 1) {
-          height = v;
+          height = Number(val as bigint);
+        } else if (field === 3) {
+          time = Number(val as bigint);
         }
-        if (field === 3) {
-          time = v;
-        }
-      } else if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        const data = buf.subarray(pos, pos + len);
+      } else if (wire === WIRE_LEN) {
         if (field === 5) {
-          orchardTree = decoder.decode(data);
+          orchardTree = decoder.decode(val as Uint8Array);
         } else if (field === 6) {
           // zidecar.v1 TreeState.ironwood_tree = 6. This read field 7, which
           // is the LIGHTWALLETD TreeState number - so against zidecar it never
           // matched and every ironwood send failed with "server has no
           // ironwood tree state", despite the server returning it correctly.
-          ironwoodTree = decoder.decode(data);
+          ironwoodTree = decoder.decode(val as Uint8Array);
         }
-        pos += len;
-      } else {
-        break;
       }
-    }
+    });
 
     // omit ironwoodTree entirely when the server didn't send it so callers
     // can feature-detect with a simple truthiness check
