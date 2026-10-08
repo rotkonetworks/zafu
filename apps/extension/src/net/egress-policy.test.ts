@@ -523,9 +523,10 @@ describe('send over nym: everything that ties you to a transaction or an address
     const rows: [string, string][] = [
       ['https://zcash.rotko.net/zidecar.v1.Zidecar/GetTaddressTxids', 'names-you'],
       ['https://zcash.rotko.net/zidecar.v1.Zidecar/GetAddressUtxos', 'names-you'],
+      // penumbra is off by default (see the per-network choice below)
       [
         'https://penumbra.rotko.net/penumbra.util.tendermint_proxy.v1.TendermintProxyService/BroadcastTxSync',
-        'broadcast',
+        'direct',
       ],
       ['https://penumbra.rotko.net/penumbra.core.app.v1.QueryService/AppParameters', 'direct'],
       [`${thor}/thorchain/tx/status/ABCD`, 'own-tx'],
@@ -565,5 +566,50 @@ describe('send over nym: everything that ties you to a transaction or an address
     expect(d.allow && d.nymBody?.some(([p]) => new RegExp(p).test('{"method":"status"}'))).toBe(
       false,
     );
+  });
+});
+
+describe('send over nym: the choice per network', () => {
+  const ZEC_SEND = 'https://zcash.rotko.net/zidecar.v1.Zidecar/SendTransaction';
+  const PEN_SEND =
+    'https://penumbra.rotko.net/penumbra.util.tendermint_proxy.v1.TendermintProxyService/BroadcastTxSync';
+  const NOBLE_SEND = 'https://noble-api.polkachu.com/cosmos/tx/v1beta1/txs';
+  const THOR_SEND = 'https://gateway.liquify.com/chain/thorchain_api/cosmos/tx/v1beta1/txs';
+  const route = (optIns: Record<string, 'allowed' | 'blocked'>, url: string) => {
+    const d = decide(
+      {
+        enabledNetworks: ['zcash', 'penumbra', 'noble'],
+        netEgress: { optIns: { thorchain: 'allowed', ...optIns } },
+      },
+      url,
+      'worker',
+    );
+    return d.allow ? (d.nym ?? 'direct') : d.reason;
+  };
+
+  test.each<[string, Record<string, 'allowed' | 'blocked'>, string, string]>([
+    ['zcash on by default', {}, ZEC_SEND, 'broadcast'],
+    ['cosmos chains on by default', {}, NOBLE_SEND, 'broadcast'],
+    ['thorchain on by default', {}, THOR_SEND, 'broadcast'],
+    ['penumbra off by default', {}, PEN_SEND, 'direct'],
+    ['penumbra turned on', { 'nym:penumbra': 'allowed' }, PEN_SEND, 'broadcast'],
+    ['zcash turned off', { 'nym:zcash': 'blocked' }, ZEC_SEND, 'direct'],
+    ['zcash off leaves cosmos on', { 'nym:zcash': 'blocked' }, NOBLE_SEND, 'broadcast'],
+    ['cosmos turned off', { 'nym:cosmos': 'blocked' }, NOBLE_SEND, 'direct'],
+    ['master off: zcash direct', { nym: 'blocked' }, ZEC_SEND, 'direct'],
+    ['master off: thorchain direct', { nym: 'blocked' }, THOR_SEND, 'direct'],
+    [
+      'master off wins over a network turned on',
+      { nym: 'blocked', 'nym:penumbra': 'allowed' },
+      PEN_SEND,
+      'direct',
+    ],
+  ])('%s', (_, optIns, url, expected) => {
+    expect(route(optIns, url)).toBe(expected);
+  });
+
+  it('a network turned off does not stop nym itself, the master does', () => {
+    const optIns = { 'nym:zcash': 'blocked' as const };
+    expect(compileEgress({ ...ZCASH_ONLY, netEgress: { optIns } }).nym).toBe(true);
   });
 });
