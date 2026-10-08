@@ -611,7 +611,7 @@ describe('send over nym: the choice per network', () => {
   it('says which networks send over nym, and whether to keep it ready', () => {
     const base = { enabledNetworks: ['zcash', 'penumbra', 'noble'] };
     expect(compileEgress(base)).toMatchObject({
-      nymGroups: ['zcash', 'cosmos'],
+      nymVia: ['zcash', 'noble'],
       nymKeepReady: true,
     });
     const optIns = {
@@ -620,10 +620,10 @@ describe('send over nym: the choice per network', () => {
       'nym-ready': 'blocked',
     } as const;
     expect(compileEgress({ ...base, netEgress: { optIns } })).toMatchObject({
-      nymGroups: ['penumbra', 'cosmos'],
+      nymVia: ['penumbra', 'noble'],
       nymKeepReady: false,
     });
-    expect(compileEgress({ ...base, netEgress: { optIns: { nym: 'blocked' } } }).nymGroups).toEqual(
+    expect(compileEgress({ ...base, netEgress: { optIns: { nym: 'blocked' } } }).nymVia).toEqual(
       [],
     );
   });

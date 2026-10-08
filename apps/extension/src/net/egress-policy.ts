@@ -723,7 +723,7 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
         if (transport !== 'nym') {
           continue;
         }
-        carrying.add(group!.id);
+        carrying.add(spec.id);
         const ours = NYM_CLASSES.filter(
           c => c.destination === spec.id || c.destination === spec.family,
         );
@@ -759,7 +759,7 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
     hosts,
     adhoc: i.keplrCompat === true,
     nym,
-    nymGroups: [...carrying],
+    nymVia: [...carrying],
     nymKeepReady: i.netEgress?.optIns?.[NYM_KEEP_READY] !== 'blocked',
   };
 };

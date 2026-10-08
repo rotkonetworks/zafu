@@ -101,7 +101,7 @@ import { backOff } from 'exponential-backoff';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { networkAllowsBackgroundSync } from './state/privacy';
 import { startUiOpenSession } from './ui-open-session';
-import { postNym } from './net/nym-bridge';
+import { startNymLifecycle } from './net/nym-lifecycle';
 import { ensureOffscreenDocument } from './offscreen-document';
 import { startPeopleRelay } from './people/sw';
 import { penumbraTiming } from './penumbra/timing';
@@ -165,6 +165,9 @@ const people = startPeopleRelay();
 // never opened again
 void keptCaptureAccess().catch(() => undefined);
 
+// nym: kept up while unlocked, or started on demand (net/nym-plan.ts)
+const nym = startNymLifecycle();
+
 const ui = startUiOpenSession(
   {
     resume: () => {
@@ -174,8 +177,7 @@ const ui = startUiOpenSession(
     },
     pause: () => {
       console.log('[sw] last UI surface closed, requesting zcash sync stop');
-      // nothing runs while zafu is closed: the next send starts a fresh tunnel
-      postNym({ type: 'stop' });
+      nym.lastWindowClosed();
       requestStopAllSync('zcash');
       if (!keepPenumbraSyncing) {
         penumbraSync('pause');

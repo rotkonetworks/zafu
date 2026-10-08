@@ -3,9 +3,10 @@
  * smolmix (`workers/nym-worker.ts`), answering every realm over the
  * {@link NYM_CHANNEL}.
  *
- * Started on intent (a send, swap or liquidity screen), when a proof starts,
- * or by the first request that needs it; never while nym is off. Stopped with
- * the last zafu window by terminating the worker: smolmix's own disconnect
+ * Started and stopped by the service worker's plan (`./nym-lifecycle`), by a
+ * send, swap or liquidity screen, or by the first request that needs it;
+ * never for a destination that goes direct. Stopped by terminating the
+ * worker: smolmix's own disconnect
  * leaves its wasm unusable, so each start is a fresh worker with a fresh,
  * throwaway client identity.
  *
@@ -114,12 +115,12 @@ const startOnce = async (): Promise<Remote<IMixTunnelWorker> | undefined> => {
   }
 };
 
-/** start the tunnel if nym is on and it is not up; resolves once it is ready or down */
-export const startNymTunnel = async (why = 'asked'): Promise<void> => {
+/** start the tunnel if any of `via` sends over nym and it is not up; resolves once it is ready or down */
+export const startNymTunnel = async (why = 'asked', via: string[] = []): Promise<void> => {
   if (tunnel) {
     return;
   }
-  if (!starting && (await nymRoutingOn()) && !tunnel && !starting) {
+  if (!starting && (await nymRoutingOn(via)) && !tunnel && !starting) {
     console.info(`[nym] starting: ${why}`);
     const gen = generation;
     const t0 = performance.now();
@@ -197,7 +198,7 @@ const relay = async (id: string, url: string, init: NymRequestInit): Promise<voi
 };
 
 const handlers: { [K in NymMessage['type']]?: (m: Extract<NymMessage, { type: K }>) => void } = {
-  start: () => void startNymTunnel(),
+  start: m => void startNymTunnel(m.via?.join(' ') || 'asked', m.via),
   ping: () => say({ type: 'state', ready: !!tunnel }),
   stop: stopNymTunnel,
   reroute: m => reroute(m.id),

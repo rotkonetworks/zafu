@@ -82,8 +82,8 @@ export interface EgressTable {
   adhoc: boolean;
   /** send over nym: requests of a nym class go through the tunnel */
   nym?: boolean;
-  /** the networks (NYM_GROUPS ids) that send over nym right now */
-  nymGroups?: string[];
+  /** the destinations that send over nym right now */
+  nymVia?: string[];
   /** keep the tunnel up while unlocked, rather than on demand */
   nymKeepReady?: boolean;
 }

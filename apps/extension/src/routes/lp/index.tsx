@@ -8,6 +8,7 @@
 
 import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useEffect, type ReactNode } from 'react';
+import { ensureNym } from '../../net/nym-bridge';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@repo/ui/components/ui/button';
@@ -105,6 +106,7 @@ export const LpPage = () => {
   const { requestAuth, PasswordModal } = usePasswordGate();
 
   useEffect(() => {
+    void ensureNym('zcash', 'thorchain');
     void init();
     // reads and the flight move when the tab is shown and every 15 s while it stays shown
     const turn = () => document.visibilityState === 'visible' && void tick();
