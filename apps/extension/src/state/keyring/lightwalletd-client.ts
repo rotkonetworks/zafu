@@ -2,6 +2,7 @@
 // grpc-web with 415). Body framing matches grpc-web so fetch reads it, but the
 // gRPC status sits in unreadable HTTP/2 trailers - so HTTP 200 + data = success.
 
+import { eachField } from '../../net/proto-reader';
 import { decodeLightdInfo, type LightdInfo } from './lightd-info';
 import type { ChainTip, CompactAction, CompactBlock, Utxo } from './zidecar-client';
 import type { ZcashClient } from './zcash-backend';
@@ -86,7 +87,7 @@ export class LightwalletdClient implements ZcashClient {
     const resp = await this.grpcCall('GetLatestBlock', new Uint8Array(0));
     let height = 0;
     let hash: Uint8Array = new Uint8Array(0);
-    this.eachField(resp, (field, wire, val) => {
+    eachField(resp, (field, wire, val) => {
       if (wire === 0 && field === 1) {
         height = Number(val as bigint);
       } else if (wire === 2 && field === 2) {
@@ -108,7 +109,7 @@ export class LightwalletdClient implements ZcashClient {
     let orchardTree = '';
     let ironwoodTree = '';
     const decoder = new TextDecoder();
-    this.eachField(resp, (field, wire, val) => {
+    eachField(resp, (field, wire, val) => {
       if (wire === 0 && field === 2) {
         h = Number(val as bigint);
       } else if (wire === 0 && field === 4) {
@@ -159,7 +160,7 @@ export class LightwalletdClient implements ZcashClient {
 
     // GetAddressUtxosReplyList { addressUtxos=1 repeated GetAddressUtxosReply }
     const utxos: Utxo[] = [];
-    this.eachField(resp, (field, wire, val) => {
+    eachField(resp, (field, wire, val) => {
       if (wire === 2 && field === 1) {
         utxos.push(this.parseUtxo(val as Uint8Array));
       }
@@ -180,7 +181,7 @@ export class LightwalletdClient implements ZcashClient {
     const req = new Uint8Array([0x08, ...this.varint(height)]);
     const resp = await this.grpcCall('GetBlock', req);
     let time = 0;
-    this.eachField(resp, (field, wire, val) => {
+    eachField(resp, (field, wire, val) => {
       if (wire === 0 && field === 5) {
         time = Number(val as bigint);
       }
@@ -206,7 +207,7 @@ export class LightwalletdClient implements ZcashClient {
     let errorCode = 0;
     let errorMessage = '';
     const decoder = new TextDecoder();
-    this.eachField(resp, (field, wire, val) => {
+    eachField(resp, (field, wire, val) => {
       if (wire === 0 && field === 1) {
         errorCode = Number(val as bigint);
       } else if (wire === 2 && field === 2) {
@@ -293,60 +294,6 @@ export class LightwalletdClient implements ZcashClient {
     return [...this.varint(data.length), ...data];
   }
 
-  /** iterate top-level protobuf fields; `val` is bigint for varints, Uint8Array for length-delimited. */
-  private eachField(
-    buf: Uint8Array,
-    fn: (field: number, wire: number, val: bigint | Uint8Array) => void,
-  ): void {
-    let pos = 0;
-    while (pos < buf.length) {
-      const tag = buf[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-      if (wire === 0) {
-        let v = 0n,
-          s = 0n;
-        while (pos < buf.length) {
-          const b = buf[pos++]!;
-          v |= BigInt(b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7n;
-        }
-        fn(field, wire, v);
-      } else if (wire === 2) {
-        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
-        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
-        // the parser loops re-reading the same bytes forever. Multiply instead
-        // of shift, and refuse a varint longer than 5 bytes.
-        let len = 0,
-          s = 0,
-          lenBytes = 0;
-        while (pos < buf.length && lenBytes < 5) {
-          const b = buf[pos++]!;
-          len += (b & 0x7f) * Math.pow(2, s);
-          lenBytes++;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
-          break;
-        }
-        fn(field, wire, buf.subarray(pos, pos + len));
-        pos += len;
-      } else if (wire === 5) {
-        pos += 4;
-      } else if (wire === 1) {
-        pos += 8;
-      } else {
-        break;
-      }
-    }
-  }
-
   private parseBlockStream(buf: Uint8Array): CompactBlock[] {
     const blocks: CompactBlock[] = [];
     let pos = 0;
@@ -377,7 +324,7 @@ export class LightwalletdClient implements ZcashClient {
   /** CompactBlock { height=2; hash=3; vtx=7 repeated CompactTx } */
   private parseBlock(buf: Uint8Array): CompactBlock {
     const block: CompactBlock = { height: 0, hash: new Uint8Array(0), actions: [] };
-    this.eachField(buf, (field, wire, val) => {
+    eachField(buf, (field, wire, val) => {
       if (wire === 0 && field === 2) {
         block.height = Number(val as bigint);
       } else if (wire === 2 && field === 3) {
@@ -410,7 +357,7 @@ export class LightwalletdClient implements ZcashClient {
     let txid: Uint8Array = new Uint8Array(0);
     const rawActions: Uint8Array[] = [];
     const rawIronwood: Uint8Array[] = [];
-    this.eachField(buf, (field, wire, val) => {
+    eachField(buf, (field, wire, val) => {
       if (wire === 2 && field === 2) {
         txid = val as Uint8Array;
       } else if (wire === 2 && field === 6) {
@@ -446,7 +393,7 @@ export class LightwalletdClient implements ZcashClient {
       nullifier: new Uint8Array(0),
       txid: new Uint8Array(0),
     };
-    this.eachField(buf, (field, wire, val) => {
+    eachField(buf, (field, wire, val) => {
       if (wire !== 2) {
         return;
       }
@@ -475,7 +422,7 @@ export class LightwalletdClient implements ZcashClient {
       valueZat: 0n,
       height: 0,
     };
-    this.eachField(buf, (field, wire, val) => {
+    eachField(buf, (field, wire, val) => {
       if (wire === 0) {
         const v = val as bigint;
         if (field === 2) {
@@ -503,7 +450,7 @@ export class LightwalletdClient implements ZcashClient {
   private parseRawTransaction(buf: Uint8Array): { data: Uint8Array; height: number } {
     let data: Uint8Array = new Uint8Array(0);
     let height = 0;
-    this.eachField(buf, (field, wire, val) => {
+    eachField(buf, (field, wire, val) => {
       if (wire === 2 && field === 1) {
         data = val as Uint8Array;
       } else if (wire === 0 && field === 2) {
