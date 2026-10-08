@@ -254,51 +254,20 @@ export class ZidecarClient {
     } // field 3 bool mainnet (omit when false)
     const resp = await this.grpcCall('SignAnchor', new Uint8Array(parts));
 
-    let pos = 0;
+    // SignAnchorResponse { signature=1; verifier_key=2; available=3 }
     const toHex = (u: Uint8Array) => Array.from(u, b => b.toString(16).padStart(2, '0')).join('');
     let signatureHex = '';
     let verifierKeyHex = '';
     let available = false;
-    while (pos < resp.length) {
-      const tag = resp[pos++]!;
-      const field = tag >> 3;
-      const wire = tag & 0x7;
-      if (wire === 2) {
-        let len = 0,
-          s = 0;
-        while (pos < resp.length) {
-          const b = resp[pos++]!;
-          len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        const data = resp.subarray(pos, pos + len);
-        pos += len;
-        if (field === 1) {
-          signatureHex = toHex(data);
-        } else if (field === 2) {
-          verifierKeyHex = toHex(data);
-        }
-      } else if (wire === 0) {
-        let v = 0,
-          s = 0;
-        while (pos < resp.length) {
-          const b = resp[pos++]!;
-          v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) {
-            break;
-          }
-          s += 7;
-        }
-        if (field === 3) {
-          available = v !== 0;
-        }
-      } else {
-        break;
+    eachField(resp, (field, wire, val) => {
+      if (wire === WIRE_LEN && field === 1) {
+        signatureHex = toHex(val as Uint8Array);
+      } else if (wire === WIRE_LEN && field === 2) {
+        verifierKeyHex = toHex(val as Uint8Array);
+      } else if (wire === WIRE_VARINT && field === 3) {
+        available = val !== 0n;
       }
-    }
+    });
     return { available, signatureHex, verifierKeyHex };
   }
 
