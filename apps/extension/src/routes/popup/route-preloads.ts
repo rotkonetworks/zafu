@@ -2,10 +2,10 @@
  * The data side of each route's preload (see preload.ts): the queries a screen
  * reads first, warmed with the very options the screen reads them by.
  *
- * Every read here is local - the view service, the zcash worker, storage -
- * except history, which asks the network's own light-client server. That one
- * runs only when the screen itself would ask it at once (history kept, the
- * server allowed right now), and never asks to allow anything.
+ * Every read here is local - the view service, the zcash worker, storage.
+ * zcash history is never warmed: it looks up each transparent address at the
+ * light-client server, and a t-address is asked about only on intent, never
+ * on a hover or a press that may not become a visit.
  */
 
 import type { AllSlices } from '../../state';
@@ -17,18 +17,16 @@ import {
 import { activePockets, activeZcashStoreId, visiblePockets } from '../../state/pockets';
 import { pocketStoreId } from '../../state/pocket-id';
 import { selectZcashIsMainnet } from '../../state/wallets';
-import { checkEgress } from '../../net/egress';
 import { getRootNetwork } from '../../config/networks';
 import { balancesQueryOptions } from '../../hooks/penumbra-balances';
 import { zcashWorkerQuery } from '../../hooks/zcash-pool-balances';
 import { activeTransparentAddressesQuery } from '../../hooks/use-transparent-addresses';
-import { penumbraHistoryQuery, zcashHistoryQuery } from './home/history';
+import { penumbraHistoryQuery } from './home/history';
 import { zidPinsQuery } from './identity/use-identity';
 import { swapWallet } from '../../hooks/swap-preload';
 import { preloadSwapQuote } from '../../state/swap/preload';
 import type { Preload, PreloadCtx } from './route-modules';
 
-const zidecarOf = (s: AllSlices) => s.networks.networks.zcash.endpoint || 'https://zcash.rotko.net';
 const isZcash = (s: AllSlices) => selectActiveNetwork(s) === 'zcash';
 const isPenumbra = (s: AllSlices) => getRootNetwork(selectActiveNetwork(s)) === 'penumbra';
 
@@ -71,25 +69,11 @@ const everyPocket: Preload = ctx => {
   }
 };
 
-/** the history list, only where it is kept and its server may be asked right now */
-const history = async ({ client, state }: PreloadCtx) => {
-  if (!state.privacy.settings.enableTransactionHistory) {
-    return;
-  }
-  if (isPenumbra(state)) {
-    return client.prefetchQuery(penumbraHistoryQuery(selectPenumbraAccount(state), true));
-  }
-  const zidecar = zidecarOf(state);
-  if (!isZcash(state) || !checkEgress(zidecar).allow) {
-    return;
-  }
-  const { tAddresses } = await client.ensureQueryData(
-    activeTransparentAddressesQuery(state, selectZcashIsMainnet(state)),
-  );
-  return client.prefetchQuery(
-    zcashHistoryQuery(activeZcashStoreId(state), zidecar, tAddresses, true),
-  );
-};
+/** penumbra's history list (the local view service), only where it is kept */
+const history: Preload = ({ client, state }) =>
+  state.privacy.settings.enableTransactionHistory &&
+  isPenumbra(state) &&
+  client.prefetchQuery(penumbraHistoryQuery(selectPenumbraAccount(state), true));
 
 /** the transparent addresses receive shows, keyed as receive reads them (local derivation, cached) */
 const tAddresses: Preload = ({ client, state }) =>
