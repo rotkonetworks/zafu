@@ -428,6 +428,12 @@ const TAP: Record<NonNullable<Gate['tap']>, (egress: string) => Promise<unknown>
   'turn-on': egress => setDestinationOptIn(egress, 'allowed').then(refreshEgress),
 };
 
+/** the line's own tap, if it has one */
+const pressOf = (g: Gate): (() => void) | undefined => {
+  const tap = g.tap && TAP[g.tap];
+  return tap && (() => void tap(ROUTES[g.route].egress));
+};
+
 const RouteLine = ({
   route,
   line,
@@ -823,7 +829,6 @@ export const CrosschainSwap = ({
     .map(g => {
       const a = answerOf(g.route);
       const q = a?.data;
-      const tap = g.tap && TAP[g.tap];
       return {
         route: g.route,
         line: q
@@ -834,12 +839,9 @@ export const CrosschainSwap = ({
         stale: !!a?.isPlaceholderData || !!a?.isFetching,
         onPress: q
           ? () => setRoutesOpen(true)
-          : tap
-            ? () => void tap(ROUTES[g.route].egress)
-            : // near wants a refund address: choosing it brings the field back
-              a?.error instanceof NeedsRefundAddress
-              ? () => setPicked(g.route)
-              : undefined,
+          : (pressOf(g) ??
+            // near wants a refund address: choosing it brings the field back
+            (a?.error instanceof NeedsRefundAddress ? () => setPicked(g.route) : undefined)),
         rank: q ? quotes.indexOf(q) : g.line || a?.error ? 99 : 50,
         // thorchain's zec pool is thin or refusing: one quiet link to deepen it
         deepen:
@@ -1546,7 +1548,7 @@ export const CrosschainSwap = ({
             />
           ))}
           {quiet.map(r => (
-            <RouteLine key={r.route} route={r.route} line={r.line} />
+            <RouteLine key={r.route} route={r.route} line={r.line} onPress={pressOf(r)} />
           ))}
         </Sheet>
         {deal && firm && (
