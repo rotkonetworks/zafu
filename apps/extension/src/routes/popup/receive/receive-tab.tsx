@@ -61,11 +61,19 @@ export function ZcashReceive({
   const shown = transparent ? (t.tAddresses[0] ?? '') : address;
   // a retired shielded address stays on screen until its replacement lands,
   // but it can't be handed out again
-  const retired = stale && !transparent;
+  const pending = stale && !transparent;
   const { copied, copy } = useCopy();
   const [requestOpen, setRequestOpen] = useState(false);
+  // a copied payment request stays on screen as it was copied, so its code is
+  // that same request (address, amount, memo) while the next address derives
+  const [request, setRequest] = useState<{ uri: string; of: AddrType }>();
+  const held = request?.of === addrType ? request.uri : undefined;
   const copyAddress = () => {
-    if (!shown || retired) {
+    if (held) {
+      copy(held);
+      return;
+    }
+    if (!shown || pending) {
       return;
     }
     copy(shown);
@@ -78,26 +86,33 @@ export function ZcashReceive({
   return (
     <>
       <AddressView
-        address={shown}
+        address={held ?? shown}
         loading={transparent ? t.isLoading : loading}
-        retired={retired}
-        label={transparent ? 'transparent address · public' : 'shielded address'}
+        retired={!held && pending}
+        label={
+          held
+            ? 'payment request'
+            : transparent
+              ? 'transparent address · public'
+              : 'shielded address'
+        }
         hint={transparent ? 'shield after receiving' : 'one address per sender'}
         tone={transparent ? 'public' : 'plain'}
-        onRotate={transparent ? undefined : retireShielded}
+        onRotate={held ? () => setRequest(undefined) : transparent ? undefined : retireShielded}
         notice={transparent && t.missing && noTransparentCopy[t.missing]}
       >
         {shown && (
           <Button
             variant='secondary'
             onClick={() => setRequestOpen(true)}
+            disabled={pending}
             className='w-[150px] shrink-0'
           >
             request amount
           </Button>
         )}
-        <Button onClick={copyAddress} disabled={!shown || retired} className='flex-1'>
-          {copied ? 'copied' : 'copy address'}
+        <Button onClick={copyAddress} disabled={!held && (!shown || pending)} className='flex-1'>
+          {copied ? 'copied' : held ? 'copy payment link' : 'copy address'}
         </Button>
       </AddressView>
       {shown && (
@@ -106,8 +121,10 @@ export function ZcashReceive({
           onOpenChange={setRequestOpen}
           address={shown}
           isShielded={!transparent && shown.startsWith('u')}
-          onCopied={() => {
+          onCopied={uri => {
             setRequestOpen(false);
+            setRequest({ uri, of: addrType });
+            // its address went out with the link: the next sender gets a fresh one
             if (!transparent) {
               retireShielded();
             }
