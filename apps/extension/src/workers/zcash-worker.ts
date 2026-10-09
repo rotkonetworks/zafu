@@ -248,8 +248,11 @@ const flyTrustKey = (serverUrl: string, mainnet: boolean) =>
   [`chain:${mainnet ? 'main' : 'test'}`, `proved:${backendKey(serverUrl)}`] as const;
 
 /** the sync client for an endpoint; call sites without a backend in scope use the registry */
-const makeZcashClient = (serverUrl: string, backend?: ZcashBackend): ZcashClient =>
-  zcashClient(serverUrl, backend ?? lookupBackend(serverUrl));
+const makeZcashClient = (
+  serverUrl: string,
+  backend?: ZcashBackend,
+  signal?: AbortSignal,
+): ZcashClient => zcashClient(serverUrl, backend ?? lookupBackend(serverUrl), signal);
 
 interface WorkerMessage {
   type:
@@ -2489,10 +2492,12 @@ const syncLoop = async (
   };
   let restart = false;
 
-  const client = makeZcashClient(serverUrl, backend);
+  // bound to the run: a stop ends what is in flight and nothing more goes out,
+  // not even the rest of a pass already under way
+  const client = makeZcashClient(serverUrl, backend, signal);
   // proofs, the actions commitment and mempool watch are
   // zidecar's; on a standard lightwalletd this is undefined and none of them run
-  const zidecar = zidecarExtras(serverUrl, backend);
+  const zidecar = zidecarExtras(serverUrl, backend, signal);
 
   // Tree sizes give each found note its position. The note trees end at the
   // same sizes and the same height: both are written with every batch.

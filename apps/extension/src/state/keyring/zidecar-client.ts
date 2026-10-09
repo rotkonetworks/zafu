@@ -49,7 +49,11 @@ export interface LicenseInfo {
 export class ZidecarClient {
   private serverUrl: string;
 
-  constructor(serverUrl: string) {
+  /** `signal`: the run this client serves; once it aborts, nothing more goes out */
+  constructor(
+    serverUrl: string,
+    private readonly signal?: AbortSignal,
+  ) {
     this.serverUrl = serverUrl.replace(/\/$/, '');
   }
 
@@ -277,6 +281,7 @@ export class ZidecarClient {
     const { resp, body } = await grpcWebFetch(this.serverUrl, service, method, msg, {
       maxBytes,
       onHeaders,
+      signal: this.signal,
     });
     return grpcWebUnaryMessage(resp, body, method, this.serverUrl);
   }
@@ -289,7 +294,8 @@ export class ZidecarClient {
     service = 'zidecar.v1.Zidecar',
   ): Promise<Uint8Array> {
     const { body } = await grpcWebFetch(this.serverUrl, service, method, msg, {
-      signal,
+      signal:
+        signal && this.signal ? AbortSignal.any([signal, this.signal]) : (signal ?? this.signal),
     });
     return body;
   }
