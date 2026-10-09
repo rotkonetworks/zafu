@@ -31,22 +31,14 @@ export interface StrategyParams {
   readonly store: BucketStore;
   /** optional RNG override (tests). */
   readonly rng?: RandomU32;
-  /**
-   * predicate: if true for a given bucket, fetch it even when cached.
-   * used by callers (e.g. the worker) to force re-fetch of buckets that
-   * contain notes spent in this sync run so the OVK decode path can rediscover
-   * outgoing memos. defaults to () => false.
-   */
-  readonly alwaysFetch?: (bucket: number) => boolean;
 }
 
 export function buildStrategy(name: MemoSyncStrategy, params: StrategyParams): MemoFetcher {
-  const { base, store, rng, alwaysFetch } = params;
-  const cache = withBucketCache(store, { alwaysFetch });
+  const { base, store, rng } = params;
+  const cache = withBucketCache(store);
   // ordering note: filters are applied left-to-right, so the LAST entry is the
-  // outermost call-time wrapper. cache must be outermost so:
-  //   - it sees real-only input (never decoys) when deciding what to mark
-  //   - it strips already-cached real buckets before decoy widens the set
+  // outermost call-time wrapper. cache must be outermost so it sees real-only
+  // input (never decoys) when deciding what to mark
   // see strategy.ts header comment for call-time flow.
   switch (name) {
     case 'fast':
@@ -70,8 +62,8 @@ export function buildStrategy(name: MemoSyncStrategy, params: StrategyParams): M
  * call-time order is opposite: C runs first (outermost), then B, then A, then
  * base. for the 'private' stack `[concurrency, shuffle, decoy, cache]`:
  *
- *   call() → cache strips already-processed buckets from the REAL set
- *          → decoy adds random buckets (excluding cached real via excludeStore)
+ *   call() → cache passes the REAL set on
+ *          → decoy adds random buckets (excluding recorded real via excludeStore)
  *          → shuffle reorders the (real + decoy) set
  *          → concurrency annotates ctx
  *          → base fetches the survivors

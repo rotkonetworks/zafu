@@ -14,7 +14,7 @@ strategy.ts                  // buildStrategy('private' | 'fast', params)
 filters/
   shuffle.ts                 // randomize bucket fetch order
   decoy.ts                   // mix in N× random decoy buckets
-  cache.ts                   // skip / record processed buckets (IDB or memory)
+  cache.ts                   // record real buckets fetched (IDB or memory)
   concurrency.ts             // bound parallel fetches
 ```
 
@@ -74,10 +74,9 @@ breaking the public API.
   (innermost). Read the array as "innermost first."
 - **Cache vs decoy ordering**: `[cache, decoy, shuffle, concurrency]`
   means at call-time the call goes `concurrency → shuffle → decoy →
-cache → base`. Decoy adds random buckets, cache strips known ones
-  (real or decoy that collided with cached real). Collisions degrade the
-  3N count slightly but never re-fetch a bucket the server has already
-  seen.
+cache → base`. Decoy adds random buckets, never one the cache recorded
+  as real. A real bucket is fetched again when a new note lands in it:
+  skipping it would lose that note's memo.
 - **Why an async iterable**: lets the consumer process buckets as they
   arrive (display progress, persist memos incrementally) without
   buffering the whole batch in memory.

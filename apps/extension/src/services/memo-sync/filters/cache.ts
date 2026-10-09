@@ -1,81 +1,50 @@
 /**
- * withBucketCache - skip buckets already processed; mark new buckets after fetch.
+ * withBucketCache - record the real buckets fetched for a wallet.
  *
- * privacy + bandwidth: once a bucket has been fetched the server has seen it
- * tied to this wallet's session. fetching it again teaches nothing new, costs
- * bandwidth, and progressively narrows what the server can infer about which
- * buckets are real (real buckets get fetched once, decoy buckets are random
- * each time - so any bucket fetched twice is real). caching avoids that
- * fingerprint.
+ * the decoy filter reads the record (excludeStore) so a decoy never lands on
+ * a bucket this wallet already fetched for real: a bucket fetched as a decoy
+ * and again for real would mark itself as real.
  *
- * the cache is keyed by walletId, so multiple wallets sharing the same browser
- * don't leak each other's bucket sets via cross-cache hits.
+ * every bucket it is handed is fetched, even one fetched before: the caller
+ * passes only buckets holding a note whose memo is not read yet, and a new
+ * payment can land in a bucket fetched for an older one. skipping it lost
+ * that memo for good. fetching it again tells the server the bucket is real,
+ * which it could already guess from the first fetch; a lost memo is worse.
  *
- * the storage backend is injected as a BucketStore so unit tests can use an
- * in-memory map without touching IndexedDB.
+ * the record is keyed by walletId, so wallets sharing a browser don't leak
+ * each other's bucket sets.
  */
 
-import type { BucketStart, MemoFetcher, MemoFilter } from '../types';
+import type { BucketStart, MemoFilter } from '../types';
 
 export interface BucketStore {
-  /** return true if (walletId, bucket) has been processed already. */
+  /** return true if (walletId, bucket) has been fetched for real. */
   has(walletId: string, bucket: BucketStart): Promise<boolean>;
-  /** mark (walletId, bucket) processed. */
+  /** mark (walletId, bucket) fetched for real. */
   put(walletId: string, bucket: BucketStart): Promise<void>;
   /** read every bucket recorded for this wallet. used by decoy filter to skip. */
   list(walletId: string): Promise<ReadonlySet<BucketStart>>;
 }
 
-export interface BucketCacheOptions {
-  /**
-   * Optional predicate: if it returns true for a bucket, the bucket is fetched
-   * even if it's already in the cache. Used for cases where the same bucket
-   * needs revisiting under a different decode key (e.g. OVK decryption for
-   * outgoing memos at a spend-height bucket).
-   *
-   * The bucket is still recorded after fetch; the predicate just overrides
-   * the cache-hit short-circuit on input.
-   */
-  readonly alwaysFetch?: (bucket: BucketStart) => boolean;
-}
-
 export const withBucketCache =
-  (store: BucketStore, opts: BucketCacheOptions = {}): MemoFilter =>
-  (inner: MemoFetcher): MemoFetcher =>
+  (store: BucketStore): MemoFilter =>
+  inner =>
     async function* cached(walletId, ownedBuckets, ctx) {
-      const seen = await store.list(walletId);
-      const fresh = new Set<BucketStart>();
-      const alwaysFetch = opts.alwaysFetch;
-      for (const b of ownedBuckets) {
-        if (alwaysFetch?.(b) || !seen.has(b)) {
-          fresh.add(b);
-        }
-      }
-      if (fresh.size === 0) {
+      if (ownedBuckets.size === 0) {
         return;
       }
-
-      // we record only buckets we actually saw a successful event for AND that
-      // were in our own input set (= real-only when cache is outermost). this
-      // guarantees:
-      //   - errored buckets (no event yielded) are not cached, so the next
-      //     sync retries them naturally
-      //   - decoy buckets (added by inner filters, not in `fresh`) are never
-      //     recorded - keeping the decoy universe over [activation, tip] full
-      //     instead of monotonically shrinking
+      // recorded: buckets whose event arrived AND that were in our own input
+      // (real-only, as cache is outermost). an errored bucket yields no event
+      // and stays unrecorded; a decoy added by an inner filter is never
+      // recorded, keeping the decoy universe over [activation, tip] full
       const succeeded = new Set<BucketStart>();
-      for await (const event of inner(walletId, fresh, ctx)) {
-        if (fresh.has(event.bucketStart)) {
+      for await (const event of inner(walletId, ownedBuckets, ctx)) {
+        if (ownedBuckets.has(event.bucketStart)) {
           succeeded.add(event.bucketStart);
         }
         yield event;
       }
-
-      const tasks: Promise<void>[] = [];
-      for (const b of succeeded) {
-        tasks.push(store.put(walletId, b));
-      }
-      await Promise.all(tasks);
+      await Promise.all([...succeeded].map(b => store.put(walletId, b)));
     };
 
 // ────────────────────────────────────────────────────────────────────────
