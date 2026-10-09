@@ -385,6 +385,17 @@ describe('two optional services on one url', () => {
     });
   });
 
+  test('a blocked one refuses the shared url, even with the other allowed', () => {
+    const t = compileEgress({
+      netEgress: { optIns: { 'people-relay': 'allowed', 'contact-discovery': 'blocked' } },
+    });
+    expect(decideEgress(url, 'service-worker', t)).toMatchObject({
+      allow: false,
+      reason: 'blocked',
+      destination: 'contact-discovery',
+    });
+  });
+
   test('both rows list the host in settings', () => {
     const view = describeEgress({});
     for (const id of ['people-relay', 'contact-discovery']) {

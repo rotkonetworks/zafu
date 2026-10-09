@@ -175,8 +175,9 @@ export const decideEgress = (
     return { allow: true, host };
   }
   const ties = matchRules(table, url, realm);
-  // shared optional rules: the url passes when any of them is on
-  const rule = ties.find(r => r.allow) ?? ties[0];
+  // shared optional rules: a destination the person blocked refuses the url
+  // (a request cannot say which feature made it); otherwise it passes when any is on
+  const rule = ties.find(r => r.reason === 'blocked') ?? ties.find(r => r.allow) ?? ties[0];
   const destination = rule?.destination;
   const override = table.hosts[host];
   if (override === 'blocked' || rule?.reason === 'blocked') {
