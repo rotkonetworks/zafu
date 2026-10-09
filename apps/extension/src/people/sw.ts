@@ -47,6 +47,7 @@ import {
   PEOPLE_WATCH_PORT,
   type PeopleAsking,
 } from './protocol';
+import { onOnline } from '../sw-online';
 import { readRooms, readThreads, writeRooms, writeThreads, type PeopleRoom } from './vault';
 import {
   chain,
@@ -245,7 +246,7 @@ export const startPeopleRelay = (
   });
 
   // back online while people is open: what waited to leave goes now; closed, nothing runs
-  globalThis.addEventListener('online', () => {
+  onOnline(() => {
     if (service.active) {
       void service.flush().catch(() => undefined);
     }
