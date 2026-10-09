@@ -329,7 +329,7 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
             )}
             <div className='flex items-center justify-between px-3.5 py-2 text-sm'>
               <span className='text-fg-muted'>fee</span>
-              <span>{tx.feeAmount ?? '—'}</span>
+              <span>{tx.feeAmount ?? '-'}</span>
             </div>
           </RowGroup>
         )}
