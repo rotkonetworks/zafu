@@ -4,8 +4,6 @@
  */
 
 export interface GrpcWebCall {
-  /** headers added to the grpc-web ones */
-  headers?: Record<string, string>;
   /** refuse a response body past this size, before it is all read */
   maxBytes?: number;
   /** sees the response headers once the status is ok, before the body is read */
@@ -64,7 +62,7 @@ export const grpcWebFetch = async (
   service: string,
   method: string,
   msg: Uint8Array,
-  { headers, maxBytes = Infinity, onHeaders, signal }: GrpcWebCall = {},
+  { maxBytes = Infinity, onHeaders, signal }: GrpcWebCall = {},
 ): Promise<{ resp: Response; body: Uint8Array }> => {
   const resp = await fetch(`${baseUrl}/${service}/${method}`, {
     method: 'POST',
@@ -72,7 +70,6 @@ export const grpcWebFetch = async (
       'Content-Type': 'application/grpc-web+proto',
       Accept: 'application/grpc-web+proto',
       'x-grpc-web': '1',
-      ...headers,
     },
     body: grpcWebFrame(msg),
     signal,

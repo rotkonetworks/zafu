@@ -13,7 +13,6 @@ import { useStore } from '../state';
 import {
   selectEnabledNetworks,
   selectEffectiveKeyInfo,
-  selectGetMnemonic,
   selectGetVaultUnlock,
 } from '../state/keyring';
 import { keyInfoSupportsNetwork } from '../state/keyring/vault-ops';
@@ -28,9 +27,6 @@ import {
   isWalletSyncing,
 } from '../state/keyring/network-worker';
 import { ZCASH_ORCHARD_ACTIVATION } from '../config/networks';
-import { isPro } from '../state/license';
-import { deriveRingVrfSeed } from '../state/identity';
-import { ZidecarClient } from '../state/keyring/zidecar-client';
 import { zcashClient, type ZcashBackend } from '../state/keyring/zcash-backend';
 import { selectZcashBackend } from '../state/networks';
 import { isMempoolWatchEnabled } from '../services/mempool-watch/strategy';
@@ -76,7 +72,6 @@ export function useZcashAutoSync() {
     useStore(selectEnabledNetworks).includes('zcash') &&
     !!selectedKeyInfo &&
     keyInfoSupportsNetwork(selectedKeyInfo, 'zcash');
-  const getMnemonic = useStore(selectGetMnemonic);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
@@ -213,21 +208,6 @@ export function useZcashAutoSync() {
           if (cancelled) {
             return;
           }
-          // generate ring VRF session proof for pro priority sync (this still
-          // opens the phrase in the page; it moves with the ZID signers).
-          // The ring is zidecar's own rpc: never asked of any other node
-          if (isPro(useStore.getState()) && zcashBackend === 'zidecar') {
-            try {
-              const seed = deriveRingVrfSeed(await getMnemonic(walletId));
-              await useStore.getState().ringVrf.refreshRing(zidecarUrl, seed);
-              await useStore.getState().ringVrf.newSessionProof();
-              // inject proof headers into all ZidecarClient requests
-              ZidecarClient.extraHeaders = () => useStore.getState().ringVrf.getProofHeaders();
-            } catch {
-              /* ring VRF is optional - free tier still works */
-            }
-          }
-
           syncingWalletRef.current = storeId;
           syncEndpointRef.current = { endpoint: zidecarUrl, backend: zcashBackend };
           console.log('[zcash-sync] starting mnemonic sync for', storeId);
@@ -273,7 +253,6 @@ export function useZcashAutoSync() {
     walletId,
     storeId,
     pocketBirthday,
-    getMnemonic,
     getVaultUnlock,
     zidecarUrl,
     zcashBackend,

@@ -49,9 +49,6 @@ export interface LicenseInfo {
 export class ZidecarClient {
   private serverUrl: string;
 
-  /** optional callback that returns extra headers (ring VRF proof, etc.) */
-  static extraHeaders: (() => Record<string, string>) | null = null;
-
   constructor(serverUrl: string) {
     this.serverUrl = serverUrl.replace(/\/$/, '');
   }
@@ -82,12 +79,11 @@ export class ZidecarClient {
    * `consensusBranchId` is field 6 (hex string, no 0x prefix); the turnstile
    * builder fails closed unless it is the real NU6.3 branch id (0x37a5165b).
    */
-  async getLightdInfo({ bare = false }: { bare?: boolean } = {}): Promise<LightdInfo> {
+  async getLightdInfo(): Promise<LightdInfo> {
     const resp = await this.grpcCallService(
       'cash.z.wallet.sdk.rpc.CompactTxStreamer',
       'GetLightdInfo',
       new Uint8Array(0),
-      { bare },
     );
     return decodeLightdInfo(resp);
   }
@@ -270,19 +266,15 @@ export class ZidecarClient {
     method: string,
     msg: Uint8Array,
     {
-      bare = false,
       maxBytes = Infinity,
       onHeaders,
     }: {
-      /** only the grpc-web headers: for a node not yet known to be a zidecar */
-      bare?: boolean;
       /** refuse a response body past this size, before it is all read */
       maxBytes?: number;
       onHeaders?: (headers: Headers) => void;
     } = {},
   ): Promise<Uint8Array> {
     const { resp, body } = await grpcWebFetch(this.serverUrl, service, method, msg, {
-      headers: bare ? {} : (ZidecarClient.extraHeaders?.() ?? {}),
       maxBytes,
       onHeaders,
     });
@@ -297,7 +289,6 @@ export class ZidecarClient {
     service = 'zidecar.v1.Zidecar',
   ): Promise<Uint8Array> {
     const { body } = await grpcWebFetch(this.serverUrl, service, method, msg, {
-      headers: ZidecarClient.extraHeaders?.() ?? {},
       signal,
     });
     return body;
