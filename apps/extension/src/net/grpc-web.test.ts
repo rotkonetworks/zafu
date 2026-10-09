@@ -27,16 +27,15 @@ describe('grpcWebFetch', () => {
     expect(seen).toEqual(['x']);
   });
 
-  test('headers override in order: grpc-web defaults, then the caller', async () => {
+  test('sends only the grpc-web headers: no caller can add one', async () => {
     const fetch = vi.fn((_u: string, _i: RequestInit) => Promise.resolve(new Response('')));
     vi.stubGlobal('fetch', fetch);
-    await grpcWebFetch('https://n', 's', 'M', new Uint8Array(0), { headers: { a: 'b' } });
+    await grpcWebFetch('https://n', 's', 'M', new Uint8Array(0));
     expect(fetch.mock.calls[0]![0]).toBe('https://n/s/M');
     expect(fetch.mock.calls[0]![1].headers).toEqual({
       'Content-Type': 'application/grpc-web+proto',
       Accept: 'application/grpc-web+proto',
       'x-grpc-web': '1',
-      a: 'b',
     });
   });
 });
