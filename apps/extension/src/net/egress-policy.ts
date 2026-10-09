@@ -138,9 +138,9 @@ const tx = 'cosmos/tx/v1beta1/txs';
  * a cometbft node's `/`) instead of the path.
  *
  * Stay direct, on purpose: sync (every wallet downloads the same blocks, and
- * nym cannot stream), and the public reads that are the same for everyone
- * (thornode inbound_addresses, mimir, network, pools; 1click tokens; midgard
- * pools), which the swap screen reads on its critical path.
+ * nym cannot stream). A swap operator gets everything over nym, its public
+ * reads too: a read direct beside a quote over nym, at the same moment,
+ * would tie the two together by timing.
  *
  * zcash: only zidecar's grpc-web paths. nym's http client speaks http/1.1 and
  * a lightwalletd answers native grpc only over http/2 (measured: 404 through
@@ -193,28 +193,17 @@ const NYM_CLASSES: {
   },
   { cls: 'broadcast', destination: 'thorchain', paths: [`/${tx}`] },
   { cls: 'own-tx', destination: 'thorchain', paths: [`/${tx}/`, '/thorchain/tx/'] },
-  {
-    cls: 'names-you',
-    destination: 'thorchain',
-    paths: [
-      '/thorchain/quote/',
-      '/thorchain/pool/ZEC.ZEC/liquidity_provider',
-      '/cosmos/auth/v1beta1/accounts',
-      '/cosmos/bank/v1beta1/balances',
-      '/cosmos/tx/v1beta1/simulate',
-    ],
-  },
-  { cls: 'names-you', destination: 'midgard', paths: ['/v2/actions', '/v2/member'] },
-  { cls: 'names-you', destination: 'near-swap', paths: ['/v0/quote', '/v0/status', '/v0/deposit'] },
   // the vote servers see your vote arrive. pir hides what it is asked by design and
   // its answers can be large (nym moves about 11 KB/s), so it stays direct
   { cls: 'names-you', destination: 'voting', paths: ['/shielded-vote'] },
   // every request to these names you or what you look up
-  ...['zcash-me', 'peer', 'base', 'sponsor'].map(destination => ({
-    cls: 'names-you' as const,
-    destination,
-    paths: [''],
-  })),
+  ...['zcash-me', 'peer', 'base', 'sponsor', 'thorchain', 'midgard', 'near-swap'].map(
+    destination => ({
+      cls: 'names-you' as const,
+      destination,
+      paths: [''],
+    }),
+  ),
 ];
 
 /**
@@ -260,7 +249,7 @@ export const NYM_GROUPS: {
     id: 'swaps',
     label: 'swaps',
     on: true,
-    nym: 'quotes and swap sends',
+    nym: 'everything a swap asks',
     direct: 'the swap sees your ip and address',
     members: ['thorchain', 'midgard', 'near-swap'],
   },
