@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { PagePath } from '../paths';
 import { SEED_PHRASE_ORIGIN } from './password/types';
-import { PASSWORD_PATH, originOf, passwordStrength, penumbraOnlyImport, screenFor } from './flow';
+import {
+  PASSWORD_PATH,
+  originOf,
+  passwordStrength,
+  penumbraOnlyImport,
+  phraseNote,
+  screenFor,
+} from './flow';
 
 describe('onboarding flow', () => {
   it('walks back along each path to the welcome screen', () => {
@@ -61,5 +68,16 @@ describe('onboarding flow', () => {
     expect(screenFor(PagePath.IMPORT_PASSWORD).back).toBe(PagePath.IMPORT_BIRTHDAY);
     // other paths ignore the length
     expect(screenFor(PagePath.CREATE_PASSWORD, true).step).toEqual([1, 3]);
+  });
+
+  it('says a whole 12-word phrase opens penumbra only, in its one line', () => {
+    expect(phraseNote({ count: 12, whole: true, valid: true })).toBe(
+      '12 words · this phrase opens penumbra only',
+    );
+    expect(phraseNote({ count: 24, whole: true, valid: true })).toBe('24 words · valid phrase');
+    // not yet a phrase: nothing is promised about what it opens
+    expect(phraseNote({ count: 12, whole: true, valid: false })).toBe(
+      "these words don't form a phrase yet · please check the order",
+    );
   });
 });

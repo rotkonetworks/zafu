@@ -60,6 +60,33 @@ export const BIRTHDAY_PATH = {
 export const penumbraOnlyImport = (origin: SEED_PHRASE_ORIGIN, words: number) =>
   origin === SEED_PHRASE_ORIGIN.IMPORTED && words === 12;
 
+/** The one line under the phrase box: a typo and its fix, an order that is off, or what the phrase opens. */
+export const phraseNote = ({
+  count,
+  typo,
+  fix,
+  whole,
+  valid,
+}: {
+  count: number;
+  typo?: string;
+  fix?: string | null;
+  /** a whole phrase's worth of words */
+  whole: boolean;
+  valid: boolean;
+}): string =>
+  typo
+    ? `"${typo}" is not a recovery word${fix ? ` · did you mean ${fix}? (tap to fix)` : ''}`
+    : whole && !valid
+      ? "these words don't form a phrase yet · please check the order"
+      : valid
+        ? count === 12
+          ? '12 words · this phrase opens penumbra only'
+          : `${count} words · valid phrase`
+        : count
+          ? `${count} words`
+          : '24 words';
+
 export type BirthdayOrigin = keyof typeof BIRTHDAY_PATH;
 
 export const birthdayOriginOf = (pathname: string): BirthdayOrigin | undefined =>
