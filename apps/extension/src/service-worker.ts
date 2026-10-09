@@ -15,6 +15,7 @@
 // file's note on asyncWebAssembly deferring the entry body).
 import './net/egress-install';
 import './install-global-error-handlers';
+import './sw-online';
 
 // listeners
 import { contentScriptConnectListener } from './message/listen/content-script-connect';
