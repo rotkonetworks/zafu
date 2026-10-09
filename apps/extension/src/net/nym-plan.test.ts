@@ -15,7 +15,7 @@ describe('transportFor: every combination of the layers', () => {
     groupDefault: [true, false, undefined] as const,
     destinationOn: bools,
     names: bools,
-    exitPort: bools,
+    reachable: bools,
   });
 
   it.each(rows)('%o', (c: TransportCtx) => {
@@ -23,14 +23,14 @@ describe('transportFor: every combination of the layers', () => {
     const wanted = c.choice ? c.choice === 'allowed' : !!c.groupDefault;
     const expected = !c.destinationOn
       ? 'off'
-      : c.master && c.names && c.exitPort && wanted
+      : c.master && c.names && c.reachable && wanted
         ? 'nym'
         : 'direct';
     expect(transportFor(c)).toBe(expected);
   });
 
   it('a hard deny always wins over a network turned on', () => {
-    const on = { choice: 'allowed', groupDefault: true, names: true, exitPort: true } as const;
+    const on = { choice: 'allowed', groupDefault: true, names: true, reachable: true } as const;
     expect(transportFor({ ...on, master: false, destinationOn: true })).toBe('direct');
     expect(transportFor({ ...on, master: true, destinationOn: false })).toBe('off');
     expect(transportFor({ ...on, master: true, destinationOn: true })).toBe('nym');

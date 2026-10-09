@@ -38,6 +38,7 @@ import { BUNDLED_SERVICE_CONFIG } from '../services/voting/bundled-config';
 import { BASE_RPC, PEER_HOSTS } from '../config/ramps';
 import { PAY_APPS } from '../buy/apps';
 import { hostOf } from './destination';
+import { backendKey, backendOfEndpoint, isZcashBackend } from '../state/keyring/zcash-backend';
 import {
   matchRules,
   type EgressRealm,
@@ -71,6 +72,7 @@ export const EGRESS_INPUT_KEYS: string[] = [
   'keplrCompat',
   'zcashWallets',
   'vaults',
+  'zcashBackends',
   PEOPLE_RELAY_KEY,
   ...Object.keys(COSMOS_CHAINS).map(rpcPoolKey),
 ];
@@ -95,6 +97,8 @@ export interface EgressInputs {
   vaults?: { type?: unknown; insensitive?: { relayUrl?: unknown } }[];
   /** the people relay's default and the other relays the person allowed */
   peopleRelay?: PeopleRelaySetting;
+  /** what each zcash node said it is, by `backendKey` */
+  zcashBackends?: Record<string, unknown>;
 }
 
 /**
@@ -123,6 +127,8 @@ export interface DestinationSpec {
   realm?: EgressRealm;
   /** shares the nym rows of its family (every cosmos chain's nodes) */
   family?: string;
+  /** whether the node at `url` speaks what nym carries; every one does unless said */
+  overNym?: (i: EgressInputs, url: string) => boolean;
 }
 
 /** every cosmos chain's nodes share these rows */
@@ -286,17 +292,6 @@ export const NYM_KEEP_READY = 'nym-ready';
 
 type NymGroup = (typeof NYM_GROUPS)[number];
 
-/** a network's own choice, everything else aside: what its sheet row shows */
-export const nymGroupOn = (i: EgressInputs, group: NymGroup): boolean =>
-  transportFor({
-    groupDefault: group.on,
-    choice: i.netEgress?.optIns?.[nymGroupKey(group.id)],
-    names: true,
-    exitPort: true,
-    master: true,
-    destinationOn: true,
-  }) === 'nym';
-
 const groupOf = (spec: DestinationSpec): NymGroup | undefined =>
   NYM_GROUPS.find(
     g => g.members.includes(spec.id) || (!!spec.family && g.members.includes(spec.family)),
@@ -308,6 +303,38 @@ const NYM_EXIT_PORTS = new Set(['443', '80', '81', '9001']);
 const portOf = (url: string): string => {
   const u = new URL(url);
   return u.port || (u.protocol === 'http:' || u.protocol === 'ws:' ? '80' : '443');
+};
+
+/** nym can carry a request to this node: the port is open at the exits, and the node speaks it */
+const nymReaches = (spec: DestinationSpec, i: EgressInputs, url: string): boolean =>
+  NYM_EXIT_PORTS.has(portOf(url)) && (spec.overNym?.(i, url) ?? true);
+
+/** what a network's sheet row shows: the person's choice, and whether nym can carry it */
+export type NymGroupView = 'nym' | 'direct' | 'unreachable';
+
+export const nymGroupView = (i: EgressInputs, group: NymGroup): NymGroupView => {
+  const chosen =
+    transportFor({
+      groupDefault: group.on,
+      choice: i.netEgress?.optIns?.[nymGroupKey(group.id)],
+      names: true,
+      reachable: true,
+      master: true,
+      destinationOn: true,
+    }) === 'nym';
+  const reached = DESTINATIONS.filter(s => groupOf(s) === group && stateOf(s, i).on).every(s =>
+    (urlsOf(s, i) ?? []).every(u => !u || !hostOf(u) || nymReaches(s, i, u)),
+  );
+  return !chosen ? 'direct' : reached ? 'nym' : 'unreachable';
+};
+
+/**
+ * zidecar answers grpc-web over http/1.1; a lightwalletd answers native grpc
+ * only over http/2, which nym's client does not speak (measured: 404).
+ */
+const zcashOverNym = (i: EgressInputs, url: string): boolean => {
+  const told = i.zcashBackends?.[backendKey(url)];
+  return (isZcashBackend(told) ? told : backendOfEndpoint(url)) === 'zidecar';
 };
 
 /** the user's own rpc pool for a chain: what its balance checks rotate across */
@@ -387,6 +414,7 @@ export const DESTINATIONS: DestinationSpec[] = [
     purpose: 'chain-rpc',
     gate: { kind: 'network', networks: ['zcash'] },
     urls: i => [zcashEndpoint(i)],
+    overNym: zcashOverNym,
   },
   {
     id: 'penumbra',
@@ -583,6 +611,16 @@ onCosmosChainsAdded(ids => {
   }
 });
 
+/** a destination's urls; one malformed input must not cost every other destination its row */
+const urlsOf = (spec: DestinationSpec, i: EgressInputs): (string | undefined)[] | undefined => {
+  try {
+    return spec.urls(i);
+  } catch (e) {
+    console.warn(`[egress] could not resolve ${spec.id}:`, e);
+    return undefined;
+  }
+};
+
 export const destinationSpec = (id: string): DestinationSpec | undefined =>
   DESTINATIONS.find(d => d.id === id);
 
@@ -689,12 +727,8 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
   for (const spec of DESTINATIONS) {
     const { on, why } = stateOf(spec, i);
     const group = groupOf(spec);
-    // one malformed input must not cost every other destination its row
-    let urls: (string | undefined)[];
-    try {
-      urls = spec.urls(i);
-    } catch (e) {
-      console.warn(`[egress] could not resolve ${spec.id}:`, e);
+    const urls = urlsOf(spec, i);
+    if (!urls) {
       continue;
     }
     for (const url of urls) {
@@ -714,7 +748,7 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
           groupDefault: group?.on,
           choice: group && i.netEgress?.optIns?.[nymGroupKey(group.id)],
           names: true,
-          exitPort: NYM_EXIT_PORTS.has(portOf(url!)),
+          reachable: nymReaches(spec, i, url!),
           master: nym,
           destinationOn: on,
         });

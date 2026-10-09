@@ -15,8 +15,13 @@ import { useEffect, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
-import { EGRESS_INPUT_KEYS, type DestinationView } from '../../../net/egress-policy';
-import { readEgressView } from '../../../net/egress-opt-in';
+import {
+  describeEgress,
+  EGRESS_INPUT_KEYS,
+  type DestinationView,
+  type EgressInputs,
+} from '../../../net/egress-policy';
+import { readEgressInputs } from '../../../net/egress-opt-in';
 import type { NetEgressState } from '../../../net/destination';
 import { readNetEgress, setDestinationDecision, setDestinationOptIn } from '../../../net/ledger';
 import { SettingsScreen } from './settings-screen';
@@ -25,6 +30,7 @@ import { ExplainSheet, useExplain, type Explain } from './settings-explain';
 import { SendOverNymRows } from './nym-rows';
 
 interface Connections {
+  inputs: EgressInputs;
   destinations: DestinationView[];
   ledger: NetEgressState;
 }
@@ -35,8 +41,8 @@ const useConnections = (): Connections | undefined => {
   useEffect(() => {
     const keys = new Set<string>(EGRESS_INPUT_KEYS);
     const load = () =>
-      void Promise.all([readEgressView(), readNetEgress()]).then(([destinations, ledger]) =>
-        setState({ destinations, ledger }),
+      void Promise.all([readEgressInputs(), readNetEgress()]).then(([inputs, ledger]) =>
+        setState({ inputs, destinations: describeEgress(inputs), ledger }),
       );
     const onChanged = (changes: Record<string, unknown>, area: string) => {
       if (area === 'local' && Object.keys(changes).some(k => keys.has(k))) {
@@ -132,7 +138,11 @@ export const SettingsConnections = () => {
         <section>
           <p className='kicker mb-2'>how sends travel</p>
           <RowGroup>
-            <SendOverNymRows optIns={data.ledger.optIns} {...explainProps('privacy.sendOverNym')} />
+            <SendOverNymRows
+              optIns={data.ledger.optIns}
+              inputs={data.inputs}
+              {...explainProps('privacy.sendOverNym')}
+            />
           </RowGroup>
         </section>
 
