@@ -21,6 +21,8 @@ export const NYM = 'nym';
 export const NYM_CHANNEL = 'zafu-nym';
 /** the tunnel worker's name: its egress realm is `nym` */
 export const NYM_WORKER_NAME = 'zafu-nym';
+/** a runtime message: the tunnel asks the service worker's plan before it starts */
+export const NYM_MAY_START = 'zafu_nym_may_start';
 
 /**
  * How long a request keeps trying routes. A broadcast that still has no

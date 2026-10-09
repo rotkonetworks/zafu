@@ -19,7 +19,13 @@
 import { wrap, type Remote } from 'comlink';
 import type { IMixTunnelWorker } from '@nymproject/mix-tunnel';
 import { checkEgress, EgressBlockedError, nymRoutingOn } from './egress';
-import { NYM_CHANNEL, NYM_WORKER_NAME, type NymMessage, type NymRequestInit } from './nym-bridge';
+import {
+  NYM_CHANNEL,
+  NYM_MAY_START,
+  NYM_WORKER_NAME,
+  type NymMessage,
+  type NymRequestInit,
+} from './nym-bridge';
 
 const channel = new BroadcastChannel(NYM_CHANNEL);
 const say = (m: NymMessage): void => channel.postMessage(m);
@@ -36,6 +42,8 @@ let clientId: string | undefined;
 /** the ready tunnel */
 let tunnel: Remote<IMixTunnelWorker> | undefined;
 let starting: Promise<void> | undefined;
+/** starts still asking whether they may: none of them is a "down" yet */
+let asking = 0;
 /** bumped by a stop: a start that was overtaken gives up */
 let generation = 0;
 /** requests inside the tunnel: a dropped route answers them as failed, so their callers retry */
@@ -115,17 +123,34 @@ const startOnce = async (): Promise<Remote<IMixTunnelWorker> | undefined> => {
   }
 };
 
+/** the service worker's plan allows a start (not locked, nym on); no answer is no */
+const planAllows = async (): Promise<boolean> => {
+  try {
+    return (await chrome.runtime.sendMessage({ type: NYM_MAY_START })) === true;
+  } catch {
+    return false;
+  }
+};
+
 /** start the tunnel if any of `via` sends over nym and it is not up; resolves once it is ready or down */
 export const startNymTunnel = async (why = 'asked', via: string[] = []): Promise<void> => {
   if (tunnel) {
     return;
   }
-  if (!starting && !(await nymRoutingOn(via))) {
+  asking++;
+  let allowed = false;
+  try {
+    allowed = !starting && (await nymRoutingOn(via)) && (await planAllows());
+  } finally {
+    asking--;
+  }
+  // another start may be asking or under way: it speaks for the tunnel
+  if (!allowed && !tunnel && !starting && asking === 0) {
     // a request already waiting for the tunnel fails now, not at the end of its bound
     say({ type: 'state', ready: false, down: true });
     return;
   }
-  if (!tunnel && !starting) {
+  if (allowed && !tunnel && !starting) {
     console.info(`[nym] starting: ${why}`);
     const gen = generation;
     const t0 = performance.now();
