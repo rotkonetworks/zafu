@@ -1,8 +1,9 @@
 /**
  * Enter a recovery phrase - Onb7Paste board. One box for the 24 words,
- * pasted or typed, any spacing. A 12-word phrase is accepted quietly for
- * people coming from a penumbra wallet, but never advertised. A typo gets one calm line with the nearest
- * word, and tapping it applies the fix. The board's "paste" button would
+ * pasted or typed, any spacing. A 12-word phrase is accepted for people
+ * coming from a penumbra wallet; once it is whole, its line says it opens
+ * penumbra only. A typo gets one calm line with the nearest word, and
+ * tapping it applies the fix. The board's "paste" button would
  * need clipboard-read permission, so a native paste stands in for it.
  */
 
@@ -21,6 +22,7 @@ import {
 import { usePageNav } from '../../../utils/navigate';
 import { PagePath } from '../paths';
 import { PENDING_ZCASH_BIRTHDAY_KEY } from './constants';
+import { phraseNote } from './flow';
 
 const LENGTHS = [12, 24];
 
@@ -49,15 +51,7 @@ export const ImportSeedPhrase = () => {
 
   const whole = LENGTHS.includes(words.length);
   const tone = typo ? 'warn' : valid ? 'ok' : 'idle';
-  const note = typo
-    ? `"${typo}" is not a recovery word${fix ? ` · did you mean ${fix}? (tap to fix)` : ''}`
-    : whole && !valid
-      ? "these words don't form a phrase yet · please check the order"
-      : valid
-        ? `${words.length} words · valid phrase`
-        : words.length
-          ? `${words.length} words`
-          : '24 words';
+  const note = phraseNote({ count: words.length, typo, fix, whole, valid });
 
   const applyFix = () => fix && write(words.map(w => (w === typo ? fix : w)).join(' '));
 
