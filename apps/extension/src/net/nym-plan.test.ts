@@ -38,15 +38,28 @@ describe('transportFor: every combination of the layers', () => {
 });
 
 describe('nymPlan: every combination of the layers', () => {
-  const rows = cartesian({ keepReady: bools, carries: bools, master: bools, unlocked: bools });
+  const rows = cartesian({
+    keepReady: bools,
+    up: bools,
+    carries: bools,
+    master: bools,
+    unlocked: bools,
+  });
 
   it.each(rows)('%o', (c: PlanCtx) => {
-    const expected = !c.unlocked || !c.master || !c.carries ? 'down' : c.keepReady ? 'up' : 'leave';
+    const expected =
+      !c.unlocked || !c.master || !c.carries
+        ? 'down'
+        : c.keepReady
+          ? 'up'
+          : c.up
+            ? 'idle'
+            : 'leave';
     expect(nymPlan(c)).toBe(expected);
   });
 
   it('locked, or the master off, stops it whatever else is on', () => {
-    const on = { keepReady: true, carries: true };
+    const on = { keepReady: true, up: true, carries: true };
     expect(nymPlan({ ...on, master: true, unlocked: false })).toBe('down');
     expect(nymPlan({ ...on, master: false, unlocked: true })).toBe('down');
   });

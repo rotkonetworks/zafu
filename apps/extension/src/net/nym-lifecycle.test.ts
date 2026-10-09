@@ -13,7 +13,7 @@ vi.mock('./egress', () => ({
 vi.mock('./nym-bridge', () => ({
   NYM_MAY_START: 'zafu_nym_may_start',
   ensureNym: () => Promise.resolve(void calls.push('start')),
-  postNym: (m: { type: string }) => calls.push(m.type),
+  postNym: (m: { type: string; idle?: true }) => calls.push(m.idle ? `${m.type}-idle` : m.type),
 }));
 
 let session: Record<string, unknown> = {};
@@ -71,6 +71,18 @@ describe('the nym lifecycle at the edge', () => {
     expect(calls).toEqual([]);
     nym.lastWindowClosed();
     expect(calls).toEqual(['stop']);
+  });
+
+  it('kept ready turned off while up: the idle tunnel goes, then on demand', async () => {
+    const nym = startNymLifecycle();
+    await lock(true);
+    publish(table({}));
+    publish(table({ nymKeepReady: false }));
+    expect(calls).toEqual(['start', 'stop-idle']);
+    // back to on demand: nothing more until a window closes
+    publish(table({ nymKeepReady: false }));
+    nym.lastWindowClosed();
+    expect(calls).toEqual(['start', 'stop-idle', 'stop']);
   });
 
   it('stops when nothing sends over nym any more', async () => {

@@ -48,6 +48,8 @@ let asking = 0;
 let generation = 0;
 /** requests inside the tunnel: a dropped route answers them as failed, so their callers retry */
 const inFlight = new Set<string>();
+/** no longer kept ready: stop once the last request inside has its answer */
+let idleStop = false;
 
 const spawn = (): Promise<Remote<IMixTunnelWorker>> =>
   new Promise((resolve, reject) => {
@@ -134,6 +136,8 @@ const planAllows = async (): Promise<boolean> => {
 
 /** start the tunnel if any of `via` sends over nym and it is not up; resolves once it is ready or down */
 export const startNymTunnel = async (why = 'asked', via: string[] = []): Promise<void> => {
+  // asked for again: whatever wanted it gone has been overtaken
+  idleStop = false;
   if (tunnel) {
     return;
   }
@@ -179,10 +183,20 @@ export const startNymTunnel = async (why = 'asked', via: string[] = []): Promise
 };
 
 export const stopNymTunnel = (): void => {
+  idleStop = false;
   generation++;
   starting = undefined;
   drop();
   say({ type: 'state', ready: false });
+};
+
+/** stop now if nothing is inside or starting, else once the last request inside is answered */
+const stopWhenIdle = (): void => {
+  if (inFlight.size === 0 && !starting) {
+    stopNymTunnel();
+    return;
+  }
+  idleStop = true;
 };
 
 /** a request inside this tunnel got no answer: drop the route and take a fresh one */
@@ -215,6 +229,9 @@ const relay = async (id: string, url: string, init: NymRequestInit): Promise<voi
     if (inFlight.delete(id)) {
       say({ type: 'response', id, ...reply });
     }
+    if (idleStop && inFlight.size === 0) {
+      stopNymTunnel();
+    }
   } catch (e) {
     if (inFlight.delete(id)) {
       say({ type: 'failed', id, message: e instanceof Error ? e.message : String(e), route: true });
@@ -230,7 +247,7 @@ const relay = async (id: string, url: string, init: NymRequestInit): Promise<voi
 const handlers: { [K in NymMessage['type']]?: (m: Extract<NymMessage, { type: K }>) => void } = {
   start: m => void startNymTunnel(m.via?.join(' ') || 'asked', m.via),
   ping: () => say({ type: 'state', ready: !!tunnel }),
-  stop: stopNymTunnel,
+  stop: m => (m.idle ? stopWhenIdle() : stopNymTunnel()),
   reroute: m => reroute(m.id),
   fetch: m => void relay(m.id, m.url, m.init),
 };

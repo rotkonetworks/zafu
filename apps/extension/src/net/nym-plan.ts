@@ -48,12 +48,17 @@ export const transportFor = fold<TransportCtx, Transport>('direct', [
   (c, d) => (c.destinationOn ? d : 'off'),
 ]);
 
-/** `up`: keep the tunnel running; `leave`: on demand, as asked; `down`: stop it */
-export type NymPlan = 'up' | 'leave' | 'down';
+/**
+ * `up`: keep the tunnel running; `leave`: on demand, as asked; `idle`: no
+ * longer kept ready, so stop it once nothing is inside; `down`: stop it
+ */
+export type NymPlan = 'up' | 'leave' | 'idle' | 'down';
 
 export interface PlanCtx {
   /** "keep nym ready while unlocked", per device */
   keepReady: boolean;
+  /** the plan in force keeps the tunnel up */
+  up: boolean;
   /** some enabled network or service sends over nym right now */
   carries: boolean;
   master: boolean;
@@ -63,6 +68,8 @@ export interface PlanCtx {
 export const nymPlan = fold<PlanCtx, NymPlan>('leave', [
   // per-device choice
   (c, d) => (c.keepReady ? 'up' : d),
+  // the choice turned off while kept ready: the idle tunnel it kept goes
+  (c, d) => (d === 'leave' && c.up ? 'idle' : d),
   // per-network choice: nothing uses it
   (c, d) => (c.carries ? d : 'down'),
   // hard
