@@ -8,6 +8,9 @@ import { LocalChannel } from './local-channel.testkit';
 import type { NymMessage } from './nym-bridge';
 
 let routing = true;
+/** the service worker's plan: false while locked */
+let planAllows = true;
+const asked: unknown[] = [];
 const setup = vi.fn((_opts: Record<string, unknown>): Promise<void> => Promise.resolve());
 const mixFetch = vi.fn((): Promise<unknown> => new Promise(() => undefined));
 vi.mock('./egress', () => ({
@@ -40,6 +43,16 @@ const deleted: string[] = [];
 beforeEach(() => {
   vi.resetModules();
   routing = true;
+  planAllows = true;
+  asked.length = 0;
+  vi.stubGlobal('chrome', {
+    runtime: {
+      sendMessage: (m: unknown) => {
+        asked.push(m);
+        return Promise.resolve(planAllows);
+      },
+    },
+  });
   spawned.length = 0;
   deleted.length = 0;
   setup.mockReset();
@@ -79,6 +92,36 @@ describe('the nym tunnel', () => {
     await vi.waitFor(() =>
       expect(heard).toContainEqual({ type: 'state', ready: false, down: true }),
     );
+    peer.close();
+  });
+
+  it("refuses to start while the service worker's plan says down (locked), and says down", async () => {
+    planAllows = false;
+    const { heard, peer } = listen();
+    const host = await import('./nym-host');
+    await host.startNymTunnel();
+    expect(asked).toEqual([{ type: 'zafu_nym_may_start' }]);
+    expect(spawned).toHaveLength(0);
+    await vi.waitFor(() =>
+      expect(heard).toContainEqual({ type: 'state', ready: false, down: true }),
+    );
+    // a send's retry asking again while locked starts nothing either
+    peer.postMessage({ type: 'start', via: ['zcash'] });
+    await vi.waitFor(() => expect(asked).toHaveLength(2));
+    expect(spawned).toHaveLength(0);
+    peer.close();
+  });
+
+  it('a start nym does not carry says nothing while another start is under way', async () => {
+    const { heard, peer } = listen();
+    const host = await import('./nym-host');
+    const carried = host.startNymTunnel('send', ['zcash']);
+    routing = false;
+    await host.startNymTunnel('swap', ['thorchain']);
+    await carried;
+    expect(spawned).toHaveLength(1);
+    await vi.waitFor(() => expect(heard).toContainEqual({ type: 'state', ready: true }));
+    expect(heard).not.toContainEqual({ type: 'state', ready: false, down: true });
     peer.close();
   });
 
