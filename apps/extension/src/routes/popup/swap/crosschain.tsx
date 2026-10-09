@@ -35,8 +35,9 @@ import { selectActiveZcashWallet } from '../../../state/wallets';
 import { zcashViewKey } from '../../../state/zcash-view-key';
 import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
 import { CAPS, walletKind } from '../../../signing/wallet-kind';
-import { isEgressBlocked } from '../../../net/egress';
+import { isEgressBlocked, refreshEgress } from '../../../net/egress';
 import { requestEgressOptIn } from '../../../net/egress-opt-in';
+import { setDestinationOptIn } from '../../../net/ledger';
 import { EgressBlockedStatus } from '../../../shared/components/egress-blocked-status';
 import { useActiveAddress } from '../../../hooks/use-address';
 import { useSwapTAddress, type SwapTAddress } from '../../../hooks/use-transparent-addresses';
@@ -96,6 +97,7 @@ import {
   SWAP_EGRESS,
   WAIT,
   watchEgress,
+  type Gate,
 } from '../../../state/swap/live';
 import { NeedsRefundAddress } from '../../../state/swap/near';
 import {
@@ -416,6 +418,16 @@ const RouteMeta = ({
  * One route on one line: its name, then its price or why it has none. While
  * its request is out, a thin gold line fills over the route's real wait.
  */
+/**
+ * A route's line, tapped: one turned down at the first ask is asked again only
+ * on its own tap; one the person turned off is turned on at once, and the
+ * screen asks it once the egress view changes (watchEgress).
+ */
+const TAP: Record<NonNullable<Gate['tap']>, (egress: string) => Promise<unknown>> = {
+  ask: requestEgressOptIn,
+  'turn-on': egress => setDestinationOptIn(egress, 'allowed').then(refreshEgress),
+};
+
 const RouteLine = ({
   route,
   line,
@@ -811,6 +823,7 @@ export const CrosschainSwap = ({
     .map(g => {
       const a = answerOf(g.route);
       const q = a?.data;
+      const tap = g.tap && TAP[g.tap];
       return {
         route: g.route,
         line: q
@@ -821,9 +834,8 @@ export const CrosschainSwap = ({
         stale: !!a?.isPlaceholderData || !!a?.isFetching,
         onPress: q
           ? () => setRoutesOpen(true)
-          : // a route turned down at the first ask is asked again only on its own tap
-            g.ask
-            ? () => void requestEgressOptIn(ROUTES[g.route].egress)
+          : tap
+            ? () => void tap(ROUTES[g.route].egress)
             : // near wants a refund address: choosing it brings the field back
               a?.error instanceof NeedsRefundAddress
               ? () => setPicked(g.route)

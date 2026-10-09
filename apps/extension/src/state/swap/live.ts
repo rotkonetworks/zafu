@@ -53,8 +53,8 @@ export const SWAP_EGRESS = QUOTABLE.map(id => ROUTES[id].egress);
 export interface Gate {
   route: RouteId;
   line?: string;
-  /** not asked yet: a tap asks once */
-  ask?: true;
+  /** what a tap on the line does: `ask` once (not asked yet), or `turn-on` what the person turned off */
+  tap?: 'ask' | 'turn-on';
 }
 
 /** a route's refusal as its row says it: plain words, without its own name */
@@ -84,8 +84,10 @@ export const gates = (
       : view?.on
         ? { route }
         : view?.why === 'default-off'
-          ? { route, line: 'ask for a price', ask: true }
-          : { route, line: 'off in settings' };
+          ? { route, line: 'ask for a price', tap: 'ask' }
+          : view?.why === 'you-blocked'
+            ? { route, line: 'off for now · turn on', tap: 'turn-on' }
+            : { route, line: 'off in settings' };
   });
 
 export const pairOf = ({ direction, token }: Pick<QuoteRequest, 'direction' | 'token'>) => ({

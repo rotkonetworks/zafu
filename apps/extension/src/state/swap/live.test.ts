@@ -229,14 +229,18 @@ describe('routes that cannot quote', () => {
     ).toBe('could not quote this right now');
   });
 
-  it('a pair a route does not trade, a route not asked yet, a blocked one: each a quiet line', () => {
+  it('a pair a route does not trade, a route not asked yet, one turned off: each a quiet line', () => {
     expect(gates(pair, egress.views as never)).toEqual([
       { route: 'near' },
-      { route: 'thor', line: 'ask for a price', ask: true },
+      { route: 'thor', line: 'ask for a price', tap: 'ask' },
     ]);
     expect(
       gates(pair, [view('near-swap', true), view('thorchain', false, 'you-blocked')] as never),
-    ).toEqual([{ route: 'near' }, { route: 'thor', line: 'off in settings' }]);
+    ).toEqual([
+      { route: 'near' },
+      // turned off by the person: off, and one tap turns it on again
+      { route: 'thor', line: 'off for now · turn on', tap: 'turn-on' },
+    ]);
     expect(
       gates({ direction: 'from_zec', symbol: 'sol', chain: 'sol' }, egress.views as never)[1],
     ).toMatchObject({ route: 'thor', line: "doesn't trade sol on sol · near intents may" });
