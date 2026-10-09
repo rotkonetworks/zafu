@@ -118,6 +118,10 @@ describe('the ask sheet', () => {
   });
 
   it('lets the feature succeed after allow, through the real fetch guard', async () => {
+    // a swap operator goes over nym when it is on; this looks at the opt-in alone
+    const { setDestinationOptIn } = await import('./ledger');
+    await setDestinationOptIn('nym', 'blocked');
+    await egress.refreshEgress();
     await expect(fetch('https://1click.chaindefuser.com/v0/tokens')).rejects.toThrow(
       /did not contact/,
     );
