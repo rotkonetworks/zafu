@@ -47,24 +47,16 @@ describe('withBucketCache', () => {
     expect(seen).toEqual(owned);
   });
 
-  test('second call with same buckets short-circuits (no inner call)', async () => {
-    const store = memoryBucketStore();
-    const { fetcher, calls } = recorder();
-    const wrapped = withBucketCache(store)(fetcher);
-    const owned = new Set([100, 200, 300]);
-    await drain(wrapped('w', owned, ctx()));
-    await drain(wrapped('w', owned, ctx()));
-    expect(calls).toHaveLength(1);
-  });
-
-  test('second call with overlap only fetches new buckets', async () => {
+  test('a bucket fetched before is fetched again: a new note landed in it', async () => {
+    // the caller hands in only buckets holding a note whose memo is unread, so
+    // a recorded bucket here means a later payment in the same 100 blocks
     const store = memoryBucketStore();
     const { fetcher, calls } = recorder();
     const wrapped = withBucketCache(store)(fetcher);
     await drain(wrapped('w', new Set([100, 200]), ctx()));
-    await drain(wrapped('w', new Set([100, 200, 300, 400]), ctx()));
+    await drain(wrapped('w', new Set([200, 300]), ctx()));
     expect(calls).toHaveLength(2);
-    expect(new Set(calls[1])).toEqual(new Set([300, 400]));
+    expect(new Set(calls[1])).toEqual(new Set([200, 300]));
   });
 
   test('cache is keyed per wallet', async () => {

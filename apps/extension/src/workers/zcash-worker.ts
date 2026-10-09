@@ -34,6 +34,7 @@ import {
 } from '../state/keyring/zcash-backend';
 import { eachAddress } from '../state/keyring/each-address';
 import { txidMemoFetcher } from '../services/memo-sync/txid-fetcher';
+import { afterPass } from '../services/memo-sync/read';
 import { COMPACT_SIGN_REQUEST } from '../config/feature-flags';
 import {
   cborWrapPczt,
@@ -4735,14 +4736,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           });
         }
 
-        // ── build the memo-sync strategy ──
-        // spent buckets must always be fetched (OVK path), so we pass that
-        // info to the cache filter via alwaysFetch.
-        const spentBuckets = new Set<MemoBucketStart>();
-        for (const h of spentHeights) {
-          spentBuckets.add(bucketOf(h));
-        }
-
         const memoClient = makeZcashClient(memoServerUrl);
         const memoZidecar = zidecarExtras(memoServerUrl, lookupBackend(memoServerUrl));
         const { height: currentTip } = await memoClient.getTip();
@@ -4769,7 +4762,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 bucketSize: MEMO_BUCKET_SIZE,
               }),
               store: idbBucketStore({ open: () => Promise.resolve(db) }),
-              alwaysFetch: b => spentBuckets.has(b),
             })
           : txidMemoFetcher(memoClient, ownTxids);
 
@@ -4879,27 +4871,25 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
         }
 
-        // persist all scanned note txids + spent_by_txids so we don't re-scan next time
-        const allScanned = new Set(scannedTxids);
-        for (const n of notesToProcess) {
-          if (n.txid) {
-            allScanned.add(n.txid);
-          }
-        }
-        for (const n of memoNotes) {
-          if (n.spent_by_txid && !unmined.has(n.spent_by_txid)) {
-            allScanned.add(n.spent_by_txid);
-          }
-        }
+        // a found memo is read again until the page has stored it (see afterPass)
+        const pass = afterPass({
+          scanned: scannedTxids,
+          read: [
+            ...notesToProcess.flatMap(n => (n.txid ? [n.txid] : [])),
+            ...memoNotes.flatMap(n =>
+              n.spent_by_txid && !unmined.has(n.spent_by_txid) ? [n.spent_by_txid] : [],
+            ),
+          ],
+          found: results,
+          unmined: unmined.size,
+        });
         await new Promise<void>((resolve, reject) => {
           const tx = db.transaction('memo-cache', 'readwrite');
-          const req = tx.objectStore('memo-cache').put([...allScanned], scannedKey);
+          const req = tx.objectStore('memo-cache').put([...pass.scanned], scannedKey);
           req.onsuccess = () => resolve();
           req.onerror = () => reject(req.error);
         });
-        // a spend's height can arrive without any note being found or spent,
-        // so the counts cannot tell; read again on the next open until it does
-        if (unmined.size === 0) {
+        if (pass.settled) {
           await remember();
         }
 
