@@ -120,7 +120,12 @@ export const startNymTunnel = async (why = 'asked', via: string[] = []): Promise
   if (tunnel) {
     return;
   }
-  if (!starting && (await nymRoutingOn(via)) && !tunnel && !starting) {
+  if (!starting && !(await nymRoutingOn(via))) {
+    // a request already waiting for the tunnel fails now, not at the end of its bound
+    say({ type: 'state', ready: false, down: true });
+    return;
+  }
+  if (!tunnel && !starting) {
     console.info(`[nym] starting: ${why}`);
     const gen = generation;
     const t0 = performance.now();

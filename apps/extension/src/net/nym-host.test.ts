@@ -69,12 +69,17 @@ const listen = () => {
 };
 
 describe('the nym tunnel', () => {
-  it('does not start while nym is off', async () => {
+  it('does not start while nym is off, and says down so a waiting request fails at once', async () => {
     routing = false;
+    const { heard, peer } = listen();
     const host = await import('./nym-host');
     await host.startNymTunnel();
     expect(spawned).toHaveLength(0);
     expect(host.nymTunnelRunning()).toBe(false);
+    await vi.waitFor(() =>
+      expect(heard).toContainEqual({ type: 'state', ready: false, down: true }),
+    );
+    peer.close();
   });
 
   it('starts one guarded worker however many ask, with a throwaway sealed identity', async () => {
