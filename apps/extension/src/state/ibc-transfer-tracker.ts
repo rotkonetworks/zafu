@@ -77,6 +77,15 @@ export interface IbcTransfer {
  *  when the destination could not be reached this pass (treated as "no news"). */
 export type DestinationProbe = (t: IbcTransfer) => Promise<bigint | undefined>;
 
+/**
+ * A filter around a probe: the destination is asked only while `open()` (a
+ * zafu window is open); otherwise the pass has no news and nothing leaves.
+ */
+export const whileOpen =
+  (open: () => boolean, probe: DestinationProbe): DestinationProbe =>
+  t =>
+    open() ? probe(t) : Promise.resolve(undefined);
+
 /** minimal persistence surface - chrome.storage.local in production, a Map in tests */
 export interface TransferStorage {
   /** all tracked transfers, keyed by id */
