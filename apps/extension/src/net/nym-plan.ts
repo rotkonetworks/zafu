@@ -26,8 +26,8 @@ export interface TransportCtx {
   choice?: OptInChoice;
   /** the request names you (a nym class row) */
   names: boolean;
-  /** nym's exits reach the node's port */
-  exitPort: boolean;
+  /** nym can carry it there: an exit opens the node's port, and the node speaks http/1.1 */
+  reachable: boolean;
   /** "send over nym" */
   master: boolean;
   /** the destination is allowed at all */
@@ -41,9 +41,9 @@ export const transportFor = fold<TransportCtx, Transport>('direct', [
   (c, d) => (c.groupDefault ? 'nym' : d),
   // per-network choice
   (c, d) => (c.choice ? (c.choice === 'allowed' ? 'nym' : 'direct') : d),
-  // hard: nothing to hide, nym cannot exit there, master off, destination off
+  // hard: nothing to hide, nym cannot reach the node, master off, destination off
   (c, d) => (c.names ? d : toDirect(d)),
-  (c, d) => (c.exitPort ? d : toDirect(d)),
+  (c, d) => (c.reachable ? d : toDirect(d)),
   (c, d) => (c.master ? d : toDirect(d)),
   (c, d) => (c.destinationOn ? d : 'off'),
 ]);

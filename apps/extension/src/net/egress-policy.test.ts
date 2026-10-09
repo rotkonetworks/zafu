@@ -1,5 +1,11 @@
 import { describe, expect, it, test } from 'vitest';
-import { compileEgress, describeEgress, type EgressInputs } from './egress-policy';
+import {
+  compileEgress,
+  describeEgress,
+  NYM_GROUPS,
+  nymGroupView,
+  type EgressInputs,
+} from './egress-policy';
 import { decideEgress, type EgressRealm } from './egress-table';
 
 const decide = (inputs: EgressInputs, url: string, realm: EgressRealm = 'popup') =>
@@ -478,7 +484,12 @@ describe('send over nym: the transport is chosen per request class', () => {
   });
 
   it('follows the configured endpoint and its path', () => {
-    const inputs = { ...ZCASH_ONLY, networkEndpoints: { zcash: 'https://node.example/lwd' } };
+    const inputs = {
+      ...ZCASH_ONLY,
+      networkEndpoints: { zcash: 'https://node.example/lwd' },
+      // a zidecar under a path: the node said what it is
+      zcashBackends: { 'https://node.example/lwd': 'zidecar' },
+    };
     expect(nymOf(inputs, 'https://node.example/lwd/zidecar.v1.Zidecar/SendTransaction')).toBe(
       'broadcast',
     );
@@ -642,5 +653,51 @@ describe('send over nym: the choice per network', () => {
   it('a network turned off does not stop nym itself, the master does', () => {
     const optIns = { 'nym:zcash': 'blocked' as const };
     expect(compileEgress({ ...ZCASH_ONLY, netEgress: { optIns } }).nym).toBe(true);
+  });
+});
+
+describe("the nym row says what nym can carry for the person's own node", () => {
+  const zcash = NYM_GROUPS.find(g => g.id === 'zcash')!;
+  const node = (url: string, extra: EgressInputs = {}): EgressInputs => ({
+    enabledNetworks: ['zcash'],
+    networkEndpoints: { zcash: url },
+    ...extra,
+  });
+
+  it('the shipped zidecar goes over nym', () => {
+    expect(nymGroupView(ZCASH_ONLY, zcash)).toBe('nym');
+    expect(compileEgress(ZCASH_ONLY).nymVia).toContain('zcash');
+  });
+
+  it("a node on a port nym's exits do not open is direct, and says so", () => {
+    const i = node('https://zcash.rotko.net:9067');
+    expect(nymGroupView(i, zcash)).toBe('unreachable');
+    expect(compileEgress(i).nymVia).not.toContain('zcash');
+  });
+
+  it('a lightwalletd is direct, and says so, by what the node said it is', () => {
+    const lwd = node('https://lwd.example.org');
+    expect(nymGroupView(lwd, zcash)).toBe('unreachable');
+    expect(compileEgress(lwd).nymVia).not.toContain('zcash');
+    // a node that said it is a zidecar, though not a known host
+    const told = node('https://lwd.example.org', {
+      zcashBackends: { 'https://lwd.example.org': 'zidecar' },
+    });
+    expect(nymGroupView(told, zcash)).toBe('nym');
+    // a rotko host that said it is a lightwalletd
+    const lied = node('https://zcash.rotko.net', {
+      zcashBackends: { 'https://zcash.rotko.net': 'lightwalletd' },
+    });
+    expect(nymGroupView(lied, zcash)).toBe('unreachable');
+  });
+
+  it('a malformed endpoint costs the row nothing', () => {
+    expect(() => nymGroupView(node('not a url'), zcash)).not.toThrow();
+  });
+
+  it("the person's own choice of direct reads direct", () => {
+    expect(
+      nymGroupView({ ...ZCASH_ONLY, netEgress: { optIns: { 'nym:zcash': 'blocked' } } }, zcash),
+    ).toBe('direct');
   });
 });
