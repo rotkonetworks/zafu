@@ -54,18 +54,31 @@ export class EgressBlockedError extends TypeError {
   }
 }
 
-/** the class a cometbft JSON-RPC body names, if its rule reads bodies */
-const classOfBody = (
-  rows: [string, RequestClass][] | undefined,
-  body: BodyInit | null | undefined,
-): RequestClass | undefined => {
-  const text =
-    typeof body === 'string'
-      ? body
-      : body instanceof Uint8Array || body instanceof ArrayBuffer
-        ? new TextDecoder().decode(body)
-        : undefined;
-  return text === undefined ? undefined : rows?.find(([p]) => new RegExp(p).test(text))?.[1];
+/**
+ * The class a cometbft JSON-RPC body names, if its rule reads bodies. A body
+ * that cannot be read without spending it (a stream) is taken as naming you:
+ * it goes over nym or nowhere, never directly unread.
+ */
+const classOfBody = async (
+  rows: [string, RequestClass][],
+  input: string | URL | Request,
+  init: RequestInit | undefined,
+): Promise<RequestClass | undefined> => {
+  const body = init?.body;
+  let text: string | undefined;
+  try {
+    text =
+      body == null
+        ? input instanceof Request
+          ? await input.clone().text()
+          : ''
+        : body instanceof ReadableStream
+          ? undefined
+          : await new Response(body).text();
+  } catch {
+    text = undefined;
+  }
+  return text === undefined ? 'names-you' : rows.find(([p]) => new RegExp(p).test(text))?.[1];
 };
 
 export const isEgressBlocked = (e: unknown): e is EgressBlockedError =>
@@ -180,8 +193,9 @@ const contactIdOf = (d: EgressDecision): string | undefined =>
     ? (d.destination ?? d.host)
     : undefined;
 
+// fetch stringifies anything that is not a Request, so the guard does too
 const urlOf = (input: string | URL | Request): string =>
-  typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  input instanceof Request ? input.url : String(input);
 
 /** The decision for `input` in this realm, right now. */
 export const checkEgress = (input: string | URL | Request): EgressDecision =>
@@ -213,10 +227,15 @@ const refuse = (refusal: EgressRefusal): never => {
   throw new EgressBlockedError(refusal);
 };
 
+/** a socket, an event stream or an xhr: nym cannot carry one, so a nym class goes nowhere */
 const enforce = (input: string | URL | Request): void => {
   const decision = checkEgress(input);
   if (!decision.allow) {
-    refuse(decision);
+    return refuse(decision);
+  }
+  const { host = '', destination, nym, nymBody } = decision;
+  if (nym || nymBody?.length) {
+    refuse({ allow: false, host, destination, reason: 'transport-down', nym: nym ?? 'names-you' });
   }
   tallyContact(contactIdOf(decision));
 };
@@ -300,7 +319,9 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
         return send(input, init);
       };
       // a request that names you goes through nym, or nowhere
-      const nym = decision.allow && (decision.nym ?? classOfBody(decision.nymBody, init?.body));
+      const nym =
+        decision.allow &&
+        (decision.nym ?? (decision.nymBody && (await classOfBody(decision.nymBody, input, init))));
       if (decision.allow && nym) {
         const { host: h = '', destination } = decision;
         const res = await viaNym(input, init, nym, sendDirect, () =>

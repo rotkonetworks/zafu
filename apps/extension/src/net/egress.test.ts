@@ -170,6 +170,13 @@ describe('installEgress', () => {
     expect(sockets).toEqual(['wss://zcash.rotko.net/anything']);
   });
 
+  it('decides an input that is neither a string, a URL nor a Request by its string', async () => {
+    const { isEgressBlocked } = await install(ALLOW_ZCASH);
+    const odd = { toString: () => 'https://api.coingecko.com/x' } as unknown as string;
+    expect(isEgressBlocked(await fetch(odd).catch((e: unknown) => e))).toBe(true);
+    expect(nativeFetch).not.toHaveBeenCalled();
+  });
+
   it('tells listeners what it refused', async () => {
     const { onEgressBlocked } = await install(ALLOW_ZCASH);
     const seen: string[] = [];
@@ -325,6 +332,80 @@ describe('send over nym, by JSON-RPC body', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('a nym class never leaves another way', () => {
+  const RPC = {
+    host: 'rpc.example',
+    path: '',
+    destination: 'noble',
+    allow: true,
+    nymBody: [['"method"\\s*:\\s*"broadcast_tx_', 'broadcast']] as [string, 'broadcast'][],
+  };
+  const TABLE: EgressTable = {
+    rules: [
+      RPC,
+      {
+        host: 'zcash.rotko.net',
+        path: '/send',
+        destination: 'zcash',
+        allow: true,
+        nym: 'broadcast',
+      },
+    ],
+    hosts: {},
+    adhoc: false,
+    nym: true,
+  };
+
+  it('a socket, an event stream or an xhr to a nym class is refused', async () => {
+    await install(TABLE);
+    expect(() => new WebSocket('wss://zcash.rotko.net/send')).toThrow(/nym/);
+    expect(() => new EventSource('https://rpc.example/')).toThrow(/nym/);
+    expect(() => new XMLHttpRequest().open('POST', 'https://rpc.example/')).toThrow(/nym/);
+    expect(sockets).toEqual([]);
+  });
+
+  /** the request is refused by the nym filter, after its budget, never sent directly */
+  const heldForNym = async (go: () => Promise<Response>) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const done = go().catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      return ((await done) as { refusal?: { reason: string } }).refusal?.reason;
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+
+  it("reads a Request's own body when there is no init", async () => {
+    await install(TABLE);
+    const body = '{"method":"broadcast_tx_sync"}';
+    expect(
+      await heldForNym(() => fetch(new Request('https://rpc.example/', { method: 'POST', body }))),
+    ).toBe('transport-down');
+    expect(nativeFetch).not.toHaveBeenCalled();
+  });
+
+  it('a body it cannot read without spending goes over nym, never directly', async () => {
+    await install(TABLE);
+    const stream = new ReadableStream({
+      start: c => {
+        c.enqueue(new TextEncoder().encode('{"method":"broadcast_tx_sync"}'));
+        c.close();
+      },
+    });
+    expect(
+      await heldForNym(() =>
+        fetch('https://rpc.example/', {
+          method: 'POST',
+          body: stream,
+          duplex: 'half',
+        } as RequestInit),
+      ),
+    ).toBe('transport-down');
+    expect(nativeFetch).not.toHaveBeenCalled();
   });
 });
 
