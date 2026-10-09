@@ -20,20 +20,20 @@ export type ZcashBackend = 'zidecar' | 'lightwalletd';
  * lightwalletd.
  */
 export interface ZcashBackendProfile {
-  readonly client: (url: string) => ZcashClient;
-  readonly extras?: (url: string) => ZidecarClient;
+  readonly client: (url: string, signal?: AbortSignal) => ZcashClient;
+  readonly extras?: (url: string, signal?: AbortSignal) => ZidecarClient;
   /** zidecar's SendResponse carries the txid; standard lightwalletd's does not */
   readonly echoesTxid: boolean;
 }
 
 export const ZCASH_BACKENDS: Readonly<Record<ZcashBackend, ZcashBackendProfile>> = {
   zidecar: {
-    client: url => new ZidecarClient(url),
-    extras: url => new ZidecarClient(url),
+    client: (url, signal) => new ZidecarClient(url, signal),
+    extras: (url, signal) => new ZidecarClient(url, signal),
     echoesTxid: true,
   },
   lightwalletd: {
-    client: url => new LightwalletdClient(url),
+    client: (url, signal) => new LightwalletdClient(url, signal),
     echoesTxid: false,
   },
 };
@@ -42,11 +42,19 @@ export const isZcashBackend = (b: unknown): b is ZcashBackend =>
   typeof b === 'string' && Object.hasOwn(ZCASH_BACKENDS, b);
 
 /** zidecar's own rpcs for this backend, or undefined on a standard lightwalletd */
-export const zidecarExtras = (url: string, backend: unknown): ZidecarClient | undefined =>
-  isZcashBackend(backend) ? ZCASH_BACKENDS[backend].extras?.(url) : undefined;
+export const zidecarExtras = (
+  url: string,
+  backend: unknown,
+  signal?: AbortSignal,
+): ZidecarClient | undefined =>
+  isZcashBackend(backend) ? ZCASH_BACKENDS[backend].extras?.(url, signal) : undefined;
 
-export const zcashClient = (url: string, backend: ZcashBackend): ZcashClient =>
-  ZCASH_BACKENDS[backend].client(url);
+/** `signal`: a stopped run's client sends nothing more, and its requests in flight end */
+export const zcashClient = (
+  url: string,
+  backend: ZcashBackend,
+  signal?: AbortSignal,
+): ZcashClient => ZCASH_BACKENDS[backend].client(url, signal);
 
 export const utxosEach = (
   client: Pick<ZcashClient, 'getAddressUtxos'>,

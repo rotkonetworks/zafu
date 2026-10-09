@@ -77,7 +77,11 @@ async function readBoundedBody(resp: Response, method: string): Promise<Uint8Arr
 export class LightwalletdClient implements ZcashClient {
   private serverUrl: string;
 
-  constructor(serverUrl: string) {
+  /** `signal`: the run this client serves; once it aborts, nothing more goes out */
+  constructor(
+    serverUrl: string,
+    private readonly signal?: AbortSignal,
+  ) {
     this.serverUrl = serverUrl.replace(/\/$/, '');
   }
 
@@ -272,6 +276,7 @@ export class LightwalletdClient implements ZcashClient {
       // native gRPC content-type - public lightwalletd rejects grpc-web (415)
       headers: { 'Content-Type': 'application/grpc' },
       body,
+      signal: this.signal,
     });
     if (!resp.ok) {
       throw new Error(`gRPC ${method}: HTTP ${resp.status}`);
