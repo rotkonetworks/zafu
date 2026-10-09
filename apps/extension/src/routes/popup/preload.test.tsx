@@ -142,13 +142,13 @@ describe('intent preloading', () => {
     expect(askOptIn).not.toHaveBeenCalled();
   });
 
-  it('the same press reads history once the server is allowed (the test is not vacuous)', async () => {
+  // a hover runs the same preload as a press: nothing ahead of the screen asks about a t-address
+  it('asks no t-address ahead of the screen, even with the server allowed', async () => {
     allowed.add('zcash.rotko.net');
     press(renderNav(`/activity${seq}`));
-    // wait for the read itself: under load it can land after a fixed settle,
-    // and then inside the next test, where "nothing runs" would fail instead
-    await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
-    expect(askOptIn).not.toHaveBeenCalled();
+    await settle();
+    expect(getHistory).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('with history off, the activity press touches no t-address and asks nothing', async () => {
