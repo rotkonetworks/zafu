@@ -18,6 +18,7 @@ import { nymPlan, type NymPlan } from './nym-plan';
 
 const EFFECT: Record<NymPlan, () => void> = {
   up: () => void ensureNym(),
+  idle: () => postNym({ type: 'stop', idle: true }),
   down: () => postNym({ type: 'stop' }),
   leave: () => undefined,
 };
@@ -29,6 +30,7 @@ export const startNymLifecycle = (): { lastWindowClosed: () => void } => {
   const planOf = (t: EgressTable): NymPlan =>
     nymPlan({
       keepReady: t.nymKeepReady === true,
+      up: plan === 'up',
       carries: !!t.nymVia?.length,
       master: t.nym === true,
       unlocked,

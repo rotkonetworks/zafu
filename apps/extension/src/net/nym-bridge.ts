@@ -48,7 +48,8 @@ export interface NymRequestInit {
 export type NymMessage =
   /** start if any of `via` (every destination when empty) sends over nym */
   | { type: 'start'; via?: string[] }
-  | { type: 'stop' }
+  /** `idle`: only once nothing is inside the tunnel */
+  | { type: 'stop'; idle?: true }
   | { type: 'ping' }
   /** `down`: the last start failed, so a waiting request need not wait out its bound */
   | { type: 'state'; ready: boolean; down?: boolean }

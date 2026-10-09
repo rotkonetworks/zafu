@@ -166,6 +166,37 @@ describe('the nym tunnel', () => {
     await vi.waitFor(() => expect(spawned[0]!.terminated).toBe(true));
     sw.close();
   });
+  it('an idle stop ends a tunnel with nothing inside at once', async () => {
+    const host = await import('./nym-host');
+    await host.startNymTunnel();
+    const sw = new BroadcastChannel('zafu-nym');
+    sw.postMessage({ type: 'stop', idle: true });
+    await vi.waitFor(() => expect(spawned[0]!.terminated).toBe(true));
+    sw.close();
+  });
+
+  it('an idle stop waits for the request inside, then ends the tunnel', async () => {
+    let answer: (r: unknown) => void = () => undefined;
+    mixFetch.mockImplementationOnce(() => new Promise(r => (answer = r)));
+    const { heard, peer } = listen();
+    const host = await import('./nym-host');
+    await host.startNymTunnel();
+    peer.postMessage({
+      type: 'fetch',
+      id: 'c',
+      url: 'https://zcash.rotko.net/x',
+      init: { method: 'POST', headers: {} },
+    });
+    await vi.waitFor(() => expect(mixFetch).toHaveBeenCalledTimes(1));
+    peer.postMessage({ type: 'stop', idle: true });
+    await new Promise(r => setTimeout(r, 0));
+    expect(spawned[0]!.terminated).toBe(false);
+    answer({ status: 200, statusText: 'ok', headers: [], body: new Uint8Array() });
+    await vi.waitFor(() => expect(spawned[0]!.terminated).toBe(true));
+    expect(heard).toContainEqual(expect.objectContaining({ type: 'response', id: 'c' }));
+    peer.close();
+  });
+
   it('drops a start that is not ready in time and tries a fresh worker and identity', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     setup.mockImplementationOnce(() => new Promise(() => undefined));
