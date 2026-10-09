@@ -6,10 +6,12 @@
  * destination-balance probe - no browser, no network.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   track,
   pollOnce,
+  sweepAndResume,
+  whileOpen,
   transition,
   isTerminalTransferStatus,
   type IbcTransfer,
@@ -169,5 +171,25 @@ describe('ibc-transfer-tracker: broadcast -> timeout', () => {
     dest.set(0n);
     r = await pollOnce(recorded.id, dest.probe, deps);
     expect(r?.status).toBe('arrived');
+  });
+});
+
+describe('ibc-transfer-tracker: only while a window is open', () => {
+  it('asks the destination nothing while every window is closed, and resumes on open', async () => {
+    const storage = memoryStorage();
+    const deps: TrackerDeps = { storage, now: clock(T0).now };
+    await storage.put({ ...newUnshield(), status: 'broadcast', startedAt: T0, baseline: '0' });
+    const asked = vi.fn(() => Promise.resolve(5_000_000n));
+    let open = false;
+    const probe = whileOpen(() => open, asked);
+
+    await sweepAndResume(probe, deps);
+    expect(asked).not.toHaveBeenCalled();
+    expect((await storage.getAll())['tx-abc']?.status).toBe('broadcast');
+
+    open = true;
+    await sweepAndResume(probe, deps);
+    expect(asked).toHaveBeenCalledTimes(1);
+    expect((await storage.getAll())['tx-abc']?.status).toBe('arrived');
   });
 });
