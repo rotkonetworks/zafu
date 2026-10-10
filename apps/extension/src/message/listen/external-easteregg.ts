@@ -8,7 +8,6 @@
  * - { type: 'zafu_request_capability', capability } → request a specific capability
  * - { type: 'zafu_pick_contacts', purpose, max } → opens contact picker popup
  * - { type: 'zafu_pick_contacts_result', requestId, contacts } → internal: picker result
- * - { type: 'zafu_send_invite', handle, payload } → route invite via e2ee
  * - { type: 'zafu_frost_create' } → create FROST DKG, returns approval popup
  * - { type: 'zafu_frost_join', roomCode } → join existing FROST DKG
  * - { type: 'zafu_frost_sign', roomCode, sighashHex, ... } → FROST signing session
@@ -61,6 +60,14 @@ import { isSidePanelOpen } from '../../side-panel-presence';
 import { SIDE_PANEL_NAVIGATE } from '../side-panel-delivery';
 import { popupWindowGeometry } from '../../utils/popup-window';
 import { PopupPath } from '../../routes/popup/paths';
+import {
+  CONNECT_METHODS,
+  CONTACT_DISCOVERY_METHODS,
+  CONTACT_DISCOVERY_REQUEST_METHODS,
+  ENCRYPTION_INTERNAL_METHODS,
+  ENCRYPTION_PUBLIC_METHODS,
+  SIGN_REQUEST_TYPE,
+} from './zafu-method-names';
 
 /**
  * Show a wallet route on the user's chosen surface: navigate the side panel
@@ -84,6 +91,16 @@ export const openWalletRoute = async (origin: string, route: string): Promise<bo
   url.hash = route;
   return openApprovalPopup(origin, url.href);
 };
+
+/** what the other external listeners own: never answered here, or they never run */
+const DELEGATED_TYPES = new Set<string>([
+  SIGN_REQUEST_TYPE,
+  ...ENCRYPTION_PUBLIC_METHODS,
+  ...ENCRYPTION_INTERNAL_METHODS,
+  ...CONTACT_DISCOVERY_METHODS,
+  ...CONTACT_DISCOVERY_REQUEST_METHODS,
+  ...CONNECT_METHODS,
+]);
 
 /** Source chains the wallet can shield from via zafu_open_shield. */
 const OPEN_SHIELD_CHAINS = new Set<string>(['injective']);
@@ -717,12 +734,6 @@ export const externalMessageListener = (
         pendingPicks.delete(requestId);
       }
       sendResponse({ ok: true });
-      return true;
-    }
-
-    case 'zafu_send_invite': {
-      // TODO: resolve handle → pubkey, open e2ee channel, deliver payload
-      sendResponse({ sent: false, error: 'invite delivery not yet implemented in extension' });
       return true;
     }
 
@@ -1521,19 +1532,8 @@ export const externalMessageListener = (
     }
 
     default: {
-      // don't respond to types handled by other listeners
-      const delegatedTypes = [
-        'zafu_sign', // handled by sign-request.ts
-        'zafu_encrypt',
-        'zafu_decrypt',
-        'zafu_zid_pubkey',
-        'zafu_encryption_approval_result', // handled by external-encryption.ts
-        'zafu_request_contact_discovery', // handled by contact-discovery-request.ts
-        // handled by contact-discovery.ts: answering here first left every
-        // site with "unknown message type", so discovery never ran
-        'zafu_discover_contacts',
-      ];
-      if (typeof type === 'string' && delegatedTypes.includes(type)) {
+      // don't respond to types another listener owns
+      if (typeof type === 'string' && DELEGATED_TYPES.has(type)) {
         return false;
       }
       sendResponse({ error: 'unknown message type' });
