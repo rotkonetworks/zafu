@@ -256,6 +256,10 @@ export const popupRoutes: RouteObject[] = [
             ...screen('contactDiscoveryApproval'),
           },
           {
+            path: PopupPath.CONNECT_APPROVAL,
+            ...screen('connectApproval'),
+          },
+          {
             path: PopupPath.DESTINATION_APPROVAL,
             ...screen('destinationApproval'),
           },

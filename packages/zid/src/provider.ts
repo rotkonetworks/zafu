@@ -170,16 +170,69 @@ export async function pickContacts(
   }
 }
 
+/** what this site knows about one of its people: their site keys, from their zafu_zid_pubkey */
+export interface ConnectPeer {
+  pubkey: string;
+  ka: string;
+  ka_sig: string;
+}
+
 /**
- * Ask the wallet to deliver an invite to a contact by opaque handle (wallet
- * resolves handle->pubkey and routes over an e2ee channel).
- *
- * Wallet-routed invite delivery is NOT a v1 @zafu/protocol method yet - the
- * wallet's zafu_send_invite handler is an unimplemented stub that always
- * refuses - so this reports `{ sent: false }` and the caller (zid.connect's
- * `invite`) falls back to delivering over its own zid channel. Kept as the seam
- * for when wallet-routed invites land (tracked with the social-messaging work);
- * at that point this dispatches the typed request through the transport.
+ * Ask to connect this person with another person on this site (two players at
+ * a table). zafu asks once; when both said yes they share a private room in
+ * zafu. The answer is 'pending' until then, whatever the other said: a site
+ * never learns a no. A connection shows up in {@link listFriends}.
+ */
+export async function connectPeer(
+  zafu: ZafuHandle,
+  peer: ConnectPeer,
+  name?: string,
+): Promise<{ status: 'pending' } | { status: 'connected'; handle: string }> {
+  const resp = await createExtensionTransport(zafu).request('zafu_connect', {
+    type: 'zafu_connect',
+    peer,
+    ...(name ? { name } : {}),
+  });
+  if ('status' in resp) {
+    return resp;
+  }
+  throw classifyWalletError(resp.error, resp.code);
+}
+
+/** the people this site introduced this person to, connected now (handle = their site pubkey) */
+export async function listFriends(zafu: ZafuHandle): Promise<{ handle: string; name: string }[]> {
+  const resp = await createExtensionTransport(zafu).request('zafu_friends', {
+    type: 'zafu_friends',
+  });
+  if ('friends' in resp) {
+    return resp.friends;
+  }
+  throw classifyWalletError(resp.error, resp.code);
+}
+
+/** an invite (a table, a link on this site) into a friend's private room, said as from this site */
+export async function inviteFriend(
+  zafu: ZafuHandle,
+  handle: string,
+  text: string,
+  path?: string,
+): Promise<void> {
+  const resp = await createExtensionTransport(zafu).request('zafu_invite_friend', {
+    type: 'zafu_invite_friend',
+    handle,
+    text,
+    ...(path ? { path } : {}),
+  });
+  if (!('sent' in resp)) {
+    throw classifyWalletError(resp.error, resp.code);
+  }
+}
+
+/**
+ * Deliver an invite to a contact by opaque handle. The wallet carries invites
+ * only between people the same site introduced ({@link inviteFriend}); for
+ * anyone else this reports `{ sent: false }` and the caller (zid.connect's
+ * `invite`) delivers over its own zid channel.
  */
 export function sendInvite(
   _zafu: ZafuHandle,

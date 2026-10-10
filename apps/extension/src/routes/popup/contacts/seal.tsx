@@ -16,27 +16,31 @@ import { pairSeal } from '../../../people/cards';
 import { ScreenHeader } from '../../../components/screen-header';
 import { PopupPath, contactPath } from '../paths';
 import { SealCompare } from './seal-compare';
+import type { Contact } from '../../../state/contacts';
+import { hostOf } from '../../../net/destination';
+
+type Came = Pick<Contact, 'sealChecked' | 'source' | 'introduced'>;
+
+const FROM: Record<NonNullable<Contact['source']>, string> = {
+  link: 'from a link',
+  scan: 'from a qr',
+  memo: 'from a memo',
+  app: 'introduced by an app',
+};
 
 /** where a person's card came from, until the seal is checked */
-export const sourceLine = (c: {
-  sealChecked?: number;
-  source?: 'link' | 'scan' | 'memo';
-}): string | undefined =>
+export const sourceLine = (c: Came): string | undefined =>
   c.sealChecked
     ? 'seal checked in person'
-    : c.source === 'memo'
-      ? 'from a memo'
-      : c.source === 'scan'
-        ? 'from a qr'
-        : c.source
-          ? 'from a link'
-          : undefined;
+    : c.introduced
+      ? `introduced by ${hostOf(c.introduced.origin)}`
+      : c.source && FROM[c.source];
 
 const day = (ms: number) =>
   new Date(ms).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' }).toLowerCase();
 
 /** where a card came from, before the seal: the cue a pay screen shows */
-export const uncheckedLine = (c: { sealChecked?: number; source?: 'link' | 'scan' | 'memo' }) =>
+export const uncheckedLine = (c: Came) =>
   !c.sealChecked && c.source ? `${sourceLine(c)} · seal not checked` : undefined;
 
 /** the seal, as a picture and as the hex both screens can read aloud */

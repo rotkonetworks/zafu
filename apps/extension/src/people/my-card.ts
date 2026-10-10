@@ -105,13 +105,22 @@ export const contactFromAnswer = (
   }
   return {
     id: room.card.contactId,
-    name: answer.name ?? 'someone',
+    name: answer.name || room.card.introduced?.name || 'someone',
     zid: answer.key,
     pairKa: answer.pairKa,
     rel: { walletId, gen: room.signer.gen, j: room.signer.j },
     addresses: addressesOf(answer),
     cardV2: room.card.answer,
-    source: room.card.via === 'memo' ? 'memo' : 'link',
+    source: room.card.introduced ? 'app' : room.card.via === 'memo' ? 'memo' : 'link',
+    ...(room.card.introduced
+      ? {
+          introduced: {
+            origin: room.card.introduced.origin,
+            handle: room.card.introduced.peer,
+            at: room.card.at ?? Date.now(),
+          },
+        }
+      : {}),
     ...(room.card.checked ? { sealChecked: room.card.checked } : {}),
     given: givenOf(mine),
   };

@@ -280,6 +280,10 @@ const deriveSeedForSiteXWing = (identity: Uint8Array, origin: string, rotation =
   return deriveSeed(identity, tag);
 };
 
+/** derive a site-scoped X25519 seed: an app may introduce two people by these keys */
+const deriveSeedForSiteKa = (identity: Uint8Array, origin: string): Uint8Array =>
+  deriveSeed(identity, enc.encode('ka-site\0' + origin));
+
 /** derive ring VRF seed for anonymous pro membership (never rotates). */
 const deriveSeedForRingVrf = (identity: Uint8Array): Uint8Array =>
   deriveSeed(identity, enc.encode('ring-vrf-v1'));
@@ -376,6 +380,23 @@ export const deriveZidForSite = (
     privateKey.fill(0);
     const hex = bytesToHex(publicKey);
     return { publicKey: hex, address: formatZid(hex) };
+  });
+
+/**
+ * A site's key-agreement key: X25519, its own seed, never the ed25519 key
+ * converted and never the X-Wing component. An app holds both people's keys
+ * and so can introduce them (zafu_connect); it can never compute the secret.
+ */
+export const deriveZidKaForSite = (
+  mnemonic: string,
+  identity: string,
+  origin: string,
+): { seed: Uint8Array; publicKey: string } =>
+  withIdentity(mnemonic, identity, id => {
+    const full = deriveSeedForSiteKa(id, origin);
+    const seed = full.slice(0, 32);
+    full.fill(0);
+    return { seed, publicKey: bytesToHex(x25519.getPublicKey(seed)) };
   });
 
 /** the post-quantum sealed-box suite advertised alongside a site's ZID pubkey. */
@@ -1319,6 +1340,19 @@ export const discoverySecret = (
   myXid: string,
   peerXid: string,
 ): Uint8Array => relationshipSecret('zafu-discovery-v1', kaSeed, peerKa, myXid, peerXid);
+
+/**
+ * The secret two people an app introduced meet under: X25519 of the two site
+ * KA keys, HKDF bound to the site and to both site ZIDs. Only the two wallets
+ * compute it; the app that introduced them holds the public keys only.
+ */
+export const connectSecret = (
+  kaSeed: Uint8Array,
+  peerKa: string,
+  myZid: string,
+  peerZid: string,
+  origin: string,
+): Uint8Array => relationshipSecret('zafu-connect-v1\0' + origin, kaSeed, peerKa, myZid, peerZid);
 
 /** chrome.storage.local, per wallet: the next unused `j` per generation */
 export const XID_REL_NEXT_KEY = 'xidRelNext';

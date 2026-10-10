@@ -48,6 +48,7 @@ import {
   type PeopleAsking,
 } from './protocol';
 import { onOnline } from '../sw-online';
+import { connectOps, onConnect } from './connect';
 import { readRooms, readThreads, writeRooms, writeThreads, type PeopleRoom } from './vault';
 import {
   chain,
@@ -198,6 +199,7 @@ export const startPeopleRelay = (
   const service = createPeopleService(peopleDeps, {
     ...groups.handlers,
     card: cards.handlers.card,
+    connect: onConnect,
     ...handlers,
     group: chain(handlers.group ?? groups.handlers.group, lx.handler(foldFrost)),
     pair: chain(handlers.pair ?? invites.handlers.pair, cards.handlers.pair, foldFrost, onDealAsk),
@@ -221,6 +223,7 @@ export const startPeopleRelay = (
     ...cards.ops,
     ...frostOps,
     ...lx.ops,
+    ...connectOps,
     ...ops,
   };
 

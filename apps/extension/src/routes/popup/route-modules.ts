@@ -65,6 +65,7 @@ export const popupScreens = {
   contactDiscoveryApproval: () =>
     import('./approval/contact-discovery').then(m => m.ContactDiscoveryApproval),
   destinationApproval: () => import('./approval/destination').then(m => m.DestinationApproval),
+  connectApproval: () => import('./approval/connect').then(m => m.ConnectApproval),
   passkeyApprove: () => import('./approval/passkey').then(m => m.PasskeyApprove),
   zcashSendApproval: () => import('./approval/zcash-send').then(m => m.ZcashSendApproval),
   keplrApproval: () => import('./approval/keplr').then(m => m.KeplrApproval),
