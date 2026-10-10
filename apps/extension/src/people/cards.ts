@@ -185,6 +185,8 @@ export const pairRoomFromCards = (
   signer,
   joined: true,
   createdAt: at,
+  // nothing in it is older than their card: read from there, not 48 h of empty windows
+  since: presenceEpoch(theirs.card.created * 60),
   pair: { personId: contactId, peer: theirs.card.key, v2: { latest: theirs.b64, ...extra } },
 });
 
