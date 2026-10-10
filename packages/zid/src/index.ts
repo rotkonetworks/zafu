@@ -24,7 +24,7 @@ export {
   interaction,
   interactionKey,
 } from '@zafu/interactions';
-export { detectZafu } from './provider';
+export { connectPeer, detectZafu, inviteFriend, listFriends, type ConnectPeer } from './provider';
 export { createExtensionTransport, type ZafuHandle } from './transport';
 export {
   detect,
