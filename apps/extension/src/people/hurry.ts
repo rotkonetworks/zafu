@@ -15,7 +15,7 @@ export const FAST_MS = 1_000;
 const ARRIVING_MS = 5 * 60_000;
 /** a shared wallet fills fast for the hour its first code works */
 const FILLING_MS = 60 * 60_000;
-/** an introduction is read fast this long after this side said yes */
+/** an introduction, and a new pair room, is read fast this long after it was made */
 const MEETING_MS = 10 * 60_000;
 /** keys being made are read fast while the ceremony moved within this long */
 const KEYS_S = 10 * 60;
@@ -43,10 +43,12 @@ export const hurried = (rooms: PeopleRoom[], now: number): Set<string> => {
         out.add(groupId(r.signer.G));
       }
     }
-    // an introduction: the other side's card, or the answer to yours
+    // an introduction: the other side's card, the answer to yours, and a new pair room
+    // until they confirm holding your card
     const meeting =
       (r.connect && r.connect.state !== 'done') ||
-      (r.card?.introduced && r.card.state === 'waiting');
+      (r.card?.introduced && r.card.state === 'waiting') ||
+      (r.kind === 'pair' && r.pair?.v2 && !r.pair.v2.confirmed);
     if (r.joined && meeting && now - r.createdAt < MEETING_MS) {
       out.add(r.id);
     }
