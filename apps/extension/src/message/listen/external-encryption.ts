@@ -29,6 +29,7 @@ import type {
   ZafuDecryptResponse,
   ZafuZidPubkeyResponse,
 } from '@zafu/protocol';
+import { CONNECT_KA_SUITE } from '@zafu/protocol';
 import { ENCRYPTION_PUBLIC_METHODS } from './zafu-method-names';
 import { sealXWing, openXWing, XWING_LENGTHS, pqKeyAuthMessage } from '@zafu/pq';
 import { isValidExternalSender } from '../../senders/external';
@@ -369,6 +370,7 @@ const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> =
       deriveZidForSite,
       deriveZidPqPublicKey,
       deriveZidKeypairForSite,
+      deriveZidKaForSite,
       ZID_PQ_SUITE,
       currentIdentityName,
     } = await import('../../state/identity');
@@ -394,9 +396,27 @@ const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> =
         privateKey,
       ),
     );
+    // the key an app introduces two people by (zafu_connect), signed the same way
+    const ka = deriveZidKaForSite(mnemonic, identityName, origin);
+    ka.seed.fill(0);
+    const ka_sig = bytesToHex(
+      ed25519.sign(
+        pqKeyAuthMessage(CONNECT_KA_SUITE, origin, 0, hexToBytes(ka.publicKey)),
+        privateKey,
+      ),
+    );
     privateKey.fill(0);
 
-    return { pubkey: zid.publicKey, pq_pubkey, pq_suite: ZID_PQ_SUITE, pq_sig, pq_epoch, origin };
+    return {
+      pubkey: zid.publicKey,
+      pq_pubkey,
+      pq_suite: ZID_PQ_SUITE,
+      pq_sig,
+      pq_epoch,
+      ka: ka.publicKey,
+      ka_sig,
+      origin,
+    };
   } catch (e) {
     return { error: 'failed to derive pubkey: ' + String(e), code: 'internal_error' };
   }

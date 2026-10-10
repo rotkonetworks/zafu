@@ -49,6 +49,12 @@ export const CONTACT_DISCOVERY_METHODS = ['zafu_discover_contacts'] as const;
  */
 export const CONTACT_DISCOVERY_REQUEST_METHODS = ['zafu_request_contact_discovery'] as const;
 
+/** connect.ts - introductions: an app connects two of its people, lists them, invites them */
+export const CONNECT_METHODS = ['zafu_connect', 'zafu_friends', 'zafu_invite_friend'] as const;
+
+/** connect.ts - internal popup->worker: the connect window is done (not dapp-facing). */
+export const CONNECT_INTERNAL_METHODS = ['zafu_connect_result'] as const;
+
 /** contact-discovery-request.ts - internal popup->worker consent callback (not dapp-facing). */
 export const CONTACT_DISCOVERY_INTERNAL_METHODS = [
   'zafu_contact_discovery_approval_result',

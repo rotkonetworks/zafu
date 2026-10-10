@@ -15,6 +15,7 @@ import { groupId } from './protocol';
 import { hostStep, joinStep } from './door-run';
 import { hurried } from './hurry';
 import { useFrostRoom } from './use-frost-room';
+import { useConnectSteps } from './connect-page';
 import { readRooms, type PeopleRoom } from './vault';
 
 /** one step at a time per door; a change while it runs runs it once more after */
@@ -68,6 +69,7 @@ const Keep = ({ room }: { room: PeopleRoom }) => {
 
 export const PeopleKeeper = () => {
   const rooms = useMyRooms();
+  useConnectSteps(rooms);
   const hot = hurried(rooms, Date.now());
   const doors = rooms.filter(r => r.kind === 'door' && hot.has(r.id));
   const sig = doors

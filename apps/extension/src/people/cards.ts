@@ -456,6 +456,10 @@ export const createCards = (deps: CardDeps) => {
           contactId: String(r['contactId']),
           shown: now(),
           state: 'waiting',
+          // an introduction waits on someone who may say yes days later
+          ...(r['introduced']
+            ? { introduced: r['introduced'] as CardRoom['introduced'], shared: now() }
+            : {}),
         },
         true,
       ),

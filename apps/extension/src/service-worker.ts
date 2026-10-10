@@ -36,7 +36,15 @@ import { destinationConsentResultListener } from './net/prompt';
 import { runNetEgressMigration } from './net/egress-migrate';
 import { loadStoredRegistry } from './transparent/registry-live';
 import { refreshEgress } from './net/egress';
-import { NET_EGRESS_INTERNAL_METHODS } from './message/listen/zafu-method-names';
+import {
+  CONNECT_INTERNAL_METHODS,
+  NET_EGRESS_INTERNAL_METHODS,
+} from './message/listen/zafu-method-names';
+import {
+  connectDeps,
+  connectResultListener,
+  createConnectListener,
+} from './message/listen/connect';
 import { linkListener } from './message/listen/links';
 import { openWalletRoute } from './message/listen/external-easteregg';
 import { omniboxDescription, omniboxUri, escapeOmniboxXml } from './links/omnibox';
@@ -651,6 +659,16 @@ startDiscoveryPresence();
 // wallet-wide feature on. Opens the consent popup.
 chrome.runtime.onMessageExternal.addListener(contactDiscoveryRequestListener);
 
+// introductions (zafu_connect, zafu_friends, zafu_invite_friend): an app
+// connects two of its people; the line it sends lands in their pair room
+chrome.runtime.onMessageExternal.addListener(
+  createConnectListener(
+    connectDeps(async (roomId, line) => {
+      await people.service.api.send(roomId, line);
+    }),
+  ),
+);
+
 // bridge: popup → SW result messages are sent via INTERNAL chrome.runtime.sendMessage
 // (onMessage), but their handlers live in the external listeners (onMessageExternal).
 const INTERNAL_RESULT_TYPES = new Set([
@@ -679,6 +697,9 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   }
   if (t === 'zafu_contact_discovery_approval_result') {
     return contactDiscoveryRequestResultListener(req, sender, sendResponse);
+  }
+  if (CONNECT_INTERNAL_METHODS[0] === t) {
+    return connectResultListener(req, sender, sendResponse);
   }
   if (NET_EGRESS_INTERNAL_METHODS[0] === t) {
     return destinationConsentResultListener(req, sender, sendResponse);

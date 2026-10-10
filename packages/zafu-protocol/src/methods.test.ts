@@ -27,7 +27,7 @@ describe('ZAFU_V1_METHODS', () => {
     }
   });
 
-  it('excludes the fund-safety FROST surface and the unimplemented invite stub', () => {
+  it('excludes the fund-safety FROST surface', () => {
     const excluded = [
       'zafu_frost_create',
       'zafu_frost_join',
@@ -35,7 +35,6 @@ describe('ZAFU_V1_METHODS', () => {
       'zafu_frost_sign_orchard',
       'zafu_dkg_join',
       'zafu_delete_multisig',
-      'zafu_send_invite',
     ];
     for (const m of excluded) {
       expect(ZAFU_V1_METHODS as readonly string[]).not.toContain(m);

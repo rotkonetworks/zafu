@@ -14,8 +14,8 @@
  *
  * Only IMPLEMENTED, safe-for-arbitrary-origins methods live in v1. Deliberately
  * excluded: the FROST/multisig methods (fund-safety surface, gated behind
- * explicit capabilities - not for a general SDK), and `zafu_send_invite`
- * (an unimplemented stub in the wallet today).
+ * explicit capabilities - not for a general SDK). An invite between people
+ * goes through `zafu_invite_friend`, to someone the same app introduced.
  */
 
 /** lowercase hex, no 0x prefix. */
@@ -132,6 +132,17 @@ export type ZafuZidPubkeyResponse =
        */
       pq_sig?: Hex;
       /**
+       * the site's key-agreement public key (X25519), hex. An app that holds
+       * two people's `pubkey` + `ka` + `ka_sig` can introduce them with
+       * zafu_connect; it can never compute the secret they meet under.
+       */
+      ka?: Hex;
+      /**
+       * ed25519 signature (hex) by `pubkey` over @zafu/pq's
+       * `pqKeyAuthMessage(CONNECT_KA_SUITE, origin, 0, ka)`. Present iff `ka` is.
+       */
+      ka_sig?: Hex;
+      /**
        * the rotation epoch `pq_pubkey` was derived at (P2 epoch
        * compartmentalization: a leaked epoch seed opens that epoch only. This
        * is not forward secrecy - the wallet's recovery phrase re-derives every
@@ -241,6 +252,63 @@ export interface ZafuPickContactsRequest {
   max?: number;
 }
 export type ZafuPickContactsResponse = { success: true; contacts: ZafuContact[] } | ZafuError;
+
+// -- introductions: an app connects two of its people ------------------------
+
+/** the suite `ka_sig` is made under (zafu_zid_pubkey) */
+export const CONNECT_KA_SUITE = 'x25519-connect-v1';
+
+/** what an app knows about one of its people: their site keys, from their zafu_zid_pubkey */
+export interface ZafuConnectPeer {
+  pubkey: Hex;
+  ka: Hex;
+  ka_sig: Hex;
+}
+
+/**
+ * Ask to connect the person using this app with another person using it
+ * (a friend at a poker table). zafu asks once; when both people have
+ * accepted, their zafus open a private room with each other - no
+ * transaction, no code. The app never learns whether the other person
+ * declined: until both accept the answer is `pending`, and a connection
+ * shows up later in zafu_friends.
+ */
+export interface ZafuConnectRequest {
+  type: 'zafu_connect';
+  peer: ZafuConnectPeer;
+  /** the name the app knows them by, shown on the ask (zafu may shorten it) */
+  name?: string;
+}
+export type ZafuConnectResponse =
+  | { status: 'pending' }
+  | { status: 'connected'; handle: Hex }
+  | ZafuError;
+
+/** one person this app introduced, now connected: `handle` is their site `pubkey` here */
+export interface ZafuFriend {
+  handle: Hex;
+  name: string;
+}
+
+/** the people this app introduced the person to, and who are connected now. Nothing about anyone else. */
+export interface ZafuFriendsRequest {
+  type: 'zafu_friends';
+}
+export type ZafuFriendsResponse = { friends: ZafuFriend[] } | ZafuError;
+
+/**
+ * Hand a connected friend an invite (a table code, a link): zafu puts it in
+ * their private room, says which app it is from, and they open it from there.
+ */
+export interface ZafuInviteFriendRequest {
+  type: 'zafu_invite_friend';
+  handle: Hex;
+  /** a short line the friend reads, e.g. "table 7-fern-dusk" */
+  text: string;
+  /** a path on this app's own origin to open, e.g. "/t/7-fern-dusk" */
+  path?: string;
+}
+export type ZafuInviteFriendResponse = { sent: true } | ZafuError;
 
 // -- contact discovery (opt-in, app-scoped presence) -------------------------
 
@@ -436,6 +504,9 @@ export interface ZafuApi {
     response: ZafuGetFreshChainAddressResponse;
   };
   zafu_open_shield: { request: ZafuOpenShieldRequest; response: ZafuOpenShieldResponse };
+  zafu_connect: { request: ZafuConnectRequest; response: ZafuConnectResponse };
+  zafu_friends: { request: ZafuFriendsRequest; response: ZafuFriendsResponse };
+  zafu_invite_friend: { request: ZafuInviteFriendRequest; response: ZafuInviteFriendResponse };
 }
 
 export type ZafuMethod = keyof ZafuApi;
@@ -463,6 +534,9 @@ export const ZAFU_V1_METHODS = [
   'zafu_request_contact_discovery',
   'zafu_get_fresh_chain_address',
   'zafu_open_shield',
+  'zafu_connect',
+  'zafu_friends',
+  'zafu_invite_friend',
 ] as const satisfies readonly ZafuMethod[];
 
 // Compile-time guarantee that ZAFU_V1_METHODS lists EVERY key of ZafuApi (not

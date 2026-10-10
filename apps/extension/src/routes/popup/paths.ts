@@ -94,6 +94,7 @@ export enum PopupPath {
 
   // Contact-discovery consent (opened by external apps via zafu_request_contact_discovery)
   CONTACT_DISCOVERY_APPROVAL = '/approval/contact-discovery',
+  CONNECT_APPROVAL = '/approval/connect',
 
   // Outbound-destination consent (raised by the egress gate when a dapp
   // introduces a host that is not in zafu's config for an enabled network)
@@ -173,6 +174,7 @@ export const APPROVAL_ROUTES: readonly string[] = [
   PopupPath.ZCASH_SEND_APPROVAL,
   PopupPath.KEPLR_APPROVAL,
   PopupPath.CONTACT_DISCOVERY_APPROVAL,
+  PopupPath.CONNECT_APPROVAL,
   PopupPath.DESTINATION_APPROVAL,
   PopupPath.CONTACT_PICKER,
   PopupPath.FROST_APPROVE,
