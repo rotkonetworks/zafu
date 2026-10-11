@@ -107,7 +107,7 @@ export const reserve = async (
   await baseReader().waitForTransactionReceipt({ hash: tx });
   const held = await heldIntent(account.address, o.depositId);
   if (!held) {
-    throw new Error('the seller was not held');
+    throw new Error('the seller did not put the usdc in escrow');
   }
   return { tx, ...held };
 };

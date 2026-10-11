@@ -285,7 +285,7 @@ export const Ticket = () => {
     !stage || stage === 'reserving'
       ? ['estimate', 'text-fg-muted']
       : stage === 'pay'
-        ? ['held for you', 'text-zigner-gold']
+        ? ['in escrow for you', 'text-zigner-gold']
         : stage === 'confirming'
           ? ['paid · confirming', 'text-zigner-gold']
           : stage === 'done'
