@@ -69,7 +69,7 @@ export const PopupWelcome = () => {
           seen by no one.
         </h1>
         <p className='text-label tracking-[0.04em] text-fg-muted'>
-          zcash · penumbra · private by default
+          private by default
         </p>
       </div>
 

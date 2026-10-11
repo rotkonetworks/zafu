@@ -48,7 +48,7 @@ export const OnboardingStart = () => {
         <br />
         by no one.
       </h1>
-      <p className='text-body text-fg-muted'>zcash and penumbra · private by default</p>
+      <p className='text-body text-fg-muted'>private by default</p>
       <div className='mt-[18px] flex flex-col gap-3'>
         <Button
           autoFocus
