@@ -154,7 +154,7 @@ const HOSTS: Host[] = [
   {
     mark: 'b',
     name: 'base',
-    does: "where the seller's usdc is held for you",
+    does: "where the seller's usdc waits in escrow for you",
     host: 'mainnet.base.org',
     c: 'text-info',
   },

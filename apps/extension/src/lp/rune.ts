@@ -140,7 +140,7 @@ export const readRune = async (thor1: string, signal?: AbortSignal): Promise<Run
 };
 
 export const NO_ACCOUNT_LINE =
-  'this rune address has not held rune yet · please get some rune first · nothing was sent';
+  'this rune address has no rune yet · please get some rune first · nothing was sent';
 
 /**
  * Simulate, then broadcast, one signed MsgDeposit; its tx hash. The simulate
