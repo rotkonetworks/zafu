@@ -187,6 +187,11 @@ export const SETTINGS_EXPLAIN = {
     on: 'zafu shows your zcash balance and syncs it from your chosen node',
     off: 'zcash is hidden everywhere in zafu; your keys are untouched and nothing is asked of any zcash node',
   },
+  'network.zcash-testnetEnable': {
+    blurb: 'zcash testnet, to try zafu and apps with coins that have no value.',
+    on: "a seed wallet's zcash speaks testnet: its own addresses, balance and sync, from tzcash.rotko.net. mainnet waits, untouched",
+    off: 'zcash is mainnet again and the testnet node is never contacted',
+  },
   'network.penumbraEnable': {
     blurb: 'turns the penumbra network on or off in zafu.',
     on: 'zafu shows your penumbra balance and syncs it from your chosen node',

@@ -48,7 +48,12 @@ export const HomeScreen = ({
         note={note}
         watermark={watermark ? look.watermark : undefined}
       >
-        <HomeActions spendable={spendable} icons={look.actionIcons} buy={!!look.buy} />
+        <HomeActions
+          spendable={spendable}
+          icons={look.actionIcons}
+          buy={!!look.buy}
+          swap={look.swap}
+        />
       </BalanceHero>
       {children}
     </div>

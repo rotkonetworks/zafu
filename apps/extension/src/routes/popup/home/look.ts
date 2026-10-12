@@ -12,6 +12,8 @@ export interface HomeLook {
   eye: boolean;
   /** icons in receive / swap / send (board Main has them, HomePenumbra not) */
   actionIcons: boolean;
+  /** the swap action: only for coins with a price */
+  swap: boolean;
   /** heading of the balance rows */
   heading: string;
   /** the faint mark behind the hero (boards Main, HomePenumbra) */
@@ -31,6 +33,7 @@ export const HOME_LOOK = {
     label: 'balance',
     eye: true,
     actionIcons: true,
+    swap: true,
     heading: 'balances',
     watermark: 'i-zafu-enso',
     empty: 'no zec yet',
@@ -38,11 +41,24 @@ export const HOME_LOOK = {
     swapInto: 'swap into zec',
     buy: 'buy zec',
   },
+  // testnet coins have no value: nothing to buy or swap
+  'zcash-testnet': {
+    unit: 'taz',
+    label: 'balance',
+    eye: true,
+    actionIcons: true,
+    swap: false,
+    heading: 'balances',
+    watermark: 'i-zafu-enso',
+    empty: 'no taz yet',
+    receive: 'receive taz',
+  },
   penumbra: {
     unit: 'um',
     label: 'total value',
     eye: false,
     actionIcons: false,
+    swap: true,
     heading: 'assets',
     watermark: 'i-zafu-enso',
     empty: 'no assets yet',

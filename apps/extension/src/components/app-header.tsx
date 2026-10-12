@@ -12,7 +12,7 @@ import { useStore } from '../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo, selectLock } from '../state/keyring';
 import { useNavigate } from 'react-router-dom';
 import { PopupPath } from '../routes/popup/paths';
-import { selectActiveZcashWallet } from '../state/wallets';
+import { selectActiveZcashWallet, selectNetworkShown } from '../state/wallets';
 import { isViewOnly } from '../signing/wallet-kind';
 import { activePockets, hiddenPockets, pocketOwner } from '../state/pockets';
 import { getNetwork, getRootNetwork } from '../config/networks';
@@ -39,6 +39,7 @@ export const AppHeader = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
+  const testnet = useStore(s => selectNetworkShown(s) === 'zcash-testnet');
   const pockets = useStore(useShallow(activePockets));
   const pocketAccount = useStore(pocketTarget(activeNetwork).active);
   const owner = selectedKeyInfo ? pocketOwner(selectedKeyInfo) : undefined;
@@ -109,6 +110,7 @@ export const AppHeader = () => {
         >
           <span className={cn('size-2', networkInfo.color)} />
           <span className='text-[13px] text-fg-high lowercase'>{networkInfo.name}</span>
+          {testnet && <span className='text-[11px] text-fg-muted'>testnet</span>}
           <span className='i-lucide-chevron-down size-3 text-fg-muted' />
         </button>
         <button

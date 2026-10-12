@@ -22,6 +22,7 @@ import { PopupPath } from '../routes/popup/paths';
 /** one line per network, so the pools read apart at a glance */
 export const NETWORK_BLURB: Partial<Record<string, string>> = {
   zcash: 'encrypted money',
+  'zcash-testnet': 'coins have no value',
   penumbra: 'private defi',
 };
 

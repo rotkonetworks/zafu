@@ -16,6 +16,7 @@ import { Sensitive } from '../../../components/sensitive';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
+import { selectNetworkShown } from '../../../state/wallets';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { Value, Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
@@ -104,14 +105,16 @@ interface OutputAsset {
 
 export const SwapPage = () => {
   const activeNetwork = useStore(selectActiveNetwork);
+  const shown = useStore(selectNetworkShown);
   const location = useLocation();
   const swapState = location.state as SwapLocationState | undefined;
   // the chain's own node and the swap services: nym starts for those that use it
   useEffect(() => void ensureNym(activeNetwork, 'thorchain', 'near-swap'), [activeNetwork]);
 
   // gate on the capability, not the chain: a network without swap has no page
-  // here. Which implementation renders below is chain-specific routing.
-  if (!hasFeature(activeNetwork, 'swap')) {
+  // here (zcash testnet among them). Which implementation renders below is
+  // chain-specific routing.
+  if (!hasFeature(shown, 'swap')) {
     return (
       <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
         <div className='bg-primary/10 p-4'>

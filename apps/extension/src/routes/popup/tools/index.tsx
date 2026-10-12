@@ -7,10 +7,11 @@
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo } from '../../../state/keyring';
+import { selectEffectiveKeyInfo } from '../../../state/keyring';
+import { selectNetworkShown } from '../../../state/wallets';
 import { LP_PRELOAD, openLpPage } from '../../../lp/open';
 import { isIdentityEnabled } from '../../../state/privacy';
-import { hasFeature } from '../../../config/networks';
+import { getNetwork, hasFeature } from '../../../config/networks';
 import { IRONWOOD_MIGRATION } from '../../../config/feature-flags';
 import { PopupPath } from '../paths';
 import { screenTransition } from '../../../utils/navigate';
@@ -26,7 +27,8 @@ interface Tile {
 
 export const ToolsPage = () => {
   const navigate = useNavigate();
-  const activeNetwork = useStore(selectActiveNetwork);
+  // zcash testnet reads its own features: nothing to swap or vote with
+  const activeNetwork = useStore(selectNetworkShown);
   const identityEnabled = useStore(isIdentityEnabled);
   // only a hot wallet signs a t->t with a memo
   const hot = useStore(selectEffectiveKeyInfo)?.type === 'mnemonic';
@@ -56,6 +58,7 @@ export const ToolsPage = () => {
       path: PopupPath.SWAP,
     },
     hasFeature(activeNetwork, 'zcash') &&
+      hasFeature(activeNetwork, 'swap') &&
       hot && {
         icon: 'i-lucide-waves',
         label: 'zec liquidity',
@@ -110,7 +113,7 @@ export const ToolsPage = () => {
     <div className='flex flex-col gap-6 p-4'>
       {tiles.length > 0 && (
         <section className='flex flex-col gap-2'>
-          <h2 className='kicker'>{activeNetwork}</h2>
+          <h2 className='kicker'>{getNetwork(activeNetwork).name.toLowerCase()}</h2>
           <div className='grid grid-cols-2 gap-2'>
             {tiles.map(t => (
               <button

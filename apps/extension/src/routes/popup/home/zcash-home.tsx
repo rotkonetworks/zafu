@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
-import { selectZcashBackend } from '../../../state/networks';
+import { selectZcashBackend, selectZcashEndpoint } from '../../../state/networks';
 import { contactsSelector } from '../../../state/contacts';
 import {
   selectEffectiveKeyInfo,
@@ -18,6 +18,7 @@ import {
   activeAccountIndex,
   activeZcashStoreId,
   activePocketBirthday,
+  hotStoreBase,
 } from '../../../state/pockets';
 import { Sensitive } from '../../../components/sensitive';
 import type { SyncNotice } from '../../../components/zcash/sync-status';
@@ -50,7 +51,8 @@ import { Button } from '@repo/ui/components/ui/button';
 import { fmtZecHero } from './format';
 import { ACTION_LABEL, CHAIN_NOTICE, chainNoticeOf, type ChainAction } from './chain-notice';
 import { HistoryContent, AskHistorySheet } from './history';
-import { HOME_LOOK } from './look';
+import { HOME_LOOK, type HomeLook } from './look';
+import { zcashNetworkOf } from '../../../config/networks';
 import { SyncStrip } from '../../../components/wallet/sync-strip';
 import { EmptyBox, HomeScreen } from './home-screen';
 import {
@@ -109,7 +111,8 @@ export const ZcashContent = ({
 }) => {
   const hasWallet = !!(hasMnemonic || watchOnly);
   const isMainnet = useStore(selectZcashIsMainnet);
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const look: HomeLook = HOME_LOOK[zcashNetworkOf(isMainnet)];
+  const zidecarUrl = useStore(selectZcashEndpoint);
   const zcashBackend = useStore(selectZcashBackend);
   const {
     chainTip,
@@ -129,6 +132,8 @@ export const ZcashContent = ({
   const kind = selectedKeyInfo && walletKind(selectedKeyInfo, zcashWallet);
   // the active pocket's own worker store and zip32 account
   const storeId = useStore(activeZcashStoreId);
+  // a hot wallet's birthday is kept apart per chain
+  const storeBase = useStore(hotStoreBase);
   const pocketAccount = useStore(activeAccountIndex);
   // a pocket's own birthday (the chain tip when it was created); undefined
   // for account 0 or a pocket that recorded none, meaning "use the wallet's"
@@ -154,7 +159,9 @@ export const ZcashContent = ({
   const balanceState = balance.data !== undefined ? 'ready' : balance.isError ? 'error' : 'loading';
 
   // wallet birthday - used to show progress relative to start, not block 0
-  const birthdayQuery = zcashBirthdayQuery(hasWallet ? selectedKeyInfo?.id : undefined);
+  const birthdayQuery = zcashBirthdayQuery(
+    hasWallet ? (storeBase ?? selectedKeyInfo?.id) : undefined,
+  );
   const walletBirthday = useQuery(birthdayQuery).data ?? 0;
 
   // the transparent figure is the last check: asked on intent, never on a timer
@@ -335,7 +342,7 @@ export const ZcashContent = ({
 
   return (
     <HomeScreen
-      look={HOME_LOOK.zcash}
+      look={look}
       strip={
         <SyncStrip
           network='zcash'
@@ -409,9 +416,9 @@ export const ZcashContent = ({
       {messageSlot}
 
       {reading || balanceView === 'error' || balanceView === 'paused' ? null : empty ? (
-        <EmptyBox look={HOME_LOOK.zcash} />
+        <EmptyBox look={look} />
       ) : (
-        <BalanceGroup heading={HOME_LOOK.zcash.heading} held={held}>
+        <BalanceGroup heading={look.heading} held={held}>
           <BalanceRow
             tile={<Tile tone='accent'>z</Tile>}
             label='shielded'
@@ -470,7 +477,7 @@ export const ZcashContent = ({
         </BalanceGroup>
       )}
 
-      {hasMnemonic && <LpCard storeId={storeId} />}
+      {hasMnemonic && look.swap && <LpCard storeId={storeId} />}
 
       <SharedWallets />
 
@@ -479,25 +486,29 @@ export const ZcashContent = ({
       {/* the shield flow (hot one-tap or zigner QR) rises in a sheet - the
           transparent row never grows */}
       {/* the zec row: buying with cash first, then what moves zec */}
-      <Sheet open={zecOpen} onOpenChange={setZecOpen} title='zec · shielded'>
+      <Sheet open={zecOpen} onOpenChange={setZecOpen} title={`${look.unit} · shielded`}>
         <RowGroup>
-          <Row
-            type='screen'
-            media={<Tile tone='accent'>+</Tile>}
-            label='buy with cash'
-            preload={BUY_PRELOAD}
-            description={PAY_APPS.filter(a => !a.off)
-              .map(a => a.name)
-              .join(', ')}
-            onPress={openBuyPage}
-          />
-          <Row
-            type='screen'
-            label='swap'
-            description='to or from another coin'
-            onPress={() => navigate(PopupPath.SWAP)}
-          />
-          {hasMnemonic && (
+          {look.buy && (
+            <Row
+              type='screen'
+              media={<Tile tone='accent'>+</Tile>}
+              label='buy with cash'
+              preload={BUY_PRELOAD}
+              description={PAY_APPS.filter(a => !a.off)
+                .map(a => a.name)
+                .join(', ')}
+              onPress={openBuyPage}
+            />
+          )}
+          {look.swap && (
+            <Row
+              type='screen'
+              label='swap'
+              description='to or from another coin'
+              onPress={() => navigate(PopupPath.SWAP)}
+            />
+          )}
+          {hasMnemonic && look.swap && (
             <Row
               type='screen'
               className='bg-zigner-gold/10'
