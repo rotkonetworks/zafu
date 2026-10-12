@@ -40,6 +40,7 @@ import { doorView } from '../../../people/door-run';
 import { waitingLine } from './group';
 import { useMemberName } from './use-member-name';
 import { threadKey, unreadOf, type PeopleRoom } from '../../../people/vault';
+import { selectZcashEndpoint } from '../../../state/networks';
 
 const zec = (zat: bigint) => (Number(zat) / 1e8).toFixed(2);
 
@@ -410,7 +411,7 @@ export function InboxPage() {
   const navigate = useNavigate();
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const network = useStore(selectActiveNetwork);
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zidecarUrl = useStore(selectZcashEndpoint);
   const walletId = keyInfo?.id ?? '';
   const [composing, setComposing] = useState(false);
   const canCard = !!keyInfo && keyInfoSupportsNetwork(keyInfo, 'zcash');

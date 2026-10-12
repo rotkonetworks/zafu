@@ -38,6 +38,7 @@ import { SettingsScreen } from './settings/settings-screen';
 import { PopupPath } from './paths';
 import { cn } from '@repo/ui/lib/utils';
 import { Clipped } from '@repo/ui/components/ui/clipped';
+import { selectZcashEndpoint } from '../../state/networks';
 
 /** Shielded pool a note lives in. Records persisted pre-ironwood default to orchard. */
 type NotePool = 'orchard' | 'ironwood';
@@ -264,7 +265,7 @@ export const PoolNotesPage = () => {
   const hasMnemonic = selectedKeyInfo?.type === 'mnemonic';
   const watchOnly = hasMnemonic ? undefined : activeZcashWallet;
   const isMainnet = watchOnly?.mainnet ?? true;
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zidecarUrl = useStore(selectZcashEndpoint);
 
   const active = filter === 'ironwood' ? notes.ironwood : notes.orchard;
   const label = filter === 'ironwood' ? 'ironwood' : 'orchard';

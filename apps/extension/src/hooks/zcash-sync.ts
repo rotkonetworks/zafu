@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { ChainTip } from '../state/keyring/zidecar-client';
 import { backendKey, zcashClient } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
-import { selectZcashBackend } from '../state/networks';
+import { selectZcashBackend, selectZcashEndpoint } from '../state/networks';
 import { selectActiveNetwork } from '../state/keyring';
 import { activeZcashStoreId } from '../state/pockets';
 import {
@@ -20,7 +20,6 @@ import {
 } from '../state/keyring/network-worker';
 import { classifySyncFailure, stalledFailure, type SyncFailure } from '../state/sync-failure';
 
-const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
 const CHAIN_FAILURE = classifySyncFailure('chain proof did not check out', 'chain-unproven');
 const CHAIN_ERROR = new Error(CHAIN_FAILURE.raw);
 const POLL_INTERVAL = 10_000;
@@ -50,7 +49,7 @@ export interface ZcashSyncState {
  * check of another node says nothing about this one
  */
 export function useZcashChainCheck(): ZcashChainCheck | undefined {
-  const endpoint = useStore(s => s.networks.networks.zcash.endpoint);
+  const endpoint = useStore(selectZcashEndpoint);
   const [check, setCheck] = useState<ZcashChainCheck>();
   useEffect(() => {
     const read = (v: unknown) => setCheck(v as ZcashChainCheck | undefined);
@@ -173,7 +172,7 @@ export function useZcashWorkerSync() {
 }
 
 export function useZcashSyncStatus(): ZcashSyncState {
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
+  const zidecarUrl = useStore(selectZcashEndpoint);
   const backend = useStore(selectZcashBackend);
   // Privacy: never poll the zcash zidecar when zcash is not an enabled network.
   // Otherwise a penumbra-only wallet still hammered zcash.rotko.net for GetTip /

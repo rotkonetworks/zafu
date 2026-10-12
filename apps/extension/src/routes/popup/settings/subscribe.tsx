@@ -41,6 +41,7 @@ import { QrScanner } from '../../../shared/components/qr-scanner';
 import { SettingsScreen } from './settings-screen';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { Clipped } from '@repo/ui/components/ui/clipped';
+import { selectZcashEndpoint } from '../../../state/networks';
 
 type PayState =
   | 'idle'
@@ -80,7 +81,7 @@ export const SubscribePage = () => {
   const pending = useStore(selectPending);
   const { fetchLicense, registerRing } = useStore(licenseSelector);
   const currentLicense = useStore(s => s.license.license);
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zidecarUrl = useStore(selectZcashEndpoint);
   const enabledNetworks = useStore(s => s.keyRing.enabledNetworks);
   const zcashEnabled = enabledNetworks.includes('zcash');
   const isZignerWallet = keyInfo?.type === 'zigner-zafu';

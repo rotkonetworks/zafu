@@ -17,6 +17,7 @@ import { AnimatedQrDisplay } from '../../shared/components/animated-qr-display';
 import { SettingsScreen } from './settings/settings-screen';
 import { PopupPath } from './paths';
 import { Clipped } from '@repo/ui/components/ui/clipped';
+import { selectZcashEndpoint } from '../../state/networks';
 
 type Step = 'loading' | 'building' | 'display' | 'error';
 
@@ -27,7 +28,7 @@ export const NoteSyncPage = () => {
   const [error, setError] = useState('');
 
   const walletId = useStore(activeZcashStoreId);
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zidecarUrl = useStore(selectZcashEndpoint);
 
   useEffect(() => {
     if (!activeWallet || !walletId) {

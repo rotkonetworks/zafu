@@ -7,14 +7,14 @@
 
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../state';
-import { selectZcashBackend } from '../state/networks';
+import { selectZcashBackend, selectZcashEndpoint } from '../state/networks';
 import { activeZcashStoreId } from '../state/pockets';
 import { zcashClient } from '../state/keyring/zcash-backend';
 import { readCheck, runCheck, saveCheck, type TransparentCheck } from '../transparent/zcash-check';
 
 export const useTransparentBalance = (tAddresses: string[]) => {
   const storeId = useStore(activeZcashStoreId);
-  const url = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const url = useStore(selectZcashEndpoint);
   const backend = useStore(selectZcashBackend);
   const queryClient = useQueryClient();
   const key = ['zcashTransparentCheck', storeId];
