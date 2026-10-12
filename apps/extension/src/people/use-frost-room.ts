@@ -22,7 +22,7 @@ import {
   frostSpendAggregateInWorker,
   frostSpendSignInWorker,
 } from '../state/keyring/network-worker';
-import type { ZcashWalletJson } from '../state/wallets';
+import { selectZcashIsMainnet, type ZcashWalletJson } from '../state/wallets';
 import { peopleAsk, peopleCall } from './client';
 import {
   advance,
@@ -49,16 +49,20 @@ import {
 import { readRooms, type PeopleRoom } from './vault';
 import { signAndBroadcast } from '../signing/cold-send';
 import { frostAirgapSigner } from '../signing/frost-signer';
+import { zcashEndpointOf } from '../state/networks';
+
+/** a room's wallet is made on the chain zafu speaks now; a mixed room fails the key echo */
+const mainnetNow = () => selectZcashIsMainnet(useStore.getState());
 
 const frost: FrostCalls = {
   part1: frostDkgPart1InWorker,
   part2: frostDkgPart2InWorker,
   part3: frostDkgPart3InWorker,
-  ufvk: (pkp, sk) => frostDeriveUfvkInWorker(pkp, sk, true),
+  ufvk: (pkp, sk) => frostDeriveUfvkInWorker(pkp, sk, mainnetNow()),
   address: async (pkp, sk) =>
     encodeOrchardUnifiedAddress(
       hexToBytes(await frostDeriveAddressFromSkInWorker(pkp, sk, 0)),
-      true,
+      mainnetNow(),
     ),
 };
 
@@ -140,8 +144,8 @@ export const walletOf = (seat: ZcashWalletJson | undefined): RoomWallet | undefi
     : undefined;
 };
 
-const zcashUrl = () =>
-  useStore.getState().networks.networks.zcash.endpoint || 'https://zcash.rotko.net';
+/** the node of a seat's own chain */
+const zcashUrl = (seat: ZcashWalletJson) => zcashEndpointOf(useStore.getState(), seat.mainnet);
 
 /** the signing rounds, bound to this device's share of `seat` */
 const signCalls = async (seat: ZcashWalletJson): Promise<SignCalls> => {
@@ -160,7 +164,7 @@ const signCalls = async (seat: ZcashWalletJson): Promise<SignCalls> => {
         await signAndBroadcast(
           frostAirgapSigner(sigs, { spendIndices: p.si }),
           { pcztHex: p.pczt, spendIndices: p.si, coldSendId: cold },
-          { walletId: seat.vaultId, zidecarUrl: zcashUrl(), mainnet: seat.mainnet },
+          { walletId: seat.vaultId, zidecarUrl: zcashUrl(seat), mainnet: seat.mainnet },
         )
       ).txid,
   };
@@ -309,7 +313,7 @@ export const proposePayment = async (
   const u = await buildSendTxPcztInWorker(
     'zcash',
     seat.vaultId,
-    zcashUrl(),
+    zcashUrl(seat),
     to,
     amountZat,
     '',

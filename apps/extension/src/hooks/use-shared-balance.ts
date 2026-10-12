@@ -17,12 +17,13 @@ import {
 } from '../state/keyring/network-worker';
 import type { ZcashWalletJson } from '../state/wallets';
 import { resolveBirthday } from './zcash-auto-sync';
+import { zcashEndpointOf } from '../state/networks';
 
 /** the least time between two balance reads of one shared wallet */
 const READ_MS = 15_000;
 
 export const useSharedBalance = (w: ZcashWalletJson | undefined): bigint | undefined => {
-  const url = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const url = useStore(s => zcashEndpointOf(s, w?.mainnet !== false));
   const backend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
   const [bal, setBal] = useState<{ id: string; zat: bigint }>();
   const id = w?.vaultId;

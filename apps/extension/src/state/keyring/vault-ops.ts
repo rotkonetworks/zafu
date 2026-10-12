@@ -253,7 +253,8 @@ export const buildFrostZcashWallet = (
   orchardFvk: params.orchardFvk,
   address: params.address,
   accountIndex: 0,
-  mainnet: true,
+  // the viewing key says which chain the group was made on
+  mainnet: !params.orchardFvk.startsWith('uviewtest'),
   vaultId,
   multisig: {
     publicKeyPackage: params.publicKeyPackage,

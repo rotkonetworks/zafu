@@ -10,6 +10,7 @@ import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../state';
+import { selectZcashIsMainnet } from '../../state/wallets';
 import {
   frostDkgPart1InWorker,
   frostDkgPart2InWorker,
@@ -475,10 +476,12 @@ export const FrostApprove = () => {
     setStatus('round 3: finalizing...');
     const round3 = await frostDkgPart3InWorker(round2.secret, peerBroadcasts, peerRound2);
 
-    // mainnet=true matches multisig/join.tsx; param-ize when callers need testnet/regtest
+    // the shared wallet is made on the chain zafu speaks now; a co-signer on
+    // the other chain derives another viewing key and the echo below refuses it
+    const mainnet = selectZcashIsMainnet(useStore.getState());
     const addrRaw = await frostDeriveAddressFromSkInWorker(round3.public_key_package, fvkSk, 0);
-    const addr = encodeOrchardUnifiedAddress(hexToBytes(addrRaw), true);
-    const orchardFvk = await frostDeriveUfvkInWorker(round3.public_key_package, fvkSk, true);
+    const addr = encodeOrchardUnifiedAddress(hexToBytes(addrRaw), mainnet);
+    const orchardFvk = await frostDeriveUfvkInWorker(round3.public_key_package, fvkSk, mainnet);
 
     setStatus('verifying viewing key agreement...');
     await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`FVK:${orchardFvk}`));
