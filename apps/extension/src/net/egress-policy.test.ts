@@ -93,6 +93,14 @@ describe('the required endpoint follows settings', () => {
     expect(outcome(inputs, 'https://node.example/x')).toBe('unknown');
   });
 
+  it('reaches the zcash testnet node only while testnet is on', () => {
+    const tip = 'https://tzcash.rotko.net/zidecar.v1.Zidecar/GetTip';
+    expect(outcome(ZCASH_ONLY, tip)).toBe('network-off');
+    const on = { enabledNetworks: ['zcash', 'zcash-testnet'] };
+    expect(outcome(on, tip)).toBe('allow');
+    expect(outcome(on, 'https://zcash.rotko.net/x')).toBe('allow');
+  });
+
   it('resolves penumbra like the wallet does: picked node, then the legacy key, then the default', () => {
     const on = { enabledNetworks: ['penumbra'] };
     expect(outcome(on, 'https://penumbra.rotko.net/x')).toBe('allow');
