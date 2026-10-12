@@ -1,5 +1,5 @@
 /**
- * Introductions (zafu_connect): an app that holds two people's site keys asks
+ * Introductions (zafu_connect): an app that knows two people's site keys asks
  * each zafu, once, to connect them - two players at a poker table who want to
  * play again. When both have said yes they meet in a room only their two
  * wallets can derive (state/identity `connectSecret`: X25519 of the two site
@@ -15,8 +15,8 @@
  * could hand over a wrong key, so the person stays "seal not checked" until
  * compared, like anyone met by link.
  *
- * The meeting room lives under the pair scope, kept as long as pair rooms: one
- * person may say yes days after the other.
+ * The meeting room lives under the pair scope. The second yes has to come while
+ * the relay still keeps the first one's card (48 h).
  */
 
 import { sha256 } from '@noble/hashes/sha2';
@@ -63,7 +63,8 @@ export const connectRoom = (
   signer: { gen: c.gen, j: c.j },
   joined: true,
   createdAt: at,
-  since: presenceEpoch(Math.floor(at / 1000)),
+  // the answer side may say yes after the card went up: it reads back to it, not from now
+  ...(c.role === 'card' ? { since: presenceEpoch(Math.floor(at / 1000)) } : {}),
   connect: {
     origin: c.origin,
     peer: c.peer,

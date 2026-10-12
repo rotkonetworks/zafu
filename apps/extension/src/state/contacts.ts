@@ -122,7 +122,7 @@ export interface Contact {
   /** ms: you compared the pair seal with them in person and it matched */
   sealChecked?: number;
   /** the site that introduced you (zafu_connect) and their key there: that site may list them */
-  introduced?: { origin: string; handle: string; at: number };
+  introduced?: { origin: string; handle: string; at: number; name?: string };
   /** the card you last gave them (people/my-card), so a change sends an update */
   given?: GivenCard;
   /** bumped when you give them a new address */

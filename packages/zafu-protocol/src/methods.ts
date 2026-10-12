@@ -132,7 +132,7 @@ export type ZafuZidPubkeyResponse =
        */
       pq_sig?: Hex;
       /**
-       * the site's key-agreement public key (X25519), hex. An app that holds
+       * the site's key-agreement public key (X25519), hex. An app that has
        * two people's `pubkey` + `ka` + `ka_sig` can introduce them with
        * zafu_connect; it can never compute the secret they meet under.
        */
@@ -287,6 +287,7 @@ export type ZafuConnectResponse =
 /** one person this app introduced, now connected: `handle` is their site `pubkey` here */
 export interface ZafuFriend {
   handle: Hex;
+  /** the name this app gave in zafu_connect, never the person's own label; empty if it gave none */
   name: string;
 }
 

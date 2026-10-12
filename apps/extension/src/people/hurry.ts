@@ -44,7 +44,7 @@ export const hurried = (rooms: PeopleRoom[], now: number): Set<string> => {
       }
     }
     // an introduction: the other side's card, the answer to yours, and a new pair room
-    // until they confirm holding your card
+    // until they confirm they have your card
     const meeting =
       (r.connect && r.connect.state !== 'done') ||
       (r.card?.introduced && r.card.state === 'waiting') ||

@@ -118,6 +118,7 @@ export const contactFromAnswer = (
             origin: room.card.introduced.origin,
             handle: room.card.introduced.peer,
             at: room.card.at ?? Date.now(),
+            ...(room.card.introduced.name ? { name: room.card.introduced.name } : {}),
           },
         }
       : {}),

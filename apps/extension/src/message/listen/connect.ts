@@ -75,7 +75,8 @@ export const shortName = (n: unknown): string =>
 export const friendsOf = (contacts: Contact[], origin: string, rooms: Set<string>) =>
   contacts
     .filter(c => c.introduced?.origin === origin && rooms.has(pairId(c.id)))
-    .map(c => ({ handle: c.introduced!.handle, name: c.name, id: c.id }));
+    // the name the app gave, never the person's own label for the contact
+    .map(c => ({ handle: c.introduced!.handle, name: c.introduced!.name ?? '', id: c.id }));
 
 // one ask per minute budget per site, like discovery's
 const WINDOW_MS = 60_000;
@@ -160,7 +161,10 @@ export const createConnectListener =
         const handle = typeof r['handle'] === 'string' ? r['handle'].toLowerCase() : '';
         const friend = friends.find(f => f.handle === handle);
         const text = shortName(r['text']);
-        const path = typeof r['path'] === 'string' && r['path'].startsWith('/') ? r['path'] : '';
+        const path =
+          typeof r['path'] === 'string' && r['path'].startsWith('/')
+            ? [...r['path']].filter(ch => ch > ' ' && ch !== '\u007f').join('').slice(0, 200)
+            : '';
         if (!friend || !text) {
           sendResponse({ error: 'not a friend here', code: 'invalid_request' });
           return;

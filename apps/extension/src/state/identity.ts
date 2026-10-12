@@ -384,7 +384,7 @@ export const deriveZidForSite = (
 
 /**
  * A site's key-agreement key: X25519, its own seed, never the ed25519 key
- * converted and never the X-Wing component. An app holds both people's keys
+ * converted and never the X-Wing component. An app has both people's keys
  * and so can introduce them (zafu_connect); it can never compute the secret.
  */
 export const deriveZidKaForSite = (
@@ -1331,7 +1331,7 @@ export const pairSecret = (
  *                        info min(XID) || max(XID))
  *
  * Each person holds a different KA key from you (xid-rel-v1), so nothing a
- * card carries links one person's card to another's, and a site that holds
+ * card carries links one person's card to another's, and a site that has
  * one of your cards cannot test whether a visitor knows you.
  */
 export const discoverySecret = (
@@ -1344,7 +1344,7 @@ export const discoverySecret = (
 /**
  * The secret two people an app introduced meet under: X25519 of the two site
  * KA keys, HKDF bound to the site and to both site ZIDs. Only the two wallets
- * compute it; the app that introduced them holds the public keys only.
+ * compute it; the app that introduced them has the public keys only.
  */
 export const connectSecret = (
   kaSeed: Uint8Array,

@@ -38,7 +38,7 @@ export const useStartConnect = () => {
   const cards = useMyCards();
   return async (origin: string, peer: ZafuConnectPeer, name: string) => {
     if (!keyInfo || !cards.ready) {
-      throw new Error("this wallet doesn't make cards · a phrase or zigner wallet does");
+      throw new Error("this wallet doesn't make cards · a phrase wallet does");
     }
     const mnemonic = await getMnemonic(keyInfo.id);
     const id = await currentIdentityName();
@@ -126,7 +126,7 @@ export const useConnectSteps = (rooms: PeopleRoom[]) => {
           addresses: addressesOf(theirs),
           cardV2: c.card,
           source: 'app',
-          introduced: { origin: c.origin, handle: c.peer, at: Date.now() },
+          introduced: { origin: c.origin, handle: c.peer, at: Date.now(), name: r.name },
           given: givenOf(answer.card),
         });
         await peopleAsk('card-answer', {
