@@ -18,7 +18,8 @@ import {
 import { keyInfoSupportsNetwork } from '../state/keyring/vault-ops';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { zcashViewKey } from '../state/zcash-view-key';
-import { activePocketBirthday, activeZcashStoreId } from '../state/pockets';
+import { activePocketBirthday, activeZcashStoreId, hotStoreBase } from '../state/pockets';
+import { storeIsMainnet } from '../state/pocket-id';
 import {
   spawnNetworkWorker,
   startSyncInWorker,
@@ -26,9 +27,9 @@ import {
   stopSyncInWorker,
   isWalletSyncing,
 } from '../state/keyring/network-worker';
-import { ZCASH_ORCHARD_ACTIVATION } from '../config/networks';
+import { ZCASH_ORCHARD_ACTIVATION, orchardActivation } from '../config/networks';
 import { zcashClient, type ZcashBackend } from '../state/keyring/zcash-backend';
-import { selectZcashBackend } from '../state/networks';
+import { selectZcashBackend, selectZcashEndpoint } from '../state/networks';
 import { isMempoolWatchEnabled } from '../services/mempool-watch/strategy';
 
 /**
@@ -46,19 +47,20 @@ export async function resolveBirthday(
   backend: ZcashBackend,
 ): Promise<number> {
   const birthdayKey = `zcashBirthday_${walletId}`;
+  const floor = orchardActivation(storeIsMainnet(walletId));
   const stored = await chrome.storage.local.get(birthdayKey);
   // per-wallet birthday takes priority (user-set or auto-detected)
   if (stored[birthdayKey] && typeof stored[birthdayKey] === 'number') {
-    return Math.max(ZCASH_ORCHARD_ACTIVATION, stored[birthdayKey]);
+    return Math.max(floor, stored[birthdayKey]);
   }
   // no birthday set - default to near chain tip (new wallet = recent)
   try {
     const tip = await zcashClient(zidecarUrl, backend).getTip();
-    const height = Math.floor(Math.max(ZCASH_ORCHARD_ACTIVATION, tip.height - 100) / 10000) * 10000;
+    const height = Math.floor(Math.max(floor, tip.height - 100) / 10000) * 10000;
     await chrome.storage.local.set({ [birthdayKey]: height });
     return height;
   } catch {
-    return ZCASH_ORCHARD_ACTIVATION;
+    return floor;
   }
 }
 
@@ -74,7 +76,7 @@ export function useZcashAutoSync() {
     keyInfoSupportsNetwork(selectedKeyInfo, 'zcash');
   const getVaultUnlock = useStore(selectGetVaultUnlock);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zidecarUrl = useStore(selectZcashEndpoint);
   const zcashBackend = useStore(selectZcashBackend);
   const mempoolWatchSetting = useStore(s => s.networks.networks.zcash.mempoolWatch) ?? 'off';
   // Single-source-of-truth gate. UI and worker also enforce; we run the same
@@ -90,6 +92,8 @@ export function useZcashAutoSync() {
   const walletId = selectedKeyInfo?.id;
   // the worker store of the active pocket; the bare vault id for account 0
   const storeId = useStore(activeZcashStoreId);
+  // where its birthday is kept: apart per chain
+  const storeBase = useStore(hotStoreBase);
   const pocketBirthday = useStore(activePocketBirthday);
 
   // track which walletId we started sync for, to avoid double-start
@@ -204,7 +208,7 @@ export function useZcashAutoSync() {
           const startHeight =
             pocketBirthday !== undefined
               ? Math.max(ZCASH_ORCHARD_ACTIVATION, pocketBirthday)
-              : await resolveBirthday(walletId, zidecarUrl, zcashBackend);
+              : await resolveBirthday(storeBase ?? walletId, zidecarUrl, zcashBackend);
           if (cancelled) {
             return;
           }
@@ -252,6 +256,7 @@ export function useZcashAutoSync() {
     hasMnemonic,
     walletId,
     storeId,
+    storeBase,
     pocketBirthday,
     getVaultUnlock,
     zidecarUrl,

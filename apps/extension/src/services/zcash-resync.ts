@@ -8,9 +8,9 @@ import { useStore } from '../state';
 import { selectEffectiveKeyInfo } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { zcashViewKey } from '../state/zcash-view-key';
-import { activeAccountIndex, activePockets } from '../state/pockets';
+import { activeAccountIndex, activePockets, hotStoreBase } from '../state/pockets';
 import { pocketStoreId } from '../state/pocket-id';
-import { selectZcashBackend } from '../state/networks';
+import { selectZcashBackend, selectZcashEndpoint } from '../state/networks';
 import {
   spawnNetworkWorker,
   terminateNetworkWorker,
@@ -29,12 +29,14 @@ const target = () => {
   if (!key) {
     return undefined;
   }
-  const zidecarUrl = s.networks.networks.zcash.endpoint || 'https://zcash.rotko.net';
+  const zidecarUrl = selectZcashEndpoint(s);
   // what the node said it is, or the guess until it has (never zidecar for a
   // third-party host); an unclassified node is asked first by the worker
   const backend = selectZcashBackend(s);
   const detect = !s.networks.networks.zcash.backendDetected;
-  const storeId = pocketStoreId(key.id, activeAccountIndex(s));
+  // a hot wallet's stores (and birthday) are apart per chain
+  const base = hotStoreBase(s) ?? key.id;
+  const storeId = pocketStoreId(base, activeAccountIndex(s));
   const pockets = activePockets(s);
   const watch = key.type === 'mnemonic' ? undefined : selectActiveZcashWallet(s);
   const ufvk = zcashViewKey(watch);
@@ -58,9 +60,9 @@ const target = () => {
   };
 
   return {
-    walletId: key.id,
+    walletId: base,
     storeId,
-    storeIds: pockets.length > 0 ? pockets.map(p => pocketStoreId(key.id, p.account)) : [key.id],
+    storeIds: pockets.length > 0 ? pockets.map(p => pocketStoreId(base, p.account)) : [base],
     start,
   };
 };

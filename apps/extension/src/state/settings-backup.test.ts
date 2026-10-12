@@ -130,7 +130,7 @@ describe('settings backup', () => {
       decoys: 4,
     },
     capabilityModes: { 'zid-discovery': 'disabled' },
-    enabledNetworks: ['zcash', 'penumbra'],
+    enabledNetworks: ['zcash', 'zcash-testnet', 'penumbra'],
     keplrCompat: true,
   };
 

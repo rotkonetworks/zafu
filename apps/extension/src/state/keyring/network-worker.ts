@@ -839,12 +839,15 @@ export const deriveAddressInWorker = async (
   diversifierHex?: string,
   /** zcash: the pocket (zip32 account); accountIndex above is a diversifier index */
   pocket = 0,
+  /** zcash: the chain the address is encoded for */
+  mainnet = true,
 ): Promise<string> => {
   return callWorker(network, 'derive-address', {
     vault: await sealFor(network, vault),
     accountIndex,
     diversifierHex,
     pocket,
+    mainnet,
   });
 };
 

@@ -30,7 +30,10 @@ const state = {
 vi.mock('../../../state', () => ({
   useStore: (selector: (s: typeof state) => unknown) => selector(state),
 }));
-vi.mock('../../../state/keyring', () => ({ selectActiveNetwork: () => 'zcash' }));
+vi.mock('../../../state/keyring', () => ({
+  selectActiveNetwork: () => 'zcash',
+  selectEffectiveKeyInfo: () => undefined,
+}));
 vi.mock('../../../state/pockets', () => ({ activeAccountIndex: () => 0 }));
 
 const { SendPage } = await import('./index');

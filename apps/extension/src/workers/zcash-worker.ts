@@ -133,7 +133,7 @@ import { startRun, stopRun, STOP_WAIT_MS, type RunSlot } from './sync-runs';
 import { errText, storageFailure } from '@penumbra-zone/query/error-text';
 import { mergeLoadedNotes, mergeLoadedSpent, readAcrossRewinds } from './wallet-state-merge';
 import { allowMismatchRewind, rewindPurge } from './rewind-purge';
-import { isWrongNetwork, walletIsMainnet } from './chain-network';
+import { isWrongNetwork, unitOf, walletIsMainnet } from './chain-network';
 import { storeFellBehind } from './store-reset';
 import { createBuildRegistry } from './build-abort';
 import { doorPake, type DoorPakeCall, type DoorPakeWasm } from './door-pake';
@@ -2195,15 +2195,16 @@ const deriveAddress = (
   accountIndex: number,
   diversifierHex?: string,
   pocket = 0,
+  mainnet = true,
 ): string => {
   const keys = walletKeysFor(mnemonic, pocket);
   try {
     // accountIndex is really a u32 diversifier index; receive passes the full
     // 11-byte random one instead
     const raw = diversifierHex
-      ? keys.get_receiving_address_at_index(diversifierHex, true)
-      : keys.get_receiving_address_at(accountIndex, true);
-    return fixOrchardAddress(raw, true);
+      ? keys.get_receiving_address_at_index(diversifierHex, mainnet)
+      : keys.get_receiving_address_at(accountIndex, mainnet);
+    return fixOrchardAddress(raw, mainnet);
   } finally {
     keys.free();
   }
@@ -2516,7 +2517,9 @@ const syncLoop = async (
   // load the trees, or seed them from the server at this height, taking the
   // per-note witnesses an older version stored (then those are dropped)
   const legacy = await readLegacyWitnesses(walletId, state.spentNullifiers);
-  const mainnet = (state.keys as { is_mainnet?: () => boolean } | null)?.is_mainnet?.() ?? true;
+  const mainnet =
+    (state.keys as { is_mainnet?: () => boolean } | null)?.is_mainnet?.() ??
+    walletIsMainnet(ufvk, walletId);
   const trees = await openTrees(
     () => new TreeCtor(MAX_CHECKPOINTS),
     treeChain(client, mainnet),
@@ -3013,7 +3016,7 @@ const syncLoop = async (
       }
       if (!networkChecked) {
         const info = await client.getLightdInfo();
-        if (isWrongNetwork(info.chainName, walletIsMainnet(ufvk))) {
+        if (isWrongNetwork(info.chainName, walletIsMainnet(ufvk, walletId))) {
           throw syncError(
             'wrong-network',
             `the node serves the ${info.chainName} network, not this wallet's`,
@@ -3790,19 +3793,21 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       case 'derive-address': {
         await initWasm();
-        const { vault, accountIndex, diversifierHex, pocket } = payload as {
+        const { vault, accountIndex, diversifierHex, pocket, mainnet } = payload as {
           /** the sealed vault this worker opens itself; the phrase never rides the bus */
           vault?: SealedVault;
           accountIndex: number;
           diversifierHex?: string;
           /** zip32 account; accountIndex above is a diversifier index */
           pocket?: number;
+          mainnet?: boolean;
         };
         const address = deriveAddress(
           await unsealVault(vault),
           accountIndex,
           diversifierHex,
           pocket,
+          mainnet,
         );
         workerSelf.postMessage({
           type: 'address',
@@ -4007,7 +4012,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               height: n.height ?? 0,
               type: 'receive',
               amount: '0',
-              asset: 'ZEC',
+              asset: unitOf(walletId),
             });
           }
           // a spend only counts as seen once scanning has given it a height;
@@ -4018,7 +4023,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               height: n.spent_at_height ?? 0,
               type: 'send',
               amount: '0',
-              asset: 'ZEC',
+              asset: unitOf(walletId),
             });
           }
         }
@@ -4029,6 +4034,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // is never failed; get-history asks the node and decides
           sent: pendSent.map(s => (s.pool === 'transparent' ? { ...s, expiryHeight: 0 } : s)),
           scannedHeight: await getSyncHeight(walletId),
+          asset: unitOf(walletId),
         });
         workerSelf.postMessage({
           type: 'pending-sends',
@@ -4432,7 +4438,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             height: info.height || info.position,
             type: isSend ? 'send' : 'receive',
             amount: amount.toString(),
-            asset: 'ZEC',
+            asset: unitOf(walletId),
             ...(amountIsUpperBound ? { amountUpperBound: true } : {}),
           });
         }
@@ -4461,7 +4467,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               height: spentHeight,
               type: 'send',
               amount: inputTotal.toString(),
-              asset: 'ZEC',
+              asset: unitOf(walletId),
               ...(changeIsSettled ? {} : { amountUpperBound: true }),
             });
           }
@@ -4508,7 +4514,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               height: tTx.height,
               type: 'receive',
               amount: receivedZat.toString(),
-              asset: 'ZEC',
+              asset: unitOf(walletId),
             });
           }
         }
@@ -4537,6 +4543,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             chainTxs: histTxs,
             sent,
             scannedHeight: histScannedHeight,
+            asset: unitOf(walletId),
           });
           reconciled = result.txs;
           // fire-and-forget: display must not wait on (or fail with) a write

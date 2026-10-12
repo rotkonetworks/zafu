@@ -8,6 +8,8 @@ import {
   isZcashBackend,
   type ZcashBackend,
 } from './keyring/zcash-backend';
+import { selectZcashIsMainnet } from './wallets';
+import { ZCASH_TESTNET_ENDPOINT, defaultZcashEndpoint } from '../config/zcash-endpoints';
 
 /**
  * Supported network ecosystems.
@@ -413,11 +415,27 @@ export const createNetworksSlice =
 
 export const networksSelector = (state: AllSlices) => state.networks;
 
-/** the zcash node's kind: its own answer, or the guess that stands until it answers */
-export const selectZcashBackend = (state: AllSlices): ZcashBackend => {
+/** a zcash chain's node: the person's choice on mainnet, the shipped one on testnet */
+export const zcashEndpointOf = (state: AllSlices, mainnet: boolean): string =>
+  mainnet
+    ? state.networks.networks.zcash.endpoint || defaultZcashEndpoint().url
+    : ZCASH_TESTNET_ENDPOINT;
+
+/** the active zcash wallet's node */
+export const selectZcashEndpoint = (state: AllSlices): string =>
+  zcashEndpointOf(state, selectZcashIsMainnet(state));
+
+/** the chosen (mainnet) zcash node's kind: its own answer, or the guess that stands until it answers */
+export const selectChosenZcashBackend = (state: AllSlices): ZcashBackend => {
   const zcash = state.networks.networks.zcash;
   return zcash.backend ?? backendOfEndpoint(zcash.endpoint ?? '');
 };
+
+/** the active zcash wallet's node kind */
+export const selectZcashBackend = (state: AllSlices): ZcashBackend =>
+  selectZcashIsMainnet(state)
+    ? selectChosenZcashBackend(state)
+    : backendOfEndpoint(ZCASH_TESTNET_ENDPOINT);
 
 /** one re-ask per node per cooldown, shared by every caller in this context */
 const redetect = createRedetector();

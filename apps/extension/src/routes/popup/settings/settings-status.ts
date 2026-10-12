@@ -3,7 +3,7 @@ import type { AllSlices } from '../../../state';
 import type { KeyInfo } from '../../../state/keyring';
 import type { ZcashWalletJson } from '../../../state/wallets';
 import { NETWORKS } from '../../../config/networks';
-import { selectZcashBackend } from '../../../state/networks';
+import { selectChosenZcashBackend } from '../../../state/networks';
 import { ZCASH_BACKENDS } from '../../../state/keyring/zcash-backend';
 import { defaultZcashEndpoint } from '../../../config/zcash-endpoints';
 import { hostOf } from '../../../net/destination';
@@ -57,7 +57,7 @@ export const selectZcashOpenings = (s: AllSlices): number => {
   const p = s.privacy.settings;
   const zcash = s.networks.networks.zcash;
   // memo decoys and instant pending exist only on a zidecar node
-  const wire = !!ZCASH_BACKENDS[selectZcashBackend(s)].extras;
+  const wire = !!ZCASH_BACKENDS[selectChosenZcashBackend(s)].extras;
   return [
     p.explorerLinks === 'open',
     p.zcashTransparentEachBlock,

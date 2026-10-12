@@ -28,12 +28,13 @@ import { STAGES, type SendProgress } from '../send/send-stage';
 import { RowGroup } from '@repo/ui/components/ui/row';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
-import { selectActiveZcashWallet } from '../../../state/wallets';
+import { selectZcashIsMainnet } from '../../../state/wallets';
 import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
 import { buildMultiSendTxInWorker, stopBuildInWorker } from '../../../state/keyring/network-worker';
 import { isBuildStopped } from '../../../workers/build-abort';
 import type { SendingNote } from '../send/send-ui';
 import { Clipped } from '@repo/ui/components/ui/clipped';
+import { selectZcashEndpoint } from '../../../state/networks';
 
 interface Output {
   address: string;
@@ -90,8 +91,8 @@ export function ZcashSendApproval() {
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
-  const activeZcashWallet = useStore(selectActiveZcashWallet);
+  const zidecarUrl = useStore(selectZcashEndpoint);
+  const mainnet = useStore(selectZcashIsMainnet);
   const storeId = useStore(activeZcashStoreId);
   const pocketAccount = useStore(activeAccountIndex);
 
@@ -174,7 +175,6 @@ export function ZcashSendApproval() {
     buildKeyRef.current = key;
     try {
       const vault = await getVaultUnlock(selectedKeyInfo.id);
-      const mainnet = activeZcashWallet?.mainnet !== false;
       const workerOutputs = outputs.map(o => ({
         address: o.address.trim(),
         amount: String(o.amount),

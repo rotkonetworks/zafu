@@ -1,3 +1,5 @@
+import { storeIsMainnet } from '../state/pocket-id';
+
 /**
  * Which zcash network a node says it serves (GetLightdInfo.chainName), held
  * against the wallet's keys. A mainnet wallet synced from a testnet node finds
@@ -22,5 +24,9 @@ export const isWrongNetwork = (chainName: string, walletMainnet: boolean): boole
   return node !== undefined && node !== walletMainnet;
 };
 
-/** a watch-only wallet's network is in its viewing key; a seed wallet here is mainnet */
-export const walletIsMainnet = (ufvk?: string): boolean => !ufvk?.startsWith('uviewtest');
+/** a watch-only wallet's network is in its viewing key; a seed wallet's in its store id */
+export const walletIsMainnet = (ufvk: string | undefined, storeId: string): boolean =>
+  ufvk ? !ufvk.startsWith('uviewtest') : storeIsMainnet(storeId);
+
+/** the unit a store's amounts read in: testnet coins are TAZ, never ZEC */
+export const unitOf = (storeId: string): 'ZEC' | 'TAZ' => (storeIsMainnet(storeId) ? 'ZEC' : 'TAZ');

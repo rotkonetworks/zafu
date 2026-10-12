@@ -25,7 +25,7 @@ import { Clipped } from '@repo/ui/components/ui/clipped';
 import { cn } from '@repo/ui/lib/utils';
 import { useExplain, type ExplainId } from './settings-explain';
 import { OptionsRow } from './sheet-options';
-import { selectZcashBackend } from '../../../state/networks';
+import { selectChosenZcashBackend } from '../../../state/networks';
 import { ZCASH_BACKENDS } from '../../../state/keyring/zcash-backend';
 import type { ExplorerLinks } from '../../../state/privacy';
 import { BUNDLED_SERVICE_CONFIG } from '../../../services/voting/bundled-config';
@@ -100,7 +100,7 @@ export const ZcashNodeSheet = ({
 const ZcashWireRows = ({ explainProps }: { explainProps: Explain }) => {
   const memo = useStore(s => s.networks.networks.zcash.memoSyncStrategy ?? 'private');
   const mempool = useStore(s => s.networks.networks.zcash.mempoolWatch ?? 'off');
-  const zidecar = useStore(s => !!ZCASH_BACKENDS[selectZcashBackend(s)].extras);
+  const zidecar = useStore(s => !!ZCASH_BACKENDS[selectChosenZcashBackend(s)].extras);
   const setMemo = useStore(s => s.networks.setMemoSyncStrategy);
   const setMempool = useStore(s => s.networks.setMempoolWatch);
   const needs = zidecar ? undefined : 'needs a zidecar node';

@@ -16,7 +16,11 @@ import {
   selectGetMnemonic,
   selectGetVaultUnlock,
 } from '../state/keyring';
-import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
+import {
+  getActiveWalletJson,
+  selectActiveZcashWallet,
+  selectZcashIsMainnet,
+} from '../state/wallets';
 import { activeAccountIndex } from '../state/pockets';
 import { getNetworkConfig, isIbcNetwork } from '../state/keyring/network-types';
 import { spawnNetworkWorker, deriveAddressInWorker } from '../state/keyring/network-worker';
@@ -137,6 +141,7 @@ export function useActiveAddress() {
   const penumbraWallet = useStore(getActiveWalletJson);
   const zcashWallet = useStore(selectActiveZcashWallet);
   const pocket = useStore(activeAccountIndex);
+  const zcashMainnet = useStore(selectZcashIsMainnet);
 
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(true);
@@ -179,7 +184,7 @@ export function useActiveAddress() {
 
   useEffect(() => {
     let cancelled = false;
-    const identity = `${activeNetwork}:${selectedKeyInfo?.id}:${pocket}:${zcashWallet?.ufvk ?? zcashWallet?.orchardFvk ?? ''}`;
+    const identity = `${activeNetwork}:${zcashMainnet}:${selectedKeyInfo?.id}:${pocket}:${zcashWallet?.ufvk ?? zcashWallet?.orchardFvk ?? ''}`;
 
     const deriveAddress = async () => {
       if (derivedFor.current !== identity) {
@@ -220,8 +225,9 @@ export function useActiveAddress() {
                     0,
                     diversifier,
                     pocket,
+                    zcashMainnet,
                   );
-                  const addr = fixOrchardAddress(rawAddr, true);
+                  const addr = fixOrchardAddress(rawAddr, zcashMainnet);
                   if (!cancelled) {
                     setAddress(addr);
                   }
@@ -420,6 +426,7 @@ export function useActiveAddress() {
     getVaultUnlock,
     diversifier,
     pocket,
+    zcashMainnet,
   ]);
 
   return { address, loading, shieldedIndex: derivedIndex };

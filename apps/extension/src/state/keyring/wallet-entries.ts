@@ -13,7 +13,7 @@ import type { ZcashWalletJson } from '../wallets';
 import type { Key } from '@repo/encryption/key';
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { shownIndicesKey, fundedIndicesKey } from '../../transparent/hd';
-import { isStoreOfWallet } from '../pocket-id';
+import { chainStoreId, isStoreOfWallet } from '../pocket-id';
 import { PENDING_WIPE_KEY } from '../../clear-cache-startup';
 import { startsOf } from '../../penumbra/start';
 
@@ -521,6 +521,7 @@ export async function purgeWalletData(
   // static per-wallet keys, batched into one remove call
   const staticKeys = [
     `zcashBirthday_${vaultId}`,
+    `zcashBirthday_${chainStoreId(vaultId, false)}`,
     // ZID generations pinned/labelled by this wallet - keyed by walletId by
     // construction (see ZID_PINS_STORAGE_KEY doc comment in state/identity.ts).
     `zidPins:${vaultId}`,
