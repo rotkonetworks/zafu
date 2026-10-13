@@ -202,3 +202,33 @@ export async function announceSession(
     throw new Error(`rendezvous announce failed: ${res.status}`);
   }
 }
+
+/** a `generateRoomCode` code, as opposed to a frostd session uuid */
+export const isRoomCode = (s: string): boolean => /^[1-9]\d{0,2}-[a-z]+-[a-z]+$/.test(s);
+
+/**
+ * Joiner side for a caller that has only the code (an app's escrow made the
+ * room): put our relay key in, then wait until the coordinator announced the
+ * session and every other signer's key is there.
+ */
+export async function meetInRoom(
+  relayUrl: string,
+  code: string,
+  myKey: string,
+  peersNeeded: number,
+  deadline: number,
+): Promise<{ peerKeys: string[]; sessionId: string }> {
+  const roomId = await roomIdFromCode(code);
+  await publishKey(relayUrl, roomId, myKey);
+  for (;;) {
+    const view = await pollRoom(relayUrl, roomId);
+    const peerKeys = view.entries.map(e => e.pubkey).filter(k => k !== myKey);
+    if (view.sessionId !== null && peerKeys.length >= peersNeeded) {
+      return { peerKeys, sessionId: view.sessionId };
+    }
+    if (Date.now() >= deadline) {
+      throw new Error('the others did not arrive in time · nothing was signed, please try again');
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+}

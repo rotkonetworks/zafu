@@ -28,6 +28,8 @@ import { hexToBytes } from '@repo/wallet/networks';
 import { DEFAULT_RELAY_URL } from './multisig/dkg-helpers';
 import { FrostdRelayClient } from '../../state/keyring/frostd-relay-client';
 import { buildRelayIdentity, getOrCreateRelayIdentity } from '../../state/keyring/relay-identity';
+import { isRoomCode, meetInRoom } from '../../state/keyring/rendezvous-client';
+import { requestEgressOptIn } from '../../net/egress-opt-in';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../state/frost-session';
 import { usePasswordGate } from '../../hooks/password-gate';
 import { Sensitive } from '../../components/sensitive';
@@ -214,21 +216,42 @@ export const FrostApprove = () => {
    * otherwise: stable for the flow, and not shared across unrelated groups,
    * so a relay operator cannot link a user's sessions.
    */
-  const relayClient = async (): Promise<FrostdRelayClient> => {
-    if (relayPeerKeys.length === 0) {
+  const relayClient = async (): Promise<{ relay: FrostdRelayClient; room: string }> => {
+    const ceremonyId = roomCode !== '' ? roomCode : sighashHex;
+    const stored = await getOrCreateRelayIdentity(ceremonyId);
+    if (relayPeerKeys.length > 0) {
+      return {
+        relay: new FrostdRelayClient(relayUrl, await buildRelayIdentity(stored, relayPeerKeys)),
+        room: roomCode,
+      };
+    }
+    // an app (zk.poker's escrow) gave a room code, not keys: meet the others
+    // there the way multisig join does, then open the session it announces
+    if (!isRoomCode(roomCode)) {
       throw new Error(
         'this request has no relayPeerKeys - every signer must be listed before a session exists',
       );
     }
-    const ceremonyId = roomCode !== '' ? roomCode : sighashHex;
-    const stored = await getOrCreateRelayIdentity(ceremonyId);
-    const identity = await buildRelayIdentity(stored, relayPeerKeys);
-    return new FrostdRelayClient(relayUrl, identity);
+    if (!(await requestEgressOptIn('multisig-relay'))) {
+      throw new Error('a room code needs the multisig relay · please allow it to continue');
+    }
+    setStatus(`meeting the others in ${roomCode}...`);
+    const { peerKeys, sessionId } = await meetInRoom(
+      relayUrl,
+      roomCode,
+      stored.publicKey,
+      maxSigners - 1,
+      Date.now() + FROST_SESSION_TIMEOUT_MS,
+    );
+    return {
+      relay: new FrostdRelayClient(relayUrl, await buildRelayIdentity(stored, peerKeys)),
+      room: sessionId,
+    };
   };
 
   const runDkgCreate = async () => {
     const abort = new AbortController();
-    const relay = await relayClient();
+    const { relay } = await relayClient();
 
     setStatus('creating room...');
     const room = await relay.createRoom(threshold, maxSigners, 600);
@@ -311,7 +334,7 @@ export const FrostApprove = () => {
 
   const runDkgJoin = async () => {
     const abort = new AbortController();
-    const relay = await relayClient();
+    const { relay, room } = await relayClient();
 
     setStatus(`joining room ${roomCode}...`);
 
@@ -325,7 +348,7 @@ export const FrostApprove = () => {
     let parsedMaxSigners = maxSigners;
 
     void relay.joinRoom(
-      roomCode,
+      room,
       pid,
       event => {
         if (event.type === 'message') {
@@ -357,7 +380,7 @@ export const FrostApprove = () => {
     assertApprovedGroup(parsedThreshold, parsedMaxSigners);
 
     const round1 = await frostDkgPart1InWorker(parsedMaxSigners, parsedThreshold);
-    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(round1.broadcast));
+    await relay.sendMessage(room, pid, new TextEncoder().encode(round1.broadcast));
 
     await waitFor(() => peerBroadcasts.length >= parsedMaxSigners - 1, 120_000);
 
@@ -365,7 +388,7 @@ export const FrostApprove = () => {
     setStatus('round 2 - exchanging key shares...');
     const round2 = await frostDkgPart2InWorker(round1.secret, peerBroadcasts);
     for (const pkg of round2.peer_packages) {
-      await relay.sendMessage(roomCode, pid, new TextEncoder().encode(pkg));
+      await relay.sendMessage(room, pid, new TextEncoder().encode(pkg));
     }
 
     await waitFor(() => peerRound2.length >= parsedMaxSigners - 1, 120_000);
@@ -400,7 +423,7 @@ export const FrostApprove = () => {
   const runDkgJoinV2 = async () => {
     const abort = new AbortController();
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
-    const relay = await relayClient();
+    const { relay, room } = await relayClient();
     const pid = new Uint8Array(32);
     crypto.getRandomValues(pid);
 
@@ -413,7 +436,7 @@ export const FrostApprove = () => {
 
     setStatus('joining room...');
     void relay.joinRoom(
-      roomCode,
+      room,
       pid,
       event => {
         if (event.type === 'message') {
@@ -458,7 +481,7 @@ export const FrostApprove = () => {
 
     setStatus('round 1: generating commitment...');
     const round1 = await frostDkgPart1InWorker(parsedMaxSigners, parsedThreshold);
-    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`R1:${round1.broadcast}`));
+    await relay.sendMessage(room, pid, new TextEncoder().encode(`R1:${round1.broadcast}`));
 
     setStatus(`round 1: waiting for ${parsedMaxSigners - 1} participant(s)...`);
     await waitForUntil(() => peerBroadcasts.length >= parsedMaxSigners - 1, sessionDeadline);
@@ -466,7 +489,7 @@ export const FrostApprove = () => {
     setStatus('round 2: exchanging key shares...');
     const round2 = await frostDkgPart2InWorker(round1.secret, peerBroadcasts);
     for (const pkg of round2.peer_packages) {
-      await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`R2:${pkg}`));
+      await relay.sendMessage(room, pid, new TextEncoder().encode(`R2:${pkg}`));
     }
 
     const expectedR2 = (parsedMaxSigners - 1) ** 2;
@@ -484,7 +507,7 @@ export const FrostApprove = () => {
     const orchardFvk = await frostDeriveUfvkInWorker(round3.public_key_package, fvkSk, mainnet);
 
     setStatus('verifying viewing key agreement...');
-    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`FVK:${orchardFvk}`));
+    await relay.sendMessage(room, pid, new TextEncoder().encode(`FVK:${orchardFvk}`));
     await waitForUntil(() => peerFvks.length >= parsedMaxSigners - 1, sessionDeadline);
     for (const peerFvk of peerFvks) {
       if (peerFvk !== orchardFvk) {
@@ -535,7 +558,7 @@ export const FrostApprove = () => {
     }
 
     const abort = new AbortController();
-    const relay = await relayClient();
+    const { relay, room } = await relayClient();
     const secrets = await getMultisigSecrets(multisigVault.id);
     if (!secrets) {
       throw new Error("the multisig share didn't open · please unlock zafu and try again");
@@ -555,7 +578,7 @@ export const FrostApprove = () => {
 
     // join room BEFORE sending to avoid race condition
     void relay.joinRoom(
-      roomCode,
+      room,
       pid,
       event => {
         if (event.type === 'message') {
@@ -583,7 +606,7 @@ export const FrostApprove = () => {
 
     // send commitments after joining
     await relay.sendMessage(
-      roomCode,
+      room,
       pid,
       new TextEncoder().encode(`C:${round1s.map(r => r.commitments).join('|')}`),
     );
@@ -607,7 +630,7 @@ export const FrostApprove = () => {
         alpha,
         allCommitments,
       );
-      await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`S:${share}`));
+      await relay.sendMessage(room, pid, new TextEncoder().encode(`S:${share}`));
     }
 
     abort.abort();
@@ -640,7 +663,7 @@ export const FrostApprove = () => {
     }
 
     const abort = new AbortController();
-    const relay = await relayClient();
+    const { relay, room } = await relayClient();
     const secrets = await getMultisigSecrets(vault.id);
     if (!secrets) {
       throw new Error("the multisig share didn't open · please unlock zafu and try again");
@@ -663,7 +686,7 @@ export const FrostApprove = () => {
     const peerShares: Record<number, string> = {};
 
     void relay.joinRoom(
-      roomCode,
+      room,
       pid,
       event => {
         if (event.type !== 'message') {
@@ -763,7 +786,7 @@ export const FrostApprove = () => {
       round1s.push(await frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage));
     }
     const commitsCsv = round1s.map(r => r.commitments).join('|');
-    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`C:${commitsCsv}`));
+    await relay.sendMessage(room, pid, new TextEncoder().encode(`C:${commitsCsv}`));
 
     setStatus('round 1: waiting for host commitments...');
     await waitFor(() => peerCommits.length >= 1, 120_000);
@@ -783,7 +806,7 @@ export const FrostApprove = () => {
         approved.alphas[i]!,
         allCommits,
       );
-      await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`S:${i}:${share}`));
+      await relay.sendMessage(room, pid, new TextEncoder().encode(`S:${i}:${share}`));
     }
 
     setStatus('done - host will broadcast the transaction');
