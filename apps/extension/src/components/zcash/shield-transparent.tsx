@@ -120,6 +120,12 @@ export const ShieldTransparent = ({
   const keyRing = useStore(keyRingSelector);
   const { requestAuth, PasswordModal } = usePasswordGate();
   const { last, shielded } = useTransparentBalance(tAddresses);
+  // what went out: the sheet keeps showing it once the coins leave the figures
+  const [moved, setMoved] = useState<{ zat: bigint; funded?: number; feeZat?: bigint }>();
+  const shieldWentOut = (spentZat: bigint) => {
+    setMoved({ zat: transparentZat, funded, feeZat });
+    shielded(spentZat);
+  };
   const account = useStore(activeAccountIndex);
   const pocketName = useStore(
     s => activePockets(s).find(p => p.account === account)?.name ?? 'main',
@@ -224,7 +230,7 @@ export const ShieldTransparent = ({
         key,
       );
       setShieldTxid(result.txid);
-      shielded(BigInt(result.shieldedZat) + BigInt(result.feeZat));
+      shieldWentOut(BigInt(result.shieldedZat) + BigInt(result.feeZat));
     } catch (err) {
       if (!isBuildStopped(err)) {
         setShieldError(err instanceof Error ? err.message : String(err));
@@ -345,7 +351,7 @@ export const ShieldTransparent = ({
         );
 
         setZignerTxid(result.txid);
-        shielded(transparentZat);
+        shieldWentOut(transparentZat);
         setZignerStep('complete');
       } catch (err) {
         setZignerError(err instanceof Error ? err.message : String(err));
@@ -356,7 +362,7 @@ export const ShieldTransparent = ({
   );
 
   const ledger = useLedgerShield({
-    transparentZat,
+    onShielded: () => shieldWentOut(transparentZat),
     watchOnly,
     tAddresses,
     isMainnet,
@@ -386,6 +392,7 @@ export const ShieldTransparent = ({
         method === 'zigner',
       )
     : undefined;
+  const shown = moved ?? { funded, feeZat };
   const busy =
     shielding ||
     !!ledger.phase ||
@@ -496,7 +503,7 @@ export const ShieldTransparent = ({
 
       <div className='text-center'>
         <Sensitive className='text-3xl tabular-nums text-fg-high'>
-          {utxoLoading ? '...' : fmtZec(tZec)}
+          {moved ? fmtZec(Number(moved.zat) / 1e8) : utxoLoading ? '...' : fmtZec(tZec)}
           <span className='ml-1.5 text-base text-zigner-gold'>zec</span>
         </Sensitive>
       </div>
@@ -505,7 +512,7 @@ export const ShieldTransparent = ({
         <div className='flex items-center justify-between px-4 py-3 text-sm'>
           <span className='text-fg-muted'>from</span>
           <span>
-            {funded ?? 'your'} transparent address{funded === 1 ? '' : 'es'}
+            {shown.funded ?? 'your'} transparent address{shown.funded === 1 ? '' : 'es'}
           </span>
         </div>
         <div className='flex items-center justify-between px-4 py-3 text-sm'>
@@ -514,12 +521,14 @@ export const ShieldTransparent = ({
         </div>
         <div className='flex items-center justify-between px-4 py-3 text-sm'>
           <span className='text-fg-muted'>fee</span>
-          <span>{feeZat === undefined ? '...' : `${fmtZec(Number(feeZat) / 1e8)} zec`}</span>
+          <span>
+            {shown.feeZat === undefined ? '...' : `${fmtZec(Number(shown.feeZat) / 1e8)} zec`}
+          </span>
         </div>
       </div>
 
       {/* hot and ledger shield one address per transaction; zigner signs them all in one */}
-      {!!funded && funded > 1 && (
+      {!!shown.funded && shown.funded > 1 && (
         <p className='text-label text-fg-muted lowercase'>
           {method === 'zigner'
             ? `these ${funded} addresses are shielded together in one transaction · that links them on chain`
@@ -571,18 +580,16 @@ export const ShieldTransparent = ({
  * again, reusing its signed bytes; the session ends when it completes or pauses.
  */
 function useLedgerShield({
-  transparentZat,
+  onShielded,
   watchOnly,
   tAddresses,
   isMainnet,
   zidecarUrl,
-}: Pick<
-  ShieldTransparentProps,
-  'transparentZat' | 'watchOnly' | 'tAddresses' | 'isMainnet' | 'zidecarUrl'
->) {
+}: Pick<ShieldTransparentProps, 'watchOnly' | 'tAddresses' | 'isMainnet' | 'zidecarUrl'> & {
+  onShielded: () => void;
+}) {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const storeId = useStore(activeZcashStoreId);
-  const { shielded } = useTransparentBalance(tAddresses);
   const [phase, setPhase] = useState<LedgerSigningPhase['phase'] | null>(null);
   const [round, setRound] = useState<{ n: number; of: number }>();
   const [txid, setTxid] = useState<string | null>(null);
@@ -661,7 +668,7 @@ function useLedgerShield({
       if (out.status === 'paused') {
         setError(out.message);
       } else {
-        shielded(transparentZat);
+        onShielded();
       }
     } catch (e) {
       const g = ledgerGuidance(e);
