@@ -475,6 +475,18 @@ describe('send over nym: the transport is chosen per request class', () => {
     }
   });
 
+  it('sends testnet transactions over nym too, and syncs testnet directly', () => {
+    const on = { ...ZCASH_ONLY, enabledNetworks: ['zcash', 'zcash-testnet'] };
+    const rows: [string, string][] = [
+      ['https://tzcash.rotko.net/zidecar.v1.Zidecar/SendTransaction', 'broadcast'],
+      ['https://tzcash.rotko.net/zidecar.v1.Zidecar/GetTransaction', 'own-tx'],
+      ['https://tzcash.rotko.net/zidecar.v1.Zidecar/GetBlockTransactions', 'direct'],
+    ];
+    for (const [url, expected] of rows) {
+      expect([url, nymOf(on, url)]).toEqual([url, expected]);
+    }
+  });
+
   it('keeps the FlyClient proof direct: it comes from your own node and names nothing', () => {
     const url = 'https://zcash.rotko.net/zidecar.v1.Zidecar/GetFlyClientProof';
     expect(nymOf(ZCASH_ONLY, url)).toBe('direct');

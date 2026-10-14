@@ -426,6 +426,9 @@ export const DESTINATIONS: DestinationSpec[] = [
     purpose: 'chain-rpc',
     gate: { kind: 'network', networks: ['zcash-testnet'] },
     urls: () => [ZCASH_TESTNET_ENDPOINT],
+    // the same sends and lookups as zcash, so the same nym rows
+    family: 'zcash',
+    overNym: zcashOverNym,
   },
   {
     id: 'penumbra',
