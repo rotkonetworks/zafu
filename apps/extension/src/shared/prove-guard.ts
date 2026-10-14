@@ -10,6 +10,7 @@ export const PROVER_FNS = [
   'build_unsigned_pczt',
   'build_turnstile_migration_pczt',
   'build_ironwood_send_pczt',
+  'build_ironwood_send_pczt_multi',
   'build_unsigned_shielding',
   'build_unsigned_shielding_ironwood',
   // shielded voting, on the standalone voting-wasm module

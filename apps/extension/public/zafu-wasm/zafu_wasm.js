@@ -1216,6 +1216,45 @@ export function build_ironwood_send_pczt(ufvk_str, ironwood_notes_json, recipien
 }
 
 /**
+ * [`build_ironwood_send_pczt`] paying SEVERAL recipients in one V6
+ * transaction. `outputs_json` is a JSON array of
+ * `{ "address": string, "amount": number (zat), "memo_hex"?: string }`, paid
+ * in that order; change returns to the wallet as for the single send, and
+ * the result has the same shape. `fee` is ZIP-317 for the transaction this
+ * builds (see [`build_ironwood_send_pczt_proven_multi`]). Same fail-closed
+ * NU6.3 branch-id guard; errors name an output by index only.
+ * @param {string} ufvk_str
+ * @param {string} ironwood_notes_json
+ * @param {string} outputs_json
+ * @param {bigint} fee
+ * @param {string} ironwood_anchor_hex
+ * @param {string} ironwood_merkle_paths_json
+ * @param {number} account_index
+ * @param {number} target_height
+ * @param {number} expected_branch_id
+ * @param {boolean} mainnet
+ * @param {number | null} [expiry_delta]
+ * @returns {any}
+ */
+export function build_ironwood_send_pczt_multi(ufvk_str, ironwood_notes_json, outputs_json, fee, ironwood_anchor_hex, ironwood_merkle_paths_json, account_index, target_height, expected_branch_id, mainnet, expiry_delta) {
+    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(ironwood_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(outputs_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(ironwood_anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ptr4 = passStringToWasm0(ironwood_merkle_paths_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len4 = WASM_VECTOR_LEN;
+    const ret = wasm.build_ironwood_send_pczt_multi(ptr0, len0, ptr1, len1, ptr2, len2, fee, ptr3, len3, ptr4, len4, account_index, target_height, expected_branch_id, mainnet, isLikeNone(expiry_delta) ? Number.MAX_SAFE_INTEGER : (expiry_delta) >>> 0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * Build merkle paths for note positions by replaying compact blocks from a checkpoint.
  *
  * # Arguments
@@ -4334,12 +4373,12 @@ function __wbg_get_imports(memory) {
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4824, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4825, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4826, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4827, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_);
             return ret;
         },

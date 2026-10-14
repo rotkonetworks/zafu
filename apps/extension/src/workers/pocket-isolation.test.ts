@@ -24,11 +24,13 @@ describe('zcash worker pocket isolation', () => {
   });
 
   test('hot builds sign with the account of the store the notes came from', () => {
-    // send-tx (ironwood + orchard), turnstile migration, send-tx-multi, shield
+    // send-tx (ironwood + orchard), turnstile migration, send-tx-multi
+    // (ironwood + orchard), shield
     expect(signingAccounts()).toEqual([
       'spendAccount',
       'spendAccount',
       'migrateAccount',
+      'multiAccount',
       'multiAccount',
       'shieldAccount',
     ]);

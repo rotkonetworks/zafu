@@ -351,6 +351,17 @@ export function build_delegation_pczt(fvk_hex: string, seed_fingerprint_hex: str
 export function build_ironwood_send_pczt(ufvk_str: string, ironwood_notes_json: string, recipient: string, amount: bigint, fee: bigint, ironwood_anchor_hex: string, ironwood_merkle_paths_json: string, account_index: number, target_height: number, expected_branch_id: number, mainnet: boolean, memo_hex?: string | null, expiry_delta?: number | null): any;
 
 /**
+ * [`build_ironwood_send_pczt`] paying SEVERAL recipients in one V6
+ * transaction. `outputs_json` is a JSON array of
+ * `{ "address": string, "amount": number (zat), "memo_hex"?: string }`, paid
+ * in that order; change returns to the wallet as for the single send, and
+ * the result has the same shape. `fee` is ZIP-317 for the transaction this
+ * builds (see [`build_ironwood_send_pczt_proven_multi`]). Same fail-closed
+ * NU6.3 branch-id guard; errors name an output by index only.
+ */
+export function build_ironwood_send_pczt_multi(ufvk_str: string, ironwood_notes_json: string, outputs_json: string, fee: bigint, ironwood_anchor_hex: string, ironwood_merkle_paths_json: string, account_index: number, target_height: number, expected_branch_id: number, mainnet: boolean, expiry_delta?: number | null): any;
+
+/**
  * Build merkle paths for note positions by replaying compact blocks from a checkpoint.
  *
  * # Arguments
@@ -1205,6 +1216,7 @@ export interface InitOutput {
     readonly apply_signature_contributions: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly build_delegation_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number) => [number, number, number, number];
     readonly build_ironwood_send_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number) => [number, number, number];
+    readonly build_ironwood_send_pczt_multi: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number];
     readonly build_merkle_paths: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly build_turnstile_migration_pczt: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
     readonly build_unsigned_pczt: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number) => [number, number, number];

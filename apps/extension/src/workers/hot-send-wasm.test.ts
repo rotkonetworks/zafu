@@ -11,6 +11,7 @@ import { resolve } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { assertProveRequest } from '../shared/prove-guard';
+import { planIronwoodMultiSend } from './ironwood-multi-send';
 import type { SpendKeysCtor } from './hot-sign';
 
 const SEED =
@@ -39,8 +40,28 @@ interface Wasm {
   initSync(opts: { module: Uint8Array }): void;
   SpendKeys: SpendKeysCtor;
   build_ironwood_send_pczt(...args: unknown[]): { retained_pczt_hex: string; pczt_hex: string };
+  build_ironwood_send_pczt_multi(...args: unknown[]): {
+    retained_pczt_hex: string;
+    pczt_hex: string;
+    summary: { ironwood_actions: number; outputs: [string, number][]; fee_zat: number };
+  };
   compute_txid(txHex: string): string;
+  WalletKeys: {
+    from_seed_phrase_account(
+      seed: string,
+      account: number,
+    ): {
+      decrypt_transaction_memos(tx: Uint8Array): {
+        value: number;
+        memo: string;
+        is_outgoing: boolean;
+      }[];
+      free(): void;
+    };
+  };
 }
+
+const hexBytes = (hex: string) => Uint8Array.from(hex.match(/../g)!.map(b => parseInt(b, 16)));
 
 describe('hot ironwood send on the real wasm', () => {
   let wasm: Wasm;
@@ -88,6 +109,79 @@ describe('hot ironwood send on the real wasm', () => {
       } finally {
         keys.free();
         other.free();
+      }
+    },
+    300_000,
+  );
+
+  test.each(UPGRADES)(
+    '$name: several outputs, one tx - each recipient gets its amount and memo',
+    ({ target, branchId }) => {
+      const keys = new wasm.SpendKeys(SEED, 0, false);
+      const seat = new wasm.SpendKeys(SEED, 9, false);
+      const rake = new wasm.SpendKeys(SEED, 8, false);
+      try {
+        const outputs = planIronwoodMultiSend(
+          [
+            {
+              address: fixOrchardAddress(seat.receiving_address(), false),
+              amount: '300000',
+              memo: 'seat deposit',
+            },
+            {
+              address: fixOrchardAddress(rake.receiving_address(), false),
+              amount: '200000',
+              memo: 'rake',
+            },
+          ],
+          () => false,
+        ).outputs;
+        // 1 spend, 2 outputs + change: 3 ironwood actions under ZIP-317
+        const fee = 15_000n;
+        const args = [
+          keys.ufvk(),
+          JSON.stringify(NOTES),
+          JSON.stringify(outputs),
+          fee,
+          ANCHOR,
+          JSON.stringify(PATHS),
+          0,
+          target,
+          branchId,
+          false,
+          null,
+        ];
+        assertProveRequest({ fn: 'build_ironwood_send_pczt_multi', args: args.map(String) });
+
+        const built = wasm.build_ironwood_send_pczt_multi(...args);
+        expect(built.summary.ironwood_actions).toBe(3);
+        expect(built.summary.fee_zat).toBe(15_000);
+        const txHex = keys.sign_pczt(built.retained_pczt_hex);
+        expect(txHex.slice(0, 8)).toBe('06000080');
+        expect(wasm.compute_txid(txHex)).toMatch(/^[0-9a-f]{64}$/);
+
+        const received = (account: number) => {
+          const wk = wasm.WalletKeys.from_seed_phrase_account(SEED, account);
+          try {
+            return wk.decrypt_transaction_memos(hexBytes(txHex));
+          } finally {
+            wk.free();
+          }
+        };
+        expect(received(9)).toEqual([
+          expect.objectContaining({ value: 300_000, memo: 'seat deposit', is_outgoing: false }),
+        ]);
+        expect(received(8)).toEqual([
+          expect.objectContaining({ value: 200_000, memo: 'rake', is_outgoing: false }),
+        ]);
+        // the change: 1,000,000 - 500,000 - 15,000
+        expect(received(0)).toEqual([
+          expect.objectContaining({ value: 485_000, is_outgoing: true }),
+        ]);
+      } finally {
+        keys.free();
+        seat.free();
+        rake.free();
       }
     },
     300_000,
