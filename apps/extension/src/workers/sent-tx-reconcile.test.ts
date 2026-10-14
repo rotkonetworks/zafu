@@ -52,6 +52,24 @@ describe('reconcileSentTxs', () => {
     expect(prune).toEqual([]);
   });
 
+  it('keeps every payment of a several-recipient send, and none for a single one', () => {
+    const payments = [
+      { recipient: 'u1alice', amount: '110000', memo: 'for alice' },
+      { recipient: 'u1bob', amount: '220000' },
+      { recipient: 't1bob', amount: '330000' },
+    ];
+    const several = reconcileSentTxs({
+      chainTxs: [],
+      sent: [rec({ amount: '660000', recipient: 'u1alice', payments })],
+      scannedHeight: 3_437_000,
+    }).txs[0]!;
+    expect(several.payments).toEqual(payments);
+    expect(several.recipientAmount).toBe('660000');
+    const single = reconcileSentTxs({ chainTxs: [], sent: [rec()], scannedHeight: 3_437_000 })
+      .txs[0]!;
+    expect(single.payments).toBeUndefined();
+  });
+
   it('reports what left the wallet, not the notes spent as inputs', () => {
     // the real case: a 355,000 zat note spent to pay 50,000 with a 15,000 fee.
     // 290,000 comes back as change, so the wallet is 65,000 poorer - reporting

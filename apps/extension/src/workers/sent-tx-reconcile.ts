@@ -23,6 +23,14 @@ export type SentPool = 'orchard' | 'ironwood' | 'transparent';
 export type SentKind = 'send' | 'shield' | 'migrate';
 
 /** What we write down at broadcast. Persisted in the `sent` object store. */
+/** one payment of a several-recipient transaction */
+export interface SentPayment {
+  recipient: string;
+  /** zatoshi, as a decimal string */
+  amount: string;
+  memo?: string;
+}
+
 export interface SentTxRecord {
   walletId: string;
   txid: string;
@@ -48,6 +56,12 @@ export interface SentTxRecord {
    * does not make a confirmed payment look pending again.
    */
   confirmedHeight?: number;
+  /**
+   * Every payment of a transaction that paid several recipients (a site's
+   * several-output send is one ironwood transaction); absent for a single
+   * payment, which `recipient` / `amount` / `memo` describe. Zatoshi strings.
+   */
+  payments?: SentPayment[];
 }
 
 /**
@@ -95,6 +109,8 @@ export interface HistoryTx {
   fee?: string;
   sentAt?: number;
   expiryHeight?: number;
+  /** every payment, when the transaction paid several recipients */
+  payments?: SentPayment[];
 }
 
 /**
@@ -221,6 +237,7 @@ export function reconcileSentTxs({
       kind: rec.kind,
       recipient: rec.recipient,
       memo: rec.memo,
+      ...(rec.payments && rec.payments.length > 1 ? { payments: rec.payments } : {}),
       fee: rec.fee,
       sentAt: rec.sentAt,
       expiryHeight: rec.expiryHeight,

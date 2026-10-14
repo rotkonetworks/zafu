@@ -6626,7 +6626,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             }
             const iwTxid = await resolveBroadcastTxid(iwResult, iwTxHex, multiPayload.serverUrl);
             await markNotesSpentLocally(walletId, iwState, iwSelected, iwTxid);
-            // one record per transaction: the total it paid, to its first output
+            // one record per transaction: the total it paid, named by its first
+            // output, with every payment kept for the history's detail
             await recordSentTx({
               walletId,
               txid: iwTxid,
@@ -6636,6 +6637,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               pool: 'ironwood',
               kind: 'send',
               memo: multiPayload.outputs[0]!.memo,
+              payments: plan.outputs.map((o, i) => ({
+                recipient: o.address,
+                amount: o.amount.toString(),
+                ...(multiPayload.outputs[i]?.memo ? { memo: multiPayload.outputs[i]?.memo } : {}),
+              })),
               sentAt: Date.now(),
               expiryHeight: parseExpiryHeight(iwTxHex),
             });

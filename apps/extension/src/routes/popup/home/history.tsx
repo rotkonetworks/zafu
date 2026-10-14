@@ -149,6 +149,7 @@ export const zcashHistoryQuery = (
         recipientAmount: e.recipientAmount ? zatToZec(BigInt(e.recipientAmount)) : undefined,
         feeAmount: e.fee ? zatToZec(BigInt(e.fee)) : undefined,
         recipient: e.recipient,
+        payments: e.payments?.map(p => ({ ...p, amount: zatToZec(BigInt(p.amount)) })),
         sentAt: e.sentAt,
       }));
     },

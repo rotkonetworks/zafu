@@ -112,13 +112,19 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
   const hasBreakdown = !isFailed && !!tx.recipientAmount && !!tx.feeAmount;
   const shortRecipient = tx.recipient && shorten(tx.recipient, 8, 4);
   const recipientName = contactMatch?.contact.name ?? directoryName ?? shortRecipient;
+  /** a several-recipient send lists each payment instead of one recipient */
+  const payments = (tx.payments?.length ?? 0) > 1 ? tx.payments! : undefined;
+  const nameOf = (address: string) =>
+    findByAddress(address)?.contact.name ?? shorten(address, 8, 4);
   const title = isIn
     ? 'received'
     : isSh
       ? tx.description
-      : recipientName
-        ? `sent to ${recipientName}`
-        : tx.description;
+      : payments
+        ? `sent to ${payments.length} recipients`
+        : recipientName
+          ? `sent to ${recipientName}`
+          : tx.description;
   const hero = look.hero(tx);
 
   // What we can honestly say about progress: a history record carries one
@@ -185,8 +191,30 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
           </div>
         )}
 
-        {tx.memo && (
-          <p className='text-xs text-fg-muted whitespace-pre-wrap break-words'>{tx.memo}</p>
+        {payments ? (
+          <div className='flex flex-col divide-y divide-border-soft border border-border-soft bg-elev-1'>
+            {payments.map((p, i) => (
+              <div key={i} className='flex flex-col gap-0.5 px-3 py-2'>
+                <div className='flex items-center justify-between gap-2 text-xs'>
+                  <span className='truncate text-fg'>{nameOf(p.recipient)}</span>
+                  <Sensitive>
+                    <span className='tabular text-fg'>
+                      {p.amount} {tx.asset ?? ''}
+                    </span>
+                  </Sensitive>
+                </div>
+                {p.memo && (
+                  <p className='text-label text-fg-muted whitespace-pre-wrap break-words'>
+                    {p.memo}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          tx.memo && (
+            <p className='text-xs text-fg-muted whitespace-pre-wrap break-words'>{tx.memo}</p>
+          )
         )}
         {hasBreakdown && (
           <p className='text-label text-fg-dim tabular'>
