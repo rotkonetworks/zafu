@@ -447,7 +447,9 @@ export const FrostApprove = () => {
       if (Date.now() >= deadline) {
         throw new Error('the coordinator never opened the session for that room code');
       }
-      setStatus(`waiting for the coordinator (${peers.length + 1}/${maxSigners} keys in the room)...`);
+      setStatus(
+        `waiting for the coordinator (${peers.length + 1}/${maxSigners} keys in the room)...`,
+      );
       await new Promise(r => setTimeout(r, 1000));
     }
   };
@@ -455,7 +457,8 @@ export const FrostApprove = () => {
   const runDkgJoinV2 = async () => {
     const abort = new AbortController();
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
-    const { relay, session, relayPubkey, peers, ceremonyId } = await joinViaRendezvous(sessionDeadline);
+    const { relay, session, relayPubkey, peers, ceremonyId } =
+      await joinViaRendezvous(sessionDeadline);
     const pid = new Uint8Array(32);
     crypto.getRandomValues(pid);
 
@@ -560,6 +563,9 @@ export const FrostApprove = () => {
       relayUrl,
       hidden: hide,
       createdByOrigin: app,
+      // a testnet group (network=test) is a testnet wallet: its review and
+      // balances encode for testnet, as its address and viewing key already do
+      mainnet,
       // the transport keys and identity a later signing session opens with
       relayPeerKeys: peers,
       relayCeremonyId: ceremonyId,
