@@ -24,6 +24,7 @@ import { zcashViewKey } from '../../state/zcash-view-key';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../../state/keyring';
 import { activeAccountIndex, activePockets, activeZcashStoreId } from '../../state/pockets';
 import { usePasswordGate } from '../../hooks/password-gate';
+import { useTransparentBalance } from '../../hooks/zcash-transparent-balance';
 import { Button } from '@repo/ui/components/ui/button';
 import {
   shieldInWorker,
@@ -59,6 +60,7 @@ import {
 import { LedgerSteps } from '../../routes/popup/send/send-states';
 import { Proving, SendingFooter, type SendingNote } from '../../routes/popup/send/send-ui';
 import { STAGES, sendStage, type SendProgress } from '../../routes/popup/send/send-stage';
+import { shieldFeeFor } from '../../routes/popup/send/spendable';
 import { isHeartbeat, phaseOf, useSendWatch, watchNote } from '../../routes/popup/send/send-watch';
 import { stopBuildInWorker } from '../../state/keyring/network-worker';
 import { isBuildStopped } from '../../workers/build-abort';
@@ -117,6 +119,7 @@ export const ShieldTransparent = ({
   const storeId = useStore(activeZcashStoreId);
   const keyRing = useStore(keyRingSelector);
   const { requestAuth, PasswordModal } = usePasswordGate();
+  const { last, shielded } = useTransparentBalance(tAddresses);
   const account = useStore(activeAccountIndex);
   const pocketName = useStore(
     s => activePockets(s).find(p => p.account === account)?.name ?? 'main',
@@ -221,6 +224,7 @@ export const ShieldTransparent = ({
         key,
       );
       setShieldTxid(result.txid);
+      shielded(BigInt(result.shieldedZat) + BigInt(result.feeZat));
     } catch (err) {
       if (!isBuildStopped(err)) {
         setShieldError(err instanceof Error ? err.message : String(err));
@@ -341,6 +345,7 @@ export const ShieldTransparent = ({
         );
 
         setZignerTxid(result.txid);
+        shielded(transparentZat);
         setZignerStep('complete');
       } catch (err) {
         setZignerError(err instanceof Error ? err.message : String(err));
@@ -350,7 +355,13 @@ export const ShieldTransparent = ({
     [unsignedData, selectedKeyInfo, zidecarUrl],
   );
 
-  const ledger = useLedgerShield({ watchOnly, tAddresses, isMainnet, zidecarUrl });
+  const ledger = useLedgerShield({
+    transparentZat,
+    watchOnly,
+    tAddresses,
+    isMainnet,
+    zidecarUrl,
+  });
   const method =
     HARDWARE_WALLET_ENABLED &&
     selectedKeyInfo &&
@@ -368,6 +379,13 @@ export const ShieldTransparent = ({
   }[method];
 
   const tZec = Number(transparentZat) / 1e8;
+  // the coins are this session's only; the check the sheet asks for as it opens brings them
+  const feeZat = last?.utxos
+    ? shieldFeeFor(
+        last.utxos.map(u => u.address),
+        method === 'zigner',
+      )
+    : undefined;
   const busy =
     shielding ||
     !!ledger.phase ||
@@ -496,7 +514,7 @@ export const ShieldTransparent = ({
         </div>
         <div className='flex items-center justify-between px-4 py-3 text-sm'>
           <span className='text-fg-muted'>fee</span>
-          <span>0.0001 zec</span>
+          <span>{feeZat === undefined ? '...' : `${fmtZec(Number(feeZat) / 1e8)} zec`}</span>
         </div>
       </div>
 
@@ -553,13 +571,18 @@ export const ShieldTransparent = ({
  * again, reusing its signed bytes; the session ends when it completes or pauses.
  */
 function useLedgerShield({
+  transparentZat,
   watchOnly,
   tAddresses,
   isMainnet,
   zidecarUrl,
-}: Pick<ShieldTransparentProps, 'watchOnly' | 'tAddresses' | 'isMainnet' | 'zidecarUrl'>) {
+}: Pick<
+  ShieldTransparentProps,
+  'transparentZat' | 'watchOnly' | 'tAddresses' | 'isMainnet' | 'zidecarUrl'
+>) {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const storeId = useStore(activeZcashStoreId);
+  const { shielded } = useTransparentBalance(tAddresses);
   const [phase, setPhase] = useState<LedgerSigningPhase['phase'] | null>(null);
   const [round, setRound] = useState<{ n: number; of: number }>();
   const [txid, setTxid] = useState<string | null>(null);
@@ -637,6 +660,8 @@ function useLedgerShield({
       setTxid(out.txids.at(-1) ?? null);
       if (out.status === 'paused') {
         setError(out.message);
+      } else {
+        shielded(transparentZat);
       }
     } catch (e) {
       const g = ledgerGuidance(e);

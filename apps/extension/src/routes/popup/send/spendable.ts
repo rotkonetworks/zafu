@@ -48,6 +48,61 @@ export const computeFeeZat = (
 };
 
 /**
+ * Serialized size of one P2PKH `tx_in`: 32 (txid) + 4 (index) + 1 (script len)
+ * + 107 (script_sig) + 4 (sequence).
+ */
+const P2PKH_TX_IN_SIZE = 148;
+/** ZIP-317 divides the transparent byte total by this to get logical actions. */
+const ZIP317_TX_BYTES_PER_ACTION = 150;
+
+/**
+ * ZIP-317 transparent-side logical actions for `n` P2PKH inputs:
+ * `ceil(tx_in_total_size / 150)`.
+ *
+ * NOT `n`. `ceil(148n/150) === n` only while `2n < 150`; at n = 75 the byte
+ * total is exactly 11_100 = 74 * 150, so the true count is 74 and every count
+ * from 75 up is strictly below `n`. Using `n` overpaid one marginal fee per
+ * ~75 inputs - safe for consensus (nodes only reject UNDER-payment) but a
+ * wallet fingerprint on every large consolidation, since no ZIP-317-correct
+ * wallet would pay it.
+ *
+ * Kept numerically identical to `zafu_wasm::zip317_transparent_actions` and to
+ * zcli's `ops/shield.rs`; the wasm shielding builder RE-CHECKS the fee with the
+ * same formula and refuses an under-payment, so these must not drift.
+ */
+const zip317TransparentActions = (nTInputs: number): number =>
+  Math.ceil((nTInputs * P2PKH_TX_IN_SIZE) / ZIP317_TX_BYTES_PER_ACTION);
+
+/**
+ * ZIP-317 fee for a shielding transaction: one padded (2-action) shielded
+ * bundle plus the transparent input side. The worker builds with it and the
+ * shield sheet shows it.
+ *
+ * Deliberately does NOT apply the user fee multiplier - the shielding paths
+ * never did, and the wasm builder re-checks this exact number, so keeping it at
+ * the conventional fee leaves the two in lockstep.
+ */
+export const shieldFeeZat = (nTInputs: number): bigint => {
+  const logicalActions = MIN_SHIELDED_ACTIONS + zip317TransparentActions(nTInputs);
+  return MARGINAL_FEE * BigInt(Math.max(logicalActions, GRACE_ACTIONS));
+};
+
+/**
+ * What shielding these coins costs, from the address of each coin: hot and
+ * ledger send one transaction per address, zigner signs them all in one.
+ */
+export const shieldFeeFor = (coinAddresses: readonly string[], together: boolean): bigint => {
+  if (together) {
+    return coinAddresses.length ? shieldFeeZat(coinAddresses.length) : 0n;
+  }
+  const perAddress = new Map<string, number>();
+  for (const a of coinAddresses) {
+    perAddress.set(a, (perAddress.get(a) ?? 0) + 1);
+  }
+  return [...perAddress.values()].reduce((sum, n) => sum + shieldFeeZat(n), 0n);
+};
+
+/**
  * The worker's note selection: largest first, until the target is covered.
  * Returns the selected values, or undefined when the notes cannot cover the
  * target - the same condition the worker throws "insufficient funds" on.

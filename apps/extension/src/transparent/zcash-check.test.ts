@@ -7,6 +7,7 @@ import { Key } from '@repo/encryption/key';
 import { storage } from '@repo/mock-chrome';
 import { markHydrated } from '../state/encrypted-storage';
 import {
+  afterShield,
   checkKey,
   fromStored,
   newTip,
@@ -71,6 +72,17 @@ describe('zcash transparent check', () => {
     // no tip yet (connecting) never asks
     expect(newTip(true, 0, null)).toBe(false);
     expect(newTip(true, 1, null)).toBe(true);
+  });
+
+  it('a shield takes its coins off the last check, so home never counts them twice', () => {
+    const last: TransparentCheck = { at: 5, height: 100, zat: 500_000n, funded: 1, utxos: [] };
+    expect(afterShield(last, 500_000n)).toEqual({ at: 5, height: 100, zat: 0n, funded: 0 });
+    // dust under a group's fee stays where it is
+    expect(afterShield({ ...last, zat: 510_000n, funded: 2 }, 500_000n)).toMatchObject({
+      zat: 10_000n,
+      funded: 2,
+    });
+    expect(afterShield(last, 900_000n).zat).toBe(0n);
   });
 
   it('round-trips through storage without the coins, and reads anything else as never checked', () => {

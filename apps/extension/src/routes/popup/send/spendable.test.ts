@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { computeFeeZat, maxSendable, quoteSend, MARGINAL_FEE } from './spendable';
+import {
+  computeFeeZat,
+  maxSendable,
+  quoteSend,
+  shieldFeeFor,
+  shieldFeeZat,
+  MARGINAL_FEE,
+} from './spendable';
 
 const zec = (n: number) => BigInt(Math.round(n * 1e8));
 
@@ -89,5 +96,21 @@ describe('quoteSend - the check that used to happen after a two-minute prove', (
     const q = quoteSend([], zec(0.01), { transparentRecipient: false });
     expect(q.ok).toBe(false);
     expect(q.error).toBe('insufficient');
+  });
+});
+
+describe('shield fee', () => {
+  it('one coin pays three actions, not the 0.0001 the sheet once showed', () => {
+    expect(shieldFeeZat(1)).toBe(15_000n);
+    expect(shieldFeeZat(2)).toBe(20_000n);
+    // 75 inputs fill exactly 74 actions of transparent bytes
+    expect(shieldFeeZat(75)).toBe(MARGINAL_FEE * 76n);
+  });
+
+  it('prices one transaction per address, or one for all when zigner signs them together', () => {
+    const coins = ['t1a', 't1a', 't1b'];
+    expect(shieldFeeFor(coins, false)).toBe(shieldFeeZat(2) + shieldFeeZat(1));
+    expect(shieldFeeFor(coins, true)).toBe(shieldFeeZat(3));
+    expect(shieldFeeFor([], true)).toBe(0n);
   });
 });
