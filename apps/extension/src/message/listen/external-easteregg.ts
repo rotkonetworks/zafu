@@ -56,6 +56,10 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
 import { getApprovalSurface } from '../../side-panel-pref';
+import { walletIsMainnet } from '../../workers/chain-network';
+import type { VaultUnlock } from '../../state/keyring/types';
+import type { AllSlices } from '../../state';
+import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { isSidePanelOpen } from '../../side-panel-presence';
 import { SIDE_PANEL_NAVIGATE } from '../side-panel-delivery';
 import { popupWindowGeometry } from '../../utils/popup-window';
@@ -316,6 +320,45 @@ const createPopupWindow = async (
  *                                                 shape; caller MUST
  *                                                 early-return.
  */
+/**
+ * The shielded address a seed wallet offers on its receive screen: the stored
+ * diversifier, the active pocket, derived in the zcash worker from the sealed
+ * vault (the phrase never crosses the message bus). Undefined when the seed
+ * wallet is on the other network than the caller asked for.
+ */
+async function seedWalletReceiveAddress(
+  state: AllSlices & { keyRing: { getVaultUnlock: (id: string) => Promise<VaultUnlock> } },
+  vaultId: string,
+  wantMainnet: boolean,
+): Promise<string | undefined> {
+  const mainnet = walletIsMainnet();
+  if (mainnet !== wantMainnet) {
+    return undefined;
+  }
+  const [{ spawnNetworkWorker, deriveAddressInWorker }, { readShieldedDiversifier }, pockets] =
+    await Promise.all([
+      import('../../state/keyring/network-worker'),
+      import('../../state/shielded-receive-index'),
+      import('../../state/pockets'),
+    ]);
+  const vault = await state.keyRing.getVaultUnlock(vaultId);
+  let pocket = 0;
+  try {
+    pocket = pockets.activeAccountIndex(state);
+  } catch {
+    /* no pocket book yet: the first pocket */
+  }
+  await spawnNetworkWorker('zcash');
+  const raw = await deriveAddressInWorker(
+    'zcash',
+    vault,
+    0,
+    await readShieldedDiversifier(),
+    pocket,
+  );
+  return fixOrchardAddress(raw, mainnet);
+}
+
 const REJECT_FLOOR_MS = 30;
 async function requireCapability(
   sender: chrome.runtime.MessageSender,
@@ -1266,7 +1309,21 @@ export const externalMessageListener = (
             return;
           }
           const { useStore } = await import('../../state');
-          const { zcashWallets, activeZcashIndex } = useStore.getState().wallets;
+          const state = useStore.getState();
+          const key = state.keyRing.selectedKeyInfo;
+          if (key?.type === 'mnemonic') {
+            // a seed wallet is the active zcash account (as on the receive
+            // screen): its address is derived in the zcash worker from the
+            // sealed vault, never from a stored zigner/multisig entry
+            const address = await seedWalletReceiveAddress(state, key.id, wantMainnet);
+            sendResponse(
+              address
+                ? { address }
+                : { error: 'no zcash wallet on that network', code: 'no-wallet' },
+            );
+            return;
+          }
+          const { zcashWallets, activeZcashIndex } = state.wallets;
           const w = zcashWallets[activeZcashIndex];
           if (!w || w.multisig || w.mainnet !== wantMainnet) {
             sendResponse({ error: 'no zcash wallet on that network', code: 'no-wallet' });
