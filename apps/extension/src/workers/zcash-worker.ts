@@ -42,6 +42,7 @@ import {
   zignerBatchRequest,
   zignerSignRequest,
 } from '../routes/popup/send/zcash-send-cbor-helpers';
+import { shieldFeeZat } from '../routes/popup/send/spendable';
 import { nu63ActivationHeight } from '../config/feature-flags';
 import {
   applyTreeWrites,
@@ -1684,45 +1685,6 @@ const computeFee = (
  * `parse_ironwood_recipient`, which decodes the base58 version bytes.
  */
 const isTransparentRecipient = (addr: string): boolean => /^(t1|t3|tm|t2)/.test(addr.trim());
-
-/**
- * Serialized size of one P2PKH `tx_in`: 32 (txid) + 4 (index) + 1 (script len)
- * + 107 (script_sig) + 4 (sequence).
- */
-const P2PKH_TX_IN_SIZE = 148;
-/** ZIP-317 divides the transparent byte total by this to get logical actions. */
-const ZIP317_TX_BYTES_PER_ACTION = 150;
-
-/**
- * ZIP-317 transparent-side logical actions for `n` P2PKH inputs:
- * `ceil(tx_in_total_size / 150)`.
- *
- * NOT `n`. `ceil(148n/150) === n` only while `2n < 150`; at n = 75 the byte
- * total is exactly 11_100 = 74 * 150, so the true count is 74 and every count
- * from 75 up is strictly below `n`. Using `n` overpaid one marginal fee per
- * ~75 inputs - safe for consensus (nodes only reject UNDER-payment) but a
- * wallet fingerprint on every large consolidation, since no ZIP-317-correct
- * wallet would pay it.
- *
- * Kept numerically identical to `zafu_wasm::zip317_transparent_actions` and to
- * zcli's `ops/shield.rs`; the wasm shielding builder RE-CHECKS the fee with the
- * same formula and refuses an under-payment, so these must not drift.
- */
-const zip317TransparentActions = (nTInputs: number): number =>
-  Math.ceil((nTInputs * P2PKH_TX_IN_SIZE) / ZIP317_TX_BYTES_PER_ACTION);
-
-/**
- * ZIP-317 fee for a shielding transaction: one padded (2-action) shielded
- * bundle plus the transparent input side.
- *
- * Deliberately does NOT apply the user fee multiplier - the shielding paths
- * never did, and the wasm builder re-checks this exact number, so keeping it at
- * the conventional fee leaves the two in lockstep.
- */
-const computeShieldFee = (nTInputs: number): bigint => {
-  const logicalActions = MIN_ORCHARD_ACTIONS + zip317TransparentActions(nTInputs);
-  return MARGINAL_FEE * BigInt(Math.max(logicalActions, GRACE_ACTIONS));
-};
 
 const computeTurnstileFee = (nOrchardSpends: number): bigint => {
   const orchardActions = Math.max(nOrchardSpends, MIN_ORCHARD_ACTIONS);
@@ -6726,7 +6688,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // shield each group with its matching key
           for (const [addrIndex, utxos] of byIndex) {
             const groupZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
-            const fee = computeShieldFee(utxos.length);
+            const fee = shieldFeeZat(utxos.length);
             if (groupZat <= fee) {
               console.warn(`[zcash-worker] skipping index ${addrIndex}: it does not cover the fee`);
               continue;
@@ -6881,7 +6843,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // for simplicity, shield all UTXOs in a single tx
         const shieldUTotal = shieldUUtxos.reduce((sum, u) => sum + u.valueZat, 0n);
-        const shieldUFee = computeShieldFee(shieldUUtxos.length);
+        const shieldUFee = shieldFeeZat(shieldUUtxos.length);
         if (shieldUTotal <= shieldUFee) {
           throw new Error('UTXOs too small to cover fee');
         }
@@ -7494,7 +7456,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           payload: {
             inputCount: eUtxos.length,
             totalZat: eUtxos.reduce((sum, u) => sum + u.valueZat, 0n).toString(),
-            belowThreshold: eRound.length > 0 && eRoundZat <= computeShieldFee(eRound.length),
+            belowThreshold: eRound.length > 0 && eRoundZat <= shieldFeeZat(eRound.length),
           },
         });
         return;

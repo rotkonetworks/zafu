@@ -61,6 +61,7 @@ import {
 import { LedgerSteps } from '../../routes/popup/send/send-states';
 import { Proving, SendingFooter, type SendingNote } from '../../routes/popup/send/send-ui';
 import { STAGES, sendStage, type SendProgress } from '../../routes/popup/send/send-stage';
+import { shieldFeeFor } from '../../routes/popup/send/spendable';
 import { isHeartbeat, phaseOf, useSendWatch, watchNote } from '../../routes/popup/send/send-watch';
 import { stopBuildInWorker } from '../../state/keyring/network-worker';
 import { isBuildStopped } from '../../workers/build-abort';
@@ -119,7 +120,7 @@ export const ShieldTransparent = ({
   const storeId = useStore(activeZcashStoreId);
   const keyRing = useStore(keyRingSelector);
   const { requestAuth, PasswordModal } = usePasswordGate();
-  const { shielded } = useTransparentBalance(tAddresses);
+  const { last, shielded } = useTransparentBalance(tAddresses);
   const account = useStore(activeAccountIndex);
   const pocketName = useStore(
     s => activePockets(s).find(p => p.account === account)?.name ?? 'main',
@@ -380,6 +381,13 @@ export const ShieldTransparent = ({
 
   const tZec = Number(transparentZat) / 1e8;
   const unit = HOME_LOOK[isMainnet ? 'zcash' : 'zcash-testnet'].unit;
+  // the coins are this session's only; the check the sheet asks for as it opens brings them
+  const feeZat = last?.utxos
+    ? shieldFeeFor(
+        last.utxos.map(u => u.address),
+        method === 'zigner',
+      )
+    : undefined;
   const busy =
     shielding ||
     !!ledger.phase ||
@@ -508,7 +516,7 @@ export const ShieldTransparent = ({
         </div>
         <div className='flex items-center justify-between px-4 py-3 text-sm'>
           <span className='text-fg-muted'>fee</span>
-          <span>0.0001 {unit}</span>
+          <span>{feeZat === undefined ? '...' : `${fmtZec(Number(feeZat) / 1e8)} ${unit}`}</span>
         </div>
       </div>
 
