@@ -60,17 +60,8 @@ export const PopupWelcome = () => {
 
       <div className='relative -mt-[34px] flex flex-1 flex-col gap-3 px-7'>
         <Mark size={34} />
-        <span className='-mt-1.5 ml-[46px] text-[11px] tracking-[0.1em] text-fg-muted'>
-          shielded signing
-        </span>
-        <h1 className='font-display text-[28px] leading-[1.25] text-fg-high'>
-          held in your own hands,
-          <br />
-          seen by no one.
-        </h1>
-        <p className='text-label tracking-[0.04em] text-fg-muted'>
-          private by default
-        </p>
+        <h1 className='font-display text-[28px] leading-[1.25] text-fg-high'>shielded signing.</h1>
+        <p className='text-label tracking-[0.04em] text-fg-muted'>private by default</p>
       </div>
 
       <div className='flex flex-col gap-2.5 px-5 pb-[18px]'>

@@ -145,9 +145,9 @@ export const RuneScreen = ({ onSwap }: { onSwap: () => void }) => {
             )}
           </Table>
           {(s.err ??
-            (over ? 'more than this pocket holds shielded, with the network fees' : undefined)) && (
+            (over ? 'more than this pocket has shielded, with the network fees' : undefined)) && (
             <span className='text-xs text-warn'>
-              {s.err ?? 'more than this pocket holds shielded, with the network fees'}
+              {s.err ?? 'more than this pocket has shielded, with the network fees'}
             </span>
           )}
           <Button className='h-14' disabled={!fresh || over || s.flight} onClick={onSwap}>

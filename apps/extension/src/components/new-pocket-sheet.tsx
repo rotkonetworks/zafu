@@ -166,7 +166,7 @@ export const NewPocketSheet = ({
             <>
               {holds && (
                 <p className='text-label text-fg-muted lowercase'>
-                  it still holds {holds} zec · it stays yours
+                  it still has {holds} zec · it stays yours
                 </p>
               )}
               <Button variant='quiet' onClick={() => void handleHide()} disabled={busy}>

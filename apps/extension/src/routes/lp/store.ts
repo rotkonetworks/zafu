@@ -838,8 +838,7 @@ export const startAdd = async () => {
   }
   if (shieldedZat === undefined || a + ADD_FEES > shieldedZat) {
     set({
-      error:
-        'this is more than this pocket holds shielded, with the network fees · nothing was sent',
+      error: 'this is more than this pocket has shielded, with the network fees · nothing was sent',
     });
     return;
   }
@@ -1203,8 +1202,7 @@ export const startAdd2 = async () => {
   }
   if (shieldedZat === undefined || a + ADD_FEES > shieldedZat) {
     set({
-      error:
-        'this is more than this pocket holds shielded, with the network fees · nothing was sent',
+      error: 'this is more than this pocket has shielded, with the network fees · nothing was sent',
     });
     return;
   }
@@ -1348,7 +1346,7 @@ export const startRuneSwap = async () => {
   if (shieldedZat === undefined || q.amountZat + ADD_FEES > shieldedZat) {
     set({
       swapErr:
-        'this is more than this pocket holds shielded, with the network fees · nothing was sent',
+        'this is more than this pocket has shielded, with the network fees · nothing was sent',
     });
     return;
   }

@@ -355,7 +355,7 @@ export const AddScreen = ({ onAdd }: { onAdd: () => void }) => {
           <>
             <span className='size-2 shrink-0 bg-warn' />
             <span className='flex-1 text-[13px] text-fg'>
-              more than {pocket} holds shielded, with the network fees
+              more than {pocket} has shielded, with the network fees
             </span>
             {max >= MIN_ADD_ZAT && (
               <Button
@@ -1447,7 +1447,7 @@ export const TwoSidedScreen = ({ onAdd }: { onAdd: () => void }) => {
           <>
             <span className='size-2 shrink-0 bg-warn' />
             <span className='flex-1 text-[13px] text-fg'>
-              more than this pocket holds shielded, with the network fees
+              more than this pocket has shielded, with the network fees
             </span>
           </>
         ) : (

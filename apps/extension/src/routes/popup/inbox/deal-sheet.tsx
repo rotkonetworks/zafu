@@ -150,7 +150,7 @@ export const DealSheet = ({
         <Choice
           on={who === 'person'}
           title='someone you both trust decides'
-          line='2 of 3 · a contact holds the third key'
+          line='2 of 3 · a contact has the third key'
           onClick={() => setWho('person')}
         />
         {who === 'person' && (
