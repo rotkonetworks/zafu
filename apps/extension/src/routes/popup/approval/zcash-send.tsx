@@ -28,9 +28,13 @@ import { STAGES, type SendProgress } from '../send/send-stage';
 import { RowGroup } from '@repo/ui/components/ui/row';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
-import { selectActiveZcashWallet } from '../../../state/wallets';
 import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
-import { buildMultiSendTxInWorker, stopBuildInWorker } from '../../../state/keyring/network-worker';
+import {
+  buildMultiSendTxInWorker,
+  buildSendTxInWorker,
+  stopBuildInWorker,
+} from '../../../state/keyring/network-worker';
+import { walletIsMainnet } from '../../../workers/chain-network';
 import { isBuildStopped } from '../../../workers/build-abort';
 import type { SendingNote } from '../send/send-ui';
 import { Clipped } from '@repo/ui/components/ui/clipped';
@@ -91,7 +95,6 @@ export function ZcashSendApproval() {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
-  const activeZcashWallet = useStore(selectActiveZcashWallet);
   const storeId = useStore(activeZcashStoreId);
   const pocketAccount = useStore(activeAccountIndex);
 
@@ -174,12 +177,41 @@ export function ZcashSendApproval() {
     buildKeyRef.current = key;
     try {
       const vault = await getVaultUnlock(selectedKeyInfo.id);
-      const mainnet = activeZcashWallet?.mainnet !== false;
+      // the seed wallet's own network (checked above: this is a mnemonic
+      // wallet), not that of whichever zcashWallets entry is active - after a
+      // dapp DKG join that is the new multisig vault
+      const mainnet = walletIsMainnet();
       const workerOutputs = outputs.map(o => ({
         address: o.address.trim(),
         amount: String(o.amount),
         memo: o.memo,
       }));
+      if (workerOutputs.length === 1) {
+        // one output (an escrow deposit) goes through the wallet's own send,
+        // which spends from the live pool - ironwood from NU6.3 on. The
+        // multi-output builder is orchard-only and refuses post-activation.
+        const [only] = workerOutputs;
+        const single = await buildSendTxInWorker(
+          'zcash',
+          storeId ?? selectedKeyInfo.id,
+          zidecarUrl,
+          only!.address,
+          only!.amount,
+          only!.memo ?? '',
+          pocketAccount,
+          mainnet,
+          vault,
+          undefined,
+          key,
+        );
+        if (!('txid' in single)) {
+          throw new Error('the send was not signed');
+        }
+        buildKeyRef.current = null;
+        setStatus({ at: 'done', txids: [single.txid] });
+        sendResult({ success: true, txid: single.txid, txids: [single.txid], fees: [single.fee] });
+        return;
+      }
       const result = await buildMultiSendTxInWorker(
         'zcash',
         storeId ?? selectedKeyInfo.id,

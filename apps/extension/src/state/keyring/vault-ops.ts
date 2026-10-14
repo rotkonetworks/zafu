@@ -204,6 +204,8 @@ export interface FrostMultisigParams {
    * UI directly (e.g. zigner-multisig flow).
    */
   createdByOrigin?: string;
+  /** the network the group's address and viewing key are encoded for; mainnet when absent */
+  mainnet?: boolean;
 }
 
 /** where a shared wallet lives in people: its room, and the ceremony that made it */
@@ -253,7 +255,7 @@ export const buildFrostZcashWallet = (
   orchardFvk: params.orchardFvk,
   address: params.address,
   accountIndex: 0,
-  mainnet: true,
+  mainnet: params.mainnet ?? true,
   vaultId,
   multisig: {
     publicKeyPackage: params.publicKeyPackage,

@@ -56,6 +56,10 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
 import { getApprovalSurface } from '../../side-panel-pref';
+import { walletIsMainnet } from '../../workers/chain-network';
+import type { VaultUnlock } from '../../state/keyring/types';
+import type { AllSlices } from '../../state';
+import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { isSidePanelOpen } from '../../side-panel-presence';
 import { SIDE_PANEL_NAVIGATE } from '../side-panel-delivery';
 import { popupWindowGeometry } from '../../utils/popup-window';
@@ -316,6 +320,45 @@ const createPopupWindow = async (
  *                                                 shape; caller MUST
  *                                                 early-return.
  */
+/**
+ * The shielded address a seed wallet offers on its receive screen: the stored
+ * diversifier, the active pocket, derived in the zcash worker from the sealed
+ * vault (the phrase never crosses the message bus). Undefined when the seed
+ * wallet is on the other network than the caller asked for.
+ */
+async function seedWalletReceiveAddress(
+  state: AllSlices & { keyRing: { getVaultUnlock: (id: string) => Promise<VaultUnlock> } },
+  vaultId: string,
+  wantMainnet: boolean,
+): Promise<string | undefined> {
+  const mainnet = walletIsMainnet();
+  if (mainnet !== wantMainnet) {
+    return undefined;
+  }
+  const [{ spawnNetworkWorker, deriveAddressInWorker }, { readShieldedDiversifier }, pockets] =
+    await Promise.all([
+      import('../../state/keyring/network-worker'),
+      import('../../state/shielded-receive-index'),
+      import('../../state/pockets'),
+    ]);
+  const vault = await state.keyRing.getVaultUnlock(vaultId);
+  let pocket = 0;
+  try {
+    pocket = pockets.activeAccountIndex(state);
+  } catch {
+    /* no pocket book yet: the first pocket */
+  }
+  await spawnNetworkWorker('zcash');
+  const raw = await deriveAddressInWorker(
+    'zcash',
+    vault,
+    0,
+    await readShieldedDiversifier(),
+    pocket,
+  );
+  return fixOrchardAddress(raw, mainnet);
+}
+
 const REJECT_FLOOR_MS = 30;
 async function requireCapability(
   sender: chrome.runtime.MessageSender,
@@ -820,11 +863,19 @@ export const externalMessageListener = (
         if (!gate) {
           return;
         }
+        // a coordinator's session uuid, or its rendezvous code (number + two
+        // words): the popup then publishes our relay key and joins the session
+        // announced behind it
         const roomCode = String(msg['roomCode'] || '');
-        if (!roomCode) {
-          sendResponse({ error: 'roomCode required' });
+        const rendezvousCode = String(msg['rendezvousCode'] || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, '')
+          .slice(0, 64);
+        if (!roomCode && !rendezvousCode) {
+          sendResponse({ error: 'roomCode or rendezvousCode required' });
           return;
         }
+        const network = msg['network'] === 'test' ? 'test' : 'main';
         const threshold = Number(msg['threshold']) || 2;
         const maxSigners = Number(msg['maxSigners']) || 3;
         const relayUrl = String(msg['relayUrl'] || DEFAULT_RELAY_URL);
@@ -850,7 +901,11 @@ export const externalMessageListener = (
           relayUrl,
           labelPrefix,
           requestId,
+          network,
         });
+        if (rendezvousCode) {
+          params.set('rendezvousCode', rendezvousCode);
+        }
         if (hide) {
           params.set('hide', '1');
         }
@@ -915,6 +970,11 @@ export const externalMessageListener = (
         }
         const relayUrl = String(msg['relayUrl'] || DEFAULT_RELAY_URL);
         const feeZat = Number(msg['feeZat']) || 10_000;
+        // the coordinator's relay key(s): frostd admits only the keys listed when
+        // the escrow opened this session, and we seal to them
+        const relayPeerKeys = (Array.isArray(msg['relayPeerKeys']) ? msg['relayPeerKeys'] : [])
+          .map(k => String(k).toLowerCase())
+          .filter(k => /^[0-9a-f]{64}$/.test(k));
         // Empty is allowed here because the popup falls back to the default
         // multisigVault; the popup looks up via startsWith - same charset rules.
         const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
@@ -929,6 +989,7 @@ export const externalMessageListener = (
           feeZat: String(feeZat),
           planJson: JSON.stringify(plan),
           requestId,
+          relayPeerKeys: relayPeerKeys.join(','),
         });
         if (multisigLabel) {
           params.set('multisigLabel', multisigLabel);
@@ -994,6 +1055,10 @@ export const externalMessageListener = (
         callback(msg['result'] || { error: 'no result' });
         pendingPicks.delete(requestId);
       }
+      // the decision is in: the window may stay up showing "done", but the
+      // site's next request (a deposit right after its DKG join) must not be
+      // dropped as if this one were still pending
+      releasePopupGuardForRequest(requestId);
       sendResponse({ ok: true });
       return true;
     }
@@ -1229,6 +1294,53 @@ export const externalMessageListener = (
 
     // ── Zcash transaction (multi-output, for poker escrow) ──
 
+    case 'zafu_zcash_receive_address': {
+      // The active zcash wallet's own shielded address, for a site that pays the
+      // user (an escrow pinning where winnings go). Connect-gated like any
+      // address disclosure; network is the caller's ('test' or main), and a
+      // wallet on the other network, or a shared multisig, is not offered.
+      if (!isValidExternalSender(sender)) {
+        sendResponse({ error: 'denied', code: 'denied' });
+        return true;
+      }
+      const receiveOrigin = sender.origin;
+      const wantMainnet = msg['network'] !== 'test';
+      void (async () => {
+        try {
+          const perms = await getOriginPermissions(receiveOrigin);
+          if (!hasCapability(perms, 'connect')) {
+            sendResponse({ error: 'not connected', code: 'denied' });
+            return;
+          }
+          const { useStore } = await import('../../state');
+          const state = useStore.getState();
+          const key = state.keyRing.selectedKeyInfo;
+          if (key?.type === 'mnemonic') {
+            // a seed wallet is the active zcash account (as on the receive
+            // screen): its address is derived in the zcash worker from the
+            // sealed vault, never from a stored zigner/multisig entry
+            const address = await seedWalletReceiveAddress(state, key.id, wantMainnet);
+            sendResponse(
+              address
+                ? { address }
+                : { error: 'no zcash wallet on that network', code: 'no-wallet' },
+            );
+            return;
+          }
+          const { zcashWallets, activeZcashIndex } = state.wallets;
+          const w = zcashWallets[activeZcashIndex];
+          if (!w || w.multisig || w.mainnet !== wantMainnet) {
+            sendResponse({ error: 'no zcash wallet on that network', code: 'no-wallet' });
+            return;
+          }
+          sendResponse({ address: w.address });
+        } catch {
+          sendResponse({ error: 'internal error', code: 'internal_error' });
+        }
+      })();
+      return true;
+    }
+
     case 'zafu_zcash_send': {
       // Multi-output Zcash Orchard transaction
       // Used by poker.zk.bot for: rake + escrow deposit in one tx
@@ -1281,6 +1393,7 @@ export const externalMessageListener = (
         callback(msg['result'] || { success: false, error: 'no result' });
         pendingPicks.delete(requestId);
       }
+      releasePopupGuardForRequest(requestId);
       sendResponse({ ok: true });
       return true;
     }

@@ -27,6 +27,7 @@ import { hexToBytes } from '@repo/wallet/networks';
 import { DEFAULT_RELAY_URL } from './multisig/dkg-helpers';
 import { FrostdRelayClient } from '../../state/keyring/frostd-relay-client';
 import { buildRelayIdentity, getOrCreateRelayIdentity } from '../../state/keyring/relay-identity';
+import { pollRoom, publishKey, roomIdFromCode } from '../../state/keyring/rendezvous-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../state/frost-session';
 import { usePasswordGate } from '../../hooks/password-gate';
 import { Sensitive } from '../../components/sensitive';
@@ -83,6 +84,15 @@ export const FrostApprove = () => {
   // relay that no longer exists on this path.
   const relayUrl = params.get('relayUrl') || DEFAULT_RELAY_URL;
   const roomCode = params.get('roomCode') || '';
+  /**
+   * A dapp coordinator's rendezvous code (number + two words), instead of a
+   * session uuid: we publish our relay key into its room and join the frostd
+   * session the coordinator announces there. The code also names our relay
+   * identity for this group, so later signing sessions reuse the same key.
+   */
+  const rendezvousCode = params.get('rendezvousCode') || '';
+  /** the group's network; only 'test' changes anything (address + viewing-key encoding) */
+  const mainnet = params.get('network') !== 'test';
   /**
    * The other signers' frostd relay public keys, comma-separated.
    *
@@ -396,10 +406,59 @@ export const FrostApprove = () => {
   };
 
   // generic DKG joiner - mirrors multisig/join.tsx's R1:T:N:SK / R2 / FVK-echo flow
+  /**
+   * The frostd session to run a DKG in. With a rendezvous code: publish our relay
+   * key (the identity for this group, named by the code) and wait for the
+   * coordinator to announce a session with every co-signer's key in the room.
+   * Without one, the caller handed us the session uuid and peer keys directly.
+   */
+  const joinViaRendezvous = async (deadline: number) => {
+    if (rendezvousCode === '') {
+      const ceremonyId = roomCode !== '' ? roomCode : sighashHex;
+      const stored = await getOrCreateRelayIdentity(ceremonyId);
+      return {
+        relay: await relayClient(),
+        session: roomCode,
+        relayPubkey: stored.publicKey,
+        peers: relayPeerKeys,
+        ceremonyId,
+      };
+    }
+    const ceremonyId = rendezvousCode;
+    const stored = await getOrCreateRelayIdentity(ceremonyId);
+    const roomId = await roomIdFromCode(rendezvousCode);
+    setStatus('joining the room code...');
+    await publishKey(relayUrl, roomId, stored.publicKey);
+    for (;;) {
+      const view = await pollRoom(relayUrl, roomId);
+      const peers = view.entries
+        .map(e => e.pubkey)
+        .filter(k => k.toLowerCase() !== stored.publicKey.toLowerCase());
+      if (view.sessionId !== null && peers.length >= maxSigners - 1) {
+        const identity = await buildRelayIdentity(stored, peers);
+        return {
+          relay: new FrostdRelayClient(relayUrl, identity),
+          session: view.sessionId,
+          relayPubkey: stored.publicKey,
+          peers,
+          ceremonyId,
+        };
+      }
+      if (Date.now() >= deadline) {
+        throw new Error('the coordinator never opened the session for that room code');
+      }
+      setStatus(
+        `waiting for the coordinator (${peers.length + 1}/${maxSigners} keys in the room)...`,
+      );
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  };
+
   const runDkgJoinV2 = async () => {
     const abort = new AbortController();
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
-    const relay = await relayClient();
+    const { relay, session, relayPubkey, peers, ceremonyId } =
+      await joinViaRendezvous(sessionDeadline);
     const pid = new Uint8Array(32);
     crypto.getRandomValues(pid);
 
@@ -412,7 +471,7 @@ export const FrostApprove = () => {
 
     setStatus('joining room...');
     void relay.joinRoom(
-      roomCode,
+      session,
       pid,
       event => {
         if (event.type === 'message') {
@@ -457,7 +516,7 @@ export const FrostApprove = () => {
 
     setStatus('round 1: generating commitment...');
     const round1 = await frostDkgPart1InWorker(parsedMaxSigners, parsedThreshold);
-    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`R1:${round1.broadcast}`));
+    await relay.sendMessage(session, pid, new TextEncoder().encode(`R1:${round1.broadcast}`));
 
     setStatus(`round 1: waiting for ${parsedMaxSigners - 1} participant(s)...`);
     await waitForUntil(() => peerBroadcasts.length >= parsedMaxSigners - 1, sessionDeadline);
@@ -465,7 +524,7 @@ export const FrostApprove = () => {
     setStatus('round 2: exchanging key shares...');
     const round2 = await frostDkgPart2InWorker(round1.secret, peerBroadcasts);
     for (const pkg of round2.peer_packages) {
-      await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`R2:${pkg}`));
+      await relay.sendMessage(session, pid, new TextEncoder().encode(`R2:${pkg}`));
     }
 
     const expectedR2 = (parsedMaxSigners - 1) ** 2;
@@ -475,13 +534,12 @@ export const FrostApprove = () => {
     setStatus('round 3: finalizing...');
     const round3 = await frostDkgPart3InWorker(round2.secret, peerBroadcasts, peerRound2);
 
-    // mainnet=true matches multisig/join.tsx; param-ize when callers need testnet/regtest
     const addrRaw = await frostDeriveAddressFromSkInWorker(round3.public_key_package, fvkSk, 0);
-    const addr = encodeOrchardUnifiedAddress(hexToBytes(addrRaw), true);
-    const orchardFvk = await frostDeriveUfvkInWorker(round3.public_key_package, fvkSk, true);
+    const addr = encodeOrchardUnifiedAddress(hexToBytes(addrRaw), mainnet);
+    const orchardFvk = await frostDeriveUfvkInWorker(round3.public_key_package, fvkSk, mainnet);
 
     setStatus('verifying viewing key agreement...');
-    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`FVK:${orchardFvk}`));
+    await relay.sendMessage(session, pid, new TextEncoder().encode(`FVK:${orchardFvk}`));
     await waitForUntil(() => peerFvks.length >= parsedMaxSigners - 1, sessionDeadline);
     for (const peerFvk of peerFvks) {
       if (peerFvk !== orchardFvk) {
@@ -505,10 +563,17 @@ export const FrostApprove = () => {
       relayUrl,
       hidden: hide,
       createdByOrigin: app,
+      // a testnet group (network=test) is a testnet wallet: its review and
+      // balances encode for testnet, as its address and viewing key already do
+      mainnet,
+      // the transport keys and identity a later signing session opens with
+      relayPeerKeys: peers,
+      relayCeremonyId: ceremonyId,
     });
 
     abort.abort();
-    const res = { success: true, address: addr, orchardFvk, roomCode };
+    // relayPubkey: what a coordinator lists to admit this wallet to a signing session
+    const res = { success: true, address: addr, orchardFvk, roomCode: session, relayPubkey };
     setResult(res);
     setPhase('complete');
     sendResult(requestId, res);
@@ -637,7 +702,15 @@ export const FrostApprove = () => {
     }
 
     const abort = new AbortController();
-    const relay = await relayClient();
+    // the escrow admitted the relay key this wallet joined the group with, so
+    // sign under that identity (the coordinator's key comes in relayPeerKeys)
+    const groupCeremony = zcashWallets.find(w => w.vaultId === vault.id)?.multisig?.relayCeremonyId;
+    const relay = groupCeremony
+      ? new FrostdRelayClient(
+          relayUrl,
+          await buildRelayIdentity(await getOrCreateRelayIdentity(groupCeremony), relayPeerKeys),
+        )
+      : await relayClient();
     const secrets = await getMultisigSecrets(vault.id);
     if (!secrets) {
       throw new Error("the multisig share didn't open · please unlock zafu and try again");
