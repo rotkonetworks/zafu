@@ -78,6 +78,7 @@ import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-er
 import { BlockPrefetcher } from './block-prefetcher';
 import { once } from './once';
 import { lastOrWait } from './last-or-wait';
+import { withMemoText } from './memo-text';
 import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from '../perf/rayon-isolation';
 import { loadVotingWasm } from '../state/voting-wasm';
 import { hotSpendAccount, isStoreOfWallet, parsePocketStoreId } from '../state/pocket-id';
@@ -4346,7 +4347,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // v5 tx layout: [4B header][4B versionGroupId][4B consensusBranchId]...
         // the v5 structure is identical across NU5/NU6/NU7, only the branch ID differs
         patchBranchId(txBuf);
-        const memos = memoState.keys.decrypt_transaction_memos(txBuf);
+        const memos = withMemoText(memoState.keys.decrypt_transaction_memos(txBuf));
         workerSelf.postMessage({ type: 'memos', id, network: 'zcash', walletId, payload: memos });
         return;
       }
@@ -4843,7 +4844,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
               const txBuf = new Uint8Array(txBytes);
               patchBranchId(txBuf);
-              const foundMemos = memoKeys().decrypt_transaction_memos(txBuf);
+              const foundMemos = withMemoText(memoKeys().decrypt_transaction_memos(txBuf));
 
               for (const memo of foundMemos) {
                 // structured binary memos (0xF6 prefix) are handled separately
