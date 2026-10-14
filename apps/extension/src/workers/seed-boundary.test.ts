@@ -49,14 +49,14 @@ describe('seed boundary', () => {
     expect(deposit).toHaveLength(1);
     expect(deposit[0]).not.toMatch(/proveViaOffscreen\(/);
     const scopes = all.filter(c => !deposit.includes(c));
-    // send-tx (ironwood + orchard), turnstile, send-tx-multi, shield
-    expect(scopes).toHaveLength(5);
+    // send-tx (ironwood + orchard), turnstile, send-tx-multi (ironwood + orchard), shield
+    expect(scopes).toHaveLength(6);
     for (const scope of scopes) {
       expect(scope).toMatch(/proveViaOffscreen\(/);
       expect(scope).toMatch(/keys\.sign_(pczt|shielding)\(/);
       expect(scope).not.toMatch(/Payload\.ufvk/);
     }
-    for (const scope of scopes.slice(0, 4)) {
+    for (const scope of scopes.slice(0, 5)) {
       expect(scope).toMatch(/args: \[\s*keys\.ufvk\(\),/);
     }
   });

@@ -307,6 +307,35 @@ async function executeBuild(req: ProveRequest): Promise<unknown> {
       );
       break;
 
+    case 'build_ironwood_send_pczt_multi':
+      // NU6.3 ironwood send paying SEVERAL outputs in one tx (a site's
+      // multi-output send). Same result as build_ironwood_send_pczt.
+      // Signature: (ufvk_str, ironwood_notes_json, outputs_json, fee,
+      //  ironwood_anchor_hex, ironwood_merkle_paths_json, account_index,
+      //  target_height, expected_branch_id, mainnet, expiry_delta?), with
+      // outputs_json = [{address, amount, memo_hex?}]. a[3] is the fee
+      // (stringified bigint over postMessage); a[8] the fail-closed branch id.
+      if (typeof wasm['build_ironwood_send_pczt_multi'] !== 'function') {
+        throw new Error(
+          'this wasm build predates the multi-recipient ironwood send - rebuild the wasm ' +
+            '(see packages/zcash-wasm/BUILD_PROVENANCE.md)',
+        );
+      }
+      result = wasm['build_ironwood_send_pczt_multi'](
+        a[0],
+        a[1],
+        a[2],
+        BigInt(a[3] as string),
+        a[4],
+        a[5],
+        a[6],
+        a[7],
+        a[8],
+        a[9],
+        a[10] ?? null,
+      );
+      break;
+
     case 'build_unsigned_shielding':
       result = wasm['build_unsigned_shielding_transaction'](
         a[0],

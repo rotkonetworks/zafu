@@ -141,6 +141,7 @@ import { isWrongNetwork, walletIsMainnet } from './chain-network';
 import { storeFellBehind } from './store-reset';
 import { createBuildRegistry } from './build-abort';
 import { doorPake, type DoorPakeCall, type DoorPakeWasm } from './door-pake';
+import { multiSendRoute, planIronwoodMultiSend } from './ironwood-multi-send';
 
 export type { SentTxRecord } from './sent-tx-reconcile';
 
@@ -6393,10 +6394,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         return;
       }
 
-      // ── multi-output send (sequential single-output txs) ──
-      // Used by poker escrow: builds one tx per output, broadcasting each in sequence.
-      // Each output gets its own note selection, witness build, prove, and broadcast cycle.
-      // If any tx fails mid-way, previously broadcast txs are NOT rolled back.
+      // ── multi-output send ──
+      // Used by poker escrow. From NU6.3 on: ONE ironwood tx pays every output
+      // (build_ironwood_send_pczt_multi). Before it: one orchard tx per output,
+      // each with its own note selection, witness build, prove and broadcast;
+      // if one fails mid-way, those already broadcast are NOT rolled back.
       case 'send-tx-multi': {
         if (!walletId) {
           throw new Error('walletId required');
@@ -6465,20 +6467,187 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const txids: string[] = [];
         const fees: string[] = [];
 
-        // FAIL-CLOSED (NU6.3): multi-send only builds orchard txs today, which
-        // are consensus-disabled post-activation, and there is no ironwood
-        // multi-send path yet. Refuse up front rather than build invalid
-        // orchard txs per output.
-        // TODO(ironwood multi-send): route the ironwood pool through
-        // build_ironwood_send_pczt per output.
+        // NU6.3: orchard sends are consensus-disabled from activation on, so
+        // every output is paid by ONE ironwood transaction
+        // (build_ironwood_send_pczt_multi). Before it, the orchard builder
+        // below pays them one transaction per output, as it always has.
         {
-          const multiGuardClient = makeZcashClient(multiPayload.serverUrl);
-          const multiGuardTip = await build.race(multiGuardClient.getTip());
-          if (multiGuardTip.height >= nu63ActivationHeight(multiPayload.mainnet)) {
-            throw new Error(
-              'orchard sends are disabled at NU6.3 - multi-send does not support ironwood ' +
-                'yet; send ironwood funds individually',
+          const routeClient = makeZcashClient(multiPayload.serverUrl);
+          const routeTip = await build.race(routeClient.getTip());
+          if (
+            multiSendRoute(routeTip.height, nu63ActivationHeight(multiPayload.mainnet)) ===
+            'ironwood-one-tx'
+          ) {
+            const plan = planIronwoodMultiSend(multiPayload.outputs, isTransparentRecipient);
+            emitMultiProgress('loading wallet state');
+            const iwState = await loadState(walletId);
+
+            // FAIL-CLOSED like the single send: orchard funds only must cross
+            // the turnstile first, never be built into a dead orchard tx.
+            const unspent = (pool: NotePool) =>
+              iwState.notes.filter(
+                n => !iwState.spentNullifiers.has(n.nullifier) && poolOf(n) === pool,
+              );
+            if (unspent('ironwood').length === 0 && unspent('orchard').length > 0) {
+              throw new Error(
+                'your shielded funds are in the older orchard format. zcash replaced ' +
+                  'it with ironwood, so they cannot be spent directly. moving them ' +
+                  'once makes them spendable again - the funds stay yours the whole ' +
+                  'time, and nothing leaves your wallet.',
+              );
+            }
+
+            // ZIP-317 over the one transaction: ironwood actions
+            // max(spends, shielded outputs + change, 2) plus the transparent outputs
+            const iwEstFee = computeFee(1, plan.shielded, plan.transparent, true);
+            const iwSelected = selectNotes(
+              iwState.notes,
+              iwState.spentNullifiers,
+              plan.total + iwEstFee,
+              'ironwood',
+              heldBy(walletId, 'ironwood'),
             );
+            const iwTotalIn = iwSelected.reduce((sum, n) => sum + BigInt(n.value), 0n);
+            const iwHasChange =
+              iwTotalIn >
+              plan.total + computeFee(iwSelected.length, plan.shielded, plan.transparent, true);
+            const iwFee = computeFee(
+              iwSelected.length,
+              plan.shielded,
+              plan.transparent,
+              iwHasChange,
+            );
+            if (iwTotalIn < plan.total + iwFee) {
+              throw new Error(
+                `insufficient funds: have ${iwTotalIn} zat, need ${plan.total + iwFee} zat`,
+              );
+            }
+            emitMultiProgress(
+              'notes selected',
+              `${iwSelected.length} ironwood notes, ${plan.outputs.length} outputs, fee=${iwFee}`,
+            );
+
+            emitMultiProgress('building merkle witnesses', `tip=${routeTip.height}`);
+            const { anchorHex: iwAnchor, paths: iwPaths } = await build.race(
+              buildWitnesses(routeClient, walletId, iwSelected, routeTip.height, 'ironwood'),
+            );
+
+            // the same branch-id guard as the single ironwood send
+            emitMultiProgress('checking NU6.3 activation');
+            const iwInfo = await build.race(routeClient.getLightdInfo());
+            const iwBranchHex = (iwInfo.consensusBranchId || '')
+              .trim()
+              .toLowerCase()
+              .replace(/^0x/, '');
+            if (!iwBranchHex || iwBranchHex === PLACEHOLDER_BRANCH_ID_HEX) {
+              throw new Error(
+                'NU6.3 is not active at this endpoint yet (placeholder consensus branch id) - ' +
+                  'ironwood send is unavailable until NU6.3 activates',
+              );
+            }
+            const iwRefusal = ironwoodBranchRefusal(
+              iwBranchHex,
+              multiPayload.mainnet,
+              'ironwood send',
+            );
+            if (iwRefusal) {
+              throw new Error(iwRefusal);
+            }
+
+            const iwNotesJson = iwSelected.map(n => ({
+              value: Number(n.value),
+              nullifier: n.nullifier,
+              cmx: n.cmx,
+              position: n.position,
+              rseed_hex: n.rseed ?? '',
+              rho_hex: n.rho ?? '',
+              recipient_hex: n.recipient ?? '',
+            }));
+            const iwPathsForWasm = (
+              iwPaths as { position: number; path: { hash: string }[] }[]
+            ).map(p => ({ path: p.path.map(e => e.hash), position: p.position }));
+
+            emitMultiProgress(
+              'building, proving & signing ironwood tx (halo2)',
+              `${iwSelected.length} ironwood spends, ${plan.outputs.length} outputs`,
+            );
+            const iwProveStart = performance.now();
+            const iwTicker = setInterval(() => {
+              const elapsed = ((performance.now() - iwProveStart) / 1000).toFixed(0);
+              emitMultiProgress('proving (halo2)', `${elapsed}s elapsed`);
+            }, 2000);
+            let iwTxHex: string;
+            try {
+              iwTxHex = await build.race(
+                withSpendKeys(
+                  wasmModule.SpendKeys,
+                  multiPayload.vault,
+                  multiAccount,
+                  multiPayload.mainnet,
+                  async keys => {
+                    const built = (await proveViaOffscreen({
+                      fn: 'build_ironwood_send_pczt_multi',
+                      args: [
+                        keys.ufvk(),
+                        JSON.stringify(iwNotesJson),
+                        JSON.stringify(plan.outputs),
+                        iwFee.toString(),
+                        iwAnchor,
+                        JSON.stringify(iwPathsForWasm),
+                        multiAccount,
+                        routeTip.height,
+                        parseInt(iwBranchHex, 16),
+                        multiPayload.mainnet,
+                      ],
+                    })) as { retained_pczt_hex: string };
+                    return keys.sign_pczt(built.retained_pczt_hex);
+                  },
+                ),
+              );
+            } catch (e) {
+              console.error(
+                '[zcash-worker] ironwood multi-send failed:',
+                e instanceof Error ? e.message : String(e),
+              );
+              throw e;
+            } finally {
+              clearInterval(iwTicker);
+            }
+
+            emitMultiProgress('ironwood tx signed', `${iwTxHex.length / 2} bytes`);
+            // the point of no return: a stop from here on is refused
+            build.commit();
+            emitMultiProgress('broadcasting transaction');
+            const iwResult = await makeZcashClient(multiPayload.serverUrl).sendTransaction(
+              hexDecode(iwTxHex),
+            );
+            if (iwResult.errorCode !== 0) {
+              throw new Error(`broadcast failed (${iwResult.errorCode}): ${iwResult.errorMessage}`);
+            }
+            const iwTxid = await resolveBroadcastTxid(iwResult, iwTxHex, multiPayload.serverUrl);
+            await markNotesSpentLocally(walletId, iwState, iwSelected, iwTxid);
+            // one record per transaction: the total it paid, to its first output
+            await recordSentTx({
+              walletId,
+              txid: iwTxid,
+              amount: plan.total.toString(),
+              fee: iwFee.toString(),
+              recipient: plan.outputs[0]!.address,
+              pool: 'ironwood',
+              kind: 'send',
+              memo: multiPayload.outputs[0]!.memo,
+              sentAt: Date.now(),
+              expiryHeight: parseExpiryHeight(iwTxHex),
+            });
+            emitMultiProgress('complete', `txid=${iwTxid}`);
+            workerSelf.postMessage({
+              type: 'tx-multi-result',
+              id,
+              network: 'zcash',
+              walletId,
+              payload: { txids: [iwTxid], fees: [iwFee.toString()] },
+            });
+            return;
           }
         }
 

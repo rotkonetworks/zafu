@@ -7,6 +7,7 @@
  * way every other approval shows them.
  */
 
+import { estimateMultiSendFeeZat } from '../../../workers/ironwood-multi-send';
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Sensitive } from '../../../components/sensitive';
@@ -134,7 +135,9 @@ export function ZcashSendApproval() {
     return () => window.removeEventListener('zcash-send-progress', handler);
   }, [status.at]);
 
-  const totalFeeZat = feePerOutput * outputs.length;
+  // several outputs are one ironwood transaction (NU6.3 on): its fee, not one per output
+  const totalFeeZat =
+    outputs.length > 1 ? estimateMultiSendFeeZat(outputs.map(o => o.address)) : feePerOutput;
   const totalOutputZat = outputs.reduce((s, o) => s + o.amount, 0);
 
   const sendResult = (result: unknown) => {
@@ -188,8 +191,9 @@ export function ZcashSendApproval() {
       }));
       if (workerOutputs.length === 1) {
         // one output (an escrow deposit) goes through the wallet's own send,
-        // which spends from the live pool - ironwood from NU6.3 on. The
-        // multi-output builder is orchard-only and refuses post-activation.
+        // which spends from the live pool - ironwood from NU6.3 on. Several
+        // outputs go through the multi-output send: from NU6.3 on, one
+        // ironwood transaction paying all of them.
         const [only] = workerOutputs;
         const single = await buildSendTxInWorker(
           'zcash',
@@ -224,7 +228,14 @@ export function ZcashSendApproval() {
       );
       buildKeyRef.current = null;
       setStatus({ at: 'done', txids: result.txids });
-      sendResult({ success: true, txids: result.txids, fees: result.fees });
+      // from NU6.3 on one ironwood transaction pays every output: name it
+      // `txid` too, as the one-output send does
+      sendResult({
+        success: true,
+        ...(result.txids.length === 1 ? { txid: result.txids[0] } : {}),
+        txids: result.txids,
+        fees: result.fees,
+      });
     } catch (e: unknown) {
       buildKeyRef.current = null;
       if (isBuildStopped(e)) {
@@ -258,9 +269,17 @@ export function ZcashSendApproval() {
 
   if (status.at === 'signing') {
     const index = Math.min(status.completed, outputs.length - 1);
+    // one transaction per output (before NU6.3) reports "output N: ..." steps
+    const perOutput = status.steps.some(p => /^output \d+:/.test(p.step));
     return (
       <Sending
-        meta={outputs.length > 1 ? `payment ${index + 1}/${outputs.length}` : host}
+        meta={
+          outputs.length === 1
+            ? host
+            : perOutput
+              ? `payment ${index + 1}/${outputs.length}`
+              : `${outputs.length} payments`
+        }
         stages={STAGES.zcash}
         steps={outputSteps(status.steps, index)}
         floor={0}

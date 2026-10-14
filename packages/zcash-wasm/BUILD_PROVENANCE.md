@@ -177,6 +177,46 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
   `voting-wasm` `local_chain_e2e` ran these bindings against a local svoted
   v1.6.1-rc.5 (37 proposals, votes on 37 and 17, tally finalized).
 
+## 2026-10-15 rebuild - ironwood send to several recipients
+
+- source repo: zcli master `fe76dc0` (the merge of rotkonetworks/zcli PR #32).
+  Built from a fresh worktree of the PR head `46ccc5b`; `git diff 46ccc5b
+fe76dc0` is empty (the whole tree, lockfile included), so the inputs are
+  the master commit's and the sha256s below stand for it.
+- why: `zafu_zcash_send` with several outputs fell back to the orchard-only
+  multi-output builder, which refuses after NU6.3. The new export pays
+  every output in one V6 ironwood transaction.
+- new export: `build_ironwood_send_pczt_multi(ufvk_str, ironwood_notes_json,
+outputs_json, fee, ironwood_anchor_hex, ironwood_merkle_paths_json,
+account_index, target_height, expected_branch_id, mainnet, expiry_delta?)`,
+  where `outputs_json = [{address, amount, memo_hex?}]`. It returns the same
+  shape as `build_ironwood_send_pczt`. Nothing was removed or changed: the
+  `.d.ts` diff is that one function, and `build_ironwood_send_pczt` is now a
+  one-output wrapper over the same body. The blob also picks up master's
+  changes since `be520f3`, which are outside `crates/zcash-wasm`
+  (multisig, voting storage).
+- `cargo test --release -p zafu-wasm --lib --tests` at `46ccc5b`: 174 passed
+  (171 + 3 new in `tests/multi_ironwood_send_v6.rs`), 0 failed.
+- toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
+  wasm-bindgen CLI 0.2.126, binaryen 130; recipe above (RUSTFLAGS unset).
+- rayon snippet hash unchanged (`wasm-bindgen-rayon-38edf6e439f6d70d`), the
+  patched `workerHelpers.js` kept in both trees.
+- size: pre `wasm-opt` 28,756,926 bytes (post-bindgen); post `-Oz`
+  13,464,664 bytes (+7,788).
+- sha256(parallel zafu_wasm_bg.wasm) =
+  ecfd66864ed7a7ae1116bd3ca673e07b8d7e6886f77ba999e133b4f289074507
+- sha256(zafu_wasm.js) =
+  6382cdb8c8ef3d66d244b2e02fe02694ac4da2ffa8778465ffefa39f67ff9f9c
+- sha256(zafu_wasm.d.ts) =
+  c12def7779fabccadba56c59a15530b29ff1f22bace86ff74b4680aadebbc973
+- sha256(zafu_wasm_bg.wasm.d.ts) =
+  cd303aced94cf579cc2c92b361e72035403974af4f155af8d89f1513e552b2c2
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 59 32768 shared)`.
+- `pnpm build`: `build_ironwood_send_pczt_multi` is present in `dist/` and
+  `beta-dist/` (`zafu-wasm/`, `zcash-build-parallel.js`,
+  `workers/zcash-worker.js`).
+
 ## 2026-10-07 rebuild (3) - door codes: SPAKE2 over a code's words
 
 - source repo: zcli, branch `master`, rev `be520f3` (the merge of zcli PR
