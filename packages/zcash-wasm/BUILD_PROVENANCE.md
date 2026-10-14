@@ -177,14 +177,12 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
   `voting-wasm` `local_chain_e2e` ran these bindings against a local svoted
   v1.6.1-rc.5 (37 proposals, votes on 37 and 17, tally finalized).
 
-## 2026-10-15 rebuild - ironwood send to several recipients (PR BRANCH BUILD)
+## 2026-10-15 rebuild - ironwood send to several recipients
 
-- source repo: zcli, branch `feat/ironwood-multi-send`, rev `46ccc5b`
-  (rotkonetworks/zcli PR #32, on master `2b16b94`, the merge of PR #31).
-  **This is a PR-branch build, not a master build: re-pin to the merge
-  commit once zcli PR #32 merges** (rebuild from it with the recipe above
-  and confirm the sha256s below still match, or record the new ones).
-  Built from a fresh worktree of `46ccc5b`.
+- source repo: zcli master `fe76dc0` (the merge of rotkonetworks/zcli PR #32).
+  Built from a fresh worktree of the PR head `46ccc5b`; `git diff 46ccc5b
+  fe76dc0` is empty (the whole tree, lockfile included), so the inputs are
+  the master commit's and the sha256s below stand for it.
 - why: `zafu_zcash_send` with several outputs fell back to the orchard-only
   multi-output builder, which refuses after NU6.3. The new export pays
   every output in one V6 ironwood transaction.
