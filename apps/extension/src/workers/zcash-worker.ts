@@ -116,6 +116,7 @@ import { assertProveRequest, type ProveRequest } from '../shared/prove-guard';
 import { issueWorkerKey, openCall, type SealedCall, type SealedVault } from '../shared/vault-seal';
 import {
   parseExpiryHeight,
+  pendingShieldZat,
   reconcileSentTxs,
   type HistoryTx,
   type SentKind,
@@ -3704,6 +3705,8 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
     const sent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
     if (sent.length > 0) {
       const inputByTx = new Map<string, { value: bigint; ironwood: boolean }>();
+      const scannedTxids = new Set(state.notes.map(n => n.txid));
+      const scannedHeight = await getSyncHeight(walletId);
       for (const note of state.notes) {
         if (note.spent_by_txid && !(note.spent_at_height ?? 0)) {
           const cur = inputByTx.get(note.spent_by_txid) ?? { value: 0n, ironwood: false };
@@ -3716,6 +3719,15 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
       }
       for (const rec of sent) {
         if (rec.confirmedHeight) {
+          continue;
+        }
+        if (rec.kind === 'shield') {
+          const arriving = pendingShieldZat(rec, scannedTxids, scannedHeight);
+          if (rec.pool === 'ironwood') {
+            pendingIronwood += arriving;
+          } else {
+            pendingOrchard += arriving;
+          }
           continue;
         }
         const inp = inputByTx.get(rec.txid);
@@ -6776,6 +6788,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             }
 
             lastTxid = await resolveBroadcastTxid(result, txHex, serverUrl);
+            // so the home figure counts it as arriving until its note is scanned
+            await recordSentTx({
+              walletId,
+              txid: lastTxid,
+              amount: shieldAmount.toString(),
+              fee: fee.toString(),
+              recipient,
+              pool: shieldIntoIronwood ? 'ironwood' : 'orchard',
+              kind: 'shield',
+              sentAt: Date.now(),
+              expiryHeight: parseExpiryHeight(txHex),
+            });
             totalShielded += shieldAmount;
             totalFee += fee;
             totalUtxos += utxos.length;

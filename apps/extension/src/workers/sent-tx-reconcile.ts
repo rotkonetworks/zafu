@@ -271,6 +271,23 @@ export function reconcileSentTxs({
  * Pending, then failed, each newest-first by broadcast time; then everything
  * confirmed, by height.
  */
+/**
+ * A shield spends transparent coins, so no note of ours marks it in flight.
+ * Its output counts as arriving until its note is scanned, it is confirmed,
+ * or it expired unmined.
+ */
+export const pendingShieldZat = (
+  rec: SentTxRecord,
+  scannedTxids: ReadonlySet<string>,
+  scannedHeight: number,
+): bigint =>
+  rec.kind !== 'shield' ||
+  isConfirmedHeight(rec.confirmedHeight) ||
+  scannedTxids.has(rec.txid) ||
+  (!!rec.expiryHeight && scannedHeight > rec.expiryHeight)
+    ? 0n
+    : BigInt(rec.amount);
+
 export function sortHistory(txs: HistoryTx[]): HistoryTx[] {
   const rank = (s: TxStatus): number => (s === 'pending' ? 0 : s === 'failed' ? 1 : 2);
   return [...txs].sort((a, b) => {
