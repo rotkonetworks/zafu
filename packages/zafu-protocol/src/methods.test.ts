@@ -46,10 +46,13 @@ describe('ZAFU_V1_METHODS', () => {
     // alters the wire surface. Kept sorted for a stable diff.
     const expected: ZafuMethod[] = [
       'ping',
+      'zafu_connect',
       'zafu_decrypt',
       'zafu_discover_contacts',
       'zafu_encrypt',
+      'zafu_friends',
       'zafu_get_fresh_chain_address',
+      'zafu_invite_friend',
       'zafu_open_shield',
       'zafu_pick_contacts',
       'zafu_request_capability',

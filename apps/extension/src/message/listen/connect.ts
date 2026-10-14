@@ -163,7 +163,10 @@ export const createConnectListener =
         const text = shortName(r['text']);
         const path =
           typeof r['path'] === 'string' && r['path'].startsWith('/')
-            ? [...r['path']].filter(ch => ch > ' ' && ch !== '\u007f').join('').slice(0, 200)
+            ? [...r['path']]
+                .filter(ch => ch > ' ' && ch !== '\u007f')
+                .join('')
+                .slice(0, 200)
             : '';
         if (!friend || !text) {
           sendResponse({ error: 'not a friend here', code: 'invalid_request' });

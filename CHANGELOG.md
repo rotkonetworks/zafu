@@ -6,6 +6,20 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.0.1
+
+### Friends without a transaction
+
+- An app such as zk.poker can introduce two of its people: each is asked once,
+  and when both say yes their zafus open a private room with each other. No
+  payment, no code to type. The contact shows who introduced you.
+- Apps see only the people they introduced, by the name the app gave them, and
+  can hand a friend an invite (a table, a link) into that room.
+
+### Copy
+
+- The welcome screen reads "shielded signing." over "private by default".
+
 ## 29.0.0
 
 The redesign. A new zafu, built around two networks, privacy by default and
