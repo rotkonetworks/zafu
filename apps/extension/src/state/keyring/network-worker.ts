@@ -39,13 +39,28 @@ import {
 import type { DepositPlan, DepositRequest, MoveCoin } from '../../workers/transparent-deposit';
 import type { StopOutcome } from '../../workers/build-abort';
 import type { DoorPakeCall } from '../../workers/door-pake';
+import { ensureOffscreenDocument } from '../../offscreen-document';
 
 /** true only inside the offscreen document - the one place that owns real Workers */
 const isOffscreenHost = (): boolean =>
   typeof location !== 'undefined' && location.pathname.includes('offscreen');
 
+/** the extension's service worker - the one realm that creates the offscreen document */
+const isServiceWorker = (): boolean =>
+  typeof ServiceWorkerGlobalScope !== 'undefined' && globalThis instanceof ServiceWorkerGlobalScope;
+
 /** ensure the offscreen document exists, retrying while the service worker wakes up */
 const ensureOffscreenReady = async (): Promise<boolean> => {
+  // in the service worker itself: a realm never receives its own runtime
+  // message, so ZCASH_ENSURE_OFFSCREEN would go unanswered - create it here
+  if (isServiceWorker()) {
+    try {
+      await ensureOffscreenDocument();
+      return true;
+    } catch {
+      return false;
+    }
+  }
   for (let attempt = 0; attempt < 6; attempt++) {
     try {
       const result = await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });

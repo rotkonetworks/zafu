@@ -134,3 +134,31 @@ describe('a window outliving the offscreen host', () => {
     expect(lost).toEqual([]);
   });
 });
+
+describe('the service worker spawning the zcash worker', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.doUnmock('../../offscreen-document');
+  });
+
+  it('creates the offscreen document itself instead of messaging itself', async () => {
+    // a realm never receives its own runtime message: asked by message, the
+    // service worker waited out every retry and failed (zafu_zcash_receive_address)
+    const ensureOffscreenDocument = vi.fn(async () => undefined);
+    vi.doMock('../../offscreen-document', () => ({ ensureOffscreenDocument }));
+    vi.stubGlobal(
+      'ServiceWorkerGlobalScope',
+      class {
+        static [Symbol.hasInstance]() {
+          return true;
+        }
+      },
+    );
+    const nw = await import('./network-worker');
+    await nw.spawnNetworkWorker('zcash');
+    expect(ensureOffscreenDocument).toHaveBeenCalledOnce();
+    const asked = bus.sendMessage.mock.calls.map(([m]) => m.type);
+    expect(asked).not.toContain('ZCASH_ENSURE_OFFSCREEN');
+    expect(asked).toContain('NW_SPAWN');
+  });
+});
