@@ -1247,6 +1247,39 @@ export const externalMessageListener = (
 
     // ── Zcash transaction (multi-output, for poker escrow) ──
 
+    case 'zafu_zcash_receive_address': {
+      // The active zcash wallet's own shielded address, for a site that pays the
+      // user (an escrow pinning where winnings go). Connect-gated like any
+      // address disclosure; network is the caller's ('test' or main), and a
+      // wallet on the other network, or a shared multisig, is not offered.
+      if (!isValidExternalSender(sender)) {
+        sendResponse({ error: 'denied', code: 'denied' });
+        return true;
+      }
+      const receiveOrigin = sender.origin;
+      const wantMainnet = msg['network'] !== 'test';
+      void (async () => {
+        try {
+          const perms = await getOriginPermissions(receiveOrigin);
+          if (!hasCapability(perms, 'connect')) {
+            sendResponse({ error: 'not connected', code: 'denied' });
+            return;
+          }
+          const { useStore } = await import('../../state');
+          const { zcashWallets, activeZcashIndex } = useStore.getState().wallets;
+          const w = zcashWallets[activeZcashIndex];
+          if (!w || w.multisig || w.mainnet !== wantMainnet) {
+            sendResponse({ error: 'no zcash wallet on that network', code: 'no-wallet' });
+            return;
+          }
+          sendResponse({ address: w.address });
+        } catch {
+          sendResponse({ error: 'internal error', code: 'internal_error' });
+        }
+      })();
+      return true;
+    }
+
     case 'zafu_zcash_send': {
       // Multi-output Zcash Orchard transaction
       // Used by poker.zk.bot for: rake + escrow deposit in one tx

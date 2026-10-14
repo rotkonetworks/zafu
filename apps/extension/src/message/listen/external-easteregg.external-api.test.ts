@@ -93,6 +93,10 @@ vi.mock('../../state', async importOriginal => {
       keyInfos: [wallet('key-1'), wallet('key-2')],
       getMnemonic: async (id: string) => (id === 'key-1' ? 'test mnemonic' : `mnemonic of ${id}`),
     },
+    wallets: {
+      zcashWallets: [{ id: 'z-1', address: 'u1receive', mainnet: true }],
+      activeZcashIndex: 0,
+    },
   };
   return {
     ...actual,
@@ -792,5 +796,28 @@ describe('poker escrow custody - dkg join by room code, payout co-sign with the 
     const q = popupQuery(origin);
     expect(q.get('action')).toBe('poker-sign');
     expect(q.get('relayPeerKeys')).toBe(key);
+  });
+});
+
+describe('zafu_zcash_receive_address - the active wallet, to a connected site only', () => {
+  it('a connected site gets the active wallet address for its network', async () => {
+    const origin = 'https://receive.example';
+    await grantCapability(origin, 'connect');
+    expect(await call({ type: 'zafu_zcash_receive_address' }, validSender(origin))).toEqual({
+      address: 'u1receive',
+    });
+  });
+
+  it('a wallet on the other network is not offered', async () => {
+    const origin = 'https://receive-test.example';
+    await grantCapability(origin, 'connect');
+    const r = await call({ type: 'zafu_zcash_receive_address', network: 'test' }, validSender(origin));
+    expect(r).toEqual({ error: 'no zcash wallet on that network', code: 'no-wallet' });
+  });
+
+  it('an unconnected site learns nothing', async () => {
+    const r = await call({ type: 'zafu_zcash_receive_address' }, validSender('https://stranger.example'));
+    expect(r).toEqual({ error: 'not connected', code: 'denied' });
+    expect(createMock).not.toHaveBeenCalled();
   });
 });
