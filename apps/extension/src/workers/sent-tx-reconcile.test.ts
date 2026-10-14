@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EXPIRY_GRACE_BLOCKS,
   parseExpiryHeight,
+  pendingShieldZat,
   reconcileSentTxs,
   type HistoryTx,
   type SentTxRecord,
@@ -301,5 +302,27 @@ describe('parseExpiryHeight', () => {
     expect(parseExpiryHeight(le32(5) + '00'.repeat(40))).toBeUndefined();
     expect(parseExpiryHeight('')).toBeUndefined();
     expect(parseExpiryHeight('zz'.repeat(40))).toBeUndefined();
+  });
+});
+
+describe('a pending shield', () => {
+  const shield = rec({ kind: 'shield', amount: '485000', expiryHeight: 140 });
+  const none = new Set<string>();
+
+  it('counts as arriving while its note is not scanned yet', () => {
+    expect(pendingShieldZat(shield, none, 100)).toBe(485_000n);
+  });
+
+  it('stops counting once its note is scanned, so it never counts twice', () => {
+    expect(pendingShieldZat(shield, new Set(['aa']), 101)).toBe(0n);
+  });
+
+  it('stops counting once confirmed or expired unmined', () => {
+    expect(pendingShieldZat({ ...shield, confirmedHeight: 101 }, none, 101)).toBe(0n);
+    expect(pendingShieldZat(shield, none, 141)).toBe(0n);
+  });
+
+  it('is only for shields: a send has its own pending change', () => {
+    expect(pendingShieldZat(rec(), none, 100)).toBe(0n);
   });
 });

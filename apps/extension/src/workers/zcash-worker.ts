@@ -77,6 +77,8 @@ import {
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 import { BlockPrefetcher } from './block-prefetcher';
 import { once } from './once';
+import { lastOrWait } from './last-or-wait';
+import { withMemoText } from './memo-text';
 import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from '../perf/rayon-isolation';
 import { loadVotingWasm } from '../state/voting-wasm';
 import { hotSpendAccount, isStoreOfWallet, parsePocketStoreId } from '../state/pocket-id';
@@ -115,6 +117,7 @@ import { assertProveRequest, type ProveRequest } from '../shared/prove-guard';
 import { issueWorkerKey, openCall, type SealedCall, type SealedVault } from '../shared/vault-seal';
 import {
   parseExpiryHeight,
+  pendingShieldZat,
   reconcileSentTxs,
   type HistoryTx,
   type SentKind,
@@ -1684,6 +1687,62 @@ const computeFee = (
  * pricing and witness building. Mirrors the Rust
  * `parse_ironwood_recipient`, which decodes the base58 version bytes.
  */
+interface TransparentHistoryRow {
+  txid: string;
+  height: number;
+  received: string;
+}
+
+/** a pocket's transparent transactions: each address asked on its own, then each tx */
+const fetchTransparentHistory = async (
+  serverUrl: string,
+  tAddresses: string[],
+): Promise<TransparentHistoryRow[]> => {
+  const rows: TransparentHistoryRow[] = [];
+  const tClient = makeZcashClient(serverUrl);
+
+  const ourScripts = new Set<string>();
+  for (const addr of tAddresses) {
+    const decoded = base58checkDecode(addr);
+    if (decoded) {
+      ourScripts.add('76a914' + hexEncode(decoded) + '88ac');
+    }
+  }
+
+  // one address per request; a tx touching two of them comes back twice
+  const txids = [
+    ...new Map(
+      (await eachAddress(tAddresses, a => tClient.getTaddressTxids(a))).map(t => [hexEncode(t), t]),
+    ).values(),
+  ];
+  const CONCURRENCY = 5;
+  for (let i = 0; i < txids.length; i += CONCURRENCY) {
+    const batch = txids.slice(i, i + CONCURRENCY);
+    const results = await Promise.allSettled(
+      batch.map(async txidBytes => {
+        const rawTx = await tClient.getTransaction(txidBytes);
+        const parsed = parseTransparentTx(rawTx.data, ourScripts);
+        return {
+          txid: hexEncode(txidBytes),
+          height: rawTx.height,
+          received: parsed.toString(),
+        };
+      }),
+    );
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        rows.push(r.value);
+      }
+    }
+  }
+  return rows;
+};
+
+/** over nym the transparent lookup can take minutes: history answers within 3 s without it */
+const transparentHistory = lastOrWait<TransparentHistoryRow[]>(3000, e =>
+  console.warn(`[zcash-worker] get-history: transparent history failed: ${errText(e)}`),
+);
+
 const isTransparentRecipient = (addr: string): boolean => /^(t1|t3|tm|t2)/.test(addr.trim());
 
 const computeTurnstileFee = (nOrchardSpends: number): bigint => {
@@ -1725,6 +1784,34 @@ const selectNotes = (
     }
   }
   throw new Error(`insufficient funds: have ${total} zat, need ${target} zat`);
+};
+
+/**
+ * Notes for a send of `amountZat` and the fee they cost. Selects for the
+ * amount plus a fee, prices what was picked, and selects again for that price
+ * when it falls short: largest-first stops before small notes that a max send
+ * must spend. The target only grows, so this ends, by covering or throwing.
+ */
+const selectForSend = (
+  notes: DecryptedNote[],
+  spentNullifiers: Set<string>,
+  amountZat: bigint,
+  nZOutputs: number,
+  nTOutputs: number,
+  pool: NotePool,
+  held?: (n: DecryptedNote) => boolean,
+): { selected: DecryptedNote[]; totalIn: bigint; fee: bigint } => {
+  let target = amountZat + computeFee(1, nZOutputs, nTOutputs, true);
+  for (;;) {
+    const selected = selectNotes(notes, spentNullifiers, target, pool, held);
+    const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
+    const hasChange = totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
+    const fee = computeFee(selected.length, nZOutputs, nTOutputs, hasChange);
+    if (totalIn >= amountZat + fee) {
+      return { selected, totalIn, fee };
+    }
+    target = amountZat + fee;
+  }
 };
 
 // ── blocks for the note trees ──
@@ -3644,6 +3731,8 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
     const sent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
     if (sent.length > 0) {
       const inputByTx = new Map<string, { value: bigint; ironwood: boolean }>();
+      const scannedTxids = new Set(state.notes.map(n => n.txid));
+      const scannedHeight = await getSyncHeight(walletId);
       for (const note of state.notes) {
         if (note.spent_by_txid && !(note.spent_at_height ?? 0)) {
           const cur = inputByTx.get(note.spent_by_txid) ?? { value: 0n, ironwood: false };
@@ -3656,6 +3745,15 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
       }
       for (const rec of sent) {
         if (rec.confirmedHeight) {
+          continue;
+        }
+        if (rec.kind === 'shield') {
+          const arriving = pendingShieldZat(rec, scannedTxids, scannedHeight);
+          if (rec.pool === 'ironwood') {
+            pendingIronwood += arriving;
+          } else {
+            pendingOrchard += arriving;
+          }
           continue;
         }
         const inp = inputByTx.get(rec.txid);
@@ -4243,7 +4341,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // v5 tx layout: [4B header][4B versionGroupId][4B consensusBranchId]...
         // the v5 structure is identical across NU5/NU6/NU7, only the branch ID differs
         patchBranchId(txBuf);
-        const memos = memoState.keys.decrypt_transaction_memos(txBuf);
+        const memos = withMemoText(memoState.keys.decrypt_transaction_memos(txBuf));
         workerSelf.postMessage({ type: 'memos', id, network: 'zcash', walletId, payload: memos });
         return;
       }
@@ -4264,53 +4362,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           spent: histState.spentNullifiers.has(n.nullifier),
         }));
 
-        // fetch transparent history
-        const tHistory: { txid: string; height: number; received: string }[] = [];
-        if (histTAddresses?.length) {
-          try {
-            const tClient = makeZcashClient(histServerUrl);
-
-            const ourScripts = new Set<string>();
-            for (const addr of histTAddresses) {
-              const decoded = base58checkDecode(addr);
-              if (decoded) {
-                ourScripts.add('76a914' + hexEncode(decoded) + '88ac');
-              }
-            }
-
-            // one address per request; a tx touching two of them comes back twice
-            const txids = [
-              ...new Map(
-                (await eachAddress(histTAddresses, a => tClient.getTaddressTxids(a))).map(t => [
-                  hexEncode(t),
-                  t,
-                ]),
-              ).values(),
-            ];
-            const CONCURRENCY = 5;
-            for (let i = 0; i < txids.length; i += CONCURRENCY) {
-              const batch = txids.slice(i, i + CONCURRENCY);
-              const results = await Promise.allSettled(
-                batch.map(async txidBytes => {
-                  const rawTx = await tClient.getTransaction(txidBytes);
-                  const parsed = parseTransparentTx(rawTx.data, ourScripts);
-                  return {
-                    txid: hexEncode(txidBytes),
-                    height: rawTx.height,
-                    received: parsed.toString(),
-                  };
-                }),
-              );
-              for (const r of results) {
-                if (r.status === 'fulfilled') {
-                  tHistory.push(r.value);
-                }
-              }
-            }
-          } catch (e) {
-            console.warn(`[zcash-worker] get-history: transparent history failed: ${errText(e)}`);
-          }
-        }
+        const tHistory = histTAddresses?.length
+          ? ((await transparentHistory(walletId, () =>
+              fetchTransparentHistory(histServerUrl, histTAddresses),
+            )) ?? [])
+          : [];
 
         // build maps for sent amount calculation
         const histTxMap = new Map<
@@ -4781,7 +4837,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
               const txBuf = new Uint8Array(txBytes);
               patchBranchId(txBuf);
-              const foundMemos = memoKeys().decrypt_transaction_memos(txBuf);
+              const foundMemos = withMemoText(memoKeys().decrypt_transaction_memos(txBuf));
 
               for (const memo of foundMemos) {
                 // structured binary memos (0xF6 prefix) are handled separately
@@ -4985,24 +5041,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
         }
 
-        // estimate fee and select notes from the active pool
-        const estFee = computeFee(1, nZOutputs, nTOutputs, true);
-        const selected = selectNotes(
+        const { selected, fee } = selectForSend(
           sendState.notes,
           sendState.spentNullifiers,
-          amountZat + estFee,
+          amountZat,
+          nZOutputs,
+          nTOutputs,
           sendActivePool,
           heldBy(walletId, sendActivePool),
         );
-
-        // compute exact fee (n active-pool spends + 1 output + change?)
-        const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
-        const hasChange =
-          totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
-        const fee = computeFee(selected.length, nZOutputs, nTOutputs, hasChange);
-        if (totalIn < amountZat + fee) {
-          throw new Error(`insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
-        }
 
         emitProgress('notes selected', `${selected.length} ${sendActivePool} notes, fee=${fee}`);
 
@@ -5579,21 +5626,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
         }
 
-        const estFee = computeFee(1, nZOutputs, nTOutputs, true);
-        const selected = selectNotes(
+        const { selected, fee } = selectForSend(
           sendState.notes,
           sendState.spentNullifiers,
-          amountZat + estFee,
+          amountZat,
+          nZOutputs,
+          nTOutputs,
           pcztPool,
           heldBy(walletId, pcztPool),
         );
-        const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
-        const hasChange =
-          totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
-        const fee = computeFee(selected.length, nZOutputs, nTOutputs, hasChange);
-        if (totalIn < amountZat + fee) {
-          throw new Error(`insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
-        }
         emitProgress('notes selected', `${selected.length} ${pcztPool} notes, fee=${fee}`);
 
         // paths from the active pool's note tree at its newest checkpoint;
@@ -6754,6 +6795,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             }
 
             lastTxid = await resolveBroadcastTxid(result, txHex, serverUrl);
+            // so the home figure counts it as arriving until its note is scanned
+            await recordSentTx({
+              walletId,
+              txid: lastTxid,
+              amount: shieldAmount.toString(),
+              fee: fee.toString(),
+              recipient,
+              pool: shieldIntoIronwood ? 'ironwood' : 'orchard',
+              kind: 'shield',
+              sentAt: Date.now(),
+              expiryHeight: parseExpiryHeight(txHex),
+            });
             totalShielded += shieldAmount;
             totalFee += fee;
             totalUtxos += utxos.length;

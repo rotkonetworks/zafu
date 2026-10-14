@@ -114,3 +114,22 @@ describe('shield fee', () => {
     expect(shieldFeeFor([], true)).toBe(0n);
   });
 });
+
+describe('sending the whole max', () => {
+  // one big note and a few small ones, each worth more than the fee it adds:
+  // largest-first selection for amount + a two-action estimate stops short of them
+  const notes = [100_000_000n, 9_000n, 8_000n, 7_000n, 6_000n];
+
+  it('the max the form offers can be sent, spending every note', () => {
+    const max = maxSendable(notes, { transparentRecipient: false });
+    const q = quoteSend(notes, max.amountZat, { transparentRecipient: false });
+    expect(q.ok).toBe(true);
+    expect(q.feeZat).toBe(max.feeZat);
+    expect(q.nSpends).toBe(notes.length);
+  });
+
+  it('one zatoshi more than the max is still too much', () => {
+    const max = maxSendable(notes, { transparentRecipient: false });
+    expect(quoteSend(notes, max.amountZat + 1n, { transparentRecipient: false }).ok).toBe(false);
+  });
+});
