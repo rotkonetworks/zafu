@@ -15,8 +15,8 @@
  * could hand over a wrong key, so the person stays "seal not checked" until
  * compared, like anyone met by link.
  *
- * The meeting room lives under the pair scope. The second yes has to come while
- * the relay still keeps the first one's card (48 h).
+ * The meeting room lives under the pair scope. The second yes has to come within
+ * an hour of the first: that is how far back the answer side reads for the card.
  */
 
 import { sha256 } from '@noble/hashes/sha2';
@@ -63,8 +63,10 @@ export const connectRoom = (
   signer: { gen: c.gen, j: c.j },
   joined: true,
   createdAt: at,
-  // the answer side may say yes after the card went up: it reads back to it, not from now
-  ...(c.role === 'card' ? { since: presenceEpoch(Math.floor(at / 1000)) } : {}),
+  // the card goes up once, when its side says yes; the answer side may say yes
+  // later, so it reads back an hour (two people at one table answer within
+  // minutes) instead of the relay's whole 48 h, which took minutes to read
+  since: presenceEpoch(Math.floor(at / 1000) - (c.role === 'answer' ? ANSWER_LOOKBACK_S : 0)),
   connect: {
     origin: c.origin,
     peer: c.peer,
@@ -74,6 +76,8 @@ export const connectRoom = (
     at,
   },
 });
+
+const ANSWER_LOOKBACK_S = 60 * 60;
 
 /** the answer side reads the card the other side showed; the page answers it (people/keeper) */
 export const onConnect = async (room: PeopleRoom, records: RoomMessage[]) => {
