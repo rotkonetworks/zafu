@@ -4619,10 +4619,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         const memoState = await loadState(walletId);
-        const memoKeys = walletStates.get(walletId)?.keys;
-        if (!memoKeys) {
-          throw new Error('wallet keys not loaded');
-        }
+        // a sync restart frees the keys and makes new ones while the buckets
+        // are fetched, so take the live ones at each decrypt, never hold them
+        const memoKeys = () => {
+          const keys = walletStates.get(walletId)?.keys;
+          if (!keys) {
+            throw new Error('wallet keys not loaded');
+          }
+          return keys;
+        };
+        memoKeys();
 
         const memoNotes = memoState.notes.map(n => ({
           ...n,
@@ -4820,7 +4826,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
               const txBuf = new Uint8Array(txBytes);
               patchBranchId(txBuf);
-              const foundMemos = memoKeys.decrypt_transaction_memos(txBuf);
+              const foundMemos = memoKeys().decrypt_transaction_memos(txBuf);
 
               for (const memo of foundMemos) {
                 // structured binary memos (0xF6 prefix) are handled separately
