@@ -18,6 +18,7 @@
 
 import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { useStore } from '../../state';
 import { zcashViewKey } from '../../state/zcash-view-key';
@@ -123,9 +124,14 @@ export const ShieldTransparent = ({
   const { last, shielded } = useTransparentBalance(tAddresses);
   // what went out: the sheet keeps showing it once the coins leave the figures
   const [moved, setMoved] = useState<{ zat: bigint; funded?: number; feeZat?: bigint }>();
+  // the figures as they are now: the shield callbacks are memoised and would keep old ones
+  const latest = useRef<{ zat: bigint; funded?: number; feeZat?: bigint }>({ zat: transparentZat });
+  const queryClient = useQueryClient();
   const shieldWentOut = (spentZat: bigint) => {
-    setMoved({ zat: transparentZat, funded, feeZat });
+    setMoved({ ...latest.current });
     shielded(spentZat);
+    // the worker counts the shield as arriving now: read the figures again, not at the next block
+    void queryClient.invalidateQueries({ queryKey: ['zcashWorker', storeId] });
   };
   const account = useStore(activeAccountIndex);
   const pocketName = useStore(
@@ -394,6 +400,7 @@ export const ShieldTransparent = ({
         method === 'zigner',
       )
     : undefined;
+  latest.current = { zat: transparentZat, funded, feeZat };
   const shown = moved ?? { funded, feeZat };
   const busy =
     shielding ||
