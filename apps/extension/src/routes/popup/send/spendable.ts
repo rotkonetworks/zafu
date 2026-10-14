@@ -184,13 +184,32 @@ export const quoteSend = (
 ): SendQuote => {
   const nTOutputs = opts.transparentRecipient ? 1 : 0;
   const nZOutputs = opts.transparentRecipient ? 0 : 1;
+  const sum = (vs: bigint[]) => vs.reduce((t, v) => t + v, 0n);
+  // the fee for exactly these notes: with change only when some is left over
+  const feeFor = (vs: bigint[] | undefined) =>
+    vs
+      ? computeFeeZat(
+          vs.length,
+          nZOutputs,
+          nTOutputs,
+          sum(vs) > amountZat + computeFeeZat(vs.length, nZOutputs, nTOutputs, true),
+        )
+      : 0n;
 
   if (amountZat <= 0n) {
     return { ok: false, error: 'dust', feeZat: 0n, nSpends: 0, requiredZat: 0n };
   }
 
-  const estFee = computeFeeZat(1, nZOutputs, nTOutputs, true);
-  const selected = selectValues(noteValues, amountZat + estFee);
+  // select for the amount plus a fee, price what was picked, and select again
+  // for that price when it falls short: the target only grows, so this ends
+  let selected = selectValues(noteValues, amountZat + computeFeeZat(1, nZOutputs, nTOutputs, true));
+  for (
+    let paid = feeFor(selected);
+    selected && sum(selected) < amountZat + paid;
+    paid = feeFor(selected)
+  ) {
+    selected = selectValues(noteValues, amountZat + paid);
+  }
   if (!selected) {
     const fee = computeFeeZat(noteValues.length, nZOutputs, nTOutputs, false);
     return {
@@ -202,10 +221,8 @@ export const quoteSend = (
     };
   }
 
-  const totalIn = selected.reduce((s, v) => s + v, 0n);
-  const hasChange =
-    totalIn > amountZat + computeFeeZat(selected.length, nZOutputs, nTOutputs, true);
-  const feeZat = computeFeeZat(selected.length, nZOutputs, nTOutputs, hasChange);
+  const totalIn = sum(selected);
+  const feeZat = feeFor(selected);
   const requiredZat = amountZat + feeZat;
   return {
     ok: totalIn >= requiredZat,

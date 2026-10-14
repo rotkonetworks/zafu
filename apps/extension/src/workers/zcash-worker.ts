@@ -1785,6 +1785,34 @@ const selectNotes = (
   throw new Error(`insufficient funds: have ${total} zat, need ${target} zat`);
 };
 
+/**
+ * Notes for a send of `amountZat` and the fee they cost. Selects for the
+ * amount plus a fee, prices what was picked, and selects again for that price
+ * when it falls short: largest-first stops before small notes that a max send
+ * must spend. The target only grows, so this ends, by covering or throwing.
+ */
+const selectForSend = (
+  notes: DecryptedNote[],
+  spentNullifiers: Set<string>,
+  amountZat: bigint,
+  nZOutputs: number,
+  nTOutputs: number,
+  pool: NotePool,
+  held?: (n: DecryptedNote) => boolean,
+): { selected: DecryptedNote[]; totalIn: bigint; fee: bigint } => {
+  let target = amountZat + computeFee(1, nZOutputs, nTOutputs, true);
+  for (;;) {
+    const selected = selectNotes(notes, spentNullifiers, target, pool, held);
+    const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
+    const hasChange = totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
+    const fee = computeFee(selected.length, nZOutputs, nTOutputs, hasChange);
+    if (totalIn >= amountZat + fee) {
+      return { selected, totalIn, fee };
+    }
+    target = amountZat + fee;
+  }
+};
+
 // ── blocks for the note trees ──
 
 const TREE_FETCH_BATCH = 1000;
@@ -5019,24 +5047,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
         }
 
-        // estimate fee and select notes from the active pool
-        const estFee = computeFee(1, nZOutputs, nTOutputs, true);
-        const selected = selectNotes(
+        const { selected, fee } = selectForSend(
           sendState.notes,
           sendState.spentNullifiers,
-          amountZat + estFee,
+          amountZat,
+          nZOutputs,
+          nTOutputs,
           sendActivePool,
           heldBy(walletId, sendActivePool),
         );
-
-        // compute exact fee (n active-pool spends + 1 output + change?)
-        const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
-        const hasChange =
-          totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
-        const fee = computeFee(selected.length, nZOutputs, nTOutputs, hasChange);
-        if (totalIn < amountZat + fee) {
-          throw new Error(`insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
-        }
 
         emitProgress('notes selected', `${selected.length} ${sendActivePool} notes, fee=${fee}`);
 
@@ -5613,21 +5632,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
         }
 
-        const estFee = computeFee(1, nZOutputs, nTOutputs, true);
-        const selected = selectNotes(
+        const { selected, fee } = selectForSend(
           sendState.notes,
           sendState.spentNullifiers,
-          amountZat + estFee,
+          amountZat,
+          nZOutputs,
+          nTOutputs,
           pcztPool,
           heldBy(walletId, pcztPool),
         );
-        const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
-        const hasChange =
-          totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
-        const fee = computeFee(selected.length, nZOutputs, nTOutputs, hasChange);
-        if (totalIn < amountZat + fee) {
-          throw new Error(`insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
-        }
         emitProgress('notes selected', `${selected.length} ${pcztPool} notes, fee=${fee}`);
 
         // paths from the active pool's note tree at its newest checkpoint;
