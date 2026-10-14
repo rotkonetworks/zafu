@@ -85,7 +85,8 @@ export const SyncStatus = ({
   const [open, setOpen] = useState(false);
   const eta = useEta(currentHeight, targetHeight, !connecting && !notice);
   const pct = Math.floor(percent);
-  const behind = targetHeight - currentHeight;
+  // a height of 0 is not known yet (a new pocket before its first batch), not block 0
+  const behind = currentHeight > 0 ? targetHeight - currentHeight : 0;
   // until the rate settles into an eta, the plain distance
   const left = eta || (behind > 0 ? `${behind.toLocaleString()} blocks behind` : '');
   const warn = notice?.tone === 'warn';
