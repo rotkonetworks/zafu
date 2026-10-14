@@ -91,3 +91,22 @@ export const planIronwoodMultiSend = (
   });
   return { outputs: planned, total, shielded, transparent };
 };
+
+/** ZIP-317's marginal fee per logical action, and the grace actions every tx pays */
+const MARGINAL_FEE_ZAT = 5_000;
+const GRACE_ACTIONS = 2;
+
+const isTransparent = (address: string) => /^t[1-3m]/.test(address);
+
+/**
+ * The network fee to show before a several-output send is approved: the ZIP-317 fee
+ * of ONE ironwood transaction paying them all (the shielded outputs plus a change
+ * output as ironwood actions, each transparent output one more). An estimate - the
+ * notes it ends up spending can add actions - and the approval says so; the old
+ * per-output sum overstated it by the number of outputs.
+ */
+export const estimateMultiSendFeeZat = (addresses: readonly string[]): number => {
+  const transparent = addresses.filter(isTransparent).length;
+  const ironwoodActions = addresses.length - transparent + 1; // + change
+  return MARGINAL_FEE_ZAT * Math.max(GRACE_ACTIONS, ironwoodActions + transparent);
+};

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { memoToHex, multiSendRoute, planIronwoodMultiSend } from './ironwood-multi-send';
+import { estimateMultiSendFeeZat, memoToHex, multiSendRoute, planIronwoodMultiSend } from './ironwood-multi-send';
 
 const isT = (a: string) => /^(t1|t3|tm|t2)/.test(a);
 const UA = 'utest1shielded';
@@ -72,5 +72,16 @@ describe('planIronwoodMultiSend', () => {
         isT,
       ),
     ).toThrow('output 1: invalid amount');
+  });
+});
+
+describe('estimateMultiSendFeeZat', () => {
+  test('is the ZIP-317 fee of one ironwood transaction, not a fee per output', () => {
+    // two shielded + change = 3 actions, one transparent output: the regtest proof's 20_000
+    expect(estimateMultiSendFeeZat(['utest1a', 'utest1b', 'tmBob'])).toBe(20_000);
+    // three shielded + change
+    expect(estimateMultiSendFeeZat(['u1a', 'u1b', 'u1c'])).toBe(20_000);
+    // the grace floor
+    expect(estimateMultiSendFeeZat(['u1a'])).toBe(10_000);
   });
 });

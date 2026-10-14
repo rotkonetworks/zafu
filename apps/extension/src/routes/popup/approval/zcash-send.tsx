@@ -7,6 +7,7 @@
  * way every other approval shows them.
  */
 
+import { estimateMultiSendFeeZat } from '../../../workers/ironwood-multi-send';
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Sensitive } from '../../../components/sensitive';
@@ -134,7 +135,9 @@ export function ZcashSendApproval() {
     return () => window.removeEventListener('zcash-send-progress', handler);
   }, [status.at]);
 
-  const totalFeeZat = feePerOutput * outputs.length;
+  // several outputs are one ironwood transaction (NU6.3 on): its fee, not one per output
+  const totalFeeZat =
+    outputs.length > 1 ? estimateMultiSendFeeZat(outputs.map(o => o.address)) : feePerOutput;
   const totalOutputZat = outputs.reduce((s, o) => s + o.amount, 0);
 
   const sendResult = (result: unknown) => {
