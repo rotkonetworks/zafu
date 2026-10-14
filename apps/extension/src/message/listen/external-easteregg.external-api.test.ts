@@ -246,6 +246,33 @@ describe('gh #19 - same-origin approval-popup dedup', () => {
     expect(createMock).toHaveBeenCalledTimes(1);
   });
 
+  it('a finished request frees the origin: the deposit after a DKG join opens', async () => {
+    // the DKG window stays up showing "done"; the site's deposit right after it
+    // used to be dropped as a duplicate, which the site read as a refusal
+    const origin = 'https://dkg-then-send.example';
+    await grantCapability(origin, 'frost');
+    const joined = call({ type: 'zafu_dkg_join', rendezvousCode: '7-a-b' }, validSender(origin));
+    await flush();
+    expect(createMock).toHaveBeenCalledTimes(1);
+    const url = String((createMock.mock.calls[0]![0] as { url: string }).url);
+    const requestId = new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('requestId')!;
+    await call(
+      { type: 'zafu_frost_result', requestId, result: { success: true, address: 'utest1x' } },
+      internalSender(),
+    );
+    expect(await joined).toEqual({ success: true, address: 'utest1x' });
+
+    void call(
+      { type: 'zafu_zcash_send', outputs: [{ address: 'utest1seat', amount: 1000 }] },
+      validSender(origin),
+    );
+    await flush();
+    expect(createMock).toHaveBeenCalledTimes(2);
+    expect(String((createMock.mock.calls[1]![0] as { url: string }).url)).toContain(
+      'approval/zcash-send',
+    );
+  });
+
   it('allows a concurrent popup for a different origin', async () => {
     const a = 'https://a.example';
     const b = 'https://b.example';

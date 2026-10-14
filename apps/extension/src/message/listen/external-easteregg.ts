@@ -1055,6 +1055,10 @@ export const externalMessageListener = (
         callback(msg['result'] || { error: 'no result' });
         pendingPicks.delete(requestId);
       }
+      // the decision is in: the window may stay up showing "done", but the
+      // site's next request (a deposit right after its DKG join) must not be
+      // dropped as if this one were still pending
+      releasePopupGuardForRequest(requestId);
       sendResponse({ ok: true });
       return true;
     }
@@ -1389,6 +1393,7 @@ export const externalMessageListener = (
         callback(msg['result'] || { success: false, error: 'no result' });
         pendingPicks.delete(requestId);
       }
+      releasePopupGuardForRequest(requestId);
       sendResponse({ ok: true });
       return true;
     }
