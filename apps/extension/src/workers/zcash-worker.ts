@@ -81,7 +81,12 @@ import { lastOrWait } from './last-or-wait';
 import { withMemoText } from './memo-text';
 import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from '../perf/rayon-isolation';
 import { loadVotingWasm } from '../state/voting-wasm';
-import { hotSpendAccount, isStoreOfWallet, parsePocketStoreId } from '../state/pocket-id';
+import {
+  hotSpendAccount,
+  isStoreOfWallet,
+  parsePocketStoreId,
+  storeIsMainnet,
+} from '../state/pocket-id';
 import {
   isP2pkhOf,
   pocketWalletKeys,
@@ -4734,7 +4739,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         // ── compute the input set: buckets containing real owned/spent notes ──
-        const ORCHARD_ACTIVATION_HEIGHT = 1687104;
+        // decoy buckets come from the chain this store is on: testnet's orchard began later
+        const ORCHARD_ACTIVATION_HEIGHT = storeIsMainnet(walletId) ? 1687104 : 1842420;
 
         const ownedBucketSet = new Set<MemoBucketStart>();
         for (const height of notesByHeight.keys()) {
