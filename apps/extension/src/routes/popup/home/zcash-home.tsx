@@ -390,7 +390,7 @@ export const ZcashContent = ({
                     ? 'a payment was not mined in time'
                     : `${failedSends.length} payments were not mined in time`
                 }
-                status='its zec is held until the chain is read again'
+                status='its zec shows again once the chain is read'
                 // never the chain tip: orchard activation (or the pocket's own
                 // birthday) can never hide a note
                 action={{

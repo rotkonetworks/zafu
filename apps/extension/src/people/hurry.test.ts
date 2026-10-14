@@ -111,4 +111,30 @@ describe('the people badge', () => {
     expect(askingOf([door({ heard: [wj], admitted: 'aa'.repeat(8) })])).toEqual([]);
     expect(askingOf([door({})])).toEqual([]);
   });
+
+  test('an introduction, and the new pair room until they confirm, for ten minutes', () => {
+    const fresh = { createdAt: NOW - 2 * MIN };
+    const meeting = base({
+      id: 'i:1',
+      kind: 'connect',
+      ...fresh,
+      connect: {
+        origin: 'https://zk.poker',
+        peer: 'p',
+        role: 'answer',
+        contactId: 'c',
+        state: 'waiting',
+        at: 0,
+      },
+    });
+    const pair = base({ id: 'p:c', kind: 'pair', ...fresh, pair: { personId: 'c', v2: {} } });
+    const confirmed = base({
+      id: 'p:d',
+      kind: 'pair',
+      ...fresh,
+      pair: { personId: 'd', v2: { confirmed: 1 } },
+    });
+    expect([...hurried([meeting, pair, confirmed], NOW)].sort()).toEqual(['i:1', 'p:c']);
+    expect(hurried([{ ...meeting, createdAt: NOW - 11 * MIN }], NOW).size).toBe(0);
+  });
 });

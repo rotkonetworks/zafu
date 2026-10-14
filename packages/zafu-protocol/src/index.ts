@@ -15,6 +15,7 @@ export { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from './versi
 
 export {
   ZAFU_V1_METHODS,
+  CONNECT_KA_SUITE,
   isZafuError,
   type ZafuApi,
   type ZafuMethod,
@@ -47,6 +48,14 @@ export {
   type ZafuRequestContactDiscoveryResponse,
   type ZafuGetFreshChainAddressRequest,
   type ZafuGetFreshChainAddressResponse,
+  type ZafuConnectPeer,
+  type ZafuConnectRequest,
+  type ZafuConnectResponse,
+  type ZafuFriend,
+  type ZafuFriendsRequest,
+  type ZafuFriendsResponse,
+  type ZafuInviteFriendRequest,
+  type ZafuInviteFriendResponse,
 } from './methods';
 
 export type { ZafuTransport, ZafuTransportCallOptions } from './transport';

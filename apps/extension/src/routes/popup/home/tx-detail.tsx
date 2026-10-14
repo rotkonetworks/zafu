@@ -180,7 +180,7 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
             <span className='i-ph-check size-4 shrink-0 text-success' />
             <p className='text-xs leading-normal text-fg'>
               {recipientName ? `${recipientName} never received this. ` : ''}nothing left your
-              wallet - its zec is held until the chain is read again.
+              wallet - its zec shows again once the chain is read.
             </p>
           </div>
         )}

@@ -19,7 +19,7 @@ import type { DoorWire } from './door';
 import type { Genesis } from '@zafu/zirc/leaderless';
 import { readEncrypted, writeEncrypted } from '../state/encrypted-storage';
 
-export type PeopleRoomKind = 'group' | 'door' | 'pair' | 'card';
+export type PeopleRoomKind = 'group' | 'door' | 'pair' | 'card' | 'connect';
 
 /** a group's roster as the founder wrote it: who is in, by room pubkey */
 export interface GroupMember {
@@ -78,7 +78,7 @@ export interface DoorState {
 }
 
 export interface PeopleRoom {
-  /** `g:<G>` a group, `d:<G>:<salt>` one of its codes, `d:<jid>` a door you typed, `p:<personId>` a pair room, `c:<key>` a card's room */
+  /** `g:<G>` a group, `d:<G>:<salt>` one of its codes, `d:<jid>` a door you typed, `p:<personId>` a pair room, `c:<key>` a card's room, `i:<h>` an introduction */
   id: string;
   walletId: string;
   kind: PeopleRoomKind;
@@ -137,6 +137,8 @@ export interface PeopleRoom {
    * or (answerer side) where you posted yours. Readable by whoever holds the card.
    */
   card?: CardRoom;
+  /** an introduction an app made (people/connect): where the two cards meet */
+  connect?: ConnectState;
   /** shared wallets made in this room: the FROST messages read so far (people/frost-room) */
   frost?: FrostRoom;
   /**
@@ -177,6 +179,24 @@ export interface PeopleRoom {
   };
 }
 
+/** an introduction (people/connect), as this side keeps it */
+export interface ConnectState {
+  /** the site that introduced you */
+  origin: string;
+  /** their site key there: what the app calls them by */
+  peer: string;
+  /** card: you show the card; answer: you answer theirs */
+  role: 'card' | 'answer';
+  /** the person is saved under this id */
+  contactId: string;
+  /** waiting: nothing yet; card: a card is in the room; done: the pair room is made */
+  state: 'waiting' | 'card' | 'done';
+  /** answer side: their card, until the page answers it */
+  card?: string;
+  /** ms */
+  at: number;
+}
+
 export interface CardRoom {
   /** the signed card, base64url */
   bytes: string;
@@ -201,6 +221,8 @@ export interface CardRoom {
   answer?: string;
   /** ms: you compared the seal before saving them */
   checked?: number;
+  /** a card shown for an introduction: its answer is the person the app named, taken by itself */
+  introduced?: { origin: string; peer: string; name?: string };
   /** how the answer came */
   via?: 'relay' | 'memo';
   /** answered by memo: the block it was mined in */

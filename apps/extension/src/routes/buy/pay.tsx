@@ -119,7 +119,7 @@ export const PayScreen = () => {
           box: 'border-gold-line bg-elev-1',
         }
       : {
-          text: `${o.handle}'s ${(Number(o.gross) / 1e6).toFixed(2)} usdc is held for you`,
+          text: `${o.handle}'s ${(Number(o.gross) / 1e6).toFixed(2)} usdc is in escrow for you`,
           tone: 'text-green',
           box: 'border-border-soft bg-elev-1',
         };
@@ -353,7 +353,7 @@ export const FailedScreen = () => {
           the payment yet
         </>
       }
-      sub="the seller's usdc is still held for you. nothing is lost."
+      sub="the seller's usdc is still in escrow for you. nothing is lost."
     >
       <div className='flex flex-col border border-border-soft bg-elev-1'>
         {checks.map((t, i) => (
@@ -371,7 +371,7 @@ export const FailedScreen = () => {
       </div>
       {buy.expiresAt && (
         <div className='flex items-center justify-between text-xs text-fg-muted'>
-          held for you
+          time left to pay
           <span className='font-display text-xl tabular-nums text-fg-high'>
             {clock(buy.expiresAt - now)}
           </span>
