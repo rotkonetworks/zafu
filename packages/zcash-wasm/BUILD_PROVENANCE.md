@@ -181,7 +181,7 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
 
 - source repo: zcli master `fe76dc0` (the merge of rotkonetworks/zcli PR #32).
   Built from a fresh worktree of the PR head `46ccc5b`; `git diff 46ccc5b
-  fe76dc0` is empty (the whole tree, lockfile included), so the inputs are
+fe76dc0` is empty (the whole tree, lockfile included), so the inputs are
   the master commit's and the sha256s below stand for it.
 - why: `zafu_zcash_send` with several outputs fell back to the orchard-only
   multi-output builder, which refuses after NU6.3. The new export pays

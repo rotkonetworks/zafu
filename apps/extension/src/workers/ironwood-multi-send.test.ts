@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { estimateMultiSendFeeZat, memoToHex, multiSendRoute, planIronwoodMultiSend } from './ironwood-multi-send';
+import {
+  estimateMultiSendFeeZat,
+  memoToHex,
+  multiSendRoute,
+  planIronwoodMultiSend,
+} from './ironwood-multi-send';
 
 const isT = (a: string) => /^(t1|t3|tm|t2)/.test(a);
 const UA = 'utest1shielded';
