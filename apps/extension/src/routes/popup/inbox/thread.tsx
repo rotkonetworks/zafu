@@ -285,7 +285,7 @@ const MoneySheet = ({
       </div>
       {onDeal && (
         <Button variant='secondary' onClick={onDeal}>
-          make a deal · held by the two of you
+          make a deal · you both sign
         </Button>
       )}
     </Sheet>

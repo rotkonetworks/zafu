@@ -41,13 +41,7 @@ export const OnboardingStart = () => {
   return (
     <div className='flex flex-col gap-[22px]'>
       <span className='text-label tracking-[0.18em] text-fg-muted'>zafu wallet</span>
-      <h1 className='font-display text-[50px] leading-[1.15] text-fg-high'>
-        held in your
-        <br />
-        own hands, seen
-        <br />
-        by no one.
-      </h1>
+      <h1 className='font-display text-[50px] leading-[1.15] text-fg-high'>shielded signing.</h1>
       <p className='text-body text-fg-muted'>private by default</p>
       <div className='mt-[18px] flex flex-col gap-3'>
         <Button
