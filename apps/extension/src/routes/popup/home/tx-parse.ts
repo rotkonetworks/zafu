@@ -37,6 +37,8 @@ export interface ParsedTransaction {
   feeAmount?: string;
   /** who we sent it to, from our own record - the chain cannot recover this */
   recipient?: string;
+  /** every payment of a several-recipient send, amounts in ZEC */
+  payments?: { recipient: string; amount: string; memo?: string }[];
   /** wall-clock ms at broadcast, used to date a row that has no height yet */
   sentAt?: number;
   /** penumbra account indices associated with this transaction (from visible actions) */

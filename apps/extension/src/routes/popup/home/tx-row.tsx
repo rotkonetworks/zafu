@@ -31,9 +31,12 @@ export function TxRow({ tx, network }: { tx: ParsedTransaction; network: Network
   const { note: fromNote } = useTxNote(tx.id);
   const recipientName =
     contactMatch?.contact.name ?? directoryName ?? (tx.recipient && shorten(tx.recipient, 8, 4));
+  const several = (tx.payments?.length ?? 0) > 1;
   const counterparty = isIn
     ? fromNote && `from ${fromNote}`
-    : recipientName && `to ${recipientName}`;
+    : several
+      ? `to ${tx.payments!.length} recipients`
+      : recipientName && `to ${recipientName}`;
   const detail = tx.entry?.detail;
   const sign = { in: '+', out: '−', neutral: '' }[tx.entry?.amounts[0]?.direction ?? 'neutral'];
   const amountText =

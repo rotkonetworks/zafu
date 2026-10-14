@@ -1221,6 +1221,8 @@ export interface HistoryEntry {
   /** zatoshis the recipient received, excluding fee */
   recipientAmount?: string;
   recipient?: string;
+  /** every payment, when the transaction paid several recipients (zatoshi strings) */
+  payments?: { recipient: string; amount: string; memo?: string }[];
   memo?: string;
   fee?: string;
   sentAt?: number;
