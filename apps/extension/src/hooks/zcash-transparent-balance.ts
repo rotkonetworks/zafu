@@ -10,7 +10,13 @@ import { useStore } from '../state';
 import { selectZcashBackend } from '../state/networks';
 import { activeZcashStoreId } from '../state/pockets';
 import { zcashClient } from '../state/keyring/zcash-backend';
-import { readCheck, runCheck, saveCheck, type TransparentCheck } from '../transparent/zcash-check';
+import {
+  afterShield,
+  readCheck,
+  runCheck,
+  saveCheck,
+  type TransparentCheck,
+} from '../transparent/zcash-check';
 
 export const useTransparentBalance = (tAddresses: string[]) => {
   const storeId = useStore(activeZcashStoreId);
@@ -27,13 +33,14 @@ export const useTransparentBalance = (tAddresses: string[]) => {
     structuralSharing: false, // bigint
   }).data;
 
+  const record = (c: TransparentCheck) => {
+    queryClient.setQueryData(key, c);
+    void saveCheck(storeId!, c);
+  };
   const run = useMutation({
     mutationKey: key,
     mutationFn: (tip: number) => runCheck(zcashClient(url, backend), tAddresses, tip),
-    onSuccess: (c: TransparentCheck) => {
-      queryClient.setQueryData(key, c);
-      void saveCheck(storeId!, c);
-    },
+    onSuccess: record,
   });
   const checking = useIsMutating({ mutationKey: key }) > 0;
 
@@ -47,6 +54,13 @@ export const useTransparentBalance = (tAddresses: string[]) => {
       if (storeId && tAddresses.length > 0 && !queryClient.isMutating({ mutationKey: key })) {
         // a check asked without a tip keeps the one it knew
         run.mutate(Math.max(tip, last?.height ?? 0));
+      }
+    },
+    /** a shield went out: its coins stay off the figure until the next check */
+    shielded: (spentZat: bigint) => {
+      const now = queryClient.getQueryData<TransparentCheck | null>(key);
+      if (storeId && now) {
+        record(afterShield(now, spentZat));
       }
     },
   };

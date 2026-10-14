@@ -74,6 +74,12 @@ export const runCheck = async (
   };
 };
 
+/** a shield's spent coins leave the last check, so they never count beside the shielded figure too */
+export const afterShield = (c: TransparentCheck, spentZat: bigint): TransparentCheck => {
+  const zat = c.zat > spentZat ? c.zat - spentZat : 0n;
+  return { at: c.at, height: c.height, zat, funded: zat > 0n ? c.funded : 0 };
+};
+
 /** the opt-in per-block refresh: on, and a tip newer than the one last checked at */
 export const newTip = (on: boolean, tip: number, last: TransparentCheck | null | undefined) =>
   on && tip > (last?.height ?? 0);

@@ -24,6 +24,7 @@ import { zcashViewKey } from '../../state/zcash-view-key';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../../state/keyring';
 import { activeAccountIndex, activePockets, activeZcashStoreId } from '../../state/pockets';
 import { usePasswordGate } from '../../hooks/password-gate';
+import { useTransparentBalance } from '../../hooks/zcash-transparent-balance';
 import { Button } from '@repo/ui/components/ui/button';
 import {
   shieldInWorker,
@@ -117,6 +118,7 @@ export const ShieldTransparent = ({
   const storeId = useStore(activeZcashStoreId);
   const keyRing = useStore(keyRingSelector);
   const { requestAuth, PasswordModal } = usePasswordGate();
+  const { shielded } = useTransparentBalance(tAddresses);
   const account = useStore(activeAccountIndex);
   const pocketName = useStore(
     s => activePockets(s).find(p => p.account === account)?.name ?? 'main',
@@ -221,6 +223,7 @@ export const ShieldTransparent = ({
         key,
       );
       setShieldTxid(result.txid);
+      shielded(BigInt(result.shieldedZat) + BigInt(result.feeZat));
     } catch (err) {
       if (!isBuildStopped(err)) {
         setShieldError(err instanceof Error ? err.message : String(err));
@@ -341,6 +344,7 @@ export const ShieldTransparent = ({
         );
 
         setZignerTxid(result.txid);
+        shielded(transparentZat);
         setZignerStep('complete');
       } catch (err) {
         setZignerError(err instanceof Error ? err.message : String(err));
@@ -350,7 +354,13 @@ export const ShieldTransparent = ({
     [unsignedData, selectedKeyInfo, zidecarUrl],
   );
 
-  const ledger = useLedgerShield({ watchOnly, tAddresses, isMainnet, zidecarUrl });
+  const ledger = useLedgerShield({
+    transparentZat,
+    watchOnly,
+    tAddresses,
+    isMainnet,
+    zidecarUrl,
+  });
   const method =
     HARDWARE_WALLET_ENABLED &&
     selectedKeyInfo &&
@@ -553,13 +563,18 @@ export const ShieldTransparent = ({
  * again, reusing its signed bytes; the session ends when it completes or pauses.
  */
 function useLedgerShield({
+  transparentZat,
   watchOnly,
   tAddresses,
   isMainnet,
   zidecarUrl,
-}: Pick<ShieldTransparentProps, 'watchOnly' | 'tAddresses' | 'isMainnet' | 'zidecarUrl'>) {
+}: Pick<
+  ShieldTransparentProps,
+  'transparentZat' | 'watchOnly' | 'tAddresses' | 'isMainnet' | 'zidecarUrl'
+>) {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const storeId = useStore(activeZcashStoreId);
+  const { shielded } = useTransparentBalance(tAddresses);
   const [phase, setPhase] = useState<LedgerSigningPhase['phase'] | null>(null);
   const [round, setRound] = useState<{ n: number; of: number }>();
   const [txid, setTxid] = useState<string | null>(null);
@@ -637,6 +652,8 @@ function useLedgerShield({
       setTxid(out.txids.at(-1) ?? null);
       if (out.status === 'paused') {
         setError(out.message);
+      } else {
+        shielded(transparentZat);
       }
     } catch (e) {
       const g = ledgerGuidance(e);
