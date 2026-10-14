@@ -820,11 +820,19 @@ export const externalMessageListener = (
         if (!gate) {
           return;
         }
+        // a coordinator's session uuid, or its rendezvous code (number + two
+        // words): the popup then publishes our relay key and joins the session
+        // announced behind it
         const roomCode = String(msg['roomCode'] || '');
-        if (!roomCode) {
-          sendResponse({ error: 'roomCode required' });
+        const rendezvousCode = String(msg['rendezvousCode'] || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, '')
+          .slice(0, 64);
+        if (!roomCode && !rendezvousCode) {
+          sendResponse({ error: 'roomCode or rendezvousCode required' });
           return;
         }
+        const network = msg['network'] === 'test' ? 'test' : 'main';
         const threshold = Number(msg['threshold']) || 2;
         const maxSigners = Number(msg['maxSigners']) || 3;
         const relayUrl = String(msg['relayUrl'] || DEFAULT_RELAY_URL);
@@ -850,7 +858,11 @@ export const externalMessageListener = (
           relayUrl,
           labelPrefix,
           requestId,
+          network,
         });
+        if (rendezvousCode) {
+          params.set('rendezvousCode', rendezvousCode);
+        }
         if (hide) {
           params.set('hide', '1');
         }
@@ -915,6 +927,11 @@ export const externalMessageListener = (
         }
         const relayUrl = String(msg['relayUrl'] || DEFAULT_RELAY_URL);
         const feeZat = Number(msg['feeZat']) || 10_000;
+        // the coordinator's relay key(s): frostd admits only the keys listed when
+        // the escrow opened this session, and we seal to them
+        const relayPeerKeys = (Array.isArray(msg['relayPeerKeys']) ? msg['relayPeerKeys'] : [])
+          .map(k => String(k).toLowerCase())
+          .filter(k => /^[0-9a-f]{64}$/.test(k));
         // Empty is allowed here because the popup falls back to the default
         // multisigVault; the popup looks up via startsWith - same charset rules.
         const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
@@ -929,6 +946,7 @@ export const externalMessageListener = (
           feeZat: String(feeZat),
           planJson: JSON.stringify(plan),
           requestId,
+          relayPeerKeys: relayPeerKeys.join(','),
         });
         if (multisigLabel) {
           params.set('multisigLabel', multisigLabel);

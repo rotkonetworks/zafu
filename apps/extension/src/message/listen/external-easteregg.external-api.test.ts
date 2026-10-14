@@ -742,3 +742,55 @@ describe('ping', () => {
     }
   });
 });
+
+describe('poker escrow custody - dkg join by room code, payout co-sign with the escrow key', () => {
+  const popupQuery = (origin: string): URLSearchParams => {
+    const url = createMock.mock.calls
+      .map((c: unknown[]) => String((c[0] as { url?: string } | undefined)?.url ?? ''))
+      .find(u => appParam(u) === origin);
+    expect(url).toBeDefined();
+    return new URLSearchParams(url!.slice(url!.indexOf('?') + 1));
+  };
+
+  it('a rendezvous code alone opens the dkg-join popup with it and the network', async () => {
+    const origin = 'https://poker-rdv.example';
+    await grantCapability(origin, 'frost');
+    void call(
+      { type: 'zafu_dkg_join', rendezvousCode: '42-Amber-Fox', network: 'test' },
+      validSender(origin),
+    );
+    await flush();
+    const q = popupQuery(origin);
+    expect(q.get('action')).toBe('dkg-join');
+    expect(q.get('rendezvousCode')).toBe('42-amber-fox');
+    expect(q.get('network')).toBe('test');
+    expect(q.get('roomCode')).toBe('');
+  });
+
+  it('a dkg join with neither a session nor a room code is refused', async () => {
+    const origin = 'https://poker-none.example';
+    await grantCapability(origin, 'frost');
+    const r = await call({ type: 'zafu_dkg_join' }, validSender(origin));
+    expect(r).toEqual({ error: 'roomCode or rendezvousCode required' });
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('the payout co-sign carries only well-formed escrow relay keys', async () => {
+    const origin = 'https://poker-sign.example';
+    await grantCapability(origin, 'frost');
+    const key = 'ab'.repeat(32);
+    void call(
+      {
+        type: 'zafu_frost_sign_orchard',
+        roomCode: 'session-uuid',
+        plan: [{ address: 'utest1x', amount_zat: 1 }],
+        relayPeerKeys: [key.toUpperCase(), 'not-a-key', 7],
+      },
+      validSender(origin),
+    );
+    await flush();
+    const q = popupQuery(origin);
+    expect(q.get('action')).toBe('poker-sign');
+    expect(q.get('relayPeerKeys')).toBe(key);
+  });
+});
