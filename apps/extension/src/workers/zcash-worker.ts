@@ -77,6 +77,7 @@ import {
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 import { BlockPrefetcher } from './block-prefetcher';
 import { once } from './once';
+import { lastOrWait } from './last-or-wait';
 import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from '../perf/rayon-isolation';
 import { loadVotingWasm } from '../state/voting-wasm';
 import { hotSpendAccount, isStoreOfWallet, parsePocketStoreId } from '../state/pocket-id';
@@ -1684,6 +1685,62 @@ const computeFee = (
  * pricing and witness building. Mirrors the Rust
  * `parse_ironwood_recipient`, which decodes the base58 version bytes.
  */
+interface TransparentHistoryRow {
+  txid: string;
+  height: number;
+  received: string;
+}
+
+/** a pocket's transparent transactions: each address asked on its own, then each tx */
+const fetchTransparentHistory = async (
+  serverUrl: string,
+  tAddresses: string[],
+): Promise<TransparentHistoryRow[]> => {
+  const rows: TransparentHistoryRow[] = [];
+  const tClient = makeZcashClient(serverUrl);
+
+  const ourScripts = new Set<string>();
+  for (const addr of tAddresses) {
+    const decoded = base58checkDecode(addr);
+    if (decoded) {
+      ourScripts.add('76a914' + hexEncode(decoded) + '88ac');
+    }
+  }
+
+  // one address per request; a tx touching two of them comes back twice
+  const txids = [
+    ...new Map(
+      (await eachAddress(tAddresses, a => tClient.getTaddressTxids(a))).map(t => [hexEncode(t), t]),
+    ).values(),
+  ];
+  const CONCURRENCY = 5;
+  for (let i = 0; i < txids.length; i += CONCURRENCY) {
+    const batch = txids.slice(i, i + CONCURRENCY);
+    const results = await Promise.allSettled(
+      batch.map(async txidBytes => {
+        const rawTx = await tClient.getTransaction(txidBytes);
+        const parsed = parseTransparentTx(rawTx.data, ourScripts);
+        return {
+          txid: hexEncode(txidBytes),
+          height: rawTx.height,
+          received: parsed.toString(),
+        };
+      }),
+    );
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        rows.push(r.value);
+      }
+    }
+  }
+  return rows;
+};
+
+/** over nym the transparent lookup can take minutes: history answers within 3 s without it */
+const transparentHistory = lastOrWait<TransparentHistoryRow[]>(3000, e =>
+  console.warn(`[zcash-worker] get-history: transparent history failed: ${errText(e)}`),
+);
+
 const isTransparentRecipient = (addr: string): boolean => /^(t1|t3|tm|t2)/.test(addr.trim());
 
 const computeTurnstileFee = (nOrchardSpends: number): bigint => {
@@ -4264,53 +4321,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           spent: histState.spentNullifiers.has(n.nullifier),
         }));
 
-        // fetch transparent history
-        const tHistory: { txid: string; height: number; received: string }[] = [];
-        if (histTAddresses?.length) {
-          try {
-            const tClient = makeZcashClient(histServerUrl);
-
-            const ourScripts = new Set<string>();
-            for (const addr of histTAddresses) {
-              const decoded = base58checkDecode(addr);
-              if (decoded) {
-                ourScripts.add('76a914' + hexEncode(decoded) + '88ac');
-              }
-            }
-
-            // one address per request; a tx touching two of them comes back twice
-            const txids = [
-              ...new Map(
-                (await eachAddress(histTAddresses, a => tClient.getTaddressTxids(a))).map(t => [
-                  hexEncode(t),
-                  t,
-                ]),
-              ).values(),
-            ];
-            const CONCURRENCY = 5;
-            for (let i = 0; i < txids.length; i += CONCURRENCY) {
-              const batch = txids.slice(i, i + CONCURRENCY);
-              const results = await Promise.allSettled(
-                batch.map(async txidBytes => {
-                  const rawTx = await tClient.getTransaction(txidBytes);
-                  const parsed = parseTransparentTx(rawTx.data, ourScripts);
-                  return {
-                    txid: hexEncode(txidBytes),
-                    height: rawTx.height,
-                    received: parsed.toString(),
-                  };
-                }),
-              );
-              for (const r of results) {
-                if (r.status === 'fulfilled') {
-                  tHistory.push(r.value);
-                }
-              }
-            }
-          } catch (e) {
-            console.warn(`[zcash-worker] get-history: transparent history failed: ${errText(e)}`);
-          }
-        }
+        const tHistory = histTAddresses?.length
+          ? ((await transparentHistory(walletId, () =>
+              fetchTransparentHistory(histServerUrl, histTAddresses),
+            )) ?? [])
+          : [];
 
         // build maps for sent amount calculation
         const histTxMap = new Map<
