@@ -100,7 +100,7 @@ export function NewGroupPage() {
               />
               <Seals k={Math.min(k, n)} n={n} onK={setK} />
               <span className='text-[11px] text-fg-muted'>
-                any {Math.min(k, n)} of you {n} can send · each device holds one key
+                any {Math.min(k, n)} of you {n} can send · each device has one key
               </span>
             </section>
           )}

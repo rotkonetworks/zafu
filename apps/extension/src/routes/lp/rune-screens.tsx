@@ -139,7 +139,7 @@ export const RuneScreen = ({ onSwap }: { onSwap: () => void }) => {
               </span>
             </Row>
             {s.read && (
-              <Row k='holds now' w='w-[110px]' h='h-[52px]'>
+              <Row k='balance now' w='w-[110px]' h='h-[52px]'>
                 <Sensitive>{runeText(s.read.balance)} rune</Sensitive>
               </Row>
             )}
