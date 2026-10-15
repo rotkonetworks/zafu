@@ -31,22 +31,30 @@ describe('lastOrWait', () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the last rows when a run fails, and says so', async () => {
-    const onError = vi.fn();
-    const get = lastOrWait<number>(3000, onError);
-    await get('w', async () => 1);
-    await expect(
-      get('w', async () => {
-        throw new Error('nym down');
-      }),
-    ).resolves.toBe(1);
-    expect(onError).toHaveBeenCalledOnce();
+  it('asks once per key: a later caller gets the answer without asking again', async () => {
+    const get = lastOrWait<number>(3000, () => undefined);
+    const run = vi.fn(async () => 1);
+    await get('w@1', run);
+    await expect(get('w@1', run)).resolves.toBe(1);
+    expect(run).toHaveBeenCalledOnce();
   });
 
-  it('keeps each key apart', async () => {
+  it('asks again after a failed run, and says so', async () => {
+    const onError = vi.fn();
+    const get = lastOrWait<number>(3000, onError);
+    await expect(
+      get('w@1', async () => {
+        throw new Error('nym down');
+      }),
+    ).resolves.toBeUndefined();
+    expect(onError).toHaveBeenCalledOnce();
+    await expect(get('w@1', async () => 2)).resolves.toBe(2);
+  });
+
+  it('keeps each key apart: a new check is a new key', async () => {
     const get = lastOrWait<number>(3000, () => undefined);
-    await get('a', async () => 1);
-    await expect(get('b', async () => 2)).resolves.toBe(2);
-    await expect(get('a', async () => 3)).resolves.toBe(3);
+    await get('w@1', async () => 1);
+    await expect(get('w@2', async () => 2)).resolves.toBe(2);
+    await expect(get('w@1', async () => 3)).resolves.toBe(1);
   });
 });

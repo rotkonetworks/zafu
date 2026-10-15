@@ -1223,8 +1223,10 @@ export const getHistoryInWorker = async (
   walletId: string,
   serverUrl: string,
   tAddresses: string[],
+  /** when the transparent balance was last checked: transparent rows follow that check, never a block */
+  tCheckedAt?: number,
 ): Promise<HistoryEntry[]> => {
-  return callWorker(network, 'get-history', { serverUrl, tAddresses }, walletId);
+  return callWorker(network, 'get-history', { serverUrl, tAddresses, tCheckedAt }, walletId);
 };
 
 /**
