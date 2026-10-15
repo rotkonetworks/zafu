@@ -6,8 +6,9 @@
  * inserts returned memos into the zustand messages store.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { queuedPass } from './queued-pass';
 import { ingestCardMemos, ingestMemoInvites } from '../people/client';
 import { useStore } from '../state';
 import { messagesSelector } from '../state/messages';
@@ -230,8 +231,13 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
     },
   });
 
+  // asked again while a pass runs (a note arrived): one more pass follows, never two at once
+  const start = useRef(syncMemos.mutateAsync);
+  start.current = syncMemos.mutateAsync;
+  const [sync] = useState(() => queuedPass(() => start.current()));
+
   return {
-    syncMemos: syncMemos.mutate,
+    syncMemos: sync,
     isSyncing: syncMemos.isPending,
     syncProgress,
     syncResult: syncMemos.data,
