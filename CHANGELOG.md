@@ -6,6 +6,28 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.1.0
+
+### Memos
+
+- The people tab reads memos again while it stays open: a memo that arrives
+  while you are on it shows without leaving and coming back.
+- Memos in any script are read as text at the source (zcli d456c26), not only
+  by zafu's own fallback.
+
+### Transparent
+
+- With history on, transparent history is asked when you check the
+  transparent balance, never on each new block: your transparent addresses are
+  no longer seen together by the node every block.
+- "check now" stays beside a transparent balance, so shield is not the only
+  way to ask again.
+
+### Copy
+
+- Send and shield labels write zec in lowercase, like every other figure.
+- A poker table's status reads "0.1 zec in escrow".
+
 ## 29.0.2
 
 ### Memos
