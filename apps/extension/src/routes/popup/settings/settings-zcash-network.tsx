@@ -346,41 +346,39 @@ const ZcashOn = () => {
             onPress={() => setSheet('node')}
             {...explainProps('network.zcashNode')}
           />
-          {node && (
-            <Row
-              type='value'
-              label='server'
-              description={[
-                node.fullNode && `on ${node.fullNode}`,
-                node.codeUrl && 'tap to read its code',
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-              value={nodeLabel(node)}
-              onPress={() =>
-                node.codeUrl
-                  ? void chrome.tabs.create({ url: node.codeUrl })
-                  : openExplain('network.zcashServer', 'server')
-              }
-              {...explainProps('network.zcashServer')}
-            />
-          )}
-          {node && (
-            <Row
-              type='value'
-              label='connection'
-              description={
-                node.protocol === 'HTTP/3'
-                  ? 'quic · every packet encrypted · forward secret'
-                  : node.protocol
-                    ? 'tls · forward secret'
-                    : 'measured on the next sync'
-              }
-              value={node.protocol ?? '-'}
-              onPress={() => openExplain('network.zcashConnection', 'connection')}
-              {...explainProps('network.zcashConnection')}
-            />
-          )}
+          {/* drawn before the node answers too, so nothing below moves when it does */}
+          <Row
+            type='value'
+            label='server'
+            description={
+              node
+                ? [node.fullNode && `on ${node.fullNode}`, node.codeUrl && 'tap to read its code']
+                    .filter(Boolean)
+                    .join(' · ')
+                : 'asked on the next sync'
+            }
+            value={node ? nodeLabel(node) : '-'}
+            onPress={() =>
+              node?.codeUrl
+                ? void chrome.tabs.create({ url: node.codeUrl })
+                : openExplain('network.zcashServer', 'server')
+            }
+            {...explainProps('network.zcashServer')}
+          />
+          <Row
+            type='value'
+            label='connection'
+            description={
+              node?.protocol === 'HTTP/3'
+                ? 'quic · every packet encrypted · forward secret'
+                : node?.protocol
+                  ? 'tls · forward secret'
+                  : 'measured on the next sync'
+            }
+            value={node?.protocol ?? '-'}
+            onPress={() => openExplain('network.zcashConnection', 'connection')}
+            {...explainProps('network.zcashConnection')}
+          />
           <Row
             type='value'
             label='starts from'
