@@ -41,6 +41,7 @@ vi.mock('../../state/keyring', () => ({
 }));
 vi.mock('../../state/wallets', () => ({
   selectMultisigWallets: (s: typeof state) => s.wallets.zcashWallets,
+  selectZcashUnit: () => 'zec',
 }));
 vi.mock('../../state/keyring/network-worker', () => ({}));
 vi.mock('../../state/keyring/frostd-relay-client', () => ({ FrostdRelayClient: vi.fn() }));

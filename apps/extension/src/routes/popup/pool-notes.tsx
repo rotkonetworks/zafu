@@ -27,9 +27,11 @@ import { Sensitive } from '../../components/sensitive';
 import { ShieldTransparent } from '../../components/zcash/shield-transparent';
 import { useStore } from '../../state';
 import { selectEffectiveKeyInfo } from '../../state/keyring';
-import { selectActiveZcashWallet, selectZcashIsMainnet } from '../../state/wallets';
-import { HOME_LOOK } from './home/look';
-import { zcashNetworkOf } from '../../config/networks';
+import {
+  selectActiveZcashWallet,
+  selectZcashIsMainnet,
+  selectZcashUnit,
+} from '../../state/wallets';
 import { activeZcashStoreId } from '../../state/pockets';
 import { getNotesInWorker, type DecryptedNoteWithTxid } from '../../state/keyring/network-worker';
 import { useZcashSyncStatus } from '../../hooks/zcash-sync';
@@ -143,8 +145,7 @@ function usePoolNotes(walletId: string | undefined): {
   return { notes, loading, error, refetch: load };
 }
 
-/** the active chain's unit: taz on testnet */
-const useUnit = () => HOME_LOOK[zcashNetworkOf(useStore(selectZcashIsMainnet))].unit;
+const useUnit = () => useStore(selectZcashUnit);
 
 /** single note row: value, height, spent/unspent, change flag. */
 function NoteRow({ note }: { note: DecryptedNoteWithTxid }) {

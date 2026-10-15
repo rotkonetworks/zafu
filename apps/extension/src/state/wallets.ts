@@ -333,6 +333,10 @@ export const selectZcashIsMainnet = (state: AllSlices): boolean =>
     ? !state.keyRing.enabledNetworks.includes('zcash-testnet')
     : (selectActiveZcashWallet(state)?.mainnet ?? true);
 
+/** the unit amounts read in on that chain */
+export const selectZcashUnit = (state: AllSlices): 'zec' | 'taz' =>
+  selectZcashIsMainnet(state) ? 'zec' : 'taz';
+
 /** the network whose data a screen reads: the active one, or zcash testnet while zcash speaks it */
 export const selectNetworkShown = (state: AllSlices): NetworkType => {
   const network = selectActiveNetwork(state);

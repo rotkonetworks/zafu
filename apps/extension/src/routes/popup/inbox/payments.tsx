@@ -20,6 +20,9 @@ import type { ZcashWalletJson } from '../../../state/wallets';
 import type { Verdict } from '../send/frost-multisig/multisig-verifier';
 import { reviewSignRequest } from '../send/frost-multisig/review';
 import { Hanko } from './shared-wallet';
+import { useStore } from '../../../state';
+import { selectZcashUnit } from '../../../state/wallets';
+import { ZecUnit } from '../../../components/zcash/zec-unit';
 
 const say = (e: unknown) =>
   e instanceof Error ? e.message : 'this did not leave. please try again.';
@@ -46,18 +49,19 @@ export const ProposeSheet = ({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const zat = parseZecAmount(amount);
+  const unit = useStore(selectZcashUnit);
   return (
     <Sheet open={open} onOpenChange={o => !o && onClose()} title='send from the shared wallet'>
       <Input
         aria-label='to'
-        placeholder='u1…'
+        placeholder={unit === 'zec' ? 'u1…' : 'utest1…'}
         value={to}
         onChange={e => setTo(e.target.value.trim())}
         className='font-mono text-xs'
       />
       <Input
         aria-label='amount'
-        placeholder='amount in zec'
+        placeholder={`amount in ${unit}`}
         inputMode='decimal'
         value={amount}
         onChange={e => setAmount(e.target.value)}
@@ -153,7 +157,7 @@ export const PaymentCard = ({
           <span>{p.sent ? 'sent' : stopped ? 'stopped' : p.set ? 'signing' : 'open'}</span>
         </span>
         <span className='font-display text-[26px] text-fg-high'>
-          {formatZecAmount(BigInt(p.amt))} <span className='text-sm text-zigner-gold'>zec</span>
+          {formatZecAmount(BigInt(p.amt))} <ZecUnit />
         </span>
         <span className='text-xs text-fg-muted'>
           to{' '}

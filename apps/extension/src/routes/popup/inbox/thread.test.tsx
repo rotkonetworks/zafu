@@ -35,6 +35,10 @@ const store = {
   },
 };
 
+vi.mock('../../../state/wallets', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../../state/wallets')>()),
+  selectZcashUnit: () => 'zec',
+}));
 vi.mock('../../../state', () => ({
   useStore: (selector?: (s: typeof store) => unknown) => (selector ? selector(store) : store),
 }));
