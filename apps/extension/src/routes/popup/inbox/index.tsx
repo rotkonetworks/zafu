@@ -22,6 +22,8 @@ import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
 import { selectVisibleMultisigWallets, type ZcashWalletJson } from '../../../state/wallets';
 import { usePenumbraMemos } from '../../../hooks/penumbra-memos';
 import { useZcashMemos } from '../../../hooks/zcash-memos';
+import { useWorkerValue, zcashWorkerQuery } from '../../../hooks/zcash-pool-balances';
+import { activeZcashStoreId } from '../../../state/pockets';
 import { useMultisigBalances } from '../../../hooks/multisig-balances';
 import { ScreenHeader } from '../../../components/screen-header';
 import { Sensitive } from '../../../components/sensitive';
@@ -422,13 +424,18 @@ export function InboxPage() {
   // the chain memos the light client already reads
   const { syncMemos: syncPenumbra } = usePenumbraMemos(walletId);
   const { syncMemos: syncZcash } = useZcashMemos(walletId, zidecarUrl);
+  // a note found while this tab is open may carry a memo: read memos again when the balance moves
+  const zcashStore = useStore(activeZcashStoreId);
+  const zcashBalance = useWorkerValue(
+    zcashWorkerQuery.balance(network === 'zcash' ? zcashStore : undefined),
+  ).data;
   useEffect(() => {
     if (network === 'penumbra') {
       syncPenumbra();
     } else if (network === 'zcash' && walletId) {
       syncZcash();
     }
-  }, [network, walletId, syncPenumbra, syncZcash]);
+  }, [network, walletId, syncPenumbra, syncZcash, zcashBalance]);
 
   return (
     <div className='flex min-h-full flex-col'>

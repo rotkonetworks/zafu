@@ -142,7 +142,7 @@ const WalletRow = ({
 
 const tableStatusLine = (t: TableView): { text: string; tone: string } => {
   if (t.balanceZat > 0n) {
-    return { text: `holds ${formatZec(t.balanceZat)} ZEC`, tone: 'text-zigner-gold' };
+    return { text: `${formatZec(t.balanceZat)} zec in escrow`, tone: 'text-zigner-gold' };
   }
   if (!t.synced) {
     return { text: 'not synced', tone: 'text-yellow-400/80' };

@@ -177,6 +177,39 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
   `voting-wasm` `local_chain_e2e` ran these bindings against a local svoted
   v1.6.1-rc.5 (37 proposals, votes on 37 and 17, tally finalized).
 
+## 2026-10-15 rebuild (2) - a memo in any script reads as text
+
+- source repo: zcli, branch `master`, rev `d456c26` (the merge of zcli PR
+  #33, `fix/memo-utf8-text` 6e21988). Built from a fresh worktree of
+  `d456c26` with the recipe above (RUSTFLAGS unset).
+- why: `parse_memo_bytes` wanted 80% of a plain UTF-8 memo's bytes to be
+  printable ASCII and counted no continuation byte, so accented and CJK memos
+  came back as binary and never reached the inbox. ZIP 302: a first byte of
+  0xF4 or below is UTF-8 text. zafu's own `workers/memo-text.ts` fallback
+  (#121) stays as a guard.
+- exports: unchanged; the glue and both `.d.ts` are byte-identical to the
+  previous build, only `zafu_wasm_bg.wasm` changed.
+- `cargo test -p zafu-wasm --lib` at `6e21988`: 109 passed (2 new memo tests).
+  In-browser: the fix built on `be520f3` and swapped into a zafu testnet build
+  without the TS fallback delivered "qa 匿 名 … · ünï" intact (d1, d5,
+  t-memo-edge pass).
+- toolchain: nightly `rustc 1.95.0-nightly (6a979b3e3 2026-02-26)`,
+  wasm-bindgen CLI 0.2.126, binaryen 130.
+- rayon snippet hash unchanged (`wasm-bindgen-rayon-38edf6e439f6d70d`), the
+  patched `workerHelpers.js` kept in both trees.
+- size: pre `wasm-opt` 28,756,517 bytes (post-bindgen); post `-Oz`
+  13,464,263 bytes.
+- sha256(parallel zafu_wasm_bg.wasm) =
+  cafdc0ea2a83115963335ba9333cb795466a454cf3ff97d3824dd4d0452da67a
+- sha256(zafu_wasm.js) =
+  6382cdb8c8ef3d66d244b2e02fe02694ac4da2ffa8778465ffefa39f67ff9f9c
+- sha256(zafu_wasm.d.ts) =
+  c12def7779fabccadba56c59a15530b29ff1f22bace86ff74b4680aadebbc973
+- sha256(zafu_wasm_bg.wasm.d.ts) =
+  cd303aced94cf579cc2c92b361e72035403974af4f155af8d89f1513e552b2c2
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 59 32768 shared)`.
+
 ## 2026-10-15 rebuild - ironwood send to several recipients
 
 - source repo: zcli master `fe76dc0` (the merge of rotkonetworks/zcli PR #32).

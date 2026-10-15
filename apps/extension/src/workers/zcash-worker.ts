@@ -4351,9 +4351,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!walletId) {
           throw new Error('walletId required');
         }
-        const { serverUrl: histServerUrl, tAddresses: histTAddresses } = payload as {
+        const {
+          serverUrl: histServerUrl,
+          tAddresses: histTAddresses,
+          tCheckedAt,
+        } = payload as {
           serverUrl: string;
           tAddresses: string[];
+          tCheckedAt?: number;
         };
 
         // load shielded notes from IDB
@@ -4363,11 +4368,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           spent: histState.spentNullifiers.has(n.nullifier),
         }));
 
-        const tHistory = histTAddresses?.length
-          ? ((await transparentHistory(walletId, () =>
-              fetchTransparentHistory(histServerUrl, histTAddresses),
-            )) ?? [])
-          : [];
+        // transparent rows follow the person's transparent check, never a block:
+        // asked once per check, and not at all before the first
+        const tHistory =
+          histTAddresses?.length && tCheckedAt
+            ? ((await transparentHistory(`${walletId}@${tCheckedAt}`, () =>
+                fetchTransparentHistory(histServerUrl, histTAddresses),
+              )) ?? [])
+            : [];
 
         // build maps for sent amount calculation
         const histTxMap = new Map<

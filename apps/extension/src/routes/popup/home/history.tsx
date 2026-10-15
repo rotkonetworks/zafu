@@ -11,6 +11,7 @@ import { selectZcashIsMainnet } from '../../../state/wallets';
 import { messagesSelector } from '../../../state/messages';
 import { privacySelector } from '../../../state/privacy';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
+import { useTransparentBalance } from '../../../hooks/zcash-transparent-balance';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { useSyncProgress } from '../../../hooks/full-sync-height';
 import { getRootNetwork, getNetwork } from '../../../config/networks';
@@ -106,14 +107,21 @@ export const zcashHistoryQuery = (
   storeId: string | undefined,
   zidecarUrl: string,
   tAddresses: string[],
+  tCheckedAt: number | undefined,
   enabled: boolean,
 ) =>
   queryOptions({
-    queryKey: ['homeHistory', 'zcash', storeId, tAddresses.length],
+    queryKey: ['homeHistory', 'zcash', storeId, tAddresses.length, tCheckedAt],
     enabled: enabled && !!storeId,
     staleTime: 10_000,
     queryFn: async (): Promise<ParsedTransaction[]> => {
-      const entries = await getHistoryInWorker('zcash', storeId!, zidecarUrl, tAddresses);
+      const entries = await getHistoryInWorker(
+        'zcash',
+        storeId!,
+        zidecarUrl,
+        tAddresses,
+        tCheckedAt,
+      );
       return entries.map(e => ({
         id: e.id,
         height: e.height,
@@ -180,6 +188,8 @@ export const HistoryContent = ({
   const zcashStoreId = useStore(activeZcashStoreId);
   const isMainnet = useStore(selectZcashIsMainnet);
   const { tAddresses } = useTransparentAddresses(isMainnet);
+  // the last transparent check, the only thing that asks the node about these addresses
+  const tCheckedAt = useTransparentBalance(tAddresses).last?.at;
   const { workerSyncHeight } = useZcashSyncStatus();
   const latestBlockHeight = useSyncProgress().tip;
   const queryClient = useQueryClient();
@@ -200,7 +210,13 @@ export const HistoryContent = ({
     penumbraHistoryQuery(penumbraAccount, getRootNetwork(network) === 'penumbra' && historyEnabled),
   );
   const zcashQ = useQuery(
-    zcashHistoryQuery(zcashStoreId, zidecarUrl, tAddresses, network === 'zcash' && historyEnabled),
+    zcashHistoryQuery(
+      zcashStoreId,
+      zidecarUrl,
+      tAddresses,
+      tCheckedAt,
+      network === 'zcash' && historyEnabled,
+    ),
   );
   // transparent rows are looked up over nym: say so when it was down, never drop them quietly
   const [nymDown, setNymDown] = useState(false);
