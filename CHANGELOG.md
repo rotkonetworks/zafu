@@ -6,6 +6,45 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.0.2
+
+### Memos
+
+- A memo now reaches your inbox reliably: the memo pass no longer drops a
+  whole round when the wallet's sync restarts underneath it.
+- Memos with accents or Japanese, Chinese or Korean text are no longer
+  dropped. Any text memo shows as you wrote it.
+
+### Balances and shielding
+
+- Shielding transparent funds no longer counts them twice on the home figure,
+  and the coins being shielded stay in the balance until they arrive.
+- The shield sheet shows the fee it will actually pay, and keeps showing the
+  amount and fee after the shield goes out.
+- Sending the full amount the form offers ("max") now works for a wallet with
+  many small notes.
+- A new pocket no longer claims to be the whole chain behind before its first
+  sync step.
+
+### Activity
+
+- The activity list no longer waits on the transparent lookup over nym, so it
+  shows right away.
+- A send to several recipients keeps every payment in its history, and shows
+  the fee of the one transaction it makes.
+
+### For sites
+
+- A site's send with several outputs is one ironwood transaction.
+- A connected site can ask for a zcash receive address
+  (`zafu_zcash_receive_address`).
+- A finished multisig approval frees the site for the next one; zk.poker escrow
+  can be joined by room code.
+
+### Copy
+
+- Onboarding and the deal button say what happens.
+
 ## 29.0.1
 
 ### Friends without a transaction
