@@ -186,8 +186,8 @@ export class LedgerShieldingSession {
           transparentPaths: built.transparentPaths,
           label:
             this.totalRounds > 1
-              ? `shield ZEC (${this.round} of ${this.totalRounds})`
-              : 'shield ZEC',
+              ? `shield zec (${this.round} of ${this.totalRounds})`
+              : 'shield zec',
         });
       }
 

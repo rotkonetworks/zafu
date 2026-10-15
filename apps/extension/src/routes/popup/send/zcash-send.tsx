@@ -775,7 +775,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     trackOpRef.current = run.key;
     void writeTxOp(run.key, {
       network: 'zcash',
-      label: `send ${amount} ZEC`,
+      label: `send ${amount} zec`,
       status: 'pending',
       step: 'building',
       startedAt: Date.now(),
@@ -1040,7 +1040,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   kind: 'send',
                   pcztHex: built.pcztHex,
                   ...(built.coldSendId ? { coldSendId: built.coldSendId } : {}),
-                  label: `send ${amount} ZEC`,
+                  label: `send ${amount} zec`,
                 },
               ).run({
                 signal: abort.signal,
