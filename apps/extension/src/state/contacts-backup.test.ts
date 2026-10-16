@@ -221,13 +221,14 @@ describe('a v2 person, sealed at rest and in the backup', () => {
     await useStore.getState().keyRing.setPassword('s0meUs3rP@ssword');
   });
 
-  test('their card, how it came, the seal check and the card you gave survive a wipe', async () => {
+  test('their card, how it came, the seal check, the card you gave and the pq box survive a wipe', async () => {
     const v2 = {
       cardV2: 'AgAB',
       source: 'link' as const,
       sealChecked: 1_790_000_000_000,
       given: { rev: 2, zcash: '11'.repeat(43), relay: 'https://relay.zafu.pro', caps: 3 },
       addrGen: 1,
+      pqBox: 'AQID',
     };
     const ken = await useStore.getState().contacts.addContact({
       id: 'ken-id',
@@ -240,6 +241,7 @@ describe('a v2 person, sealed at rest and in the backup', () => {
     // sealed at rest: nothing of the card is readable in storage
     expect(localMock.get('contacts')).toHaveProperty('encrypted');
     expect(JSON.stringify(localMock.get('contacts'))).not.toContain('cardV2');
+    expect(JSON.stringify(localMock.get('contacts'))).not.toContain('pqBox');
     const backup = await useStore.getState().contacts.exportPersonalData('backup-pass');
     await useStore.getState().contacts.clearAll();
     await useStore.getState().contacts.importPersonalData(backup, 'backup-pass', 'merge');
