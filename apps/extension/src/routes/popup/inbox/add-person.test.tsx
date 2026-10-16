@@ -188,7 +188,7 @@ describe('add a person', () => {
     expect(text()).toContain('not sealed');
     await act(async () => button(/^kensealed/).click());
     expect(container.querySelectorAll('ol li')).toHaveLength(6);
-    await act(async () => button('it matches').click());
+    await act(async () => button('the words match').click());
     expect(peopleCall).toHaveBeenCalledWith('card-choose', {
       roomId: 'c:room',
       key: signed(2).key,

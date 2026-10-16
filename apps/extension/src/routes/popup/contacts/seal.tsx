@@ -139,7 +139,7 @@ export function SealPage() {
               disabled={!seal}
               onClick={() => setSaid('no')}
             >
-              it does not match
+              they don&apos;t match
             </Button>
             <Button
               className='flex-1'
@@ -150,7 +150,7 @@ export function SealPage() {
                 )
               }
             >
-              it matches
+              the words match
             </Button>
           </>
         )}
