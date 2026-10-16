@@ -129,7 +129,7 @@ export const KeyCard = ({ c, seat, me, roomId, nameOf, onMessage, onSend }: Card
             ))}
           </span>
           <span className='text-xs text-fg'>
-            any {ms.threshold} of you {ms.maxSigners} can send · each holds one key
+            any {ms.threshold} of you {ms.maxSigners} can send · each device has one key
           </span>
           <span className='font-mono text-[11px] text-fg-muted'>{shortAddress(seat.address)}</span>
         </div>
@@ -380,7 +380,7 @@ export const MakeSharedSheet = ({
       </div>
       <Seals k={kk} n={n} onK={setK} />
       <span className='text-xs text-fg-muted'>
-        any {kk} of you {n} can send · each device holds one key
+        any {kk} of you {n} can send · each device has one key
       </span>
       <span className='h-4 text-[11px] text-hanko-light'>{error}</span>
       <Button

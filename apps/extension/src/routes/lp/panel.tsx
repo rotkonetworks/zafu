@@ -168,8 +168,8 @@ export const Panel = ({ screen }: { screen: string }) => {
         { k: 'rune address', v: <Short>{s.thor1}</Short> },
         { k: 'lp address', v: <Short>{s.address}</Short> },
         rr
-          ? { k: 'holds', v: <Sensitive>{runeText(rr.balance)} rune</Sensitive> }
-          : { k: 'holds', v: s.blocked ? 'off' : 'not read', tag: true },
+          ? { k: 'balance', v: <Sensitive>{runeText(rr.balance)} rune</Sensitive> }
+          : { k: 'balance', v: s.blocked ? 'off' : 'not read', tag: true },
         ...(paired && paired.units > 0n && pairedOut
           ? [
               {

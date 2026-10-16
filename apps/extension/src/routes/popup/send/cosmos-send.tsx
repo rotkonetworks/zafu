@@ -717,7 +717,7 @@ export function CosmosSend({
     isPenumbraDest && penumbraResting
       ? `the way into penumbra from ${sourceChain.name.toLowerCase()} is resting for now · please try again a little later`
       : exceeds
-        ? 'a little more than this address holds'
+        ? 'a little more than this address has'
         : !canPayFee
           ? `no ${gas.gasAsset.symbol.toLowerCase()} on this address for the fee`
           : routeError && !isPenumbraDest
