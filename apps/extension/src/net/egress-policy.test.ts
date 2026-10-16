@@ -701,3 +701,21 @@ describe("the nym row says what nym can carry for the person's own node", () => 
     ).toBe('direct');
   });
 });
+
+describe('the injective gas sponsor', () => {
+  const sponsor = (i: EgressInputs) => describeEgress(i).find(d => d.id === 'sponsor');
+  const INJ: EgressInputs = { enabledNetworks: ['zcash', 'injective'] };
+
+  it('needs no ask while cosmos requests go over nym, as they do by default', () => {
+    expect(sponsor(INJ)).toMatchObject({ on: true, why: 'setting' });
+  });
+
+  it('asks first when cosmos goes direct, or nym is off', () => {
+    expect(sponsor({ ...INJ, netEgress: { optIns: { 'nym:cosmos': 'blocked' } } })?.on).toBe(false);
+    expect(sponsor({ ...INJ, netEgress: { optIns: { nym: 'blocked' } } })?.on).toBe(false);
+  });
+
+  it('stays off when the person blocked it', () => {
+    expect(sponsor({ ...INJ, netEgress: { optIns: { sponsor: 'blocked' } } })?.on).toBe(false);
+  });
+});
