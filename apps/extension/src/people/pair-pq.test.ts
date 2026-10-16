@@ -16,6 +16,7 @@ import {
   Cap,
   answersOf,
   cardB64,
+  fromB64url,
   signCardV2,
   type CardV2,
 } from '@repo/wallet/networks/zcash/card-v2';
@@ -24,7 +25,7 @@ import type { Contact } from '../state/contacts';
 import { chain, createPeopleService, threadKey } from './service';
 import { cardRoomId, createCards, readB64Card } from './cards';
 import { identityOf } from './keys';
-import { createPairPq } from './pair-pq';
+import { createPairPq, pqSecret } from './pair-pq';
 import { pairRoomOf } from './pairs';
 import { pairId } from './protocol';
 import type { PeopleRoom, Thread } from './vault';
@@ -271,5 +272,28 @@ describe('a pair room moves to post-quantum', () => {
     // without the box: the first secret, which is not the room any more
     const first = bytesToHex(pairSecret(aKeys.kaSeed, bc.pairKa, aKeys.xid, xidOf(bc.key)));
     expect(first).not.toBe(a.secret);
+  });
+
+  test('a box changed in transit, or sealed for another pair, never opens', async () => {
+    const { alice, bob, aKey, bKey, turns } = await paired();
+    await turns(3);
+    const aSeals = xidOf(aKey) < xidOf(bKey);
+    const [opener, oj, oKey, sKey] = aSeals
+      ? [bob, 3, bKey, aKey]
+      : [alice, 0, aKey, bKey];
+    const room = opener.room(pairId(aSeals ? 'a' : 'b'))!;
+    const box = room.pair!.pq!.box!;
+    const keys = await opener.relKeys('w', 0, oj);
+    const first = '00'.repeat(32);
+    expect(() => pqSecret(first, keys, box, oKey, sKey)).not.toThrow();
+    const bytes = fromB64url(box);
+    bytes[bytes.length - 1]! ^= 1;
+    expect(() => pqSecret(first, keys, cardB64(bytes), oKey, sKey)).toThrow();
+    // the same box read as if a third key had sealed it
+    // a key that would seal to this opener: its XID is the lower one
+    const other = [9, 10, 11, 12, 13, 14, 15, 16]
+      .map(j => deriveRelationshipKeys(ALICE, 0, j).pubkey)
+      .find(k => xidOf(k) < xidOf(oKey))!;
+    expect(() => pqSecret(first, keys, box, oKey, other)).toThrow();
   });
 });
