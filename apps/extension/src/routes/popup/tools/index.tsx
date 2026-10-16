@@ -77,7 +77,7 @@ export const ToolsPage = () => {
     },
     hasFeature(activeNetwork, 'multisig') && {
       icon: 'i-zafu-torii',
-      label: 'shared wallet',
+      label: 'shared zcash wallet',
       desc: 'any k of n can send',
       // a hot wallet makes one straight away; a zigner's keys are made with the zigner
       path: hot ? `${PopupPath.INBOX_NEW_GROUP}?wallet=1` : PopupPath.MULTISIG,

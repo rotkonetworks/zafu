@@ -96,7 +96,7 @@ const Head = ({
     <span className='flex items-center gap-2 text-[11px] text-fg-muted'>
       <Hanko ch={deal ? '契' : '蔵'} />
       <span className='grow'>
-        {deal ? 'deal' : 'shared wallet'} · {title}
+        {deal ? 'deal' : 'shared zcash wallet'} · {title}
       </span>
       {step !== undefined && <span>step {step} of 3</span>}
     </span>
@@ -364,7 +364,7 @@ export const MakeSharedSheet = ({
   const [error, setError] = useState('');
   const kk = Math.min(Math.max(2, k), n);
   return (
-    <Sheet open={open} onOpenChange={o => !o && onClose()} title='make it a shared wallet'>
+    <Sheet open={open} onOpenChange={o => !o && onClose()} title='make it a shared zcash wallet'>
       <div className='flex flex-col gap-1.5'>
         <span className='text-[11px] text-fg-muted'>members · everyone in this room · fixed</span>
         <div className='flex flex-wrap gap-1.5'>
