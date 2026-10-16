@@ -107,7 +107,9 @@ const extractNymWorker = (outDir: string): { worker: string; wasm: string } => {
   const wasm = path.join(outDir, 'smolmix.wasm');
   // pnpm's store dates every file 1985, so the stamp is the resolved path (it names the version)
   const stamp = path.join(outDir, 'source');
-  if (existsSync(worker) && existsSync(stamp) && readFileSync(stamp, 'utf8') === bundlePath) {
+  // the stamp names our own rewrite too, so changing it unpacks again
+  const stampText = `${bundlePath}#init-object`;
+  if (existsSync(worker) && existsSync(stamp) && readFileSync(stamp, 'utf8') === stampText) {
     return { worker, wasm };
   }
   const literal = (text: string, marker: string): [start: number, end: number] => {
@@ -127,8 +129,13 @@ const extractNymWorker = (outDir: string): { worker: string; wasm: string } => {
   writeFileSync(wasm, Buffer.from(source.slice(as, ae), 'base64'));
   // the glue's own file mode: compileStreaming(fetch(path)), no base64
   const glue = `${source.slice(0, as - "null, '".length)}'/smolmix.wasm', '${source.slice(ae)}`;
-  writeFileSync(worker, glue);
-  writeFileSync(stamp, bundlePath);
+  // smolmix calls wasm-bindgen's init the old way, which warns in every console that opens
+  const oldInit = 'await __wbg_init(bytes);';
+  if (!glue.includes(oldInit)) {
+    throw new Error(`nym worker extraction: "${oldInit}" not found; mix-tunnel's format changed`);
+  }
+  writeFileSync(worker, glue.replace(oldInit, 'await __wbg_init({ module_or_path: bytes });'));
+  writeFileSync(stamp, stampText);
   return { worker, wasm };
 };
 
