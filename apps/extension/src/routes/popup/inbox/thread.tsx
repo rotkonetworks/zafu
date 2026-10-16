@@ -21,6 +21,7 @@ import { cn } from '@repo/ui/lib/utils';
 import {
   buildZip321,
   formatZecAmount,
+  isTransparentAddress,
   parseZecAmount,
   parseZip321,
 } from '@repo/wallet/networks/zcash/zip321';
@@ -65,10 +66,13 @@ import { KeyCard } from './shared-wallet';
 import { DealSheet } from './deal-sheet';
 import { PaymentCard, ProposeSheet } from './payments';
 import { usePasswordGate } from '../../../hooks/password-gate';
-import { RequestSheet } from '../send/send-fields';
+import { AmountField, RequestSheet } from '../send/send-fields';
+import { Facts } from '../send/send-ui';
+import { ExplainSheet } from '../settings/settings-explain';
 import { dayOf } from '../../../utils/when';
 import { cardOf, counterparty, threadIdOf, whenOf } from './threads';
 import { SendState } from './send-state';
+import { chatPrivacy, withReply, withoutReply } from './chat';
 
 const ZCASH_LINK = /zcash:[^\s]+/i;
 
@@ -151,17 +155,67 @@ const CardItem = ({ m }: { m: Message }) => {
   );
 };
 
+/** a payment in the conversation: what moved, its note, and where it stands */
+const PaymentItem = ({ m, from, text }: { m: Message; from: string; text: string }) => {
+  const mine = m.direction === 'sent';
+  const status = m.status ? STATUS[m.status] : '';
+  const to = mine ? m.recipientAddress : '';
+  const pool = m.network === 'zcash' && isTransparentAddress(to) ? 'public' : 'shielded';
+  const when = whenOf(m.timestamp);
+  return (
+    <article
+      className={cn(
+        'flex w-[74%] flex-col border border-border-hard bg-elev-1',
+        mine ? 'self-end' : 'self-start',
+      )}
+    >
+      <div className='flex flex-col gap-1 px-3 py-2.5'>
+        <span className='text-[11px] text-fg-muted'>
+          {mine ? `you paid ${from}` : `${from} paid you`}
+          {when && ` · ${when}`}
+        </span>
+        <span className='font-display text-[24px] text-fg-high'>
+          {m.amount}{' '}
+          <span className='text-[13px] text-zigner-gold'>
+            {m.network === 'zcash' ? 'zec' : (m.asset ?? '')}
+          </span>
+        </span>
+        {text && (
+          <p className='whitespace-pre-wrap break-words text-xs text-fg'>
+            <MessageText text={text} />
+          </p>
+        )}
+      </div>
+      <div
+        className={cn(
+          'flex items-center gap-1.5 border-t border-border-soft px-3 py-[7px] text-[11px]',
+          m.status === 'failed' ? 'text-hanko-light' : 'text-fg-muted',
+        )}
+      >
+        <span className='i-lucide-shield size-3 shrink-0' aria-hidden='true' />
+        {status ||
+          (m.blockHeight ? `${pool} · in block ${m.blockHeight.toLocaleString('en')}` : pool)}
+      </div>
+    </article>
+  );
+};
+
 const Item = ({ m, from }: { m: Message; from: string }) => {
   const mine = m.direction === 'sent';
   if (m.asset === 'contact-card') {
     return <CardItem m={m} />;
   }
   const link = ZCASH_LINK.exec(m.content)?.[0];
-  const text = (link ? m.content.replace(link, '') : m.content).trim();
+  const text = withoutReply(link ? m.content.replace(link, '') : m.content);
+  if (m.amount) {
+    return (
+      <>
+        <PaymentItem m={m} from={from} text={text} />
+        {link && <PayCard uri={link} mine={mine} from={from} />}
+      </>
+    );
+  }
   const status = m.status ? STATUS[m.status] : '';
-  // a memo whose block time could not be read shows its block, never a made-up date
-  const when =
-    whenOf(m.timestamp) || (m.blockHeight ? `block ${m.blockHeight.toLocaleString('en')}` : '');
   return (
     <>
       {text && (
@@ -180,14 +234,6 @@ const Item = ({ m, from }: { m: Message; from: string }) => {
         </div>
       )}
       {link && <PayCard uri={link} mine={mine} from={from} />}
-      {m.amount && (
-        <div className='flex items-center gap-1.5 self-center text-[11px] text-fg-muted'>
-          <span className={cn('size-1.5', status ? 'border border-fg-muted' : 'bg-success')} />
-          {mine ? 'you paid' : 'received'} {m.amount}{' '}
-          {m.network === 'zcash' ? 'zec' : (m.asset ?? '')}
-          {when && ` · ${when}`}
-        </div>
-      )}
       {status && (
         <span
           className={cn(
@@ -222,24 +268,32 @@ const RelayLine = ({
         <MessageText text={item.body} />
       </p>
     </div>
-    {item.mine && <SendState item={item} say={say} sent='on the relay' />}
+    {item.mine && <SendState item={item} say={say} sent />}
   </>
 );
 
 /** the ZIP 317 floor for a shielded memo: two actions at 5000 zat */
 const MEMO_FEE = '0.0001';
 
-/** + in the composer: pay them, or ask them for an amount */
-const MoneySheet = ({
+/**
+ * "pay" in the composer (ScPaySheet): an amount and a note for this person,
+ * handed to the send flow to review and sign. Asking them for an amount, or a
+ * deal you both sign, sit under it.
+ */
+const PaySheet = ({
   open,
   onClose,
+  name,
+  shielded,
   onPay,
   onRequest,
   onDeal,
 }: {
   open: boolean;
   onClose: () => void;
-  onPay: () => void;
+  name: string;
+  shielded: boolean;
+  onPay: (amount: string, note: string) => void;
   onRequest?: (zat: bigint, note: string) => void;
   /** a shared wallet for the two of you, over your pair room */
   onDeal?: () => void;
@@ -272,21 +326,55 @@ const MoneySheet = ({
   }
 
   return (
-    <Sheet open={open} onOpenChange={close} title='send or request'>
-      <div className='flex gap-2'>
-        <Button className='flex-1' onClick={onPay}>
-          pay
+    <Sheet open={open} onOpenChange={close} title={`pay ${name}`}>
+      <form
+        className='flex flex-col gap-3'
+        onSubmit={e => {
+          e.preventDefault();
+          if (zat) {
+            onPay(formatZecAmount(zat), note.trim());
+          }
+        }}
+      >
+        <AmountField id='pay-amount' value={amount} onChange={setAmount} unit='zec' autoFocus />
+        <div className='flex flex-col gap-1.5'>
+          <label htmlFor='pay-note' className='text-label text-fg-muted'>
+            note
+          </label>
+          <Input
+            id='pay-note'
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            maxLength={200}
+            placeholder='optional'
+          />
+        </div>
+        <Facts
+          rows={[
+            ['goes', shielded ? `shielded · only ${name} sees it` : 'public · anyone sees it'],
+            ['network fee', 'from 0.0001 zec'],
+          ]}
+        />
+        <span className='text-[11px] text-fg-muted'>
+          the chat stays free · only a payment costs a fee
+        </span>
+        <Button type='submit' disabled={!zat}>
+          {zat ? `pay ${formatZecAmount(zat)} zec` : 'pay'}
         </Button>
-        {onRequest && (
-          <Button variant='secondary' className='flex-1' onClick={() => setAsking(true)}>
-            request
-          </Button>
-        )}
-      </div>
-      {onDeal && (
-        <Button variant='secondary' onClick={onDeal}>
-          make a deal · you both sign
-        </Button>
+      </form>
+      {(onRequest || onDeal) && (
+        <div className='flex gap-2'>
+          {onRequest && (
+            <Button variant='secondary' className='flex-1' onClick={() => setAsking(true)}>
+              request
+            </Button>
+          )}
+          {onDeal && (
+            <Button variant='secondary' className='flex-1' onClick={onDeal}>
+              make a deal
+            </Button>
+          )}
+        </div>
       )}
     </Sheet>
   );
@@ -464,7 +552,8 @@ export function ThreadPage() {
   const addressSource = useContactAddressSource();
   const { address: ownAddress } = useActiveAddress();
   const [draft, setDraft] = useState('');
-  const [money, setMoney] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [explaining, setExplaining] = useState(false);
   const [dealing, setDealing] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -571,8 +660,19 @@ export function ThreadPage() {
 
   // someone whose card you hold is paid at the newest address they signed
   const payTo = (mutual && contact?.addresses.find(a => a.network === network)?.address) || address;
-  const send = (prefillMemo?: string) =>
-    navigate(PopupPath.SEND, { state: { prefillRecipient: payTo, prefillMemo, network } });
+  const send = (prefillMemo?: string, prefillAmount?: string) =>
+    navigate(PopupPath.SEND, {
+      state: { prefillRecipient: payTo, prefillMemo, prefillAmount, network },
+    });
+  const myReply = () =>
+    network === 'zcash' ? replyAddress(contact?.id, addressSource(), ownAddress) : undefined;
+  const transparent = network === 'zcash' && !!payTo && isTransparentAddress(payTo);
+  const privacy = chatPrivacy(
+    room ? 'relay' : 'memo',
+    name,
+    relayHost(room?.relay || contact?.relay || defaultRelay),
+    transparent,
+  );
 
   const sendText = async () => {
     const text = draft.trim();
@@ -593,11 +693,12 @@ export function ThreadPage() {
         return;
       }
     }
-    const reply =
-      network === 'zcash'
-        ? await replyAddress(contact?.id, addressSource(), ownAddress)
-        : undefined;
-    send(reply ? `${text}\nreply:${reply}` : text);
+    send(withReply(text, await myReply()));
+  };
+
+  const pay = async (amount: string, note: string) => {
+    setPaying(false);
+    send(withReply(note, await myReply()) || undefined, amount);
   };
 
   const request = async (zat: bigint, note: string) => {
@@ -638,6 +739,22 @@ export function ThreadPage() {
         </button>
       </header>
 
+      {address && (
+        <div className='flex shrink-0 items-center gap-2 border-b border-border-soft bg-elev-1 py-1.5 pl-4 pr-2 text-[11px] leading-snug text-fg-muted'>
+          <span className='flex min-w-0 grow flex-col'>
+            <Clipped>{privacy.lines[0]}</Clipped>
+            <Clipped>{privacy.lines[1]}</Clipped>
+          </span>
+          <button
+            type='button'
+            aria-label='who sees what'
+            onClick={() => setExplaining(true)}
+            className='grid size-7 shrink-0 place-items-center border border-border-hard text-xs hover:bg-elev-2'
+          >
+            ?
+          </button>
+        </div>
+      )}
       {room && <RelaySlot />}
       <div
         ref={scroll.ref}
@@ -732,14 +849,16 @@ export function ThreadPage() {
             void sendText();
           }}
         >
-          <button
+          <Button
             type='button'
-            aria-label='send or request zec'
-            onClick={() => setMoney(true)}
-            className='grid size-11 shrink-0 place-items-center border border-border-soft bg-elev-2 text-zigner-gold hover:bg-border-soft'
+            variant='secondary'
+            aria-label={`pay ${name}`}
+            onClick={() => (network === 'zcash' ? setPaying(true) : send())}
+            className='h-11 shrink-0 px-2.5 text-xs text-zigner-gold'
           >
-            <span className='i-lucide-plus size-[18px]' aria-hidden='true' />
-          </button>
+            <span className='i-ph-wallet size-4' aria-hidden='true' />
+            pay
+          </Button>
           <button
             type='button'
             aria-label={via === 'relay' ? 'relay · tap to send as a memo' : 'memo'}
@@ -758,7 +877,7 @@ export function ThreadPage() {
           </button>
           <Input
             aria-label='message'
-            placeholder={`message ${name}`}
+            placeholder={via === 'relay' ? `message ${name} · free` : `message ${name}`}
             value={draft}
             onChange={e => setDraft(e.target.value)}
             className='h-11 min-w-0 grow'
@@ -777,15 +896,24 @@ export function ThreadPage() {
         </p>
       )}
 
-      <MoneySheet
-        open={money}
-        onClose={() => setMoney(false)}
-        onPay={() => send()}
+      {explaining && (
+        <ExplainSheet
+          title='who sees what'
+          explain={privacy.explain}
+          onOpenChange={() => setExplaining(false)}
+        />
+      )}
+      <PaySheet
+        open={paying}
+        onClose={() => setPaying(false)}
+        name={name}
+        shielded={!transparent}
+        onPay={(amount, note) => void pay(amount, note)}
         onRequest={network === 'zcash' ? (zat, note) => void request(zat, note) : undefined}
         onDeal={
           room?.pair?.peer && shared.me && !shared.seat && !shared.keygens.length
             ? () => {
-                setMoney(false);
+                setPaying(false);
                 setDealing(true);
               }
             : undefined
