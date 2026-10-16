@@ -6,6 +6,14 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.2.2
+
+### People
+
+- A shared wallet says what it is: "shared zcash wallet". It is not offered
+  while zcash is off, so a penumbra wallet no longer shows a multisig that
+  penumbra does not have.
+
 ## 29.2.1
 
 ### Nym
