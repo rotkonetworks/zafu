@@ -545,10 +545,10 @@ describe('send over nym: everything that ties you to a transaction or an address
     const rows: [string, string][] = [
       ['https://zcash.rotko.net/zidecar.v1.Zidecar/GetTaddressTxids', 'names-you'],
       ['https://zcash.rotko.net/zidecar.v1.Zidecar/GetAddressUtxos', 'names-you'],
-      // penumbra is off by default (see the per-network choice below)
+      // a penumbra send goes over nym by default; its sync stays direct
       [
         'https://penumbra.rotko.net/penumbra.util.tendermint_proxy.v1.TendermintProxyService/BroadcastTxSync',
-        'direct',
+        'broadcast',
       ],
       ['https://penumbra.rotko.net/penumbra.core.app.v1.QueryService/AppParameters', 'direct'],
       [`${thor}/thorchain/tx/status/ABCD`, 'own-tx'],
@@ -613,8 +613,8 @@ describe('send over nym: the choice per network', () => {
     ['zcash on by default', {}, ZEC_SEND, 'broadcast'],
     ['cosmos chains on by default', {}, NOBLE_SEND, 'broadcast'],
     ['thorchain on by default', {}, THOR_SEND, 'broadcast'],
-    ['penumbra off by default', {}, PEN_SEND, 'direct'],
-    ['penumbra turned on', { 'nym:penumbra': 'allowed' }, PEN_SEND, 'broadcast'],
+    ['penumbra on by default', {}, PEN_SEND, 'broadcast'],
+    ['penumbra turned off', { 'nym:penumbra': 'blocked' }, PEN_SEND, 'direct'],
     ['zcash turned off', { 'nym:zcash': 'blocked' }, ZEC_SEND, 'direct'],
     ['zcash off leaves cosmos on', { 'nym:zcash': 'blocked' }, NOBLE_SEND, 'broadcast'],
     ['cosmos turned off', { 'nym:cosmos': 'blocked' }, NOBLE_SEND, 'direct'],
@@ -633,7 +633,7 @@ describe('send over nym: the choice per network', () => {
   it('says which networks send over nym, and whether to keep it ready', () => {
     const base = { enabledNetworks: ['zcash', 'penumbra', 'noble'] };
     expect(compileEgress(base)).toMatchObject({
-      nymVia: ['zcash', 'noble'],
+      nymVia: ['zcash', 'penumbra', 'noble'],
       nymKeepReady: true,
     });
     const optIns = {

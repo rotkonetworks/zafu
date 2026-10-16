@@ -238,7 +238,7 @@ export const NYM_GROUPS: {
   {
     id: 'penumbra',
     label: 'penumbra',
-    on: false,
+    on: true,
     nym: 'sends · sync direct',
     direct: 'the node sees your ip with the send',
     members: ['penumbra'],
