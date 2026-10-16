@@ -11,9 +11,8 @@ import type { Asset } from './penumbra-value';
 
 const transparent: ReturnType<typeof useTransparent> = {
   shieldButton: () => undefined,
+  ready: [],
   chainLines: () => null,
-  found: () => undefined,
-  onlyThere: () => [],
   sheet: null,
 };
 
