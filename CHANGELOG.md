@@ -6,6 +6,18 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.1.1
+
+### Settings
+
+- The zcash network screen keeps the server and connection rows in place
+  from the start, so nothing below them moves when the node answers.
+
+### Copy
+
+- Shared wallets say "each device has one key", and other lines that said
+  a place "holds" money now say what it has.
+
 ## 29.1.0
 
 ### Memos
