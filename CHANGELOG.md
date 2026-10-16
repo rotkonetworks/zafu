@@ -6,6 +6,15 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.2.1
+
+### Nym
+
+- Nym starts again after the browser restarts. Before, everything sent over
+  nym stopped with "nym isn't reachable right now" until a setting changed,
+  which with 29.2.0's nym defaults stopped penumbra sends, swaps and the
+  ready to shield check.
+
 ## 29.2.0
 
 ### Nym by default, easy to turn off
