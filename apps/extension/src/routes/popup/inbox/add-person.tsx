@@ -71,8 +71,8 @@ const TheirLink = () => {
         </Button>
       </div>
       <span className='text-[11px] leading-relaxed text-fg-muted'>
-        whoever opens the other&apos;s link first starts the chat · the relay sees only that you are
-        online
+        whoever opens the other&apos;s link first starts the chat · the relay sees your ip and when,
+        never your words
       </span>
     </form>
   );
@@ -263,11 +263,12 @@ const Arrived = ({ room }: { room: PeopleRoom }) => {
           text='not sealed · an older zafu sent it, others with the link could read it'
         />
       )}
-      <span className='text-xs text-fg-muted'>
-        {chosen.card.name ? `it says ${chosen.card.name}` : 'it has no name'} · check the seal with{' '}
-        {name} before saving
-      </span>
+      <span className='font-display text-lg text-fg-high'>is this {name}</span>
       <SealCompare seal={mine ? pairSeal(mine.key, chosen.card.key) : undefined} />
+      <span className='text-center text-xs text-fg-muted'>
+        {chosen.card.name ? `${chosen.card.name} sees` : 'they see'} the same seal and words · read
+        them out, or hold the screens side by side
+      </span>
       {failed && <Cue tone='warn' text='sorry, that did not go through. please try again.' />}
       <div className='flex gap-2'>
         <Button
@@ -276,10 +277,10 @@ const Arrived = ({ room }: { room: PeopleRoom }) => {
           disabled={busy}
           onClick={() => run('card-dismiss')}
         >
-          it does not match
+          they don&apos;t match
         </Button>
         <Button className='flex-1' disabled={busy} onClick={() => run('card-choose', true)}>
-          it matches
+          the words match
         </Button>
       </div>
       <div className='flex justify-between text-[11px]'>
@@ -300,7 +301,7 @@ const Arrived = ({ room }: { room: PeopleRoom }) => {
           className='text-fg-muted hover:text-fg-high'
           onClick={() => run('card-choose', false)}
         >
-          save without checking
+          check later · chat now
         </button>
       </div>
     </div>
