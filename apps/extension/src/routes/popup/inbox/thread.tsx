@@ -60,6 +60,7 @@ import { NoteLine } from './card-notes';
 import { sourceLine } from '../contacts/seal';
 import { useCardSync } from '../../../people/my-card';
 import { useFrostRoom } from '../../../people/use-frost-room';
+import { wantsPq } from '../../../people/pair-pq';
 import { useStickToBottom } from '../../../hooks/use-stick-to-bottom';
 import { DOOR_MS } from '../../../people/door';
 import { KeyCard } from './shared-wallet';
@@ -672,6 +673,7 @@ export function ThreadPage() {
     name,
     relayHost(room?.relay || contact?.relay || defaultRelay),
     transparent,
+    room?.pair?.pq?.box ? 'on' : room && wantsPq(room) ? 'securing' : 'off',
   );
 
   const sendText = async () => {

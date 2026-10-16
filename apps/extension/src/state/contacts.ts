@@ -121,6 +121,8 @@ export interface Contact {
   source?: 'link' | 'scan' | 'memo' | 'app';
   /** ms: you compared the pair seal with them in person and it matched */
   sealChecked?: number;
+  /** the post-quantum box your pair room moved by (people/pair-pq): public, it rebuilds the room */
+  pqBox?: string;
   /** the site that introduced you (zafu_connect) and their key there: that site may list them */
   introduced?: { origin: string; handle: string; at: number; name?: string };
   /** the card you last gave them (people/my-card), so a change sends an update */
@@ -159,7 +161,7 @@ export interface GivenCard {
 /** the v2 fields a contact carries */
 export type ContactV2 = Pick<
   Contact,
-  'cardV2' | 'source' | 'sealChecked' | 'given' | 'addrGen' | 'introduced'
+  'cardV2' | 'source' | 'sealChecked' | 'given' | 'addrGen' | 'introduced' | 'pqBox'
 >;
 
 /** one wallet's relationship counters, as the backup carries them */
@@ -298,7 +300,15 @@ const generateId = () => crypto.randomUUID();
 /** contacts writes this realm made: a read that one overtook is stale (state/persist) */
 export const contactsWrites = { n: 0 };
 
-const V2_KEYS = ['cardV2', 'source', 'sealChecked', 'given', 'addrGen', 'introduced'] as const;
+const V2_KEYS = [
+  'cardV2',
+  'source',
+  'sealChecked',
+  'given',
+  'addrGen',
+  'introduced',
+  'pqBox',
+] as const;
 const v2Of = (d: ContactV2): ContactV2 =>
   Object.fromEntries(V2_KEYS.filter(k => d[k] !== undefined).map(k => [k, d[k]]));
 

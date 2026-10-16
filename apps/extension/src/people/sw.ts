@@ -29,6 +29,7 @@ import { createGroups } from './groups';
 import { createCards } from './cards';
 import { foldFrost, frostOps } from './frost-room';
 import { onDealAsk } from './deal';
+import { createPairPq } from './pair-pq';
 import { createLeaderless } from './lx';
 import { compileEgress, describeEgress, type EgressInputs } from '../net/egress-policy';
 import { decideEgress } from '../net/egress-table';
@@ -140,6 +141,8 @@ const groups = createGroups({
   gate: relay => peopleDeps.gate(relay),
 });
 
+const pairPq = createPairPq({ relKeys, now: () => Date.now() });
+
 const cards = createCards({
   walletId: async () => useStore.getState().keyRing.selectedKeyInfo?.id,
   relKeys,
@@ -202,7 +205,13 @@ export const startPeopleRelay = (
     connect: onConnect,
     ...handlers,
     group: chain(handlers.group ?? groups.handlers.group, lx.handler(foldFrost)),
-    pair: chain(handlers.pair ?? invites.handlers.pair, cards.handlers.pair, foldFrost, onDealAsk),
+    pair: chain(
+      handlers.pair ?? invites.handlers.pair,
+      cards.handlers.pair,
+      foldFrost,
+      onDealAsk,
+      pairPq,
+    ),
   });
   const all: Record<string, PeopleOp> = {
     open: async (_, s) => {

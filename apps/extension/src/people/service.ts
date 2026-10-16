@@ -43,6 +43,7 @@ import {
   presenceEpoch,
   type RelayTransport,
 } from '@zafu/zid';
+import { needsPq, securing } from './pair-pq';
 import { pairShard } from './shard';
 import { FAST_MS, hurried } from './hurry';
 import { RELAY_NOT_ON, RELAY_OFF } from './protocol';
@@ -124,6 +125,8 @@ export const chain =
 
 export interface PeopleApi {
   send(roomId: string, body: string, kind?: 'msg' | 'action'): Promise<RoomMessage>;
+  /** a protocol line into a room as this record would be, not as the vault keeps it */
+  post(room: PeopleRoom, body: string): Promise<RoomMessage>;
   addRoom(room: PeopleRoom): Promise<void>;
   updateRoom(
     roomId: string,
@@ -159,6 +162,8 @@ export const T3_MS = 5 * 60_000;
  * it here when the relay's retention changes.
  */
 export const RETENTION_MS = 48 * 3600_000;
+/** a line waiting on the post-quantum move looks again this soon */
+const SECURING_MS = 5_000;
 const WINDOW_MS = PRESENCE_EPOCH_SLOTS * JAM_SLOT_DURATION * 1000;
 /** the windows the relay still holds */
 export const RETENTION_WINDOWS = Math.floor(RETENTION_MS / WINDOW_MS);
@@ -376,8 +381,13 @@ export const createPeopleService = (
     }
     const handle = handlers[rec.kind];
     const proto = msgs.filter(m => PROTOCOL_PREFIX.test(m.body));
+    // a pair room moving to post-quantum hears every line: any of theirs in the new room says they moved
+    const moving = needsPq(rec);
     // a card's room is not a conversation: nothing in it is ever shown as chat
-    const patch = handle && proto.length ? await handle(rec, proto, api) : undefined;
+    const patch =
+      handle && (proto.length || moving)
+        ? await handle(rec, moving ? msgs : proto, api)
+        : undefined;
     const head = room.chainHead();
     // a window that failed is read again next time, and so is the one still filling
     const failed = res.dropped.flatMap(d =>
@@ -461,7 +471,8 @@ export const createPeopleService = (
   const publish = async (rec: PeopleRoom, body: string, kind: 'msg' | 'action') => {
     const { room, me } = await roomFor(rec);
     const sent = await room.send(body, { kind });
-    await updateRoom(rec.id, r => ({ ...r, head: room.chainHead() }));
+    // a write into a room this record moved away from keeps the record's own head
+    await updateRoom(rec.id, r => (r.secret === rec.secret ? { ...r, head: room.chainHead() } : r));
     return { sent, item: toItem(sent, me) };
   };
 
@@ -493,6 +504,11 @@ export const createPeopleService = (
         ),
       );
     try {
+      if (securing(rec)) {
+        // nothing leaves on the first secret once both speak post-quantum: it waits for the move
+        await settle(i => ({ ...i, status: 'waiting', next: now() + SECURING_MS }));
+        return 'checked';
+      }
       const { item } = await publish(rec, draft.body, draft.kind === 'action' ? 'action' : 'msg');
       await settle(() => item);
       return 'sent';
@@ -549,6 +565,7 @@ export const createPeopleService = (
 
   const api: PeopleApi = {
     send,
+    post: async (rec, body) => (await publish(rec, body, 'action')).sent,
     addRoom,
     updateRoom,
     sync: id => sync(id),

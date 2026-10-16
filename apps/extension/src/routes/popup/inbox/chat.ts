@@ -21,18 +21,33 @@ export interface ChatPrivacy {
   explain: Explain;
 }
 
+/** where the pair room stands on post-quantum (people/pair-pq) */
+export type ChatPq = 'on' | 'securing' | 'off';
+
+const PQ_LINE: Record<ChatPq, string> = {
+  on: 'end-to-end encrypted · post-quantum',
+  securing: 'post-quantum keys on the way · your lines wait for them',
+  off: 'end-to-end encrypted',
+};
+
+const pqBlurb = (pq: ChatPq, name: string): string =>
+  pq === 'on'
+    ? ' the key is x25519 and ml-kem together, so a recording stays closed to a quantum computer later.'
+    : ` not post-quantum yet: that comes once you both run the newest zafu, then ${name} and you move the room.`;
+
 /** the quiet line under the title, and the sheet its "?" opens */
 export const chatPrivacy = (
   via: 'relay' | 'memo',
   name: string,
   relay: string,
   transparent: boolean,
+  pq: ChatPq = 'off',
 ): ChatPrivacy =>
   via === 'relay'
     ? {
-        lines: ['end-to-end encrypted', `${relay} sees your ip and when, never your words`],
+        lines: [PQ_LINE[pq], `${relay} sees your ip and when, never your words`],
         explain: {
-          blurb: `lines to ${name} go sealed through ${relay}. only the two of you can open them.`,
+          blurb: `lines to ${name} go sealed through ${relay}. only the two of you can open them.${pqBlurb(pq, name)}`,
           states: [
             { label: name, text: 'every line you send, on their device' },
             { label: relay, text: 'your ip and when you check or send · never the words' },

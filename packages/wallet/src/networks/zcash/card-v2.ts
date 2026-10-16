@@ -60,6 +60,8 @@ export const Cap = {
   discovery: 16,
   /** answers to this card are sealed to its pair key (people/card-answer) */
   sealed: 32,
+  /** moves the pair room to a post-quantum secret (people/pair-pq) */
+  pq: 64,
 } as const;
 
 export interface CardV2 {
