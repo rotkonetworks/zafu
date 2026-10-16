@@ -6,6 +6,27 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.2.0
+
+### Nym by default, easy to turn off
+
+- Penumbra sends go over nym by default, like every other network. The swap
+  screen says how a swap travels, with "send direct instead" one tap away,
+  the same switch as settings > connections.
+- The injective gas sponsor works again: shielding usdc.inj with no inj on
+  the address no longer stops at "no inj for the fee". Over nym it needs no
+  ask; set direct, it asks once.
+
+### Penumbra
+
+- Money waiting on a deposit address shows first on penumbra home, under
+  "ready to shield", with one shield each. While cosmos goes over nym, home
+  checks those addresses itself each time it opens.
+
+### Quieter
+
+- No more "deprecated parameters" warning from nym in the console.
+
 ## 29.1.1
 
 ### Settings
