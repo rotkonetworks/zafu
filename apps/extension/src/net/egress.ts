@@ -211,9 +211,16 @@ export const nymRoutingOn = async (destinations: string[] = []): Promise<boolean
 };
 
 const tableListeners = new Set<(t: EgressTable) => void>();
-/** every table this realm takes, from now on */
+/**
+ * The table this realm holds now, then every one it takes. A service worker
+ * woken after a restart compiles its table before its listeners subscribe: a
+ * listener that heard only later tables never saw one, and nym never started.
+ */
 export const onEgressTable = (listener: (t: EgressTable) => void): (() => void) => {
   tableListeners.add(listener);
+  if (table) {
+    listener(table);
+  }
   return () => void tableListeners.delete(listener);
 };
 

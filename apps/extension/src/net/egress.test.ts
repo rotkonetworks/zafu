@@ -212,6 +212,16 @@ describe('installEgress', () => {
     }
   });
 
+  it('hands a listener that subscribes late the table this realm already holds', async () => {
+    // a service worker woken after a browser restart compiles before nym's lifecycle subscribes
+    const egress = await install(ALLOW_ZCASH, 'worker');
+    const seen: EgressTable[] = [];
+    egress.onEgressTable(t => seen.push(t));
+    expect(seen).toEqual([ALLOW_ZCASH]);
+    await egress.refreshEgress();
+    expect(seen).toHaveLength(2);
+  });
+
   it('follows the table when a storage realm recompiles it', async () => {
     let table = ALLOW_ZCASH;
     const egress = await import('./egress');
