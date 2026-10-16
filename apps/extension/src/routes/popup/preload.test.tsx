@@ -206,7 +206,8 @@ describe('intent preloading', () => {
     // if the preload ever re-derives isMainnet its own way and drifts, this key won't be there
     // and the screen falls back to a cold fetch - exactly the regression intent preloading guards.
     const key = activeTransparentAddressesQuery(state, selectZcashIsMainnet(state)).queryKey;
-    expect(client.getQueryData(key)).toBeDefined();
+    // the warm-up resolves a lazy import first, which can outlast settle() under a busy run
+    await vi.waitFor(() => expect(client.getQueryData(key)).toBeDefined());
   });
 
   it('fires once per target per window, and runs registered preloads beside the route', async () => {
