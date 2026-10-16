@@ -4,6 +4,8 @@
  * keys by itself once everyone is there.
  */
 
+import { selectEnabledNetworks } from '../../../state/keyring';
+import { useStore } from '../../../state';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
@@ -22,7 +24,9 @@ type Kind = 'chat' | 'wallet';
 export function NewGroupPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const kind: Kind = params.get('wallet') ? 'wallet' : 'chat';
+  // a shared wallet is a zcash one: offered only while zcash is on
+  const zcashOn = useStore(s => selectEnabledNetworks(s).includes('zcash'));
+  const kind: Kind = zcashOn && params.get('wallet') ? 'wallet' : 'chat';
   const [name, setName] = useState('');
   const [nick, setNick] = useState('');
   const [n, setN] = useState(3);
@@ -30,7 +34,7 @@ export function NewGroupPage() {
   const [busy, setBusy] = useState(false);
   const [fail, setFail] = useState<string>();
   const wallet = kind === 'wallet';
-  const label = name.trim() || (wallet ? 'shared wallet' : '');
+  const label = name.trim() || (wallet ? 'shared zcash wallet' : '');
 
   const create = async () => {
     setBusy(true);
@@ -55,7 +59,10 @@ export function NewGroupPage() {
 
   return (
     <div className='flex h-full flex-col'>
-      <ScreenHeader title={wallet ? 'shared wallet' : 'new group'} backPath={PopupPath.INBOX} />
+      <ScreenHeader
+        title={wallet ? 'shared zcash wallet' : 'new group'}
+        backPath={PopupPath.INBOX}
+      />
       <form
         className='flex min-h-0 grow flex-col'
         onSubmit={e => {
@@ -66,20 +73,22 @@ export function NewGroupPage() {
         }}
       >
         <div className='flex min-h-0 grow flex-col gap-[18px] overflow-y-auto px-4 pb-3 pt-3.5'>
-          <Segmented<Kind>
-            label='what to make'
-            value={kind}
-            onChange={v => setParams(v === 'wallet' ? { wallet: '1' } : {}, { replace: true })}
-            options={[
-              { value: 'chat', label: 'group chat' },
-              { value: 'wallet', label: 'shared wallet' },
-            ]}
-          />
+          {zcashOn && (
+            <Segmented<Kind>
+              label='what to make'
+              value={kind}
+              onChange={v => setParams(v === 'wallet' ? { wallet: '1' } : {}, { replace: true })}
+              options={[
+                { value: 'chat', label: 'group chat' },
+                { value: 'wallet', label: 'shared zcash wallet' },
+              ]}
+            />
+          )}
           <label className='flex flex-col gap-1.5'>
             <span className='text-xs tracking-[0.04em] text-fg-muted'>name</span>
             <Input
               aria-label='name'
-              placeholder={wallet ? 'shared wallet' : 'treasury'}
+              placeholder={wallet ? 'shared zcash wallet' : 'treasury'}
               value={name}
               maxLength={48}
               onChange={e => setName(e.target.value)}

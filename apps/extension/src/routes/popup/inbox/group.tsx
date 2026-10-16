@@ -5,6 +5,8 @@
  * relay directly, the worker does.
  */
 
+import { selectEnabledNetworks } from '../../../state/keyring';
+import { useStore } from '../../../state';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Input } from '@repo/ui/components/ui/input';
@@ -92,6 +94,8 @@ export function GroupPage() {
   const shared = useFrostRoom(room);
   const held = useSharedBalance(shared.seat);
   const ms = shared.seat?.multisig;
+  // a shared wallet is a zcash one: offered only while zcash is on
+  const zcashOn = useStore(s => selectEnabledNetworks(s).includes('zcash'));
 
   const items = thread?.items ?? [];
   const nameOf = (i: ThreadItem) => (i.mine ? 'you' : nameFor(i.author, i.name));
@@ -248,14 +252,15 @@ export function GroupPage() {
             }
           }}
         >
-          {room.group?.g?.purpose === 'chat' &&
+          {zcashOn &&
+            room.group?.g?.purpose === 'chat' &&
             !room.group.deal &&
             !seat &&
             !keygens.some(c => !shared.kept[c.id]?.saved) &&
             (room.group.members.length ?? 0) >= 2 && (
               <button
                 type='button'
-                aria-label='make it a shared wallet'
+                aria-label='make it a shared zcash wallet'
                 onClick={() => setMaking(true)}
                 className='grid size-11 shrink-0 place-items-center border border-border-soft bg-elev-2 text-zigner-gold hover:bg-border-soft'
               >
