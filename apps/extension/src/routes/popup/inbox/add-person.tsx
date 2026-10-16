@@ -42,6 +42,42 @@ import { ShareWays } from './share-ways';
 import { PopupPath, threadPath } from '../paths';
 
 /** a card's two links: the zafu.pro one for anyone (and the QR, since a phone camera opens only https) */
+/** their link pasted here opens like a clicked one: whoever opens the other's first starts the chat */
+const TheirLink = () => {
+  const navigate = useNavigate();
+  const [uri, setUri] = useState('');
+  const open = () => uri.trim() && navigate(PopupPath.LINK, { state: { uri: uri.trim() } });
+  return (
+    <form
+      className='flex flex-col gap-1.5'
+      onSubmit={e => {
+        e.preventDefault();
+        open();
+      }}
+    >
+      <label htmlFor='their-link' className='text-xs text-fg-muted'>
+        or paste their link
+      </label>
+      <div className='flex gap-1.5'>
+        <Input
+          id='their-link'
+          placeholder='zafu.pro/c#…'
+          value={uri}
+          onChange={e => setUri(e.target.value)}
+          className='grow font-mono text-xs'
+        />
+        <Button type='button' variant='secondary' disabled={!uri.trim()} onClick={open}>
+          open
+        </Button>
+      </div>
+      <span className='text-[11px] leading-relaxed text-fg-muted'>
+        whoever opens the other&apos;s link first starts the chat · the relay sees only that you are
+        online
+      </span>
+    </form>
+  );
+};
+
 export const cardUrl = (b64: string) => toWebUri({ kind: 'contact', card: b64 });
 export const cardZafuUri = (b64: string) => toUri({ kind: 'contact', card: b64 });
 
@@ -360,7 +396,7 @@ export function AddPersonPage() {
   return (
     <div className='flex min-h-full flex-col'>
       <ScreenHeader
-        title='add a person'
+        title='start a chat'
         backPath={PopupPath.INBOX}
         meta={<span className='text-[11px] text-fg-muted'>your card</span>}
       />
@@ -413,6 +449,7 @@ export function AddPersonPage() {
             </>
           )
         )}
+        {!cards.cannot && !arrived && <TheirLink />}
         {cards.cannot || arrived ? null : failed === 'card' ? (
           <Cue
             tone='warn'

@@ -189,14 +189,24 @@ const Groups = () => {
     <section className='flex flex-col gap-1.5'>
       <div className='flex items-baseline justify-between'>
         <h2 className='text-xs tracking-[0.04em] text-fg-muted'>groups</h2>
-        <button
-          type='button'
-          data-preload={PopupPath.INBOX_JOIN}
-          onClick={() => navigate(PopupPath.INBOX_JOIN)}
-          className='text-xs text-zigner-gold hover:underline'
-        >
-          join a group
-        </button>
+        <span className='flex gap-3'>
+          <button
+            type='button'
+            data-preload={PopupPath.INBOX_JOIN}
+            onClick={() => navigate(PopupPath.INBOX_JOIN)}
+            className='text-xs text-zigner-gold hover:underline'
+          >
+            join a group
+          </button>
+          <button
+            type='button'
+            data-preload={PopupPath.INBOX_NEW_GROUP}
+            onClick={() => navigate(PopupPath.INBOX_NEW_GROUP)}
+            className='text-xs text-zigner-gold hover:underline'
+          >
+            new group
+          </button>
+        </span>
       </div>
       {joining.map(d => (
         <button
@@ -330,19 +340,12 @@ const Direct = ({ canCard }: { canCard: boolean }) => {
               <Button
                 variant='secondary'
                 size='sm'
-                data-preload={PopupPath.IDENTITY}
-                onClick={() => navigate(PopupPath.IDENTITY)}
+                data-preload={PopupPath.INBOX_ADD}
+                onClick={() => navigate(PopupPath.INBOX_ADD)}
               >
-                share my card
+                start a chat
               </Button>
             )}
-            <Button
-              variant='secondary'
-              size='sm'
-              onClick={() => navigate(`${PopupPath.CONTACTS}?add=1`)}
-            >
-              add someone
-            </Button>
           </div>
         </div>
       )}
@@ -350,7 +353,7 @@ const Direct = ({ canCard }: { canCard: boolean }) => {
   );
 };
 
-/** new message: pick someone saved, or paste an address */
+/** pay with a note: pick someone saved, or paste an address; a paid memo, not the free chat */
 const NewMessageSheet = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
   const navigate = useNavigate();
   const network = useStore(selectActiveNetwork);
@@ -368,7 +371,10 @@ const NewMessageSheet = ({ open, onClose }: { open: boolean; onClose: () => void
     navigate(threadPath(to.trim().toLowerCase()));
   };
   return (
-    <Sheet open={open} onOpenChange={o => !o && onClose()} title='new message'>
+    <Sheet open={open} onOpenChange={o => !o && onClose()} title='pay with a note'>
+      <p className='text-xs text-fg-muted'>
+        a shielded payment with a note on chain · it costs a network fee. to chat for free, use chat
+      </p>
       {people.length > 0 && (
         <div className='flex max-h-60 flex-col overflow-y-auto border border-border-soft bg-elev-1'>
           {people.map(({ contact, address: a }) => (
@@ -447,33 +453,15 @@ export function InboxPage() {
             {canCard && (
               <button
                 type='button'
-                aria-label='add person'
+                aria-label='chat'
                 data-preload={PopupPath.INBOX_ADD}
                 onClick={() => navigate(PopupPath.INBOX_ADD)}
-                className='flex h-9 items-center gap-1.5 border border-border-soft px-2.5 text-xs text-fg-high transition-colors hover:bg-elev-2'
+                className='flex h-9 items-center gap-1.5 border border-zigner-gold bg-zigner-gold/10 px-3 text-xs text-zigner-gold transition-colors hover:bg-zigner-gold/20'
               >
-                <span className='i-lucide-user-plus size-[15px]' aria-hidden='true' />
-                add person
+                <span className='i-lucide-message-square size-[15px]' aria-hidden='true' />
+                chat
               </button>
             )}
-            <button
-              type='button'
-              aria-label='new group'
-              data-preload={PopupPath.INBOX_NEW_GROUP}
-              onClick={() => navigate(PopupPath.INBOX_NEW_GROUP)}
-              className='flex h-9 items-center gap-1.5 border border-border-soft px-2.5 text-xs text-fg-high transition-colors hover:bg-elev-2'
-            >
-              <span className='i-zafu-torii size-[15px]' aria-hidden='true' />
-              new group
-            </button>
-            <button
-              type='button'
-              aria-label='new message'
-              onClick={() => setComposing(true)}
-              className='grid size-10 place-items-center text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg-high'
-            >
-              <span className='i-lucide-pencil size-[18px]' aria-hidden='true' />
-            </button>
           </>
         }
       />
@@ -485,6 +473,16 @@ export function InboxPage() {
         <WaitingCards />
         <Groups />
         <Direct canCard={canCard} />
+        {/* paying an address is not chatting: a shielded payment with a note, and it costs a fee */}
+        <button
+          type='button'
+          onClick={() => setComposing(true)}
+          className='flex h-11 items-center gap-2.5 px-1 text-left text-xs text-fg-muted transition-colors hover:bg-elev-2'
+        >
+          <span className='i-lucide-pencil size-[15px]' aria-hidden='true' />
+          <span className='grow'>pay an address with a note</span>
+          <span className='text-[11px] text-fg-dim'>network fee</span>
+        </button>
       </div>
       <NewMessageSheet open={composing} onClose={() => setComposing(false)} />
     </div>
