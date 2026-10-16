@@ -163,7 +163,8 @@ export const createPairPq = (deps: PairPqDeps): RecordHandler => {
     const box = theirs.findLast(m => m.body.startsWith(PQ_BOX));
     if (box) {
       try {
-        await move(box.body.slice(PQ_BOX.length), box.epoch, { ok: true });
+        // from as far back as the relay keeps: a box said again is later than their first lines there
+        await move(box.body.slice(PQ_BOX.length), 0, { ok: true });
         await api.send(room.id, PQ_OK, 'action');
         return undefined;
       } catch {

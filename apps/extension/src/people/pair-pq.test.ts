@@ -225,11 +225,17 @@ describe('a pair room moves to post-quantum', () => {
       await sealer.service.check();
     }
     expect(sealer.room(sRoom)!.pair?.pq?.box).toBeTruthy();
-    clock.t += 72 * 3600_000;
+    // a line the sealer writes while they are away is still there for them
+    clock.t += 30 * 3600_000;
+    expect(await sealer.service.say(sRoom, 'while away')).toBe('sent');
+    clock.t += 42 * 3600_000;
     await sealer.service.check();
     clock.t += 60_000;
     await opener.service.check();
     expect(opener.room(oRoom)!.secret).toBe(sealer.room(sRoom)!.secret);
+    clock.t += 60_000;
+    await opener.service.check();
+    expect(opener.lines(oRoom)).toEqual(['them: while away']);
     clock.t += 60_000;
     await sealer.service.check();
     expect(sealer.room(sRoom)!.pair?.pq?.ok).toBe(true);
