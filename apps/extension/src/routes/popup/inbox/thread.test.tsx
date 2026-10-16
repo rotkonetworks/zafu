@@ -98,7 +98,10 @@ afterEach(() => {
 const render = () => act(() => root.render(createElement(ThreadPage)));
 const text = () => container.textContent ?? '';
 const button = (label: string) =>
-  [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === label);
+  [...document.body.querySelectorAll('button')].find(b => b.textContent?.trim() === label);
+/** the pay on a request card, not the composer's */
+const payRequest = () =>
+  [...container.querySelectorAll('article button')].find(b => b.textContent?.trim() === 'pay');
 
 describe('a direct thread', () => {
   it('shows text, a request as a pay card, a payment line and a card that claims nothing', () => {
@@ -120,11 +123,13 @@ describe('a direct thread', () => {
     expect(text()).toContain('requests');
     expect(text()).toContain('1.25');
     expect(text()).toContain('logo design');
-    expect(text()).toContain('you paid 1.25 zec');
+    expect(text()).toMatch(
+      /you paid u1alice.*1\.25 zec.*looks great, paying now.*shielded · in block 1/,
+    );
     expect(text()).toContain('a card · not checked yet');
     expect(text()).not.toMatch(/verified|checked in person/);
 
-    act(() => button('pay')!.click());
+    act(() => payRequest()!.click());
     expect(navigate).toHaveBeenCalledWith(expect.stringContaining('/link?uri=zcash%3A'));
     act(() => button('save')!.click());
     expect(addContact).toHaveBeenCalledWith({ name: 'mallory' });
@@ -142,7 +147,42 @@ describe('a direct thread', () => {
     ];
     render();
     expect(text()).toContain('you asked for');
-    expect(button('pay')).toBeUndefined();
+    expect(payRequest()).toBeUndefined();
+  });
+
+  it('says plainly that a memo thread is shielded payments, and the chat line is not free', () => {
+    store.messages.messages = [msg({ txId: 'm', content: 'hi' })];
+    render();
+    expect(text()).toContain('shielded payments with a note');
+    expect(text()).not.toContain('end-to-end');
+    const box = container.querySelector<HTMLInputElement>('input[aria-label=message]')!;
+    expect(box.placeholder).not.toContain('free');
+  });
+
+  it('pays through the send flow, prefilled with the amount, the note and a reply line', async () => {
+    store.messages.messages = [msg({ txId: 'm', content: 'hi' })];
+    render();
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label^="pay "]')!.click());
+    expect(document.body.textContent).toContain('shielded · only');
+    const type = (id: string, v: string) => {
+      const el = document.getElementById(id) as HTMLInputElement;
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      act(() => {
+        set.call(el, v);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    };
+    type('pay-amount', '0.25');
+    type('pay-note', 'lunch');
+    await act(async () => button('pay 0.25 zec')!.click());
+    expect(navigate).toHaveBeenCalledWith('/send', {
+      state: {
+        prefillRecipient: ALICE,
+        prefillAmount: '0.25',
+        prefillMemo: 'lunch\nreply:u1mine',
+        network: 'zcash',
+      },
+    });
   });
 
   it('marks what you received as read once it is on screen', () => {
