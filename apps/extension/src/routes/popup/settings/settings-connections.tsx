@@ -11,50 +11,16 @@
  * The screen only reads the policy and writes choices to the ledger; the
  * guard in every realm follows the change on its own.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
-import {
-  describeEgress,
-  EGRESS_INPUT_KEYS,
-  type DestinationView,
-  type EgressInputs,
-} from '../../../net/egress-policy';
-import { readEgressInputs } from '../../../net/egress-opt-in';
-import type { NetEgressState } from '../../../net/destination';
-import { readNetEgress, setDestinationDecision, setDestinationOptIn } from '../../../net/ledger';
+import type { DestinationView } from '../../../net/egress-policy';
+import { setDestinationDecision, setDestinationOptIn } from '../../../net/ledger';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 import { ExplainSheet, useExplain, type Explain } from './settings-explain';
-import { SendOverNymRows } from './nym-rows';
-
-interface Connections {
-  inputs: EgressInputs;
-  destinations: DestinationView[];
-  ledger: NetEgressState;
-}
-
-/** The policy view and the ledger, re-read whenever one of their inputs changes. */
-const useConnections = (): Connections | undefined => {
-  const [state, setState] = useState<Connections>();
-  useEffect(() => {
-    const keys = new Set<string>(EGRESS_INPUT_KEYS);
-    const load = () =>
-      void Promise.all([readEgressInputs(), readNetEgress()]).then(([inputs, ledger]) =>
-        setState({ inputs, destinations: describeEgress(inputs), ledger }),
-      );
-    const onChanged = (changes: Record<string, unknown>, area: string) => {
-      if (area === 'local' && Object.keys(changes).some(k => keys.has(k))) {
-        load();
-      }
-    };
-    load();
-    chrome.storage.onChanged.addListener(onChanged);
-    return () => chrome.storage.onChanged.removeListener(onChanged);
-  }, []);
-  return state;
-};
+import { SendOverNymRows, useConnections } from './nym-rows';
 
 /** `zcash.rotko.net`, or `noble-rpc.polkachu.com +3` */
 const hostsLine = (hosts: string[]) => {

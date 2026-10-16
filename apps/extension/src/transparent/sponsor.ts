@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { conduitFor, type TxKind } from '@repo/wallet/networks/transparent/conduit';
 import { holdsSponsorStable } from '@repo/wallet/networks/injective/feegrant';
+import { requestEgressOptIn } from '../net/egress-opt-in';
 
 export interface GasState {
   /** fee for one tx, in the gas asset's base units */
@@ -42,6 +43,10 @@ export function useGasSponsor(
     staleTime: 5 * 60_000,
     retry: false,
     queryFn: async () => {
+      // the sponsor is an optional destination: it is asked only now, when this address needs it
+      if (!(await requestEgressOptIn('sponsor'))) {
+        throw new Error('gas sponsor not allowed');
+      }
       const res = await fetch(`${cfg.gasSponsorUrl}/v1/injective/granter`);
       if (!res.ok) {
         throw new Error(`gas sponsor unavailable (${res.status})`);

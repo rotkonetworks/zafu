@@ -36,7 +36,6 @@ import {
   BalanceRow,
   LineActions,
   Tile,
-  type LineAction,
 } from '../../../components/wallet/balance-rows';
 import { useOpenIntent } from '../../../hooks/open-link';
 import { useTransparent } from './transparent-lines';
@@ -166,13 +165,10 @@ export const AssetRow = ({
   asset: a,
   usd,
   onOpen,
-  shield,
 }: {
   asset: Asset;
   usd?: Book<TotalIn>['usd'];
   onOpen: () => void;
-  /** a check found it on a deposit address: one small button to shield it */
-  shield?: LineAction;
 }) => {
   const { inUsd, toggle } = usePenumbraRowsInUsd();
   const v = valueOf(a, usd);
@@ -197,7 +193,6 @@ export const AssetRow = ({
             <Sensitive className='text-sm text-fg-high tabular'>{top}</Sensitive>
             {under && <Sensitive className='text-[11px] text-fg-muted'>{under}</Sensitive>}
           </button>
-          {shield && <LineActions actions={[shield]} />}
         </>
       }
     />
@@ -297,30 +292,41 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
         </StatusSlot>
       ) : view === 'loading' ? null : (
         <>
-          {/* a token waiting on a deposit address is something: no empty box over it */}
-          {empty && !transparent.onlyThere([]).length && <EmptyBox look={look} />}
-          {/* one row per token; its deposit addresses live in its sheet */}
-          {(!empty || transparent.onlyThere([]).length > 0) && (
-            <BalanceGroup heading={look.heading}>
-              {!empty &&
-                assets?.map(a => (
-                  <AssetRow
-                    key={a.key}
-                    asset={a}
-                    usd={book?.usd}
-                    onOpen={() => setOpen({ asset: a })}
-                    shield={transparent.shieldButton(a.symbol)}
-                  />
-                ))}
-              {transparent.onlyThere(empty ? [] : (assets ?? []).map(a => a.symbol)).map(s => (
+          {/* found on a deposit address and waiting: first, one shield each */}
+          {transparent.ready.length > 0 && (
+            <BalanceGroup heading='ready to shield'>
+              {transparent.ready.map(r => (
                 <BalanceRow
-                  key={s}
-                  tile={<Tile tone='quiet'>{s.slice(0, 2)}</Tile>}
-                  label={s}
-                  tag='nothing shielded yet'
-                  amount={transparent.found(s)}
-                  onPress={() => setOpen({ symbol: s })}
-                  action={<LineActions actions={[transparent.shieldButton(s)!]} />}
+                  key={r.key}
+                  tile={<Tile tone='quiet'>{r.symbol.slice(0, 2)}</Tile>}
+                  label={r.symbol}
+                  tag={`on ${r.chain}`}
+                  amount={r.amount}
+                  onPress={() => setOpen({ symbol: r.symbol })}
+                  action={
+                    <LineActions
+                      actions={[
+                        {
+                          icon: 'i-ph-shield',
+                          label: `shield ${r.symbol} from ${r.chain}`,
+                          onPress: r.shield,
+                        },
+                      ]}
+                    />
+                  }
+                />
+              ))}
+            </BalanceGroup>
+          )}
+          {empty && !transparent.ready.length && <EmptyBox look={look} />}
+          {!empty && (
+            <BalanceGroup heading={look.heading}>
+              {assets?.map(a => (
+                <AssetRow
+                  key={a.key}
+                  asset={a}
+                  usd={book?.usd}
+                  onOpen={() => setOpen({ asset: a })}
                 />
               ))}
             </BalanceGroup>

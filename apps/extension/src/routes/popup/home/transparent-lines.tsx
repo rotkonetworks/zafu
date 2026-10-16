@@ -21,6 +21,9 @@ import { ago } from '../../../transparent/chain-check';
 import { useStore } from '../../../state';
 import { UnshieldedLine, type LineAction } from '../../../components/wallet/balance-rows';
 import { useOpenIntent } from '../../../hooks/open-link';
+import { useConnections } from '../settings/nym-rows';
+import { NYM } from '../../../net/nym-bridge';
+import { NYM_GROUPS, nymGroupView } from '../../../net/egress-policy';
 
 const chainName = (c: CosmosChainId) => getCosmosChain(c).name.toLowerCase();
 
@@ -152,6 +155,18 @@ const useAgreedChains = () => {
   };
 };
 
+/** cosmos requests go over nym: the switch is on and cosmos is not set to direct */
+const useCosmosOverNym = (): boolean => {
+  const data = useConnections();
+  const cosmos = NYM_GROUPS.find(g => g.id === 'cosmos');
+  return (
+    !!data &&
+    !!cosmos &&
+    data.ledger.optIns[NYM] !== 'blocked' &&
+    nymGroupView({ ...data.inputs, netEgress: data.ledger }, cosmos) === 'nym'
+  );
+};
+
 /** a token's transparent side: home's shield button, the sheet's chain lines */
 export const useTransparent = () => {
   const open = useOpenIntent();
@@ -160,16 +175,19 @@ export const useTransparent = () => {
   const auto = useStore(s => s.privacy.settings.autoCheckTransparent);
   const [asking, setAsking] = useState<CosmosChainId>();
   const { check } = t;
+  // over nym a check shows the node an address, never your ip: no ask, it just checks
+  const overNym = useCosmosOverNym();
+  const mayAsk = (c: CosmosChainId) => overNym || agreed.includes(c);
 
-  // opted in to checking on its own: each agreed chain, once each time the balance opens
+  // checking on its own (opted in, or over nym): each chain it may ask, once each time the balance opens
   useEffect(() => {
-    if (auto) {
-      t.chains.filter(c => agreed.includes(c)).forEach(check);
+    if (auto || overNym) {
+      t.chains.filter(mayAsk).forEach(check);
     }
     // the open, not every render, is what asks
-  }, [auto, agreed.length, t.chains.length]);
+  }, [auto, overNym, agreed.length, t.chains.length]);
 
-  const press = (c: CosmosChainId) => (agreed.includes(c) ? check(c) : setAsking(c));
+  const press = (c: CosmosChainId) => (mayAsk(c) ? check(c) : setAsking(c));
   const shield = (h: Holding) =>
     open({ kind: 'move', move: { action: 'shield', chain: h.chainId, index: h.index } });
   const heldOf = (symbol: string) => t.holdings.get(symbol.toLowerCase()) ?? [];
@@ -226,16 +244,19 @@ export const useTransparent = () => {
   return {
     shieldButton,
     chainLines,
-    /** what a check found of a token, across its deposit addresses */
-    found: (symbol: string) => {
-      const held = heldOf(symbol);
-      return held.length ? amountOf(held) : undefined;
-    },
-    /** tokens found only on a deposit address, nothing shielded */
-    onlyThere: (shown: string[]) => {
-      const have = new Set(shown.map(s => s.toLowerCase()));
-      return [...t.holdings.keys()].filter(s => !have.has(s));
-    },
+    /** home's ready to shield: each token a check found on a deposit address, per chain */
+    ready: [...t.holdings].flatMap(([symbol, held]) =>
+      [...new Set(held.map(h => h.chainId))].map(c => {
+        const here = held.filter(h => h.chainId === c);
+        return {
+          key: `${symbol}@${c}`,
+          symbol,
+          chain: chainName(c),
+          amount: amountOf(here),
+          shield: () => shield(here[0]!),
+        };
+      }),
+    ),
     sheet: (
       <AskSheet
         chains={asking ? [asking] : []}

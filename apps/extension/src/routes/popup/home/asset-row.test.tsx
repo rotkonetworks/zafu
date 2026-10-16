@@ -42,24 +42,4 @@ describe('asset row', () => {
     expect(labels).toEqual(['show um in usd']);
     expect(row.textContent).not.toMatch(/transparent|not checked|ago/);
   });
-
-  it('carries one small shield button once one is found', () => {
-    const div = document.createElement('div');
-    div.innerHTML = renderToStaticMarkup(
-      <MemoryRouter>
-        <AssetRow
-          asset={um}
-          onOpen={() => undefined}
-          shield={{
-            icon: 'i-ph-shield',
-            label: 'shield um from injective',
-            onPress: () => undefined,
-          }}
-        />
-      </MemoryRouter>,
-    );
-    expect(
-      div.querySelector('[aria-label="shield um from injective"] .i-ph-shield'),
-    ).not.toBeNull();
-  });
 });

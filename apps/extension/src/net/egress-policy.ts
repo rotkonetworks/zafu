@@ -238,7 +238,7 @@ export const NYM_GROUPS: {
   {
     id: 'penumbra',
     label: 'penumbra',
-    on: false,
+    on: true,
     nym: 'sends · sync direct',
     direct: 'the node sees your ip with the send',
     members: ['penumbra'],
@@ -407,6 +407,21 @@ const chainNodes = (chain: CosmosChainConfig): DestinationSpec => ({
   ],
 });
 
+/** requests on cosmos chains go over nym: the global switch is on and cosmos is not set to direct */
+const cosmosOverNym = (i: EgressInputs): boolean => {
+  const group = NYM_GROUPS.find(g => g.id === 'cosmos');
+  return (
+    transportFor({
+      groupDefault: group?.on,
+      choice: i.netEgress?.optIns?.[nymGroupKey('cosmos')],
+      names: true,
+      reachable: true,
+      master: stateOf(destinationSpec(NYM)!, i).on,
+      destinationOn: true,
+    }) === 'nym'
+  );
+};
+
 export const DESTINATIONS: DestinationSpec[] = [
   {
     id: 'zcash',
@@ -546,7 +561,11 @@ export const DESTINATIONS: DestinationSpec[] = [
     id: 'sponsor',
     label: 'zafu gas sponsor',
     purpose: 'chain-rpc',
-    gate: { kind: 'optional' },
+    // over nym it learns only that some address wants gas, so no ask; sent direct it would see your ip, so it asks first
+    gate: {
+      kind: 'optional',
+      setting: i => !!i.enabledNetworks?.includes('injective') && cosmosOverNym(i),
+    },
     urls: () => ['https://sponsor.zafu.pro'],
   },
   {

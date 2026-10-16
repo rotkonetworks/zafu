@@ -31,6 +31,7 @@ import type {
 } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { useBackNav } from '../../../utils/navigate';
 import { PenumbraFlow } from '../send/penumbra-flow';
+import { NymRouteLine } from '../settings/nym-rows';
 import { Footer, Main } from '../send/send-ui';
 import { AmountField, PickSheet } from '../send/send-fields';
 import { BalanceSheet } from '../send/balance-sheet';
@@ -419,7 +420,8 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
               </Button>
             )}
           </Main>
-          <Footer>
+          <Footer className='flex-col'>
+            <NymRouteLine group='penumbra' slower='about 10 s more' />
             <Button onClick={review} disabled={!canReview} className='w-full'>
               {simLoading ? 'pricing' : 'review swap'}
             </Button>
