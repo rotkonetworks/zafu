@@ -26,7 +26,18 @@ describe('who sees what', () => {
     const p = chatPrivacy('relay', 'ken', 'relay.zafu.pro', false);
     expect(p.lines[0]).toBe('end-to-end encrypted');
     expect(p.lines[1]).toContain('relay.zafu.pro sees your ip');
-    expect(JSON.stringify(p)).not.toMatch(/post-quantum|only that you are online/);
+    expect(p.lines[0]).not.toContain('post-quantum');
+    expect(JSON.stringify(p)).not.toMatch(/only that you are online/);
+  });
+
+  it('says post-quantum only once the room moved, and that lines wait while it moves', () => {
+    expect(chatPrivacy('relay', 'ken', 'r', false, 'on').lines[0]).toBe(
+      'end-to-end encrypted · post-quantum',
+    );
+    expect(chatPrivacy('relay', 'ken', 'r', false, 'securing').lines[0]).toContain('wait');
+    expect(chatPrivacy('relay', 'ken', 'r', false, 'off').explain.blurb).toContain(
+      'not post-quantum yet',
+    );
   });
 
   it('a memo thread says it is shielded payments, a transparent one says public', () => {

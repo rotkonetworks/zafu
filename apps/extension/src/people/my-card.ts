@@ -174,7 +174,7 @@ export const useMyCards = () => {
       ...(mine?.address.startsWith('utest') ? { testnet: true } : {}),
       penumbraOn,
       relay: defaultPeopleRelay(await localExtStorage.get('peopleRelay')),
-      caps: Cap.chat | Cap.mailbox | (discovery ? Cap.discovery : 0),
+      caps: Cap.chat | Cap.mailbox | Cap.pq | (discovery ? Cap.discovery : 0),
     };
   };
 
@@ -326,6 +326,10 @@ export const useCardSync = (): void => {
         once(`latest:${person.id}:${latest.revision}`, () =>
           updateContact(person.id, { cardV2: v2!.latest, addresses: addressesOf(latest) }),
         );
+      }
+      const box = r.pair?.pq?.box;
+      if (box && box !== person.pqBox) {
+        once(`pq:${person.id}`, () => updateContact(person.id, { pqBox: box }));
       }
       if (v2?.confirmDue) {
         once(`confirm:${person.id}`, () => peopleCall('card-confirm', { contactId: person.id }));

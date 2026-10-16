@@ -13,6 +13,7 @@ import { bytesToHex } from '@noble/hashes/utils';
 import { GROUP_ROOM_PLAINTEXT_BYTES } from '@zafu/zirc/room';
 import { isMutual, type Contact } from '../state/contacts';
 import { pairSecret, xidOf, type RelationshipKeys } from '../state/identity';
+import { pqSecret } from './pair-pq';
 import type { PeopleService } from './service';
 import type { PeopleRoom } from './vault';
 import { pairId } from './protocol';
@@ -34,23 +35,35 @@ export interface PairDeps {
 /** the pair room two mutual cards make, as the vault keeps it */
 export const pairRoomOf = (
   contact: Contact,
-  keys: Pick<RelationshipKeys, 'kaSeed' | 'xid'>,
+  keys: Pick<RelationshipKeys, 'kaSeed' | 'xid' | 'xwingSeed' | 'pubkey'>,
   relay: string,
   at: number,
-): PeopleRoom => ({
-  id: pairId(contact.id),
-  walletId: contact.rel!.walletId,
-  kind: 'pair',
-  name: contact.name,
-  appScope: PAIR_SCOPE,
-  secret: bytesToHex(pairSecret(keys.kaSeed, contact.pairKa!, keys.xid, xidOf(contact.zid!))),
-  size: GROUP_ROOM_PLAINTEXT_BYTES,
-  relay,
-  signer: { gen: contact.rel!.gen, j: contact.rel!.j },
-  joined: true,
-  createdAt: at,
-  pair: { personId: contact.id, peer: contact.zid! },
-});
+): PeopleRoom => {
+  const classical = bytesToHex(
+    pairSecret(keys.kaSeed, contact.pairKa!, keys.xid, xidOf(contact.zid!)),
+  );
+  // a room that moved to post-quantum is rebuilt there, from the box the contact keeps
+  const box = contact.pqBox;
+  return {
+    id: pairId(contact.id),
+    walletId: contact.rel!.walletId,
+    kind: 'pair',
+    name: contact.name,
+    appScope: PAIR_SCOPE,
+    secret: box ? pqSecret(classical, keys, box, keys.pubkey, contact.zid!) : classical,
+    size: GROUP_ROOM_PLAINTEXT_BYTES,
+    relay,
+    signer: { gen: contact.rel!.gen, j: contact.rel!.j },
+    joined: true,
+    createdAt: at,
+    pair: {
+      personId: contact.id,
+      peer: contact.zid!,
+      ...(contact.cardV2 ? { v2: { latest: contact.cardV2 } } : {}),
+      ...(box ? { pq: { box, ok: true } } : {}),
+    },
+  };
+};
 
 export const createPairs = (deps: PairDeps) => {
   const now = deps.now ?? (() => Date.now());
