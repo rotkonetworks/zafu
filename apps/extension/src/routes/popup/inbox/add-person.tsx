@@ -71,8 +71,8 @@ const TheirLink = () => {
         </Button>
       </div>
       <span className='text-[11px] leading-relaxed text-fg-muted'>
-        whoever opens the other&apos;s link first starts the chat · the relay sees only that you are
-        online
+        whoever opens the other&apos;s link first starts the chat · the relay sees your ip and when,
+        never your words
       </span>
     </form>
   );
