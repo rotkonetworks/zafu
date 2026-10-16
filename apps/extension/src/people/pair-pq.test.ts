@@ -278,9 +278,7 @@ describe('a pair room moves to post-quantum', () => {
     const { alice, bob, aKey, bKey, turns } = await paired();
     await turns(3);
     const aSeals = xidOf(aKey) < xidOf(bKey);
-    const [opener, oj, oKey, sKey] = aSeals
-      ? [bob, 3, bKey, aKey]
-      : [alice, 0, aKey, bKey];
+    const [opener, oj, oKey, sKey] = aSeals ? [bob, 3, bKey, aKey] : [alice, 0, aKey, bKey];
     const room = opener.room(pairId(aSeals ? 'a' : 'b'))!;
     const box = room.pair!.pq!.box!;
     const keys = await opener.relKeys('w', 0, oj);
