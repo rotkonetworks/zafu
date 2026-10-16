@@ -6,6 +6,25 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.3.0
+
+### People
+
+- 1:1 chats move to a post-quantum key. Once you both run 29.3.0, your
+  chat room moves to a key made from X25519 and ML-KEM together, so a
+  recording of it stays closed to a quantum computer later. Existing
+  contacts move on their own, with no new pairing. Lines you write while the
+  room moves say "waiting to send" and go once it has moved. With someone on
+  an older zafu the chat stays end-to-end encrypted and says it is not
+  post-quantum yet.
+- The thread says who sees what: end-to-end encrypted, and the relay sees
+  your ip and when, never your words. A "?" opens the details.
+- A line of yours says only what zafu knows: sending, waiting to send, sent
+  or failed.
+- Pay from the chat: the pay button opens the send screen, filled in.
+- The seal check asks "is this them", shows six words and is answered with
+  "the words match" or "they don't match", or "check later · chat now".
+
 ## 29.2.2
 
 ### People
