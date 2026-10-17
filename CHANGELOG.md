@@ -6,6 +6,14 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.3.1
+
+### Websites
+
+- A site connecting a cosmos chain asks once. penumbra.fi asked twice to
+  connect noble-1, because it reads the key right after asking to connect;
+  zafu now asks only for chains the site does not have yet.
+
 ## 29.3.0
 
 ### People
