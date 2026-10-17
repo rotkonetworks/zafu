@@ -474,6 +474,37 @@ module.exports.snd1 = {
   },
 };
 
+// read receipts: both on, B reads, A sees "read"; with B's off, A sees none
+module.exports.rc1 = {
+  title: 'read receipts show only where both turned them on',
+  timeout: 600_000,
+  noRetry: true,
+  run: async c => {
+    const { A, B, a } = await paired(c);
+    const on = async (Z, who) => {
+      const pg = await Z.open('/contacts', 'popup.html', 2000);
+      await pg.getByText(who, { exact: true }).first().click();
+      await pg.waitForTimeout(1500);
+      await L.toggle(pg, 'read receipts', true);
+      await pg.waitForTimeout(800);
+      await pg.close();
+    };
+    await on(A, 'bob');
+    await on(B, 'alice');
+    const n = Date.now().toString(36).slice(-4);
+    await say(a, `read me ${n}`);
+    const bi = await B.open('/inbox', 'popup.html', 3000);
+    await bi.getByText('alice', { exact: true }).first().click();
+    const got = await waitText(bi, new RegExp(`read me ${n}`), 120000);
+    const read = await waitText(a, /read \d\d:\d\d/, 120000);
+    await c.shot(a, 'a-read');
+    return {
+      status: got && read ? 'pass' : 'fail',
+      note: `B got the line: ${!!got}; A shows "read hh:mm": ${!!read} (${c.dir}/a-read.png)`,
+    };
+  },
+};
+
 module.exports.done = async () => {
   if (pair) {
     await pair.A.close();
