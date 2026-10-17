@@ -62,12 +62,44 @@ async function openApproval(
   return decision;
 }
 
-/** enable: derive + cache the key(s) for the requested chains via one approval */
-async function handleEnable(
+/** each site's enables, one after another: the second sees what the first was given */
+const enabling = new Map<string, Promise<void>>();
+
+/**
+ * enable: ask once for the chains this site does not have yet, as real Keplr
+ * does. A site that enables every chain and then reads each key at once (as
+ * cosmos-kit does) would otherwise be asked again for a chain it was just given.
+ */
+function handleEnable(
   origin: string,
   chainIds: string[],
   meta: { favIconUrl?: string; title?: string },
+): Promise<void> {
+  const run = (enabling.get(origin) ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => enableMissing(origin, chainIds, meta));
+  enabling.set(origin, run);
+  void run
+    .finally(() => enabling.get(origin) === run && enabling.delete(origin))
+    .catch(() => undefined);
+  return run;
+}
+
+/** derive + cache the key(s) for the requested chains this site lacks, via one approval */
+async function enableMissing(
+  origin: string,
+  requested: string[],
+  meta: { favIconUrl?: string; title?: string },
 ) {
+  const chainIds: string[] = [];
+  for (const cid of requested) {
+    if (!(await getCachedKey(origin, cid))) {
+      chainIds.push(cid);
+    }
+  }
+  if (!chainIds.length) {
+    return;
+  }
   const chainId = chainIds[0] ?? '';
   const decision = await openApproval({
     requestId: crypto.randomUUID(),
