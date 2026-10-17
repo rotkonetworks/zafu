@@ -12,7 +12,7 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { useStore } from '../state';
-import { selectZcashBackend } from '../state/networks';
+import { selectZcashBackend, selectZcashEndpoint } from '../state/networks';
 import { selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
 import { MAX_POCKETS, pocketOwner, pocketsOf } from '../state/pockets';
 import { zcashClient } from '../state/keyring/zcash-backend';
@@ -35,7 +35,7 @@ export const NewPocketSheet = ({
   const book = useStore(s => s.pockets.book);
   const add = useStore(s => s.pockets.add);
   const target = pocketTarget(useStore(selectActiveNetwork));
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zidecarUrl = useStore(selectZcashEndpoint);
   const zcashBackend = useStore(selectZcashBackend);
 
   const owner = selectedKeyInfo ? pocketOwner(selectedKeyInfo) : undefined;

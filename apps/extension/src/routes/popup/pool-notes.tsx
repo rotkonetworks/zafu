@@ -27,7 +27,11 @@ import { Sensitive } from '../../components/sensitive';
 import { ShieldTransparent } from '../../components/zcash/shield-transparent';
 import { useStore } from '../../state';
 import { selectEffectiveKeyInfo } from '../../state/keyring';
-import { selectActiveZcashWallet } from '../../state/wallets';
+import {
+  selectActiveZcashWallet,
+  selectZcashIsMainnet,
+  selectZcashUnit,
+} from '../../state/wallets';
 import { activeZcashStoreId } from '../../state/pockets';
 import { getNotesInWorker, type DecryptedNoteWithTxid } from '../../state/keyring/network-worker';
 import { useZcashSyncStatus } from '../../hooks/zcash-sync';
@@ -38,6 +42,7 @@ import { SettingsScreen } from './settings/settings-screen';
 import { PopupPath } from './paths';
 import { cn } from '@repo/ui/lib/utils';
 import { Clipped } from '@repo/ui/components/ui/clipped';
+import { selectZcashEndpoint } from '../../state/networks';
 
 /** Shielded pool a note lives in. Records persisted pre-ironwood default to orchard. */
 type NotePool = 'orchard' | 'ironwood';
@@ -140,8 +145,11 @@ function usePoolNotes(walletId: string | undefined): {
   return { notes, loading, error, refetch: load };
 }
 
+const useUnit = () => useStore(selectZcashUnit);
+
 /** single note row: value, height, spent/unspent, change flag. */
 function NoteRow({ note }: { note: DecryptedNoteWithTxid }) {
+  const unit = useUnit();
   const spent = isSpent(note);
   const change = note.is_change === true;
 
@@ -164,7 +172,9 @@ function NoteRow({ note }: { note: DecryptedNoteWithTxid }) {
       <div className='min-w-0 flex-1'>
         <div className='flex items-center justify-between gap-2'>
           <span className='font-mono text-sm tabular-nums text-fg-high'>
-            <Sensitive>{fmtZec(BigInt(note.value))} zec</Sensitive>
+            <Sensitive>
+              {fmtZec(BigInt(note.value))} {unit}
+            </Sensitive>
           </span>
           <span
             className={cn(
@@ -192,6 +202,7 @@ function NoteRow({ note }: { note: DecryptedNoteWithTxid }) {
 
 /** subtotal + count header for a pool section. */
 function PoolHeader({ label, notes }: { label: string; notes: DecryptedNoteWithTxid[] }) {
+  const unit = useUnit();
   const count = notes.length;
   return (
     <div className='flex items-baseline justify-between gap-2 px-0.5'>
@@ -199,7 +210,9 @@ function PoolHeader({ label, notes }: { label: string; notes: DecryptedNoteWithT
         {label} - {count} note{count === 1 ? '' : 's'}
       </span>
       <span className='font-mono text-xs tabular-nums text-fg-muted'>
-        <Sensitive>{fmtZec(subtotal(notes))} zec</Sensitive>
+        <Sensitive>
+          {fmtZec(subtotal(notes))} {unit}
+        </Sensitive>
       </span>
     </div>
   );
@@ -219,6 +232,7 @@ const POOL_TABS: { key: PoolFilter; icon: string; badge?: string }[] = [
 
 /** single transparent UTXO row: value, address, block height - public framing. */
 function UtxoRow({ utxo }: { utxo: Utxo }) {
+  const unit = useUnit();
   return (
     <div className='flex items-center gap-3 border border-border-soft bg-elev-1 p-3'>
       <div className='flex h-9 w-9 shrink-0 items-center justify-center bg-elev-2'>
@@ -227,7 +241,9 @@ function UtxoRow({ utxo }: { utxo: Utxo }) {
       <div className='min-w-0 flex-1'>
         <div className='flex items-center justify-between gap-2'>
           <span className='font-mono text-sm tabular-nums text-fg-high'>
-            <Sensitive>{fmtZec(utxo.valueZat)} zec</Sensitive>
+            <Sensitive>
+              {fmtZec(utxo.valueZat)} {unit}
+            </Sensitive>
           </span>
           <span className='shrink-0 bg-elev-2 px-1.5 py-0.5 text-label leading-none text-fg-dim'>
             public
@@ -263,8 +279,8 @@ export const PoolNotesPage = () => {
   // transparent pool: t-address UTXOs (public), same hooks as home
   const hasMnemonic = selectedKeyInfo?.type === 'mnemonic';
   const watchOnly = hasMnemonic ? undefined : activeZcashWallet;
-  const isMainnet = watchOnly?.mainnet ?? true;
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const isMainnet = useStore(selectZcashIsMainnet);
+  const zidecarUrl = useStore(selectZcashEndpoint);
 
   const active = filter === 'ironwood' ? notes.ironwood : notes.orchard;
   const label = filter === 'ironwood' ? 'ironwood' : 'orchard';
@@ -327,6 +343,7 @@ const TransparentSection = ({
   isMainnet: boolean;
   zidecarUrl: string;
 }) => {
+  const unit = useUnit();
   const { tAddresses } = useTransparentAddresses(isMainnet);
   const { last, checking, failed, check } = useTransparentBalance(tAddresses);
   const ready = tAddresses.length > 0;
@@ -353,7 +370,9 @@ const TransparentSection = ({
           transparent{count && ` - ${count}`}
         </span>
         <span className='font-mono text-xs tabular-nums text-fg-muted'>
-          <Sensitive>{fmtZec(transparentZat)} zec</Sensitive>
+          <Sensitive>
+            {fmtZec(transparentZat)} {unit}
+          </Sensitive>
         </span>
       </div>
 

@@ -6,7 +6,7 @@ import { useStore } from '../../../state';
 import { selectEnabledNetworks } from '../../../state/keyring';
 import { useDisableNetwork, useEnableNetwork } from '../../../hooks/enable-network';
 import { NETWORK_BLURB } from '../../../components/network-sheet';
-import { getNetwork, getTopLevelNetworks } from '../../../config/networks';
+import { getNetwork, getSubnetworks, getTopLevelNetworks } from '../../../config/networks';
 import { DEFAULT_RELAY_URL } from '../../../config/multisig-relay';
 import { relayHost } from '../../../config/people-relay';
 import {
@@ -41,7 +41,11 @@ const NetworksRow = () => {
       />
       <Sheet open={open} onOpenChange={setOpen} title='networks'>
         <RowGroup>
-          {getTopLevelNetworks().map(n => (
+          {/* zcash testnet has its own switch, shown while zcash is on */}
+          {[
+            ...getTopLevelNetworks(),
+            ...(enabled.includes('zcash') ? getSubnetworks('zcash') : []),
+          ].map(n => (
             <Row
               key={n}
               type='toggle'

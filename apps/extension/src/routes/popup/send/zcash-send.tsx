@@ -17,6 +17,8 @@ import {
 } from '../../../state/keyring';
 import { selectActiveZcashWallet, selectZcashWallets } from '../../../state/wallets';
 import { activeZcashStoreId } from '../../../state/pockets';
+import { zcashNetworkOf } from '../../../config/networks';
+import { getNetworkConfig } from '../../../state/keyring/network-types';
 import {
   buildSendTxInWorker,
   buildSendTxPcztInWorker,
@@ -108,6 +110,7 @@ import { isLedgerGone } from '../../../ledger/disconnect';
 import { zignerCodeChain, type ZignerChain } from '../../../shared/zigner-code';
 import { useCatchUp } from '../../../state/witness-rebuild';
 import { signedPcztOfAnswer } from '../../../signing/zigner-answer';
+import { selectZcashEndpoint } from '../../../state/networks';
 
 const SEND_FLAGS = {
   hardwareWallet: HARDWARE_WALLET_ENABLED,
@@ -157,6 +160,8 @@ const DEVICE: Partial<Record<WalletKind, string>> = {
 };
 
 export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSendProps) {
+  const UNIT = getNetworkConfig(zcashNetworkOf(mainnet)).symbol;
+  const unit = UNIT.toLowerCase();
   const {
     txHash,
     error: signingError,
@@ -424,7 +429,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const storeId = useStore(activeZcashStoreId);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
   const { requestAuth, PasswordModal } = usePasswordGate();
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zidecarUrl = useStore(selectZcashEndpoint);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const ufvk = zcashViewKey(activeZcashWallet);
 
@@ -762,7 +767,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         recipientAddress: recipient.trim(),
         content: memo || '',
         amount,
-        asset: 'ZEC',
+        asset: UNIT,
       });
       pendingTempTxIdRef.current = tempTxId;
       run.tempTxId = tempTxId;
@@ -775,7 +780,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     trackOpRef.current = run.key;
     void writeTxOp(run.key, {
       network: 'zcash',
-      label: `send ${amount} zec`,
+      label: `send ${amount} ${UNIT}`,
       status: 'pending',
       step: 'building',
       startedAt: Date.now(),
@@ -1040,7 +1045,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   kind: 'send',
                   pcztHex: built.pcztHex,
                   ...(built.coldSendId ? { coldSendId: built.coldSendId } : {}),
-                  label: `send ${amount} zec`,
+                  label: `send ${amount} ${UNIT}`,
                 },
               ).run({
                 signal: abort.signal,
@@ -1103,7 +1108,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             startSigning({
               id: `zcash-${Date.now()}`,
               network: 'zcash',
-              summary: result.summary || `send ${amount} zec to ${recipient.slice(0, 20)}...`,
+              summary: result.summary || `send ${amount} ${unit} to ${recipient.slice(0, 20)}...`,
               // legacy field kept for the signing-store consumers; the QR the
               // UI displays is `pcztSignFrames` (animated UR).
               signRequestQr: '',
@@ -1383,7 +1388,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const qrRound = !!kind && !!DEVICE[kind] && device !== 'ledger';
   const sending = (
     <>
-      send <Sensitive>{amount} zec</Sensitive> to {toLabel}
+      send{' '}
+      <Sensitive>
+        {amount} {unit}
+      </Sensitive>{' '}
+      to {toLabel}
     </>
   );
 
@@ -1393,7 +1402,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'form':
         return (
           <>
-            <ScreenHeader title='send zec' onBack={onClose} meta={stepMeta('form', qrRound)} />
+            <ScreenHeader
+              title={`send ${unit}`}
+              onBack={onClose}
+              meta={stepMeta('form', qrRound)}
+            />
             <Main className='gap-[18px] pt-5'>
               <ToField
                 value={recipient}
@@ -1425,7 +1438,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   filledByRequest.current.amount = false;
                   setAmount(v);
                 }}
-                unit='zec'
+                unit={unit}
                 available={balanceZat !== null ? fmtZecShort(balanceZat) : undefined}
                 onMax={() => {
                   filledByRequest.current.amount = false;
@@ -1444,8 +1457,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     // name them rather than fold them into what can be sent
                     strandedZat > 0n && (
                       <>
-                        <Sensitive>{fmtZecShort(strandedZat)} zec</Sensitive> waits in orchard ·
-                        migrate it on home to send it
+                        <Sensitive>
+                          {fmtZecShort(strandedZat)} {unit}
+                        </Sensitive>{' '}
+                        waits in orchard · migrate it on home to send it
                       </>
                     )
                   )
@@ -1510,7 +1525,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           <Review
             meta={stepMeta('review', qrRound)}
             amount={amount}
-            unit='zec'
+            unit={unit}
             rows={[
               [
                 'to',
@@ -1522,11 +1537,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   <Addr>{to}</Addr>
                 ),
               ],
-              ['fee', <Sensitive key='fee'>{fee} zec</Sensitive>],
+              [
+                'fee',
+                <Sensitive key='fee'>
+                  {fee} {unit}
+                </Sensitive>,
+              ],
               [
                 'total',
                 <Sensitive key='total'>
-                  {fmtZecShort(Math.round((Number(amount) + Number(fee)) * 1e8))} zec
+                  {fmtZecShort(Math.round((Number(amount) + Number(fee)) * 1e8))} {unit}
                 </Sensitive>,
               ],
             ]}
@@ -1550,7 +1570,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'broadcast': {
         const sendMeta = (
           <span>
-            <Sensitive>{amount} zec</Sensitive> to {toLabel}
+            <Sensitive>
+              {amount} {unit}
+            </Sensitive>{' '}
+            to {toLabel}
           </span>
         );
         // stop is offered only while nothing has left
@@ -1703,7 +1726,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 <span className='flex h-[42px] w-[150px] flex-col justify-center gap-0.5 border border-border-soft bg-canvas px-2.5'>
                   <span className='text-[10px] text-fg-high'>review transaction</span>
                   <span className='truncate text-[9px] text-fg-muted'>
-                    <Sensitive>{amount} zec</Sensitive> · <Addr>{to}</Addr>
+                    <Sensitive>
+                      {amount} {unit}
+                    </Sensitive>{' '}
+                    · <Addr>{to}</Addr>
                   </span>
                 </span>
                 <span className='size-[22px] border-2 border-fg-muted' />
@@ -1745,7 +1771,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   `signed on ${device} · key never left it`
                 ) : (
                   <>
-                    <Sensitive>{amount} zec</Sensitive> to {toLabel}
+                    <Sensitive>
+                      {amount} {unit}
+                    </Sensitive>{' '}
+                    to {toLabel}
                   </>
                 )
               }

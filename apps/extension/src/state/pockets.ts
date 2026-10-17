@@ -13,8 +13,8 @@ import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import { selectEffectiveKeyInfo } from './keyring';
 import type { KeyInfo } from './keyring/types';
-import { selectActiveZcashWallet } from './wallets';
-import { isAccountIndex, pocketStoreId } from './pocket-id';
+import { selectActiveZcashWallet, selectZcashIsMainnet } from './wallets';
+import { chainStoreId, isAccountIndex, pocketStoreId } from './pocket-id';
 
 /** open question: the cap keeps scanning cost bounded (see report) */
 export const MAX_POCKETS = 10;
@@ -308,8 +308,14 @@ export const activeAccountIndex = (state: AllSlices): number => {
 export const activeZcashStoreId = (state: AllSlices): string | undefined => {
   const key = hotKey(state);
   return key
-    ? pocketStoreId(key.id, activePocketOf(state.pockets.book, pocketOwner(key)))
+    ? pocketStoreId(hotStoreBase(state)!, activePocketOf(state.pockets.book, pocketOwner(key)))
     : selectEffectiveKeyInfo(state)?.id;
+};
+
+/** what a hot wallet's stores hang off: its vault id, apart per chain (chainStoreId) */
+export const hotStoreBase = (state: AllSlices): string | undefined => {
+  const key = hotKey(state);
+  return key && chainStoreId(key.id, selectZcashIsMainnet(state));
 };
 
 /** the active wallet's pockets (hot wallets only; others have none to pick) */
@@ -318,10 +324,13 @@ export const activePockets = (state: AllSlices): Pocket[] => {
   return key ? pocketsOf(state.pockets.book, pocketOwner(key)) : [];
 };
 
-/** first height the active pocket needs scanned; undefined = the wallet birthday */
+/**
+ * first height the active pocket needs scanned; undefined = the wallet
+ * birthday. A pocket's birthday is a mainnet height, so testnet uses the wallet's.
+ */
 export const activePocketBirthday = (state: AllSlices): number | undefined => {
   const key = hotKey(state);
-  if (!key) {
+  if (!key || !selectZcashIsMainnet(state)) {
     return undefined;
   }
   const owner = pocketOwner(key);

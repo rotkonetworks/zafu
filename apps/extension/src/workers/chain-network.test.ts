@@ -20,8 +20,14 @@ describe('chain network', () => {
   });
 
   it("a wallet's network follows its viewing key", () => {
-    expect(walletIsMainnet(undefined)).toBe(true);
-    expect(walletIsMainnet('uview1abc')).toBe(true);
-    expect(walletIsMainnet('uviewtest1abc')).toBe(false);
+    expect(walletIsMainnet('uview1abc', 'v1@test')).toBe(true);
+    expect(walletIsMainnet('uviewtest1abc', 'v1')).toBe(false);
+  });
+
+  it("a seed wallet's network follows its store", () => {
+    expect(walletIsMainnet(undefined, 'v1')).toBe(true);
+    expect(walletIsMainnet(undefined, 'v1#2')).toBe(true);
+    expect(walletIsMainnet(undefined, 'v1@test')).toBe(false);
+    expect(walletIsMainnet(undefined, 'v1@test#2')).toBe(false);
   });
 });

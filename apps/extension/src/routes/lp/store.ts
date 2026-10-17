@@ -125,6 +125,7 @@ import {
   type MidgardRead,
   type ThorRead,
 } from '../../lp/thor';
+import { selectZcashEndpoint } from '../../state/networks';
 
 /** the three the page talks to, asked once together on the first look */
 export const LP_EGRESS = [THORNODE_DEST, MIDGARD_DEST, PRICES_DEST] as const;
@@ -247,8 +248,7 @@ export const lpRound = createZignerRound((pczt, json) =>
 export const COLD_SHIELD_LINE =
   'zigner shields this address from zafu itself · please open zafu and shield it there';
 
-const zidecar = () =>
-  useStore.getState().networks.networks.zcash.endpoint || 'https://zcash.rotko.net';
+const zidecar = () => selectZcashEndpoint(useStore.getState());
 
 /** the keyring has read the vaults from storage (persist.ts runs its init on load) */
 const keyringLoaded = () =>

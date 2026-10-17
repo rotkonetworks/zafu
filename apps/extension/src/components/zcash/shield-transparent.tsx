@@ -42,6 +42,7 @@ import {
 import { QrDisplay } from '../../shared/components/qr-display';
 import { QrScanner } from '../../shared/components/qr-scanner';
 import { Sensitive } from '../sensitive';
+import { HOME_LOOK } from '../../routes/popup/home/look';
 import { HARDWARE_WALLET_ENABLED } from '../../config/feature-flags';
 import { walletKind } from '../../signing/wallet-kind';
 import { isPopup } from '../../utils/popup-detection';
@@ -391,6 +392,7 @@ export const ShieldTransparent = ({
   }[method];
 
   const tZec = Number(transparentZat) / 1e8;
+  const unit = HOME_LOOK[isMainnet ? 'zcash' : 'zcash-testnet'].unit;
   // the coins are this session's only; the check the sheet asks for as it opens brings them
   const feeZat = last?.utxos
     ? shieldFeeFor(
@@ -511,7 +513,7 @@ export const ShieldTransparent = ({
       <div className='text-center'>
         <Sensitive className='text-3xl tabular-nums text-fg-high'>
           {moved ? fmtZec(Number(moved.zat) / 1e8) : utxoLoading ? '...' : fmtZec(tZec)}
-          <span className='ml-1.5 text-base text-zigner-gold'>zec</span>
+          <span className='ml-1.5 text-base text-zigner-gold'>{unit}</span>
         </Sensitive>
       </div>
 
@@ -529,7 +531,7 @@ export const ShieldTransparent = ({
         <div className='flex items-center justify-between px-4 py-3 text-sm'>
           <span className='text-fg-muted'>fee</span>
           <span>
-            {shown.feeZat === undefined ? '...' : `${fmtZec(Number(shown.feeZat) / 1e8)} zec`}
+            {shown.feeZat === undefined ? '...' : `${fmtZec(Number(shown.feeZat) / 1e8)} ${unit}`}
           </span>
         </div>
       </div>

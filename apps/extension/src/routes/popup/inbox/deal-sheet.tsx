@@ -22,6 +22,7 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { cn } from '@repo/ui/lib/utils';
 import { parseZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import { useStore } from '../../../state';
+import { selectZcashUnit } from '../../../state/wallets';
 import { isMutual } from '../../../state/contacts';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { COURT_OPEN, type Deal } from '../../../people/frost-room';
@@ -96,6 +97,7 @@ export const DealSheet = ({
   const [who, setWho] = useState<Who>('two');
   const [arbiter, setArbiter] = useState<string>();
   const zat = parseZecAmount(amount);
+  const unit = useStore(selectZcashUnit);
   const others = (Array.isArray(contacts) ? contacts : []).filter(
     c => c.id !== contactId && isMutual(c, walletId),
   );
@@ -107,7 +109,7 @@ export const DealSheet = ({
       <div className='flex flex-col gap-2'>
         <Input
           aria-label='amount'
-          placeholder='amount in zec'
+          placeholder={`amount in ${unit}`}
           inputMode='decimal'
           value={amount}
           onChange={e => setAmount(e.target.value)}

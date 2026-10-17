@@ -58,6 +58,7 @@ const registryChains = (written: object) =>
 const WRITTEN_ENCRYPTION: Record<string, EncryptionType> = {
   // privacy networks
   zcash: 'zcash',
+  'zcash-testnet': 'zcash',
   penumbra: 'penumbra',
   // ibc/cosmos - all use same cosmos encryption
   noble: 'cosmos',
@@ -104,6 +105,14 @@ const WRITTEN_CONFIGS: Record<string, NetworkConfig> = {
     id: 'zcash',
     name: 'Zcash',
     symbol: 'ZEC',
+    decimals: 8,
+    type: 'privacy',
+    syncRequired: true,
+  },
+  'zcash-testnet': {
+    id: 'zcash-testnet',
+    name: 'Zcash testnet',
+    symbol: 'TAZ',
     decimals: 8,
     type: 'privacy',
     syncRequired: true,

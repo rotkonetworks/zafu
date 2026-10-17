@@ -107,6 +107,7 @@ vi.mock('../../state', async importOriginal => {
       keyInfos: [wallet('key-1'), wallet('key-2')],
       getMnemonic: async (id: string) => (id === 'key-1' ? 'test mnemonic' : `mnemonic of ${id}`),
       getVaultUnlock: async (id: string) => ({ vaultId: id }),
+      enabledNetworks: ['zcash'],
     },
     pockets: { book: {} },
     wallets: {

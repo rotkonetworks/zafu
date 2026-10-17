@@ -8,6 +8,8 @@ import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
 import { AllSlices, SliceCreator } from '.';
 import { keyUse } from './keyring-lock';
+import { selectActiveNetwork, selectEffectiveKeyInfo, type NetworkType } from './keyring';
+import { zcashNetworkOf } from '../config/networks';
 import type { SeatRoom } from './keyring/vault-ops';
 import type { Contact } from './contacts';
 
@@ -320,15 +322,26 @@ export const selectActiveZcashWallet = (state: AllSlices) => {
   return zcashWallets[activeZcashIndex];
 };
 /**
- * Whether the active zcash wallet's keys are mainnet-shaped. The one place
- * this is asked: history, receive and the zcash home screen each used to
- * derive it their own way (a wallet flag here, a zidecar-url substring
- * check there) - harmless while they agreed, but nothing would have caught
- * it if one drifted and a preload warmed the wrong key. Defaults to mainnet
- * when there is no active wallet yet (matches every prior call site).
+ * Whether the active zcash wallet speaks mainnet: the one place this is
+ * asked, and everything chain-shaped (node, unit, addresses, worker store)
+ * follows it. A seed wallet speaks testnet while "zcash testnet" is on;
+ * every other wallet's chain is in its key. Defaults to mainnet when there
+ * is no active wallet yet.
  */
 export const selectZcashIsMainnet = (state: AllSlices): boolean =>
-  selectActiveZcashWallet(state)?.mainnet ?? true;
+  selectEffectiveKeyInfo(state)?.type === 'mnemonic'
+    ? !state.keyRing.enabledNetworks.includes('zcash-testnet')
+    : (selectActiveZcashWallet(state)?.mainnet ?? true);
+
+/** the unit amounts read in on that chain */
+export const selectZcashUnit = (state: AllSlices): 'zec' | 'taz' =>
+  selectZcashIsMainnet(state) ? 'zec' : 'taz';
+
+/** the network whose data a screen reads: the active one, or zcash testnet while zcash speaks it */
+export const selectNetworkShown = (state: AllSlices): NetworkType => {
+  const network = selectActiveNetwork(state);
+  return network === 'zcash' ? zcashNetworkOf(selectZcashIsMainnet(state)) : network;
+};
 /**
  * The user's own zcash accounts, shaped as read-only `Contact`s so they can be
  * offered as send recipients (e.g. move Ledger-transparent ZEC into your own

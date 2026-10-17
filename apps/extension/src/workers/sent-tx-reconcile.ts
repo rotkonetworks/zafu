@@ -133,6 +133,8 @@ export interface ReconcileInput {
   sent: SentTxRecord[];
   /** how far this wallet has actually scanned. 0 = unknown; nothing expires. */
   scannedHeight: number;
+  /** the unit a send not yet on chain reads in (testnet: TAZ) */
+  asset?: string;
 }
 
 export interface ReconcileResult {
@@ -187,6 +189,7 @@ export function reconcileSentTxs({
   chainTxs,
   sent,
   scannedHeight,
+  asset = 'ZEC',
 }: ReconcileInput): ReconcileResult {
   const chainById = new Map<string, Omit<HistoryTx, 'status'>>();
   for (const tx of chainTxs) {
@@ -233,7 +236,7 @@ export function reconcileSentTxs({
       // the scan-derived figure outright rather than merely filling gaps.
       amount: (toZat(rec.amount) + toZat(rec.fee)).toString(),
       recipientAmount: rec.amount,
-      asset: chain?.asset ?? 'ZEC',
+      asset: chain?.asset ?? asset,
       kind: rec.kind,
       recipient: rec.recipient,
       memo: rec.memo,

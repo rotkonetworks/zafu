@@ -56,7 +56,6 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
 import { getApprovalSurface } from '../../side-panel-pref';
-import { walletIsMainnet } from '../../workers/chain-network';
 import type { VaultUnlock } from '../../state/keyring/types';
 import type { AllSlices } from '../../state';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
@@ -331,7 +330,8 @@ async function seedWalletReceiveAddress(
   vaultId: string,
   wantMainnet: boolean,
 ): Promise<string | undefined> {
-  const mainnet = walletIsMainnet();
+  // a seed wallet's zcash speaks testnet while the zcash testnet switch is on
+  const mainnet = !state.keyRing.enabledNetworks.includes('zcash-testnet');
   if (mainnet !== wantMainnet) {
     return undefined;
   }

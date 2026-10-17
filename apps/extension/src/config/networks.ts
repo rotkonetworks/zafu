@@ -12,6 +12,9 @@ import {
 
 /** orchard pool activation height - no zcash wallet should scan before this */
 export const ZCASH_ORCHARD_ACTIVATION = 1_687_104;
+/** the first orchard block of a zcash chain (testnet's NU5) */
+export const orchardActivation = (mainnet: boolean): number =>
+  mainnet ? ZCASH_ORCHARD_ACTIVATION : 1_842_420;
 
 export interface NetworkConfig {
   name: string;
@@ -79,6 +82,26 @@ const WRITTEN: Record<string, NetworkConfig> = {
       stake: false,
       swap: true,
       vote: true,
+      inbox: true,
+      multisig: true,
+      cosmos: false,
+      zcash: true,
+    },
+  },
+  // zcash's own testnet: on, a seed wallet's zcash speaks it (state/networks
+  // selectZcashIsMainnet); off by default. Its coins have no value, so
+  // nothing here swaps, buys or votes
+  'zcash-testnet': {
+    name: 'Zcash testnet',
+    color: 'bg-zigner-gold',
+    focusColor: 'focus:border-zigner-gold',
+    transparent: false,
+    launched: true,
+    parent: 'zcash',
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
       inbox: true,
       multisig: true,
       cosmos: false,
@@ -269,6 +292,10 @@ onCosmosChainsAdded(ids => {
     NETWORKS[id] ??= registrySubnetwork(id);
   }
 });
+
+/** the zcash network a chain flag names: the key into every per-network table */
+export const zcashNetworkOf = (mainnet: boolean): 'zcash' | 'zcash-testnet' =>
+  mainnet ? 'zcash' : 'zcash-testnet';
 
 /** derive display info - computed once, no runtime overhead */
 export const getNetwork = (network: NetworkType): NetworkConfig =>

@@ -34,9 +34,25 @@ export const parsePocketStoreId = (storeId: string): { walletId: string; account
     : { walletId: storeId, account: 0 };
 };
 
-/** true when `storeId` belongs to `walletId` (its account 0 or any pocket) */
-export const isStoreOfWallet = (storeId: string, walletId: string): boolean =>
-  parsePocketStoreId(storeId).walletId === walletId;
+const TESTNET = '@test';
+
+/**
+ * A seed wallet's store on one zcash chain. Mainnet keeps the bare wallet id;
+ * testnet gets its own, so its notes, trees and tip never meet mainnet's.
+ * Pockets go on top: `pocketStoreId(chainStoreId(id, false), 1)`.
+ */
+export const chainStoreId = (walletId: string, mainnet: boolean): string =>
+  mainnet ? walletId : `${walletId}${TESTNET}`;
+
+/** the chain a store syncs, read from its id */
+export const storeIsMainnet = (storeId: string): boolean =>
+  !parsePocketStoreId(storeId).walletId.endsWith(TESTNET);
+
+/** true when `storeId` belongs to `walletId` (either chain, account 0 or any pocket) */
+export const isStoreOfWallet = (storeId: string, walletId: string): boolean => {
+  const id = parsePocketStoreId(storeId).walletId;
+  return id === walletId || id === chainStoreId(walletId, false);
+};
 
 /**
  * The ZIP 32 account a hot (seed) build must sign with: always the account of

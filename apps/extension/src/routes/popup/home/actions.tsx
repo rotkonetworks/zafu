@@ -20,10 +20,12 @@ export const HomeActions = ({
   spendable = true,
   icons = true,
   buy = false,
+  swap = true,
 }: {
   spendable?: boolean;
   /** buy zec with cash, beside receive (opens buy.html) */
   buy?: boolean;
+  swap?: boolean;
   /** the boards differ: Main draws icons, HomePenumbra plain words */
   icons?: boolean;
 }) => {
@@ -65,15 +67,17 @@ export const HomeActions = ({
           buy
         </Button>
       )}
-      <Button
-        variant='secondary'
-        className={ACTION}
-        data-preload={PopupPath.SWAP}
-        onClick={() => navigate(PopupPath.SWAP)}
-      >
-        {icons && <span className='i-lucide-arrow-left-right size-[15px]' />}
-        swap
-      </Button>
+      {swap && (
+        <Button
+          variant='secondary'
+          className={ACTION}
+          data-preload={PopupPath.SWAP}
+          onClick={() => navigate(PopupPath.SWAP)}
+        >
+          {icons && <span className='i-lucide-arrow-left-right size-[15px]' />}
+          swap
+        </Button>
+      )}
       <Button
         variant={spendable ? 'primary' : 'secondary'}
         className={ACTION}

@@ -29,16 +29,17 @@ import { STAGES, type SendProgress } from '../send/send-stage';
 import { RowGroup } from '@repo/ui/components/ui/row';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../../state/keyring';
+import { selectZcashIsMainnet } from '../../../state/wallets';
 import { activeAccountIndex, activeZcashStoreId } from '../../../state/pockets';
 import {
   buildMultiSendTxInWorker,
   buildSendTxInWorker,
   stopBuildInWorker,
 } from '../../../state/keyring/network-worker';
-import { walletIsMainnet } from '../../../workers/chain-network';
 import { isBuildStopped } from '../../../workers/build-abort';
 import type { SendingNote } from '../send/send-ui';
 import { Clipped } from '@repo/ui/components/ui/clipped';
+import { selectZcashEndpoint } from '../../../state/networks';
 
 interface Output {
   address: string;
@@ -95,7 +96,10 @@ export function ZcashSendApproval() {
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zidecarUrl = useStore(selectZcashEndpoint);
+  // the seed wallet's own chain (this is a mnemonic wallet), not that of whichever
+  // zcashWallets entry is active - after a dapp DKG join that is the new multisig vault
+  const mainnet = useStore(selectZcashIsMainnet);
   const storeId = useStore(activeZcashStoreId);
   const pocketAccount = useStore(activeAccountIndex);
 
@@ -180,10 +184,6 @@ export function ZcashSendApproval() {
     buildKeyRef.current = key;
     try {
       const vault = await getVaultUnlock(selectedKeyInfo.id);
-      // the seed wallet's own network (checked above: this is a mnemonic
-      // wallet), not that of whichever zcashWallets entry is active - after a
-      // dapp DKG join that is the new multisig vault
-      const mainnet = walletIsMainnet();
       const workerOutputs = outputs.map(o => ({
         address: o.address.trim(),
         amount: String(o.amount),

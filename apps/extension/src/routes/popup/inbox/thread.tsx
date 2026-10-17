@@ -26,6 +26,7 @@ import {
   parseZip321,
 } from '@repo/wallet/networks/zcash/zip321';
 import { useStore } from '../../../state';
+import { ZecUnit } from '../../../components/zcash/zec-unit';
 import type { Message, MessageStatus } from '../../../state/messages';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
@@ -102,8 +103,7 @@ const PayCard = ({ uri, mine, from }: { uri: string; mine: boolean; from: string
           {mine ? 'you asked for' : `${from} requests`}
         </span>
         <span className='font-display text-[26px] text-fg-high'>
-          {p.amountZat !== undefined ? formatZecAmount(p.amountZat) : 'any amount'}{' '}
-          <span className='text-sm text-zigner-gold'>zec</span>
+          {p.amountZat !== undefined ? formatZecAmount(p.amountZat) : 'any amount'} <ZecUnit />
         </span>
         {(p.message ?? p.label) && (
           <span className='text-xs text-fg-muted'>{p.message ?? p.label}</span>

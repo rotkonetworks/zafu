@@ -10,6 +10,7 @@ import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../state';
+import { selectZcashIsMainnet } from '../../state/wallets';
 import {
   frostDkgPart1InWorker,
   frostDkgPart2InWorker,
@@ -91,8 +92,14 @@ export const FrostApprove = () => {
    * identity for this group, so later signing sessions reuse the same key.
    */
   const rendezvousCode = params.get('rendezvousCode') || '';
-  /** the group's network; only 'test' changes anything (address + viewing-key encoding) */
-  const mainnet = params.get('network') !== 'test';
+  /**
+   * The group's network: what the request names ('test' or 'main'), else the
+   * chain zafu speaks now. A co-signer on the other chain derives another
+   * viewing key, and the echo below refuses it.
+   */
+  const asked = params.get('network');
+  const zafuMainnet = useStore(selectZcashIsMainnet);
+  const mainnet = asked ? asked !== 'test' : zafuMainnet;
   /**
    * The other signers' frostd relay public keys, comma-separated.
    *

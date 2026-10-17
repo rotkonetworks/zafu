@@ -138,6 +138,7 @@ import { CashOutRow, PeerCashOutNote } from '../../../components/cash-out-row';
 import { isCashOutToken } from '../../../config/ramps';
 import { CostList, CostMeta } from './cost-lines';
 import './swap-live.css';
+import { selectZcashEndpoint } from '../../../state/networks';
 
 export type Step =
   | 'input'
@@ -568,7 +569,7 @@ export const CrosschainSwap = ({
   const swapTNext = useSwapTAddress(true, queryClient);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zidecarUrl = useStore(selectZcashEndpoint);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const storeId = useStore(activeZcashStoreId);
   const pocket = useStore(activeAccountIndex);

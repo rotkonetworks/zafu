@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import {
+  chainStoreId,
   hotSpendAccount,
   isStoreOfWallet,
+  storeIsMainnet,
   parsePocketStoreId,
   pocketStoreId,
   zcashTransparentIndexKey,
@@ -13,6 +15,7 @@ import {
   activePockets,
   activeZcashStoreId,
   addPocket,
+  hotStoreBase,
   forgetWallet,
   hiddenPockets,
   hidePocket,
@@ -28,7 +31,7 @@ import {
 } from './pockets';
 import type { AllSlices } from '.';
 import type { KeyInfo } from './keyring/types';
-import type { ZcashWalletJson } from './wallets';
+import { selectNetworkShown, selectZcashIsMainnet, type ZcashWalletJson } from './wallets';
 
 describe('pocket store ids', () => {
   test('account 0 is the bare wallet id, so existing stores need no migration', () => {
@@ -67,6 +70,21 @@ describe('pocket store ids', () => {
     expect(isStoreOfWallet('w#3', 'w')).toBe(true);
     expect(isStoreOfWallet('w2', 'w')).toBe(false);
     expect(isStoreOfWallet('w2#3', 'w')).toBe(false);
+  });
+
+  test("a testnet store is its own, still the wallet's, and keeps pockets apart", () => {
+    expect(chainStoreId('w', true)).toBe('w');
+    const test = chainStoreId('w', false);
+    expect(test).not.toBe('w');
+    for (const id of [test, pocketStoreId(test, 3)]) {
+      expect(storeIsMainnet(id)).toBe(false);
+      expect(isStoreOfWallet(id, 'w')).toBe(true);
+      expect(isStoreOfWallet(id, 'w2')).toBe(false);
+    }
+    expect(storeIsMainnet('w')).toBe(true);
+    expect(storeIsMainnet('w#3')).toBe(true);
+    expect(parsePocketStoreId(pocketStoreId(test, 3))).toEqual({ walletId: test, account: 3 });
+    expect(hotSpendAccount(pocketStoreId(test, 3), 3)).toBe(3);
   });
 
   test('hot spend account comes from the store, and a mismatch is refused', () => {
@@ -291,9 +309,15 @@ const stateWith = (
   key: KeyInfo | undefined,
   book: PocketBook,
   zcashWallets: ZcashWalletJson[] = [],
+  enabledNetworks: string[] = ['zcash'],
 ): AllSlices =>
   ({
-    keyRing: { keyInfos: key ? [key] : [], selectedKeyInfo: key, activeNetwork: 'zcash' },
+    keyRing: {
+      keyInfos: key ? [key] : [],
+      selectedKeyInfo: key,
+      activeNetwork: 'zcash',
+      enabledNetworks,
+    },
     wallets: { zcashWallets, activeZcashIndex: 0 },
     pockets: { book },
   }) as unknown as AllSlices;
@@ -355,6 +379,31 @@ describe('pocket selectors', () => {
       expect(activePockets(s)).toEqual([]);
       expect(activePocketBirthday(s)).toBeUndefined();
     }
+  });
+
+  test('zcash testnet keeps a hot wallet in stores of its own, pockets included', () => {
+    const book = selectPocket(addPocket({}, 'zid-abc', 'savings', 3_100_000), 'zid-abc', 1);
+    const testnet = stateWith(hot, book, [], ['zcash', 'zcash-testnet']);
+    expect(activeZcashStoreId(stateWith(hot, book))).toBe('vault-1#1');
+    expect(selectZcashIsMainnet(testnet)).toBe(false);
+    expect(hotStoreBase(testnet)).toBe('vault-1@test');
+    expect(activeZcashStoreId(testnet)).toBe('vault-1@test#1');
+    expect(activeAccountIndex(testnet)).toBe(1);
+    // a pocket's birthday is a mainnet height: testnet starts from its own
+    expect(activePocketBirthday(testnet)).toBeUndefined();
+    expect(selectNetworkShown(testnet)).toBe('zcash-testnet');
+    expect(selectNetworkShown(stateWith(hot, book))).toBe('zcash');
+  });
+
+  test('zcash testnet changes nothing for a wallet whose chain is in its key', () => {
+    const cold = keyInfo({ id: 'vault-2', type: 'zigner-zafu' });
+    const on = ['zcash', 'zcash-testnet'];
+    const main = stateWith(cold, {}, [zcashWallet({})], on);
+    expect(selectZcashIsMainnet(main)).toBe(true);
+    expect(activeZcashStoreId(main)).toBe('vault-2');
+    const test = stateWith(cold, {}, [zcashWallet({ mainnet: false })]);
+    expect(selectZcashIsMainnet(test)).toBe(false);
+    expect(activeZcashStoreId(test)).toBe('vault-2');
   });
 
   test('no wallet at all', () => {

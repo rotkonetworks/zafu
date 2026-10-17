@@ -14,7 +14,12 @@ import {
   selectEffectiveKeyInfo,
   selectPenumbraAccount,
 } from '../../state/keyring';
-import { activePockets, activeZcashStoreId, visiblePockets } from '../../state/pockets';
+import {
+  activePockets,
+  activeZcashStoreId,
+  hotStoreBase,
+  visiblePockets,
+} from '../../state/pockets';
 import { pocketStoreId } from '../../state/pocket-id';
 import { selectZcashIsMainnet } from '../../state/wallets';
 import { getRootNetwork } from '../../config/networks';
@@ -56,8 +61,8 @@ const zcashFigures: Preload = ctx =>
  * fetched ahead; home holds the last figure, dimmed, while they come.
  */
 const everyPocket: Preload = ctx => {
-  const key = selectEffectiveKeyInfo(ctx.state);
-  if (!isZcash(ctx.state) || key?.type !== 'mnemonic') {
+  const base = hotStoreBase(ctx.state);
+  if (!isZcash(ctx.state) || !base) {
     void zcashFigures(ctx);
     return;
   }
@@ -65,7 +70,7 @@ const everyPocket: Preload = ctx => {
     0,
     ...visiblePockets(activePockets(ctx.state)).map(p => p.account),
   ])) {
-    figuresOf(ctx, pocketStoreId(key.id, account));
+    figuresOf(ctx, pocketStoreId(base, account));
   }
 };
 

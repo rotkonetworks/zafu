@@ -75,6 +75,9 @@ export const ZCASH_MAINNET_ENDPOINTS: readonly ZcashEndpointPreset[] = [
   },
 ];
 
+/** testnet's light client; reached only while "zcash testnet" is on */
+export const ZCASH_TESTNET_ENDPOINT = 'https://tzcash.rotko.net';
+
 /** Find a preset by URL (used to label a user's current endpoint). */
 export function findPresetByUrl(url: string): ZcashEndpointPreset | undefined {
   const normalized = url.replace(/\/$/, '').toLowerCase();

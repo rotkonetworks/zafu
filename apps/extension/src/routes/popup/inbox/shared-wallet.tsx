@@ -26,6 +26,7 @@ import { agree, proposeWallet } from '../../../people/use-frost-room';
 import type { ZcashWalletJson } from '../../../state/wallets';
 import { PopupPath } from '../paths';
 import { shortAddress } from './threads';
+import { ZecUnit } from '../../../components/zcash/zec-unit';
 
 const useNow = (ms: number) => {
   const [now, setNow] = useState(() => Date.now());
@@ -102,7 +103,7 @@ const Head = ({
     </span>
     {deal && (
       <span className='font-display text-[26px] text-fg-high'>
-        {formatZecAmount(BigInt(deal.amount))} <span className='text-sm text-zigner-gold'>zec</span>
+        {formatZecAmount(BigInt(deal.amount))} <ZecUnit />
       </span>
     )}
     <span className='text-xs text-fg-muted'>

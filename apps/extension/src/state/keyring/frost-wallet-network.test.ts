@@ -3,8 +3,8 @@ import { buildFrostZcashWallet, type FrostMultisigParams } from './vault-ops';
 
 const params = (o: Partial<FrostMultisigParams> = {}): FrostMultisigParams => ({
   label: 'zkpoker-room',
-  address: 'utest1group',
-  orchardFvk: 'uviewtest1group',
+  address: 'u1group',
+  orchardFvk: 'uview1group',
   publicKeyPackage: '00',
   threshold: 2,
   maxSigners: 3,
@@ -25,5 +25,16 @@ describe('a DKG-joined multisig keeps the network it was made for', () => {
 
   it('mainnet when the caller says nothing (every group made before)', () => {
     expect(buildFrostZcashWallet(params(), 'v1', undefined, undefined).mainnet).toBe(true);
+  });
+
+  it('when the caller says nothing, the viewing key says which chain it was made on', () => {
+    expect(
+      buildFrostZcashWallet(
+        params({ address: 'utest1group', orchardFvk: 'uviewtest1group' }),
+        'v1',
+        undefined,
+        undefined,
+      ).mainnet,
+    ).toBe(false);
   });
 });

@@ -49,6 +49,7 @@ import {
   takeSwapUnlock,
   type Legs,
 } from './thor-out';
+import { selectZcashEndpoint } from '../networks';
 
 /** what signing a swap's legs needs from the wallet, read once from the store */
 export interface LegContext {
@@ -74,7 +75,7 @@ export const legContextOf = (s: AllSlices): LegContext | undefined => {
     storeId: activeZcashStoreId(s) ?? key.id,
     walletId: key.id,
     pocket: activeAccountIndex(s),
-    zidecarUrl: s.networks.networks.zcash.endpoint || 'https://zcash.rotko.net',
+    zidecarUrl: selectZcashEndpoint(s),
     ufvk: zcashViewKey(zw),
     cold: walletKind(key, zw) === 'zigner',
     legsPerUnlock: legsPerUnlock(selectTxSigningSecurity(s)),

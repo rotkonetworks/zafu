@@ -30,6 +30,7 @@ import { whenOf } from './threads';
 import type { PeopleRoom } from '../../../people/vault';
 import { useMemberName } from './use-member-name';
 import { SendState } from './send-state';
+import { selectZcashUnit } from '../../../state/wallets';
 
 const dayOf = (s: number) => {
   const w = whenOf(s * 1000);
@@ -96,6 +97,7 @@ export function GroupPage() {
   const ms = shared.seat?.multisig;
   // a shared wallet is a zcash one: offered only while zcash is on
   const zcashOn = useStore(s => selectEnabledNetworks(s).includes('zcash'));
+  const unit = useStore(selectZcashUnit);
 
   const items = thread?.items ?? [];
   const nameOf = (i: ThreadItem) => (i.mine ? 'you' : nameFor(i.author, i.name));
@@ -173,7 +175,7 @@ export function GroupPage() {
         name={room.name}
         line={
           ms
-            ? `${ms.threshold} of ${ms.maxSigners} · ${held === undefined ? '…' : held ? fmtZec(Number(held) / 1e8, 4) : '0.00'} zec shared`
+            ? `${ms.threshold} of ${ms.maxSigners} · ${held === undefined ? '…' : held ? fmtZec(Number(held) / 1e8, 4) : '0.00'} ${unit} shared`
             : (waitingLine(room) ?? `group chat · ${peopleCount(room.group?.members.length || 1)}`)
         }
         onInvite={

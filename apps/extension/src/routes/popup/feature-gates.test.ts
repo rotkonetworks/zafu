@@ -39,6 +39,8 @@ const ALL_FEATURES: FeatureKey[] = [
  */
 const WRITTEN_SETS: Partial<Record<NetworkType, FeatureKey[]>> = {
   zcash: ['swap', 'vote', 'inbox', 'multisig', 'zcash'],
+  // testnet coins have no value: nothing to swap or vote with
+  'zcash-testnet': ['inbox', 'multisig', 'zcash'],
   penumbra: ['stake', 'swap', 'vote', 'inbox', 'cosmos'],
   ethereum: [],
   bitcoin: [],
@@ -62,13 +64,15 @@ describe('NETWORKS features match the original literal gates', () => {
   });
 
   it.each(NETWORK_IDS)('%s: each flag equals its original literal predicate', network => {
-    // transcribed literal checks from the migrated sites
-    expect(hasFeature(network, 'multisig')).toBe(network === 'zcash');
+    // transcribed literal checks from the migrated sites; zcash testnet is zcash
+    // without a price
+    const zcash = network === 'zcash' || network === 'zcash-testnet';
+    expect(hasFeature(network, 'multisig')).toBe(zcash);
     expect(hasFeature(network, 'stake')).toBe(network === 'penumbra');
     expect(hasFeature(network, 'vote')).toBe(network === 'zcash' || network === 'penumbra');
     expect(hasFeature(network, 'swap')).toBe(network === 'zcash' || network === 'penumbra');
-    expect(hasFeature(network, 'inbox')).toBe(network === 'zcash' || network === 'penumbra');
+    expect(hasFeature(network, 'inbox')).toBe(zcash || network === 'penumbra');
     expect(hasFeature(network, 'cosmos')).toBe(isSubnetwork(network) || network === 'penumbra');
-    expect(hasFeature(network, 'zcash')).toBe(network === 'zcash');
+    expect(hasFeature(network, 'zcash')).toBe(zcash);
   });
 });

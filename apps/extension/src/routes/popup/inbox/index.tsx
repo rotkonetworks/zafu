@@ -23,7 +23,6 @@ import { selectVisibleMultisigWallets, type ZcashWalletJson } from '../../../sta
 import { usePenumbraMemos } from '../../../hooks/penumbra-memos';
 import { useZcashMemos } from '../../../hooks/zcash-memos';
 import { useWorkerValue, zcashWorkerQuery } from '../../../hooks/zcash-pool-balances';
-import { activeZcashStoreId } from '../../../state/pockets';
 import { useMultisigBalances } from '../../../hooks/multisig-balances';
 import { ScreenHeader } from '../../../components/screen-header';
 import { Sensitive } from '../../../components/sensitive';
@@ -42,6 +41,8 @@ import { doorView } from '../../../people/door-run';
 import { waitingLine } from './group';
 import { useMemberName } from './use-member-name';
 import { threadKey, unreadOf, type PeopleRoom } from '../../../people/vault';
+import { selectZcashEndpoint } from '../../../state/networks';
+import { activeZcashStoreId } from '../../../state/pockets';
 
 const zec = (zat: bigint) => (Number(zat) / 1e8).toFixed(2);
 
@@ -418,7 +419,7 @@ export function InboxPage() {
   const navigate = useNavigate();
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const network = useStore(selectActiveNetwork);
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zidecarUrl = useStore(selectZcashEndpoint);
   const walletId = keyInfo?.id ?? '';
   const [composing, setComposing] = useState(false);
   const canCard = !!keyInfo && keyInfoSupportsNetwork(keyInfo, 'zcash');
@@ -429,11 +430,12 @@ export function InboxPage() {
   const hasRooms = useMyRooms().some(r => r.joined);
   // the chain memos the light client already reads
   const { syncMemos: syncPenumbra } = usePenumbraMemos(walletId);
-  const { syncMemos: syncZcash } = useZcashMemos(walletId, zidecarUrl);
+  // zcash notes live in the active chain's (and pocket's) store: <vault>@test on testnet
+  const zcashStoreId = useStore(activeZcashStoreId) ?? walletId;
+  const { syncMemos: syncZcash } = useZcashMemos(zcashStoreId, zidecarUrl);
   // a note found while this tab is open may carry a memo: read memos again when the balance moves
-  const zcashStore = useStore(activeZcashStoreId);
   const zcashBalance = useWorkerValue(
-    zcashWorkerQuery.balance(network === 'zcash' ? zcashStore : undefined),
+    zcashWorkerQuery.balance(network === 'zcash' ? zcashStoreId : undefined),
   ).data;
   useEffect(() => {
     if (network === 'penumbra') {

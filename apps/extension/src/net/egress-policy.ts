@@ -33,7 +33,11 @@ import {
   type PeopleRelaySetting,
 } from '../config/people-relay';
 import { PENUMBRA_MAINNET_ENDPOINTS, defaultPenumbraEndpoint } from '../config/penumbra-endpoints';
-import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../config/zcash-endpoints';
+import {
+  ZCASH_MAINNET_ENDPOINTS,
+  ZCASH_TESTNET_ENDPOINT,
+  defaultZcashEndpoint,
+} from '../config/zcash-endpoints';
 import { BUNDLED_SERVICE_CONFIG } from '../services/voting/bundled-config';
 import { BASE_RPC, PEER_HOSTS } from '../config/ramps';
 import { PAY_APPS } from '../buy/apps';
@@ -429,6 +433,16 @@ export const DESTINATIONS: DestinationSpec[] = [
     purpose: 'chain-rpc',
     gate: { kind: 'network', networks: ['zcash'] },
     urls: i => [zcashEndpoint(i)],
+    overNym: zcashOverNym,
+  },
+  {
+    id: 'zcash-testnet',
+    label: 'zcash testnet light client',
+    purpose: 'chain-rpc',
+    gate: { kind: 'network', networks: ['zcash-testnet'] },
+    urls: () => [ZCASH_TESTNET_ENDPOINT],
+    // the same sends and lookups as zcash, so the same nym rows
+    family: 'zcash',
     overNym: zcashOverNym,
   },
   {

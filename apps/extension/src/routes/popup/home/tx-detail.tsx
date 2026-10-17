@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
+import { selectZcashIsMainnet } from '../../../state/wallets';
+import { zcashNetworkOf } from '../../../config/networks';
 import { contactsSelector, type ContactNetwork } from '../../../state/contacts';
 import { useZcashMeDirectoryLookup } from '../../../services/zcashme/config';
 import { zcashMeLabel } from '../../../services/zcashme/label';
@@ -35,10 +37,17 @@ const asset = (tx: ParsedTransaction) => ({
 });
 
 /** what one transaction looks like per network */
-const LOOK: Partial<Record<NetworkType, TxLook>> = {
+const LOOK: Partial<Record<NetworkType | 'zcash-testnet', TxLook>> = {
   zcash: {
     explorer: id => `https://zecblock.com/tx/${id}`,
     hero: tx => ({ amount: fmtZecHero(Number(tx.amount ?? 0)), unit: 'zec' }),
+    proved: 'proved on this computer',
+    contact: 'zcash',
+  },
+  // testnet coins are taz, and live on testnet's explorer
+  'zcash-testnet': {
+    explorer: id => `https://testnet.zcashexplorer.app/transactions/${id}`,
+    hero: tx => ({ amount: fmtZecHero(Number(tx.amount ?? 0)), unit: 'taz' }),
     proved: 'proved on this computer',
     contact: 'zcash',
   },
@@ -93,7 +102,8 @@ export const TxDetailPage = () => {
 const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: NetworkType }) => {
   const navigate = useNavigate();
   const explorerLinks = useStore(s => s.privacy.settings.explorerLinks);
-  const look = LOOK[network] ?? PLAIN;
+  const zcashMainnet = useStore(selectZcashIsMainnet);
+  const look = LOOK[network === 'zcash' ? zcashNetworkOf(zcashMainnet) : network] ?? PLAIN;
   const explorer = explorerLinks === 'off' ? undefined : look.explorer?.(tx.id);
   const isIn = isIncoming(tx);
   const isSh = tx.type === 'shield' || tx.type === 'unshield';

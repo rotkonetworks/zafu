@@ -24,6 +24,7 @@ import { TxRow } from './tx-row';
 import { PopupPath } from '../paths';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { Button } from '@repo/ui/components/ui/button';
+import { selectZcashEndpoint } from '../../../state/networks';
 
 /**
  * The first-payment "keep a history on this computer?" ask, asked once and
@@ -181,7 +182,7 @@ export const HistoryContent = ({
   /** client-side split of the already-fetched list; no new request per tab */
   filter?: 'all' | 'sent' | 'received';
 }) => {
-  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zidecarUrl = useStore(selectZcashEndpoint);
   const historyEnabled = useStore(s => s.privacy.settings.enableTransactionHistory);
   const messages = useStore(messagesSelector);
   // the active pocket's own store: account 0 is the bare wallet id
