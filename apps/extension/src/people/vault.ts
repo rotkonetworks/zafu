@@ -176,8 +176,8 @@ export interface PeopleRoom {
     };
     /** they asked you into a deal group (people/deal): its code and name */
     deal?: { code: string; group: string; at: number };
-    /** the move to a post-quantum secret (people/pair-pq): the box, when a key or box last went, and they moved too */
-    pq?: { box?: string; at?: number; ok?: boolean };
+    /** the move to a post-quantum secret (people/pair-pq): the box, when a key or box last went, they moved too, the window it moved in */
+    pq?: { box?: string; at?: number; ok?: boolean; from?: number };
   };
 }
 

@@ -54,4 +54,24 @@ describe('notes in a thread', () => {
     );
     expect(el.textContent).toContain('ken has your card');
   });
+
+  it('both sides can open the seal words: the one who answered as much as the card maker', async () => {
+    for (const ev of ['saved-them', 'saved-you']) {
+      await act(async () =>
+        root.render(createElement(NoteLine, { item: item({ ev }), name: 'ken', contactId: 'k1' })),
+      );
+      expect(el.textContent).toContain('check the seal with ken');
+      await act(async () =>
+        root.render(
+          createElement(NoteLine, {
+            item: item({ ev }),
+            name: 'ken',
+            contactId: 'k1',
+            sealChecked: true,
+          }),
+        ),
+      );
+      expect(el.textContent).not.toContain('check the seal');
+    }
+  });
 });

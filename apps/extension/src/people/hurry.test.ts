@@ -5,6 +5,8 @@
  */
 
 import { describe, expect, test } from 'vitest';
+import { Cap, cardB64, signCardV2 } from '@repo/wallet/networks/zcash/card-v2';
+import { deriveRelationshipKeys } from '../state/identity';
 import { hurried } from './hurry';
 import { askingOf } from './sw';
 import type { DoorState, PeopleRoom } from './vault';
@@ -101,6 +103,40 @@ describe('read fast only while someone waits', () => {
     expect(hurried([keys(30)], NOW).size).toBe(1);
     expect(hurried([keys(30, true)], NOW).size).toBe(0);
     expect(hurried([keys(20 * 60)], NOW).size).toBe(0);
+  });
+  test('a pair room moving to post-quantum, while its lines wait; then at the usual pace', () => {
+    const k = deriveRelationshipKeys(
+      'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+      0,
+      0,
+    );
+    const latest = cardB64(
+      signCardV2(
+        {
+          kind: 'card',
+          revision: 0,
+          key: k.pubkey,
+          pairKa: k.kaPublicKey,
+          relay: '',
+          caps: Cap.chat | Cap.pq,
+          created: 29_000_000,
+        },
+        k.seed,
+      ),
+    );
+    const pair = (pq?: { box: string }) =>
+      base({
+        id: 'p:bob',
+        kind: 'pair',
+        pair: {
+          personId: 'bob',
+          peer: k.pubkey,
+          v2: { latest, confirmed: 1 },
+          ...(pq ? { pq } : {}),
+        },
+      });
+    expect(hurried([pair()], NOW).has('p:bob')).toBe(true);
+    expect(hurried([pair({ box: 'AQID' })], NOW).size).toBe(0);
   });
 });
 

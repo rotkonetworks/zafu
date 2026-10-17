@@ -1,5 +1,6 @@
 /**
- * Which rooms someone is waiting on right now: a code that is open, an introduction, a group
+ * Which rooms someone is waiting on right now: a code that is open, an introduction, a pair
+ * room moving to post-quantum, a group
  * whose newcomer has not been seated yet, a shared wallet still filling or
  * making its keys. While a zafu window is open these are read every
  * {@link FAST_MS} (people/keeper, service watch); everything else keeps its
@@ -7,6 +8,7 @@
  */
 
 import type { PeopleRoom } from './vault';
+import { securing } from './pair-pq';
 import { groupId } from './protocol';
 
 /** how often a room someone waits on is read */
@@ -50,6 +52,10 @@ export const hurried = (rooms: PeopleRoom[], now: number): Set<string> => {
       (r.card?.introduced && r.card.state === 'waiting') ||
       (r.kind === 'pair' && r.pair?.v2 && !r.pair.v2.confirmed);
     if (r.joined && meeting && now - r.createdAt < MEETING_MS) {
+      out.add(r.id);
+    }
+    // a pair room moving to post-quantum: lines wait on it
+    if (r.joined && securing(r)) {
       out.add(r.id);
     }
     const g = r.kind === 'group' && r.joined ? r.group : undefined;
