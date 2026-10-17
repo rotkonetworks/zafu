@@ -6,6 +6,21 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.3.2
+
+### People
+
+- On a new pair, the first lines no longer take minutes to show while the
+  chat moves to post-quantum; a room still moving is read every second while
+  zafu is open.
+- The one who answered a card can open the seal words too: "check the seal
+  with {name}" shows on both sides until it is checked.
+
+### Store
+
+- The store says what zafu is: "zafu - private zcash wallet", with a plain
+  summary in place of the old one.
+
 ## 29.3.1
 
 ### Websites
