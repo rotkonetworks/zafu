@@ -14,6 +14,7 @@ import { schedulePreloadTabRoots } from './route-modules';
 import { intentHandlers, navTimingOn, Painted } from './preload';
 import { useStore } from '../../state';
 import { selectActiveNetwork, selectPenumbraAccount } from '../../state/keyring';
+import { Chimes } from '../../sounds/chimes';
 
 // its own chunk: the frost and door code it pulls in never delays the first paint
 const PeopleKeeper = lazy(() =>
@@ -67,6 +68,7 @@ export const PopupLayout = () => {
       {/* one toast per finished transaction, whichever page started it (the
           page may be gone after a side-panel approval reload) */}
       <TxTrackerWatcher />
+      <Chimes />
       {/* people waiting on you are answered on every screen, never with zafu closed */}
       {showChrome && (
         <Suspense fallback={null}>

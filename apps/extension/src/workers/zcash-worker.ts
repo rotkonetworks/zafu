@@ -142,6 +142,7 @@ import { storeFellBehind } from './store-reset';
 import { createBuildRegistry } from './build-abort';
 import { doorPake, type DoorPakeCall, type DoorPakeWasm } from './door-pake';
 import { multiSendRoute, planIronwoodMultiSend } from './ironwood-multi-send';
+import { receivedFrom } from './received';
 
 export type { SentTxRecord } from './sent-tx-reconcile';
 
@@ -427,6 +428,8 @@ interface WalletState extends RunSlot {
   treeRecovery?: Promise<void>;
   /** rewinds of the scan cursor so far: a read that spans one reads again */
   rewinds?: number;
+  /** payments from someone else seen at the tip since this worker started (workers/received) */
+  received?: number;
 }
 
 interface WasmModule extends DepositWasm, FinalizeWasm, DoorPakeWasm {
@@ -2666,6 +2669,7 @@ const syncLoop = async (
       currentHeight,
       chainHeight: currentHeight,
       notesFound: state.notes.length,
+      received: state.received ?? 0,
       blocksScanned: 0,
     },
   });
@@ -2839,6 +2843,7 @@ const syncLoop = async (
         currentHeight,
         chainHeight: currentHeight,
         notesFound: state.notes.length,
+        received: state.received ?? 0,
         blocksScanned: 0,
       },
     });
@@ -3125,6 +3130,7 @@ const syncLoop = async (
             currentHeight,
             chainHeight,
             notesFound: state.notes.length,
+            received: state.received ?? 0,
             blocksScanned: 0,
             ...(chainRecord && { chain: chainRecord }),
           },
@@ -3446,6 +3452,11 @@ const syncLoop = async (
       }
       currentHeight = endHeight;
       readBlocks = true;
+      // a payment that lands now, not one the first sync finds in old blocks
+      if (currentHeight >= chainHeight - 1) {
+        state.received =
+          (state.received ?? 0) + receivedFrom([...newNotes, ...newIronwoodNotes], state.notes);
+      }
       await saveBatch(
         walletId,
         newIronwoodNotes.length > 0 ? [...newNotes, ...newIronwoodNotes] : newNotes,
@@ -3494,6 +3505,7 @@ const syncLoop = async (
           currentHeight,
           chainHeight,
           notesFound: state.notes.length,
+          received: state.received ?? 0,
           blocksScanned: blocks.length,
           // How many cores the scan is really using. Carried on every progress
           // message so a degraded pool is visible from the wallet rather than
@@ -3562,6 +3574,7 @@ const syncLoop = async (
                 currentHeight,
                 chainHeight: currentHeight,
                 notesFound: state.notes.length,
+                received: state.received ?? 0,
                 blocksScanned: 0,
               },
             });

@@ -30,6 +30,16 @@ export const SETTINGS_EXPLAIN = {
     on: 'a shoulder-surfer sees shapes, not numbers',
     off: 'balances show plainly, as on most wallets',
   },
+  'privacy.soundMessages': {
+    blurb: 'a small bell when someone writes to you, while a zafu window is open.',
+    on: 'anyone nearby hears that a message came',
+    off: 'silent, the default; with zafu closed nothing rings either way',
+  },
+  'privacy.soundMoney': {
+    blurb: 'two wooden taps when someone pays you, while a zafu window is open.',
+    on: 'anyone nearby hears that you were paid; change and moves between your own pockets stay silent',
+    off: 'silent, the default',
+  },
   'privacy.txHistory': {
     blurb: 'keeps a list of your past sends and receives in zafu.',
     on: 'the home screen and detail sheets show past activity',

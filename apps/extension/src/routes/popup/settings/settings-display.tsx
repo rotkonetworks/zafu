@@ -5,9 +5,11 @@ import { Section, SettingsScreen } from './settings-screen';
 import { FontRow, ThemeRow } from './settings-appearance';
 import { useExplain } from './settings-explain';
 
-/** display: what this screen shows, to you and to whoever stands nearby (SetDisplay.dc.html) */
+/** display: what this screen shows and sounds, to you and to whoever stands nearby (SetDisplay.dc.html) */
 export const SettingsDisplay = () => {
   const hidden = useStore(s => s.privacy.settings.hideBalances);
+  const soundMessages = useStore(s => s.privacy.settings.soundMessages);
+  const soundMoney = useStore(s => s.privacy.settings.soundMoney);
   const setSetting = useStore(s => s.privacy.setSetting);
   const { explainProps, sheet } = useExplain();
   return (
@@ -28,6 +30,24 @@ export const SettingsDisplay = () => {
         <FontRow
           description='bundled with zafu · no font is fetched'
           {...explainProps('appearance.font')}
+        />
+      </Section>
+      <Section>
+        <Row
+          type='toggle'
+          label='sound for messages'
+          description='a small bell while zafu is open · anyone nearby hears it'
+          checked={soundMessages}
+          onChange={v => void setSetting('soundMessages', v)}
+          {...explainProps('privacy.soundMessages')}
+        />
+        <Row
+          type='toggle'
+          label='sound for money received'
+          description='two wooden taps while zafu is open · it tells the room you were paid'
+          checked={soundMoney}
+          onChange={v => void setSetting('soundMoney', v)}
+          {...explainProps('privacy.soundMoney')}
         />
       </Section>
       {sheet}

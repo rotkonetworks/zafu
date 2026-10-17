@@ -46,6 +46,8 @@ interface Snapshot {
   threads: Record<string, Thread>;
   invites: StoredInvite[];
   status?: PeopleStatus;
+  /** read from storage at least once: before that, empty means not yet, not none */
+  loaded?: boolean;
 }
 
 let snap: Snapshot = { rooms: [], threads: {}, invites: [] };
@@ -65,6 +67,7 @@ const load = (): Promise<void> =>
       threads: threads ?? {},
       invites,
       status: s[PEOPLE_STATUS_KEY] as PeopleStatus | undefined,
+      loaded: true,
     };
     subs.forEach(f => f());
   })().finally(() => (loading = undefined)));

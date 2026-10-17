@@ -170,6 +170,12 @@ export interface PrivacySettings {
    * at the read site.
    */
   txSigningSecurity: TxSigningSecurity;
+
+  /** a small bell when someone writes, while zafu is open. false (default): anyone nearby would hear it */
+  soundMessages: boolean;
+
+  /** two wooden taps when money arrives, while zafu is open. false (default): it tells the room you were paid */
+  soundMoney: boolean;
 }
 
 export interface PrivacySlice {
@@ -197,6 +203,8 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enableIdentity: true,
   hideBalances: false,
   txSigningSecurity: DEFAULT_TX_SIGNING_SECURITY,
+  soundMessages: false,
+  soundMoney: false,
 };
 
 /**
