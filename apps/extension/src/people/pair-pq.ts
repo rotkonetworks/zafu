@@ -5,7 +5,7 @@
  * hybrid secret, in the first room:
  *
  *   the higher XID posts its relationship X-Wing key   zp2:pq-key:<b64url>
- *   the lower XID seals S to it, and moves              zp2:pq-box:<b64url>
+ *   the lower XID seals S to it, and moves              zp2:pq-box:<b64url>.<window it moved in>
  *   the higher XID opens S, moves, and says so there    zp2:pq-ok
  *
  *   S      = HKDF(sealer's X-Wing seed, salt "zafu-pair-pq-v1", info peer XID)
@@ -122,7 +122,11 @@ export const createPairPq = (deps: PairPqDeps): RecordHandler => {
     const keys = await deps.relKeys(room.walletId, room.signer.gen, room.signer.j);
     const t = deps.now();
     const at = pq(room).at ?? 0;
-    const move = async (box: string, since: number, more: { at?: number; ok?: boolean }) => {
+    const move = async (
+      box: string,
+      since: number,
+      more: { at?: number; ok?: boolean; from?: number },
+    ) => {
       const secret = pqSecret(room.secret, keys, box, me, peer);
       await api.updateRoom(room.id, r => ({
         ...r,
@@ -142,7 +146,10 @@ export const createPairPq = (deps: PairPqDeps): RecordHandler => {
       if (t - at < RESEND_MS || !first) {
         return undefined;
       }
-      await api.post({ ...room, secret: first, head: undefined }, PQ_BOX + pq(room).box);
+      await api.post(
+        { ...room, secret: first, head: undefined },
+        `${PQ_BOX}${pq(room).box}.${pq(room).from ?? ''}`,
+      );
       return patch({ at: t });
     }
 
@@ -155,16 +162,19 @@ export const createPairPq = (deps: PairPqDeps): RecordHandler => {
       const s = seedFor(keys.xwingSeed, peer);
       const box = cardB64(sealXWing(pub, s, aadOf(me, peer)));
       s.fill(0);
-      await api.send(room.id, PQ_BOX + box, 'action');
-      await move(box, presenceEpoch(Math.floor(t / 1000)), { at: t });
+      const from = presenceEpoch(Math.floor(t / 1000));
+      await api.send(room.id, `${PQ_BOX}${box}.${from}`, 'action');
+      await move(box, from, { at: t, from });
       return undefined;
     }
 
     const box = theirs.findLast(m => m.body.startsWith(PQ_BOX));
     if (box) {
       try {
-        // from as far back as the relay keeps: a box said again is later than their first lines there
-        await move(box.body.slice(PQ_BOX.length), 0, { ok: true });
+        // from the window they moved in, which a box said again still names; a box without it
+        // (29.3.0 and 29.3.1) is read from as far back as the relay keeps
+        const [sealed = '', from] = box.body.slice(PQ_BOX.length).split('.');
+        await move(sealed, Number(from) || 0, { ok: true });
         await api.send(room.id, PQ_OK, 'action');
         return undefined;
       } catch {
