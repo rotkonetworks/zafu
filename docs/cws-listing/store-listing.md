@@ -6,14 +6,14 @@ Paste-ready content for the CWS "Store listing" tab.
 
 ## Title
 
-Set by manifest: `zafu wallet BETA`
+Set by manifest: `zafu beta - private zcash wallet` (prod: `zafu - private zcash wallet`)
 
 ## Summary
 
-Set by manifest description (127 chars):
+Set by manifest description (126 chars):
 
-> Zcash + Penumbra privacy wallet. Cold signing, FROST multisig,
-> client-side proving, ed25519 app identity, verified lightclient.
+> shielded zcash and penumbra wallet. private chat, shared wallets, cold
+> signing with zigner. your keys never leave your device.
 
 ## Description (paste into dashboard)
 
