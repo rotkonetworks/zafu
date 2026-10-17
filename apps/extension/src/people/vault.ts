@@ -178,6 +178,10 @@ export interface PeopleRoom {
     deal?: { code: string; group: string; at: number };
     /** the move to a post-quantum secret (people/pair-pq): the box, when a key or box last went, they moved too, the window it moved in */
     pq?: { box?: string; at?: number; ok?: boolean; from?: number };
+    /** read receipts in this chat, off by default (people/delivery) */
+    receipts?: boolean;
+    /** what they said they read: everything up to `upTo`, said at `at` (seconds) */
+    seen?: { upTo: number; at: number };
   };
 }
 
@@ -272,6 +276,8 @@ export interface ThreadItem {
   /** tries so far, and when the next may run (ms) */
   tries?: number;
   next?: number;
+  /** ms a line of yours last went to the relay, when it went again (people/delivery) */
+  posted?: number;
 }
 
 export interface Thread {

@@ -16,6 +16,13 @@ describe('where a line of yours stands', () => {
     }
   });
 
+  it('says read, with the time they said it, only for a line on the relay', () => {
+    expect(sendLine({ ts: 1 }, true, 1_700_000_000)?.text).toMatch(/^read \d\d:\d\d$/);
+    expect(sendLine({ ts: 1, status: 'waiting' }, true, 1_700_000_000)?.text).toBe(
+      'waiting to send',
+    );
+  });
+
   it('keeps a group quiet once a line is on the relay', () => {
     expect(sendLine({ ts: 1 })).toBeUndefined();
   });

@@ -254,9 +254,11 @@ const Item = ({ m, from }: { m: Message; from: string }) => {
 const RelayLine = ({
   item,
   say,
+  readAt,
 }: {
   item: ThreadItem;
   say: (text: string, retry: string) => void;
+  readAt?: number;
 }) => (
   <>
     <div
@@ -269,7 +271,7 @@ const RelayLine = ({
         <MessageText text={item.body} />
       </p>
     </div>
-    {item.mine && <SendState item={item} say={say} sent />}
+    {item.mine && <SendState item={item} say={say} sent readAt={readAt} />}
   </>
 );
 
@@ -580,6 +582,11 @@ export function ThreadPage() {
   const myRooms = useMyRooms();
   const room = myRooms.find(r => r.id === roomId && r.joined);
   const relay = useThread(room)?.items;
+  // your last line they said they read: shown only while your own read receipts are on
+  const seen = room?.pair?.receipts ? room.pair.seen : undefined;
+  const readHash = seen
+    ? relay?.filter(i => i.mine && i.hash && i.ts <= seen.upTo).at(-1)?.hash
+    : undefined;
   // a deal made in the pair room, and an invite into someone's deal group
   const shared = useFrostRoom(room);
   const [sending, setSending] = useState(false);
@@ -804,7 +811,11 @@ export function ThreadPage() {
                 pending={room?.pair?.v2?.pending}
               />
             ) : (
-              <RelayLine item={r.it} say={say} />
+              <RelayLine
+                item={r.it}
+                say={say}
+                readAt={r.it.hash && r.it.hash === readHash ? room?.pair?.seen?.at : undefined}
+              />
             )}
           </div>
         ))}

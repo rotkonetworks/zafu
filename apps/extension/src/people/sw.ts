@@ -30,6 +30,7 @@ import { createCards } from './cards';
 import { foldFrost, frostOps } from './frost-room';
 import { onDealAsk } from './deal';
 import { createPairPq } from './pair-pq';
+import { deliveryOps, onSeen } from './delivery';
 import { createLeaderless } from './lx';
 import { compileEgress, describeEgress, type EgressInputs } from '../net/egress-policy';
 import { decideEgress } from '../net/egress-table';
@@ -211,6 +212,7 @@ export const startPeopleRelay = (
       foldFrost,
       onDealAsk,
       pairPq,
+      onSeen,
     ),
   });
   const all: Record<string, PeopleOp> = {
@@ -228,6 +230,7 @@ export const startPeopleRelay = (
     read: (r, s) => s.read(String(r['roomId'])),
     ...groups.ops,
     ...pairs.ops,
+    ...deliveryOps,
     ...invites.ops,
     ...cards.ops,
     ...frostOps,

@@ -7,13 +7,15 @@ export const SendState = ({
   item,
   say,
   sent,
+  readAt,
 }: {
   item: ThreadItem;
   /** "try again": the same line, under the same local id */
   say: (text: string, retry: string) => void;
   sent?: boolean;
+  readAt?: number;
 }) => {
-  const line = sendLine(item, sent);
+  const line = sendLine(item, sent, readAt);
   if (!line) {
     return null;
   }

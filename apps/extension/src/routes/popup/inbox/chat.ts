@@ -97,13 +97,17 @@ export interface SendLine {
 export const sendLine = (
   item: Pick<ThreadItem, 'status' | 'ts'>,
   sent?: boolean,
+  /** seconds: they said they read up to this line, while both of you have read receipts on */
+  readAt?: number,
 ): SendLine | undefined =>
-  item.status === 'sending'
-    ? { text: 'sending', tone: 'muted', mark: false }
-    : item.status === 'waiting'
-      ? { text: 'waiting to send', tone: 'muted', mark: false }
-      : item.status === 'failed'
-        ? { text: 'this did not reach the relay', tone: 'failed', mark: false }
-        : sent
-          ? { text: item.ts ? `sent ${hhmm(item.ts * 1000)}` : 'sent', tone: 'muted', mark: true }
-          : undefined;
+  readAt && !item.status
+    ? { text: `read ${hhmm(readAt * 1000)}`, tone: 'muted', mark: true }
+    : item.status === 'sending'
+      ? { text: 'sending', tone: 'muted', mark: false }
+      : item.status === 'waiting'
+        ? { text: 'waiting to send', tone: 'muted', mark: false }
+        : item.status === 'failed'
+          ? { text: 'this did not reach the relay', tone: 'failed', mark: false }
+          : sent
+            ? { text: item.ts ? `sent ${hhmm(item.ts * 1000)}` : 'sent', tone: 'muted', mark: true }
+            : undefined;

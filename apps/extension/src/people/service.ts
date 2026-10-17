@@ -43,6 +43,7 @@ import {
   presenceEpoch,
   type RelayTransport,
 } from '@zafu/zid';
+import { againBody, dueAgain, fromAgain, SEEN } from './delivery';
 import { needsPq, securing } from './pair-pq';
 import { pairShard } from './shard';
 import { FAST_MS, hurried } from './hurry';
@@ -368,7 +369,15 @@ export const createPeopleService = (
           !PROTOCOL_PREFIX.test(m.body) &&
           (!voices || voices.includes(m.author)),
       )
-      .map(m => toItem(m, me));
+      .map(m => toItem(m, me))
+      // a line of theirs said again, filed under the first one (yours are already here)
+      .concat(
+        voices
+          ? msgs
+              .filter(m => m.author !== me && voices.includes(m.author))
+              .flatMap(m => fromAgain(m, me) ?? [])
+          : [],
+      );
     if (chat.length) {
       // only lines new to this thread settle drafts: the window still filling is read again each tick
       await writeItems(rec, t => {
@@ -560,6 +569,25 @@ export const createPeopleService = (
           await attempt(rec, it);
         }
       }
+      // your lines said again before the relay lets them go (people/delivery)
+      if (rec.kind === 'pair' && rec.joined && !securing(rec)) {
+        const items = threads?.[threadKey(rec)]?.items ?? [];
+        for (const it of dueAgain(items, rec.pair?.seen?.upTo ?? 0, now())) {
+          if (!session) {
+            return;
+          }
+          try {
+            await publish(rec, againBody(it), 'action');
+          } catch {
+            break;
+          }
+          const at = now();
+          await writeItems(rec, t => ({
+            read: t?.read ?? 0,
+            items: (t?.items ?? []).map(i => (i.hash === it.hash ? { ...i, posted: at } : i)),
+          }));
+        }
+      }
     }
   };
 
@@ -706,22 +734,31 @@ export const createPeopleService = (
      * is still a change, so each one would ask for the next.
      */
     read: (roomId: string) =>
-      findRoom(roomId).then(
-        rec =>
-          rec &&
-          serial(async () => {
-            const threads = await deps.readThreads();
-            const t = threads?.[threadKey(rec)];
-            const seen = t?.read ?? 0;
-            if (!threads || !t?.items.some(i => !i.mine && i.ts > seen)) {
-              return;
-            }
-            // a peer's clock ahead of ours must not leave its line unread forever
-            const read = Math.max(Math.floor(now() / 1000), ...t.items.map(i => i.ts));
-            threads[threadKey(rec)] = { ...t, read };
-            await deps.writeThreads(threads);
-          }),
-      ),
+      findRoom(roomId)
+        .then(
+          rec =>
+            rec &&
+            serial(async () => {
+              const threads = await deps.readThreads();
+              const t = threads?.[threadKey(rec)];
+              const seen = t?.read ?? 0;
+              if (!threads || !t?.items.some(i => !i.mine && i.ts > seen)) {
+                return;
+              }
+              // a peer's clock ahead of ours must not leave its line unread forever
+              const read = Math.max(Math.floor(now() / 1000), ...t.items.map(i => i.ts));
+              threads[threadKey(rec)] = { ...t, read };
+              await deps.writeThreads(threads);
+              return read;
+            }),
+        )
+        .then(async read => {
+          const rec = await findRoom(roomId);
+          // with read receipts on in this chat, they learn you read up to here (people/delivery)
+          if (read && rec?.kind === 'pair' && rec.pair?.receipts && session) {
+            await publish(rec, `${SEEN}${read}`, 'action').catch(() => undefined);
+          }
+        }),
     /** the last zafu window closed: stop everything, abort what is in flight */
     close: () => {
       if (!session) {

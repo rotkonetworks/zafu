@@ -33,6 +33,8 @@ import {
 } from '../../../addresses/kind';
 import { ChainRow, useAddressDraft } from './chain-row';
 import { uncheckedLine } from './seal';
+import { peopleCall, useMyRooms } from '../../../people/client';
+import { pairId } from '../../../people/protocol';
 
 type Open =
   | { kind: 'address'; address: ContactAddress }
@@ -239,6 +241,7 @@ const ContactView = ({ contact }: { contact: Contact }) => {
             }
           />
         )}
+        {contact.rel && <ReceiptsRow contactId={contact.id} name={contact.name} />}
         {/* a v2 card of yours they hold: a fresh address goes to them as a signed update */}
         {contact.given && (
           <Row
@@ -364,3 +367,20 @@ export function ContactPage() {
 }
 
 export default ContactPage;
+
+/** read receipts with this one person: off until both of you turn them on (people/delivery) */
+const ReceiptsRow = ({ contactId, name }: { contactId: string; name: string }) => {
+  const room = useMyRooms().find(r => r.id === pairId(contactId) && r.joined);
+  if (!room) {
+    return null;
+  }
+  return (
+    <Row
+      type='toggle'
+      label='read receipts'
+      description={`${name} sees when you read, you see when they do · only while both of you have it on`}
+      checked={!!room.pair?.receipts}
+      onChange={on => void peopleCall('pair-receipts', { roomId: room.id, on })}
+    />
+  );
+};
