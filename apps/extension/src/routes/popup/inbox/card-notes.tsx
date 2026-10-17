@@ -148,6 +148,16 @@ export const NoteLine = ({
   if (!note) {
     return null;
   }
+  const checkSeal = contactId && !sealChecked && (
+    <button
+      type='button'
+      onClick={() => navigate(sealPath(contactId))}
+      className='flex items-center gap-2 self-center border border-border-soft px-3 py-2 text-xs text-fg-high hover:bg-elev-2'
+    >
+      check the seal with {name}
+      <span className='i-lucide-chevron-right size-3.5 text-fg-dim' aria-hidden='true' />
+    </button>
+  );
   switch (note.ev) {
     case 'saved-you':
       return (
@@ -168,23 +178,18 @@ export const NoteLine = ({
           <span className='self-center text-[11px] text-fg-dim'>
             you can chat and pay each other
           </span>
-          {contactId && !sealChecked && (
-            <button
-              type='button'
-              onClick={() => navigate(sealPath(contactId))}
-              className='flex items-center gap-2 self-center border border-border-soft px-3 py-2 text-xs text-fg-high hover:bg-elev-2'
-            >
-              check the seal with {name}
-              <span className='i-lucide-chevron-right size-3.5 text-fg-dim' aria-hidden='true' />
-            </button>
-          )}
+          {checkSeal}
         </>
       );
     case 'saved-them':
+      // they compare the words on their side now: the same words here
       return (
-        <Line icon='i-lucide-check'>
-          you saved {name} · {hhmm(at)}
-        </Line>
+        <>
+          <Line icon='i-lucide-check'>
+            you saved {name} · {hhmm(at)}
+          </Line>
+          {checkSeal}
+        </>
       );
     case 'confirmed':
       return (
