@@ -113,4 +113,54 @@ describe('ZafuKeplr origin and result senders', () => {
     keplrMessageListener(result, page, respond);
     expect(respond).toHaveBeenCalledWith({ ok: true });
   });
+
+  it('asks once when a site enables a chain and reads its key at the same moment', async () => {
+    const origin = 'https://penumbra.example';
+    const s = sender(origin);
+    const page: chrome.runtime.MessageSender = {
+      id: chrome.runtime.id,
+      origin: `chrome-extension://${chrome.runtime.id}`,
+      url: `chrome-extension://${chrome.runtime.id}/popup.html`,
+    };
+    (chrome.runtime as { getURL?: (p: string) => string }).getURL = p =>
+      `chrome-extension://${chrome.runtime.id}/${p}`;
+    const key = { name: 'zafu', bech32Address: 'noble1x' };
+    const enable = call(
+      { type: 'ZafuKeplr', method: 'enable', params: { chainIds: ['noble-1'] }, origin },
+      s,
+    );
+    const getKey = call(
+      { type: 'ZafuKeplr', method: 'getKey', params: { chainId: 'noble-1' }, origin },
+      s,
+    );
+    // the one approval the person sees
+    await vi.waitFor(async () => {
+      const ids = Object.keys(await chrome.storage.session.get(null)).filter(k =>
+        k.startsWith('keplrApproval:'),
+      );
+      expect(ids).toHaveLength(1);
+    });
+    const [approval] = Object.keys(await chrome.storage.session.get(null)).filter(k =>
+      k.startsWith('keplrApproval:'),
+    );
+    keplrMessageListener(
+      {
+        type: 'zafu_keplr_result',
+        requestId: approval!.slice('keplrApproval:'.length),
+        result: { approved: true, payload: { keys: { 'noble-1': key } } },
+      },
+      page,
+      vi.fn(),
+    );
+    expect(await enable).toMatchObject({ ok: true });
+    expect(await getKey).toMatchObject({ ok: true, result: key });
+    // and enabling it again later asks nothing
+    expect(
+      await call(
+        { type: 'ZafuKeplr', method: 'enable', params: { chainIds: ['noble-1'] }, origin },
+        s,
+      ),
+    ).toMatchObject({ ok: true });
+    expect(createMock).toHaveBeenCalledTimes(1);
+  });
 });
