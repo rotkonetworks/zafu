@@ -422,17 +422,25 @@ module.exports.snd1 = {
     const logs = [];
     bi.on('console', m => logs.push(m.text().slice(0, 160)));
     bi.on('pageerror', e => logs.push('ERR ' + e.message.slice(0, 160)));
-    await spy(bi);
-    await spy(a);
+    // one window plays when several are open: listen on every zafu window of each side
+    const bPages = B.ctx.pages().filter(p => p.url().startsWith('chrome-extension://'));
+    const aPages = A.ctx.pages().filter(p => p.url().startsWith('chrome-extension://'));
+    for (const pg of [...bPages, ...aPages]) {
+      await spy(pg).catch(() => undefined);
+    }
+    const heardBy = async pages =>
+      (
+        await Promise.all(pages.map(pg => pg.evaluate(() => window.__chimes ?? []).catch(() => [])))
+      ).flat();
     const n = Date.now().toString(36).slice(-4);
     await say(a, `ring ${n}`);
     const t0 = Date.now();
     let heard = [];
     while (Date.now() - t0 < 90000 && !heard.length) {
       await bi.waitForTimeout(2000);
-      heard = await bi.evaluate(() => window.__chimes);
+      heard = await heardBy(bPages);
     }
-    const aHeard = await a.evaluate(() => window.__chimes);
+    const aHeard = await heardBy(aPages);
     const arrived = L.flat(await L.text(bi)).includes(`ring ${n}`);
     const setting = await bi.evaluate(
       async () => (await chrome.storage.local.get('privacySettings')).privacySettings,
