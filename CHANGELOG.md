@@ -6,6 +6,24 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.4.0
+
+### Zigner
+
+- Paying for pro and swapping out of zec on a route without a memo (such as
+  near) work again from a zigner wallet. Both had stopped at NU6.3; they now
+  sign the way a send does.
+- Zigner now signs every zafu transaction from the transaction itself: a
+  send, a pro payment, a swap deposit and shielding all show on zigner the
+  recipient, the amount and the fee it checked. The older request, which
+  carried only a hash and a description, is gone.
+
+### NU7
+
+- Ready for NU7: zafu builds on the network upgrade its node reports, so
+  sending, shielding and swaps carry on through the upgrade without a zafu
+  update on the day.
+
 ## 29.3.2
 
 ### People
