@@ -213,8 +213,7 @@ export const ZIGNER_PCZT_SIGN_UR_TYPE = 'zigner-module';
  * UR type carrying the module signed-PCZT RESPONSE (cold -> hot). The device
  * emits `ur:zigner-module` whose decoded payload is a CBOR `{1: bytes}` wrap of
  * the envelope response; unwrap the CBOR first, then hand the inner envelope
- * bytes to `parsePreludeSinglePcztResponse`. Do NOT feed this into the legacy
- * `parseZcashSignatureResponse` digest flow.
+ * bytes to `parsePreludeSinglePcztResponse`.
  */
 export const ZIGNER_PCZT_SIGNED_UR_TYPE = 'zigner-module';
 

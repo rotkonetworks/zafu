@@ -58,7 +58,6 @@ import {
 import { usePasswordGate } from '../../../hooks/password-gate';
 import {
   buildSendTxInWorker,
-  completeSendTxInWorker,
   planTransparentDepositInWorker,
 } from '../../../state/keyring/network-worker';
 import { checkVault, type DepositPlan } from '../../../workers/transparent-deposit';
@@ -112,15 +111,10 @@ import {
   type RouteId,
   type SwapPair,
 } from '../../../state/swap/routes';
-import { QrDisplay } from '../../../shared/components/qr-display';
-import { QrScanner } from '../../../shared/components/qr-scanner';
-import {
-  encodeZcashSignRequest,
-  parseZcashSignatureResponse,
-  isZcashSignatureQR,
-  hexToBytes,
-  bytesToHex,
-} from '@repo/wallet/networks';
+import { useStore as useZustand } from 'zustand';
+import { ZignerRoundAction, ZignerRoundView } from '../../../components/zigner-round-view';
+import { isZignerDeclined, type ZignerRound } from '../../../signing/zigner-round';
+import { payViaZigner, zignerRound } from '../../../signing/zigner-pay';
 import { useBackNav, usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { looksLikeLink, toUri } from '../../../links/router';
@@ -142,8 +136,6 @@ import './swap-live.css';
 export type Step =
   | 'input'
   | 'thor-out'
-  | 'sign'
-  | 'scan'
   | 'sending'
   | 'deposit'
   | 'polling'
@@ -167,9 +159,9 @@ export const RefundedSlot = ({ line }: { line?: string }) => (
 );
 
 /**
- * The worker build for a zcash deposit, the one call every signer shares: the
- * chosen pocket's store and account, never the wallet's pocket 0. A hot wallet
- * passes its vault (signed and broadcast), a cold one its ufvk (unsigned).
+ * A hot wallet's zcash deposit: the worker builds, signs with the vault and
+ * broadcasts, from the chosen pocket's store and account, never the wallet's
+ * pocket 0.
  */
 export const buildDeposit = (o: {
   storeId?: string;
@@ -178,8 +170,7 @@ export const buildDeposit = (o: {
   zidecarUrl: string;
   to: string;
   amountIn: string;
-  vault?: VaultUnlock;
-  ufvk?: string;
+  vault: VaultUnlock;
 }) =>
   buildSendTxInWorker(
     'zcash',
@@ -191,7 +182,39 @@ export const buildDeposit = (o: {
     o.pocket,
     true,
     o.vault,
-    o.ufvk,
+  );
+
+/**
+ * A zigner wallet's zcash deposit: the send screen's PCZT, one device round,
+ * broadcast. Its store is never split by pocket - the account is the one the
+ * viewing key names - so there is no account index to pass.
+ */
+export const payDepositViaZigner = (
+  round: ZignerRound,
+  o: {
+    storeId?: string;
+    walletId: string;
+    zidecarUrl: string;
+    to: string;
+    amountIn: string;
+    mainnet: boolean;
+    ufvk: string;
+  },
+  onSigned: () => Promise<void>,
+) =>
+  payViaZigner(
+    round,
+    {
+      walletId: o.storeId ?? o.walletId,
+      serverUrl: o.zidecarUrl,
+      recipient: o.to,
+      amountZat: toUnits(o.amountIn, 8).toString(),
+      memo: '',
+      mainnet: o.mainnet,
+      ufvk: o.ufvk,
+    },
+    `deposit ${o.amountIn} zec to the swap`,
+    onSigned,
   );
 
 /** the one note under the routes, per route and direction */
@@ -680,8 +703,10 @@ export const CrosschainSwap = ({
   const [error, setError] = useState<string>();
   // kept alongside the message so a blocked destination can offer an inline allow
   const [errorCause, setErrorCause] = useState<unknown>();
-  const [signRequestQr, setSignRequestQr] = useState<string | null>(null);
-  const unsignedTxRef = useRef<any | null>(null);
+  // one device round for this screen; it merges through the paying store
+  const payWalletRef = useRef('');
+  const [round] = useState(() => zignerRound(() => payWalletRef.current));
+  const roundShown = useZustand(round.store, r => r.shown !== null);
   const [sendSteps, setSendSteps] = useState<
     { step: string; detail?: string; elapsedMs: number }[]
   >([]);
@@ -1127,83 +1152,32 @@ export const CrosschainSwap = ({
         return;
       }
 
-      // zigner flow
+      // zigner: the PCZT round - zigner shows the recipient, amount and fee it proves
       if (!ufvk) {
         throw new Error('this zigner wallet has no viewing key here · please re-import it');
       }
       buildStartRef.current = Date.now();
       setStep('sending');
-      const result = await buildDeposit({ ...deposit, ufvk });
-      if (!('sighash' in result)) {
-        throw new Error('unexpected unsigned tx result');
-      }
-      unsignedTxRef.current = result;
-      setSignRequestQr(
-        encodeZcashSignRequest({
-          accountIndex: pocket,
-          sighash: hexToBytes(result.sighash),
-          orchardAlphas: result.alphas.map(a => hexToBytes(a)),
-          summary: `swap ${deposit.amountIn} ZEC`,
-          mainnet: true,
-        }),
+      payWalletRef.current = storeId ?? walletId;
+      const txid = await payDepositViaZigner(
+        round,
+        { ...deposit, mainnet: activeZcashWallet?.mainnet ?? true, ufvk },
+        // recorded once signed, before it goes out, so a closed popup loses nothing
+        () => remember('deposit'),
       );
-      setStep('sign');
+      track({ stage: 'sent', depositTxid: txid });
+      setStep('polling');
     } catch (err) {
-      console.error('[swap] send failed', err);
       // nothing was broadcast: there is no swap to come back to
       forget();
+      if (isZignerDeclined(err)) {
+        setStep('input');
+        return;
+      }
+      console.error('[swap] send failed', err);
       setErrorCause(err);
       setError(
         err instanceof Error ? err.message : "the deposit didn't go through · nothing was sent",
-      );
-      setStep('error');
-    }
-  };
-
-  const signatureScanned = async (data: string) => {
-    try {
-      if (!isZcashSignatureQR(data)) {
-        setError("that code isn't zigner's answer · please scan again");
-        setStep('error');
-        return;
-      }
-      const sigResponse = parseZcashSignatureResponse(data);
-      if (!unsignedTxRef.current || !selectedKeyInfo) {
-        throw new Error('missing unsigned tx');
-      }
-      setStep('sending');
-      if (firm && wallet) {
-        const o = openSwapOf(firm.quote, firm.req, wallet, 'deposit', swapT);
-        openId.current = o.id;
-        await saveOpenSwap(o);
-      }
-      // the same pocket store the build read, so the spent notes are marked there
-      const result = await completeSendTxInWorker(
-        'zcash',
-        storeId ?? selectedKeyInfo.id,
-        zidecarUrl,
-        unsignedTxRef.current.unsignedTx,
-        {
-          orchardSigs: sigResponse.orchardSigs.map(bytesToHex),
-          transparentSigs: sigResponse.transparentSigs.map(bytesToHex),
-        },
-        unsignedTxRef.current.spendIndices,
-        // lets the worker mark the spent inputs and record the send
-        unsignedTxRef.current.coldSendId,
-      );
-      unsignedTxRef.current = null;
-      if (!('txid' in result)) {
-        throw new Error(
-          "the deposit didn't reach the network · please look at home before trying again",
-        );
-      }
-      track({ stage: 'sent', depositTxid: result.txid });
-      setStep('polling');
-    } catch (err) {
-      console.error(err);
-      forget();
-      setError(
-        err instanceof Error ? err.message : "the zigner send didn't finish · nothing was sent",
       );
       setStep('error');
     }
@@ -1702,40 +1676,26 @@ export const CrosschainSwap = ({
     );
   }
 
+  // the device's round: its qr, then the camera; back steps out without sending
+  if (roundShown) {
+    return (
+      <div className='flex h-full flex-col bg-canvas'>
+        <ScreenHeader title='sign on zigner' onBack={() => round.cancel()} />
+        <Main className='items-center gap-3 px-5 pt-4'>
+          <ZignerRoundView round={round} pinned />
+        </Main>
+        <Footer>
+          <ZignerRoundAction round={round} />
+        </Footer>
+      </div>
+    );
+  }
+
   return (
     <div className='flex h-full flex-col bg-canvas'>
       {PasswordModal}
       {header()}
       <Main className='gap-3 pt-4'>
-        {step === 'sign' && signRequestQr && (
-          <div className='flex flex-col items-center gap-4 py-4'>
-            <QrDisplay
-              data={signRequestQr}
-              size={220}
-              title='scan with zigner'
-              description='scan this QR with your signer'
-            />
-            <p className='text-center text-sm text-fg-muted'>
-              open zigner, scan this code, then review and approve
-            </p>
-            {error && <p className='text-center text-xs text-warn'>{error}</p>}
-          </div>
-        )}
-
-        {step === 'scan' && (
-          <QrScanner
-            onScan={data => void signatureScanned(data)}
-            // a camera that won't start goes back to the qr, saying so there
-            onError={err => {
-              setError(typeof err === 'string' ? err : "that code didn't scan · please try again");
-              setStep('sign');
-            }}
-            onClose={() => setStep('sign')}
-            title='scan signature'
-            description='point camera at signer QR code'
-          />
-        )}
-
         {step === 'sending' && (
           <div className='flex flex-col items-center gap-4 py-6'>
             <h2 className='text-lg'>building transaction</h2>
@@ -1791,17 +1751,6 @@ export const CrosschainSwap = ({
           ))}
       </Main>
       <Footer>
-        {step === 'sign' && (
-          <Button
-            className='w-full'
-            onClick={() => {
-              setError(undefined);
-              setStep('scan');
-            }}
-          >
-            scan signature
-          </Button>
-        )}
         {/* the swap stays on home until it ends; only "stop watching" lets it go */}
         {(step === 'deposit' || step === 'polling') && watchable && (
           <Button variant='secondary' className='grow' onClick={reset}>

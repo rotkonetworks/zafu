@@ -2,13 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { splitLoHi } from '@penumbrafi/types/lo-hi';
 
-const worker = vi.hoisted(() => ({ build: vi.fn() }));
+const worker = vi.hoisted(() => ({ build: vi.fn(), pczt: vi.fn(), complete: vi.fn() }));
 vi.mock('../../../state/keyring/network-worker', async orig => ({
   ...(await orig<object>()),
   buildSendTxInWorker: worker.build,
+  buildSendTxPcztInWorker: worker.pczt,
+  completeSendTxPcztInWorker: worker.complete,
 }));
 
-import { buildDeposit, RefundedSlot, STEP_FOR } from './crosschain';
+import { buildDeposit, payDepositViaZigner, RefundedSlot, STEP_FOR } from './crosschain';
+import type { ZignerRound } from '../../../signing/zigner-round';
 import { MOVE_NEEDS_MS, tooLateToMove } from '../../../state/swap/thor-out';
 import { traceOut, u128 } from './penumbra-units';
 import { maxSendable, quoteSend } from '../send/spendable';
@@ -17,34 +20,73 @@ import { nodeStatus } from '../../../state/swap/thornode';
 describe('a swap deposit spends the chosen pocket', () => {
   const base = { walletId: 'vault', zidecarUrl: 'https://z', to: 't1dep', amountIn: '0.1' };
 
-  it('sends a zigner build to the chosen store and account, unsigned', async () => {
-    worker.build.mockResolvedValue({ sighash: '00' });
-    await buildDeposit({ ...base, storeId: 'vault#2', pocket: 2, ufvk: 'uview1x' });
-    expect(worker.build).toHaveBeenLastCalledWith(
+  // zigner pays through the PCZT round, never the legacy bare-sighash request
+  const built = { pcztHex: 'aa', urFrames: ['ur:zigner-module/1-1/x'], coldSendId: 'c1' };
+  const signedRound = (signed: string) =>
+    ({ sign: vi.fn().mockResolvedValue(signed) }) as unknown as ZignerRound;
+  const cold = { ...base, mainnet: true, ufvk: 'uview1x' };
+
+  it('builds a zigner deposit as a PCZT from the paying store, then broadcasts it', async () => {
+    worker.pczt.mockResolvedValue(built);
+    worker.complete.mockResolvedValue({ txid: 'tx1' });
+    const round = signedRound('signed-pczt');
+    const order: string[] = [];
+    const txid = await payDepositViaZigner(round, { ...cold, storeId: 'vault#2' }, async () => {
+      order.push('recorded');
+    });
+    expect(txid).toBe('tx1');
+    expect(worker.pczt).toHaveBeenLastCalledWith(
       'zcash',
       'vault#2',
       'https://z',
       't1dep',
       '10000000',
       '',
-      2,
+      0,
       true,
-      undefined,
       'uview1x',
+      false,
+      undefined,
+      undefined,
+      true,
     );
+    expect(round.sign).toHaveBeenCalledWith(built, 'deposit 0.1 zec to the swap');
+    expect(worker.complete).toHaveBeenLastCalledWith(
+      'zcash',
+      'vault#2',
+      'https://z',
+      'signed-pczt',
+      'c1',
+    );
+    expect(order).toEqual(['recorded']);
   });
 
-  it('falls back to the wallet store only when there is no pocket store', async () => {
-    await buildDeposit({ ...base, pocket: 3, ufvk: 'uview1x' });
-    const args = worker.build.mock.lastCall!;
-    expect([args[1], args[6]]).toEqual(['vault', 3]);
+  it('a zigner deposit falls back to the wallet store, and follows the wallet network', async () => {
+    worker.pczt.mockResolvedValue(built);
+    worker.complete.mockResolvedValue({ txid: 'tx2' });
+    await payDepositViaZigner(signedRound('s'), { ...cold, mainnet: false }, async () => {});
+    const args = worker.pczt.mock.lastCall!;
+    expect([args[1], args[7]]).toEqual(['vault', false]);
+  });
+
+  it('nothing is recorded or broadcast when zigner is declined', async () => {
+    worker.pczt.mockResolvedValue(built);
+    worker.complete.mockClear();
+    const round = {
+      sign: vi.fn().mockRejectedValue(new Error('declined')),
+    } as unknown as ZignerRound;
+    const recorded = vi.fn();
+    await expect(payDepositViaZigner(round, cold, recorded)).rejects.toThrow('declined');
+    expect(recorded).not.toHaveBeenCalled();
+    expect(worker.complete).not.toHaveBeenCalled();
   });
 
   it('sends a hot build with the vault and no ufvk', async () => {
     const vault = { id: 'v' } as never;
     await buildDeposit({ ...base, storeId: 'vault#1', pocket: 1, vault });
     const args = worker.build.mock.lastCall!;
-    expect([args[1], args[6], args[8], args[9]]).toEqual(['vault#1', 1, vault, undefined]);
+    expect([args[1], args[6], args[8]]).toEqual(['vault#1', 1, vault]);
+    expect(args).toHaveLength(9);
   });
 });
 

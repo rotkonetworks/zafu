@@ -205,7 +205,6 @@ export function ZcashSendApproval() {
           pocketAccount,
           mainnet,
           vault,
-          undefined,
           key,
         );
         if (!('txid' in single)) {
