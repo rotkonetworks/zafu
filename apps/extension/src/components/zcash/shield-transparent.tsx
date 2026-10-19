@@ -27,20 +27,16 @@ import { activeAccountIndex, activePockets, activeZcashStoreId } from '../../sta
 import { usePasswordGate } from '../../hooks/password-gate';
 import { useTransparentBalance } from '../../hooks/zcash-transparent-balance';
 import { Button } from '@repo/ui/components/ui/button';
+import { useStore as useZustand } from 'zustand';
 import {
   shieldInWorker,
   buildUnsignedShieldInWorker,
-  completeShieldInWorker,
+  broadcastSignedTxInWorker,
+  extractSignedPcztTxInWorker,
   spawnNetworkWorker,
-  type ShieldUnsignedResult,
 } from '../../state/keyring/network-worker';
-import {
-  encodeZcashShieldingSignRequest,
-  isZcashSignatureQR,
-  parseZcashSignatureResponse,
-} from '@repo/wallet/zcash-zigner';
-import { QrDisplay } from '../../shared/components/qr-display';
-import { QrScanner } from '../../shared/components/qr-scanner';
+import { ZignerRoundAction, ZignerRoundView } from '../zigner-round-view';
+import { createZignerRound, isZignerDeclined } from '../../signing/zigner-round';
 import { Sensitive } from '../sensitive';
 import { HARDWARE_WALLET_ENABLED } from '../../config/feature-flags';
 import { walletKind } from '../../signing/wallet-kind';
@@ -80,14 +76,7 @@ const fmtZec = (val: number): string => {
   return decimals < 2 ? s + '0'.repeat(2 - decimals) : s;
 };
 
-type ZignerStep =
-  | 'idle'
-  | 'building'
-  | 'show_qr'
-  | 'scanning'
-  | 'broadcasting'
-  | 'complete'
-  | 'error';
+type ZignerStep = 'idle' | 'building' | 'signing' | 'broadcasting' | 'complete' | 'error';
 
 export interface ShieldTransparentProps {
   /** transparent balance in zatoshi - parent hides this component at 0 */
@@ -144,8 +133,12 @@ export const ShieldTransparent = ({
 
   // zigner shielding state
   const [zignerStep, setZignerStep] = useState<ZignerStep>('idle');
-  const [signRequestQr, setSignRequestQr] = useState<string | null>(null);
-  const [unsignedData, setUnsignedData] = useState<ShieldUnsignedResult | null>(null);
+  // the device round. A shielding request goes out full (a compact answer
+  // cannot carry transparent signatures), so a merge is never asked for.
+  const [round] = useState(() =>
+    createZignerRound(() => Promise.reject(new Error('a shielding answer is never compact'))),
+  );
+  const roundShown = useZustand(round.store, r => r.shown !== null);
   const [zignerTxid, setZignerTxid] = useState<string | null>(null);
   const [zignerError, setZignerError] = useState<string | null>(null);
 
@@ -282,90 +275,41 @@ export const ShieldTransparent = ({
         ufvk,
         undefined,
         key,
+        true,
       );
-      setUnsignedData(result);
-
-      // encode QR sign request
-      const sighashBytes = result.sighashes.map(h => {
-        const bytes = new Uint8Array(32);
-        for (let i = 0; i < 32; i++) {
-          bytes[i] = parseInt(h.substring(i * 2, i * 2 + 2), 16);
-        }
-        return bytes;
-      });
-
-      const qrHex = encodeZcashShieldingSignRequest({
-        accountIndex: 0,
-        sighashes: sighashBytes,
-        addressIndices: result.addressIndices,
-        summary: result.summary,
-        mainnet: isMainnet,
-      });
-
-      setSignRequestQr(qrHex);
-      setZignerStep('show_qr');
+      if (!result.zigner) {
+        throw new Error('the shielding build came back without a zigner request');
+      }
+      // zigner recomputes the sighashes from the PCZT and shows what it signs
+      setZignerStep('signing');
+      const signed = await round.sign(
+        {
+          pcztHex: result.unsignedTxHex,
+          urFrames: result.zigner.urFrames,
+          cborData: result.zigner.cborData,
+          cborBytes: result.zigner.cborBytes,
+          compactRequest: false,
+        },
+        'shield into ironwood',
+      );
+      setZignerStep('broadcasting');
+      const { txHex } = await extractSignedPcztTxInWorker(signed);
+      const sent = await broadcastSignedTxInWorker(selectedKeyInfo.id, zidecarUrl, txHex);
+      setZignerTxid(sent.txid);
+      shieldWentOut(transparentZat);
+      setZignerStep('complete');
     } catch (err) {
       if (isBuildStopped(err)) {
+        return;
+      }
+      if (isZignerDeclined(err)) {
+        setZignerStep('idle');
         return;
       }
       setZignerError(err instanceof Error ? err.message : String(err));
       setZignerStep('error');
     }
-  }, [watchOnly, selectedKeyInfo, tAddresses, isMainnet, zidecarUrl]);
-
-  const handleZignerSigScanned = useCallback(
-    async (data: string) => {
-      if (!isZcashSignatureQR(data)) {
-        setZignerError("that code isn't zigner's answer · please scan again");
-        setZignerStep('error');
-        return;
-      }
-
-      try {
-        const sigResponse = parseZcashSignatureResponse(data);
-
-        if (!unsignedData || !selectedKeyInfo) {
-          throw new Error('missing unsigned transaction data');
-        }
-
-        // verify the returned sighash matches what we sent
-        const toHex = (b: Uint8Array) =>
-          Array.from(b)
-            .map(x => x.toString(16).padStart(2, '0'))
-            .join('');
-        const responseSighash = toHex(sigResponse.sighash);
-        if (unsignedData.sighashes.length > 0 && responseSighash !== unsignedData.sighashes[0]) {
-          throw new Error('sighash mismatch - signature is for a different transaction');
-        }
-
-        setZignerStep('broadcasting');
-
-        // zigner returns each transparent sig as: DER_sig + 0x01(hashtype) + compressed_pubkey(33 bytes)
-        // split into sig (with hashtype) and pubkey
-        const signatures = sigResponse.transparentSigs.map(combined => {
-          const pubkey = combined.slice(-33);
-          const sig = combined.slice(0, -33);
-          return { sig_hex: toHex(sig), pubkey_hex: toHex(pubkey) };
-        });
-
-        const result = await completeShieldInWorker(
-          'zcash',
-          selectedKeyInfo.id,
-          zidecarUrl,
-          unsignedData.unsignedTxHex,
-          signatures,
-        );
-
-        setZignerTxid(result.txid);
-        shieldWentOut(transparentZat);
-        setZignerStep('complete');
-      } catch (err) {
-        setZignerError(err instanceof Error ? err.message : String(err));
-        setZignerStep('error');
-      }
-    },
-    [unsignedData, selectedKeyInfo, zidecarUrl],
-  );
+  }, [watchOnly, selectedKeyInfo, tAddresses, isMainnet, zidecarUrl, round, transparentZat]);
 
   const ledger = useLedgerShield({
     onShielded: () => shieldWentOut(transparentZat),
@@ -451,47 +395,19 @@ export const ShieldTransparent = ({
     );
   }
 
-  // zigner's QR round trip takes over the sheet in place of the review -
-  // nothing here expands, it swaps.
-  if (zignerStep === 'show_qr' && signRequestQr) {
+  // zigner's round takes over the sheet in place of the review - nothing
+  // here expands, it swaps; stepping back sends nothing
+  if (roundShown) {
     return (
       <div className='flex flex-col items-center gap-3'>
-        <QrDisplay
-          data={signRequestQr}
-          size={180}
-          title='scan with zafu zigner'
-          description='scan to sign shielding transaction'
-        />
+        <ZignerRoundView round={round} pinned />
         <div className='flex w-full gap-2'>
-          <Button onClick={() => setZignerStep('scanning')} className='flex-1'>
-            scan signature
-          </Button>
-          <Button
-            variant='secondary'
-            onClick={() => {
-              setZignerStep('idle');
-              setSignRequestQr(null);
-            }}
-          >
-            cancel
+          <ZignerRoundAction round={round} />
+          <Button variant='secondary' onClick={() => round.cancel()}>
+            not now
           </Button>
         </div>
       </div>
-    );
-  }
-
-  if (zignerStep === 'scanning') {
-    return (
-      <QrScanner
-        onScan={data => void handleZignerSigScanned(data)}
-        onError={err => {
-          setZignerError(err);
-          setZignerStep('error');
-        }}
-        onClose={() => setZignerStep('show_qr')}
-        title='scan signature'
-        description='point camera at zafu zigner signature qr'
-      />
     );
   }
 

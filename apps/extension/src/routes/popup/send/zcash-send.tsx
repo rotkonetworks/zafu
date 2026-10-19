@@ -855,7 +855,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             accountIndex,
             mainnet,
             vault,
-            undefined,
             run.key,
           );
           if ('txid' in result) {

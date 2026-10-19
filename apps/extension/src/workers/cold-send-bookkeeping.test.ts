@@ -41,14 +41,13 @@ const caseBody = (name: string): string => {
 
 /** Every handler that broadcasts a transaction the wallet did not sign itself. */
 const COLD_BROADCAST_HANDLERS = [
-  'send-tx-complete',
   'send-tx-pczt-complete',
   'send-turnstile-migration-complete',
   'complete-orchard-pczt',
 ];
 
 /** Every handler that hands an unsigned build out to a signing device. */
-const COLD_BUILD_HANDLERS = ['send-tx', 'send-tx-pczt', 'send-turnstile-migration'];
+const COLD_BUILD_HANDLERS = ['send-tx-pczt', 'send-turnstile-migration'];
 
 describe('cold-send bookkeeping', () => {
   it.each(COLD_BROADCAST_HANDLERS)('%s marks inputs spent and records the send', name => {

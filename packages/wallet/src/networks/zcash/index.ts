@@ -26,17 +26,10 @@ export {
   parseZcashFvkQR,
   createZcashWalletImport,
   isZcashFvkQR,
-  // sign request
-  encodeZcashSignRequest,
-  // signature response
-  parseZcashSignatureResponse,
-  isZcashSignatureQR,
   // detection
   detectQRNetwork,
   detectQRType,
   // types
   type ZcashFvkExportData,
   type ZcashWalletImport,
-  type ZcashSignRequest,
-  type ZcashSignatureResponse,
 } from './zigner';

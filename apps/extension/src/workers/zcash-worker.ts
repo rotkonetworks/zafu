@@ -273,7 +273,6 @@ interface WorkerMessage {
     | 'send-tx'
     | 'build-stop'
     | 'send-tx-multi'
-    | 'send-tx-complete'
     | 'send-tx-pczt'
     | 'send-tx-pczt-complete'
     | 'pczt-apply-contributions'
@@ -281,7 +280,6 @@ interface WorkerMessage {
     | 'send-turnstile-migration-complete'
     | 'shield'
     | 'shield-unsigned'
-    | 'shield-complete'
     | 'transparent-deposit-plan'
     | 'transparent-deposit-unsigned'
     | 'transparent-deposit-complete'
@@ -4954,7 +4952,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           mainnet: boolean;
           /** hot wallet: the sealed vault this worker opens itself */
           vault?: SealedVault;
-          ufvk?: string;
           /** the page's key for stopping this build before it broadcasts */
           cancelKey?: string;
         };
@@ -5337,159 +5334,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           return;
         }
 
-        // zigner wallet: build unsigned transaction for cold signing (real v5 tx bytes)
-        if (!sendPayload.ufvk) {
-          throw new Error('UFVK required for zigner wallet send');
-        }
-
-        // FAIL-CLOSED (NU6.3): this legacy simple-format (sighash+alphas) cold
-        // path only builds orchard txs, which are consensus-disabled
-        // post-activation. The reachable zigner cold-sign path is the PCZT
-        // machine (`send-tx-pczt`, driven by the send UI's
-        // buildSendTxPcztInWorker), which routes ironwood through
-        // build_ironwood_send_pczt. Refuse here rather than build an invalid
-        // orchard tx or duplicate the ironwood path in an unreachable branch.
-        if (sendActivePool === 'ironwood') {
-          throw new Error(
-            'cold (zigner) ironwood send runs through the PCZT cold-sign path, not this ' +
-              'legacy simple-format path - orchard sends are disabled at NU6.3',
-          );
-        }
-
-        emitProgress(
-          'building & proving unsigned transaction (halo2)',
-          `${selected.length} spends`,
-        );
-        const proveStartZ = performance.now();
-
-        // pass full note data (with rseed, rho, recipient) for real Orchard bundle construction
-        const notesForWasm = selected.map(n => ({
-          value: Number(n.value),
-          nullifier: n.nullifier,
-          cmx: n.cmx,
-          position: n.position,
-          rseed_hex: n.rseed ?? '',
-          rho_hex: n.rho ?? '',
-          recipient_hex: n.recipient ?? '',
-        }));
-
-        const pathsForWasm = (paths as { position: number; path: { hash: string }[] }[]).map(p => ({
-          path: p.path.map(e => e.hash),
-          position: p.position,
-        }));
-
-        // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
-        const sendBranchIdHex = await build.race(fetchBranchIdHex(sendClient));
-
-        // build unsigned transaction with real Halo 2 proofs (parallel via offscreen)
-        const proving = proveViaOffscreen({
-          fn: 'build_unsigned',
-          args: [
-            sendPayload.ufvk,
-            notesForWasm,
-            sendPayload.recipient,
-            amountZat.toString(),
-            fee.toString(),
-            anchorHex,
-            pathsForWasm,
-            sendPayload.accountIndex,
-            sendPayload.mainnet,
-            memoHex,
-            sendBranchIdHex,
-          ],
-        });
-        const unsignedResult = await build.race(proving);
-
-        const proveDurationZ = ((performance.now() - proveStartZ) / 1000).toFixed(1);
-        emitProgress('unsigned transaction proved', `${proveDurationZ}s`);
-
-        const parsed = unsignedResult as {
-          sighash: string;
-          alphas: string[];
-          unsigned_tx: string;
-          spend_indices: number[];
-          summary: string;
-        };
-
-        const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
-        emitProgress('unsigned tx ready', `total=${totalDuration}s`);
-
-        // a stopped build leaves no stash behind
-        build.check();
-        // Everything send-tx-complete will need and cannot recover from the
-        // signed bytes. See the ColdSendContext comment.
-        const coldSendId = await stashColdSend(walletId, {
-          nullifiers: selected.map(n => n.nullifier),
-          amount: amountZat.toString(),
-          fee: fee.toString(),
-          recipient: sendPayload.recipient,
-          pool: sendActivePool,
-          kind: 'send',
-          memo: sendPayload.memo,
-        });
-
-        workerSelf.postMessage({
-          type: 'send-tx-unsigned',
-          id,
-          network: 'zcash',
-          walletId,
-          payload: {
-            sighash: parsed.sighash,
-            alphas: parsed.alphas,
-            summary: parsed.summary,
-            fee: fee.toString(),
-            unsignedTx: parsed.unsigned_tx,
-            spendIndices: parsed.spend_indices,
-            coldSendId,
-          },
-        });
-        return;
-      }
-
-      case 'send-tx-complete': {
-        if (!walletId) {
-          throw new Error('walletId required');
-        }
-        await initWasm();
-        if (!wasmModule) {
-          throw new Error('wasm not initialized');
-        }
-
-        const completePayload = payload as {
-          serverUrl: string;
-          unsignedTx: string;
-          signatures: { orchardSigs: string[]; transparentSigs: string[] };
-          spendIndices: number[];
-          /** id returned by the send-tx build; see ColdSendContext */
-          coldSendId?: string;
-        };
-
-        // pass orchard spend auth signatures and their action indices
-        const txHex = wasmModule.complete_transaction(
-          completePayload.unsignedTx,
-          completePayload.signatures.orchardSigs,
-          completePayload.spendIndices,
-        );
-        const txData = hexDecode(txHex);
-
-        const completeClient = makeZcashClient(completePayload.serverUrl);
-        const result = await completeClient.sendTransaction(txData);
-        if (result.errorCode !== 0) {
-          throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
-        }
-
-        const txid = await resolveBroadcastTxid(result, txHex, completePayload.serverUrl);
-        // Same bookkeeping the hot paths do at this exact point: the inputs are
-        // spent as of this broadcast whether or not anything ever rescans.
-        await finalizeColdBroadcast(walletId, completePayload.coldSendId, txid, txHex);
-        workerSelf.postMessage({
-          type: 'tx-result',
-          id,
-          network: 'zcash',
-          walletId,
-          payload: { txid },
-        });
-        return;
+        // A device-signed wallet (zigner, keystone, ledger) sends through
+        // send-tx-pczt: the signer recomputes the sighash from the PCZT. The
+        // legacy cold build here handed out a bare sighash instead, which the
+        // device could not check against anything it showed.
+        throw new Error('this wallet signs on a device · it sends through the pczt path');
       }
 
       // ── PCZT signing flow (single-signer zigner) ──────────────────────
@@ -7036,6 +6885,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           ledgerOvk?: boolean;
           /** the page's key for stopping this build (see build-abort.ts) */
           cancelKey?: string;
+          /** zigner signs it: return the PCZT as a ur:zigner-module request too */
+          zigner?: boolean;
         };
         const build = builds.begin(shieldUnsignedPayload.cancelKey);
         const progress = buildProgress(walletId);
@@ -7152,6 +7003,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           unsigned_tx_hex: string;
           summary: string;
         };
+        // zigner signs the PCZT itself, never bare sighashes. Only the ironwood
+        // builder returns a PCZT; the pre-NU6.3 orchard one is a raw tx.
+        if (shieldUnsignedPayload.zigner && !shieldUPostNu63) {
+          throw new Error('zigner shields into ironwood only · this chain is before NU6.3');
+        }
+        const shieldUZigner = shieldUnsignedPayload.zigner
+          ? zignerSignRequest(wasmModule, shieldUParsed.unsigned_tx_hex, {
+              compact: false,
+              fragmentSize: fragOf(undefined),
+            })
+          : undefined;
 
         workerSelf.postMessage({
           type: 'shield-unsigned-result',
@@ -7165,53 +7027,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             fee: shieldUFee.toString(),
             addressIndices: shieldUAddrIndices,
             ...(shieldUPubkeyHex ? { transparentPubkeyHex: shieldUPubkeyHex } : {}),
+            ...(shieldUZigner && {
+              zigner: {
+                urFrames: shieldUZigner.urFrames,
+                cborData: shieldUZigner.envelope,
+                cborBytes: shieldUZigner.envelope.length,
+              },
+            }),
           },
-        });
-        return;
-      }
-
-      case 'shield-complete': {
-        if (!walletId) {
-          throw new Error('walletId required');
-        }
-        await initWasm();
-        if (!wasmModule) {
-          throw new Error('wasm not initialized');
-        }
-
-        const shieldCompletePayload = payload as {
-          serverUrl: string;
-          unsignedTxHex: string;
-          signatures: { sig_hex: string; pubkey_hex: string }[];
-        };
-
-        const signaturesJson = JSON.stringify(shieldCompletePayload.signatures);
-        const shieldCompleteTxHex = wasmModule.complete_shielding_transaction(
-          shieldCompletePayload.unsignedTxHex,
-          signaturesJson,
-        );
-        const shieldCompleteTxData = hexDecode(shieldCompleteTxHex);
-
-        const shieldCompleteClient = makeZcashClient(shieldCompletePayload.serverUrl);
-        const shieldCompleteResult =
-          await shieldCompleteClient.sendTransaction(shieldCompleteTxData);
-        if (shieldCompleteResult.errorCode !== 0) {
-          throw new Error(
-            `broadcast failed (${shieldCompleteResult.errorCode}): ${shieldCompleteResult.errorMessage}`,
-          );
-        }
-
-        const shieldCompleteTxid = await resolveBroadcastTxid(
-          shieldCompleteResult,
-          shieldCompleteTxHex,
-          shieldCompletePayload.serverUrl,
-        );
-        workerSelf.postMessage({
-          type: 'tx-result',
-          id,
-          network: 'zcash',
-          walletId,
-          payload: { txid: shieldCompleteTxid },
         });
         return;
       }
