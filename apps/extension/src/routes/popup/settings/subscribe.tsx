@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { StepList } from '@repo/ui/components/ui/step-list';
+import { Button } from '@repo/ui/components/ui/button';
 import { Sensitive } from '../../../components/sensitive';
 import { useStore } from '../../../state';
 import { zcashViewKey } from '../../../state/zcash-view-key';
@@ -24,20 +25,11 @@ import {
   buildPaymentMemo,
 } from '@repo/wallet/license';
 import { deriveZidCrossSite, deriveRingVrfSeed, DEFAULT_IDENTITY } from '../../../state/identity';
-import {
-  buildSendTxInWorker,
-  completeSendTxInWorker,
-  type SendTxUnsignedResult,
-} from '../../../state/keyring/network-worker';
-import {
-  encodeZcashSignRequest,
-  isZcashSignatureQR,
-  parseZcashSignatureResponse,
-  hexToBytes,
-  bytesToHex,
-} from '@repo/wallet/networks';
-import { QrDisplay } from '../../../shared/components/qr-display';
-import { QrScanner } from '../../../shared/components/qr-scanner';
+import { useStore as useZustand } from 'zustand';
+import { buildSendTxInWorker } from '../../../state/keyring/network-worker';
+import { ZignerRoundView } from '../../../components/zigner-round-view';
+import { isZignerDeclined } from '../../../signing/zigner-round';
+import { payViaZigner, zignerRound } from '../../../signing/zigner-pay';
 import { SettingsScreen } from './settings-screen';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { Clipped } from '@repo/ui/components/ui/clipped';
@@ -47,8 +39,6 @@ type PayState =
   | 'idle'
   | 'review'
   | 'building'
-  | 'zigner-sign' // show sign-request QR for zigner
-  | 'zigner-scan' // scan signature QR from zigner
   | 'broadcasting'
   | 'sent'
   | 'polling'
@@ -100,9 +90,10 @@ export const SubscribePage = () => {
   const [sendSteps, setSendSteps] = useState<
     { step: string; detail?: string; elapsedMs: number }[]
   >([]);
-  // zigner signing flow: unsigned tx produced at build, QR shown to user, signature scanned back
-  const [signRequestQr, setSignRequestQr] = useState<string | null>(null);
-  const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
+  // one device round for this screen; it merges through the paying wallet
+  const payWalletRef = useRef('');
+  const [round] = useState(() => zignerRound(() => payWalletRef.current));
+  const roundShown = useZustand(round.store, s => s.shown !== null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const buildStartRef = useRef<number>(0);
   // baseline `expires` captured before a new payment starts; polling waits
@@ -332,7 +323,7 @@ export const SubscribePage = () => {
     currentLicense,
   ]);
 
-  // zigner variant: build unsigned tx, show sign-request QR, wait for signature scan.
+  // zigner: build the PCZT, one device round (zigner shows what it proves), broadcast
   const handleZignerBuild = useCallback(async () => {
     if (!keyInfo?.id || !memo) {
       return;
@@ -342,42 +333,39 @@ export const SubscribePage = () => {
       setPayState('error');
       return;
     }
+    const ufvk = zcashViewKey(activeZcashWallet);
+    if (!ufvk) {
+      setError('this wallet has no viewing key to build with · please re-import it');
+      setPayState('error');
+      return;
+    }
     baselineExpiresRef.current = currentLicense?.expires ?? 0;
     setSendSteps([]);
     buildStartRef.current = Date.now();
     setPayState('building');
     try {
-      const accountIndex = activeZcashWallet.accountIndex ?? 0;
-      const mainnet = activeZcashWallet.mainnet ?? true;
-      const ufvk = zcashViewKey(activeZcashWallet);
-
-      const result = await buildSendTxInWorker(
-        'zcash',
-        storeId ?? keyInfo.id,
-        zidecarUrl,
-        ROTKO_LICENSE_ADDRESS,
-        amountZat.toString(),
-        memo,
-        accountIndex,
-        mainnet,
-        undefined,
-        ufvk,
+      payWalletRef.current = storeId ?? keyInfo.id;
+      const sent = await payViaZigner(
+        round,
+        {
+          walletId: payWalletRef.current,
+          serverUrl: zidecarUrl,
+          recipient: ROTKO_LICENSE_ADDRESS,
+          amountZat: amountZat.toString(),
+          memo,
+          mainnet: activeZcashWallet.mainnet ?? true,
+          ufvk,
+        },
+        `pay ${amountZec} zec for pro (+${daysAdded} days)`,
+        () => setPayState('broadcasting'),
       );
-      if (!('sighash' in result)) {
-        throw new Error('unexpected result from unsigned tx build');
-      }
-      unsignedTxRef.current = result;
-
-      const signRequest = encodeZcashSignRequest({
-        accountIndex,
-        sighash: hexToBytes(result.sighash),
-        orchardAlphas: result.alphas.map(a => hexToBytes(a)),
-        summary: result.summary || `pay ${amountZec} zec for pro (+${daysAdded} days)`,
-        mainnet,
-      });
-      setSignRequestQr(signRequest);
-      setPayState('zigner-sign');
+      setTxid(sent);
+      startPolling();
     } catch (e) {
+      if (isZignerDeclined(e)) {
+        setPayState('idle');
+        return;
+      }
       const msg = e instanceof Error ? e.message : String(e);
       setError(
         msg.includes('insufficient') || msg.includes('balance') || msg.includes('not enough')
@@ -396,53 +384,9 @@ export const SubscribePage = () => {
     amountZec,
     daysAdded,
     currentLicense,
+    round,
+    startPolling,
   ]);
-
-  const handleZignerSignatureScanned = useCallback(
-    async (data: string) => {
-      if (!isZcashSignatureQR(data)) {
-        setError("that code isn't zigner's answer · please scan again");
-        setPayState('error');
-        return;
-      }
-      if (!unsignedTxRef.current || !keyInfo?.id) {
-        setError('missing unsigned transaction');
-        setPayState('error');
-        return;
-      }
-      setPayState('broadcasting');
-      try {
-        const sigResponse = parseZcashSignatureResponse(data);
-        const signatures = {
-          orchardSigs: sigResponse.orchardSigs.map(s => bytesToHex(s)),
-          transparentSigs: sigResponse.transparentSigs.map(s => bytesToHex(s)),
-        };
-        const result = await completeSendTxInWorker(
-          'zcash',
-          keyInfo.id,
-          zidecarUrl,
-          unsignedTxRef.current.unsignedTx,
-          signatures,
-          unsignedTxRef.current.spendIndices,
-          // lets the worker mark the spent inputs and record the send
-          unsignedTxRef.current.coldSendId,
-        );
-        unsignedTxRef.current = null;
-        setSignRequestQr(null);
-        setTxid(result.txid);
-        startPolling();
-      } catch (e) {
-        unsignedTxRef.current = null;
-        setError(
-          e instanceof Error
-            ? e.message
-            : "it didn't reach the network · please look at home before trying again",
-        );
-        setPayState('error');
-      }
-    },
-    [keyInfo?.id, zidecarUrl, startPolling],
-  );
 
   return (
     <SettingsScreen title='subscribe'>
@@ -619,56 +563,18 @@ export const SubscribePage = () => {
             </div>
           )}
 
-          {/* zigner: show sign-request QR */}
-          {payState === 'zigner-sign' && signRequestQr && (
+          {/* zigner: the request, then the camera for its answer */}
+          {roundShown && (
             <div className='border border-primary/40 bg-primary/5 p-3 flex flex-col gap-3 items-center'>
-              <p className='text-xs font-mono text-fg-muted'>sign with zafu zigner</p>
-              <QrDisplay data={signRequestQr} size={220} />
-              <div className='text-label font-mono text-fg-muted text-center leading-relaxed'>
-                1. open zafu zigner on your phone
-                <br />
-                2. scan this qr
-                <br />
-                3. review & approve the transaction
-                <br />
-                4. tap &quot;scan signature&quot; below
-              </div>
-              <div className='flex gap-2 w-full'>
-                <button
-                  onClick={() => {
-                    unsignedTxRef.current = null;
-                    setSignRequestQr(null);
-                    setPayState('idle');
-                  }}
-                  className='flex-1 border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
-                >
-                  cancel
-                </button>
-                <button
-                  onClick={() => setPayState('zigner-scan')}
-                  className='flex-1 border border-primary/40 bg-primary/10 py-2 text-xs font-mono text-zigner-gold hover:bg-primary/20'
-                >
-                  scan signature
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* zigner: scan signature QR */}
-          {payState === 'zigner-scan' && (
-            <div className='border border-primary/40 bg-primary/5 p-3 flex flex-col gap-2'>
-              <QrScanner
-                inline
-                title='scan signature'
-                description="point camera at zafu zigner's signature qr"
-                onScan={data => void handleZignerSignatureScanned(data)}
-                onClose={() => setPayState('zigner-sign')}
-              />
+              <ZignerRoundView round={round} />
+              <Button variant='secondary' onClick={() => round.cancel()} className='w-full'>
+                not now
+              </Button>
             </div>
           )}
 
           {/* building/broadcasting */}
-          {(payState === 'building' || payState === 'broadcasting') && (
+          {!roundShown && (payState === 'building' || payState === 'broadcasting') && (
             <div className='border border-border-soft p-3 flex flex-col gap-2'>
               <div className='flex items-center justify-between'>
                 <span className='text-xs font-mono text-fg'>

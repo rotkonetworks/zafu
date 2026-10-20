@@ -10,7 +10,6 @@ import type { AllSlices } from '..';
 import { selectEffectiveKeyInfo } from '../keyring';
 import { selectTxSigningSecurity } from '../privacy';
 import {
-  applySignatureContributionsInWorker,
   broadcastSignedTxInWorker,
   buildColdDepositInWorker,
   buildSendTxInWorker,
@@ -23,7 +22,6 @@ import {
   lookupTxInWorker,
   planTransparentDepositInWorker,
   sendTransparentDepositInWorker,
-  type SignatureContribution,
 } from '../keyring/network-worker';
 import type { VaultUnlock } from '../keyring/types';
 import { activeAccountIndex, activeZcashStoreId } from '../pockets';
@@ -31,7 +29,8 @@ import { selectActiveZcashWallet } from '../wallets';
 import { zcashViewKey } from '../zcash-view-key';
 import { walletKind } from '../../signing/wallet-kind';
 import { moveAndDeposit } from '../../signing/move-and-deposit';
-import { createZignerRound, type ZignerRound } from '../../signing/zigner-round';
+import type { ZignerRound } from '../../signing/zigner-round';
+import { zignerRound } from '../../signing/zigner-pay';
 import {
   checkVault,
   type DepositPlan,
@@ -121,14 +120,7 @@ const rounds = new Map<string, ZignerRound>();
 export const swapRound = (id: string, storeId: string): ZignerRound => {
   let round = rounds.get(id);
   if (!round) {
-    round = createZignerRound((pczt, json) =>
-      applySignatureContributionsInWorker(
-        'zcash',
-        storeId,
-        pczt,
-        JSON.parse(json) as SignatureContribution[],
-      ),
-    );
+    round = zignerRound(() => storeId);
     rounds.set(id, round);
   }
   return round;

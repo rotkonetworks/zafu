@@ -31,13 +31,6 @@ export {
   createZcashWalletImport,
   isZcashFvkQR,
 
-  // sign request
-  encodeZcashSignRequest,
-
-  // signature response
-  parseZcashSignatureResponse,
-  isZcashSignatureQR,
-
   // detection
   detectQRNetwork,
   detectQRType,
@@ -45,8 +38,6 @@ export {
   // types
   type ZcashFvkExportData,
   type ZcashWalletImport,
-  type ZcashSignRequest,
-  type ZcashSignatureResponse,
   type ZcashSendParams,
   type SpendableNote,
   type UnsignedZcashTx,

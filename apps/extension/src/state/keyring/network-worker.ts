@@ -120,7 +120,6 @@ export interface NetworkWorkerMessage {
     | 'send-tx'
     | 'build-stop'
     | 'send-tx-multi'
-    | 'send-tx-complete'
     | 'send-tx-pczt'
     | 'send-tx-pczt-complete'
     | 'pczt-apply-contributions'
@@ -128,7 +127,6 @@ export interface NetworkWorkerMessage {
     | 'send-turnstile-migration-complete'
     | 'shield'
     | 'shield-unsigned'
-    | 'shield-complete'
     | 'transparent-deposit-plan'
     | 'transparent-deposit-unsigned'
     | 'transparent-deposit-complete'
@@ -284,10 +282,8 @@ const SEND_SHAPED_TYPES: ReadonlySet<string> = new Set([
   // their hot variants broadcast inside the same call
   'send-turnstile-migration',
   'shield',
-  'send-tx-complete',
   'send-tx-pczt-complete',
   'send-turnstile-migration-complete',
-  'shield-complete',
   'complete-orchard-pczt',
   'broadcast-raw-tx',
   'broadcast-signed-tx',
@@ -1496,7 +1492,6 @@ export const buildSendTxInWorker = async (
   accountIndex: number,
   mainnet: boolean,
   vault?: VaultUnlock,
-  ufvk?: string,
   /** lets stopBuildInWorker stop this build before it broadcasts */
   cancelKey?: string,
 ): Promise<SendTxUnsignedResult | { txid: string; fee: string }> => {
@@ -1511,7 +1506,6 @@ export const buildSendTxInWorker = async (
       accountIndex,
       mainnet,
       vault: vault && (await sealFor(network, vault)),
-      ufvk,
       cancelKey,
     },
     walletId,
@@ -1551,27 +1545,6 @@ export const buildMultiSendTxInWorker = async (
       vault: await sealFor(network, vault),
       cancelKey,
     },
-    walletId,
-  );
-};
-
-/**
- * complete a send transaction with signatures and broadcast
- */
-export const completeSendTxInWorker = async (
-  network: NetworkType,
-  walletId: string,
-  serverUrl: string,
-  unsignedTx: string,
-  signatures: { orchardSigs: string[]; transparentSigs: string[] },
-  spendIndices: number[],
-  /** SendTxUnsignedResult.coldSendId from the matching build; see that field */
-  coldSendId?: string,
-): Promise<{ txid: string }> => {
-  return callWorker(
-    network,
-    'send-tx-complete',
-    { serverUrl, unsignedTx, signatures, spendIndices, coldSendId },
     walletId,
   );
 };
@@ -1821,6 +1794,13 @@ export interface ShieldUnsignedResult {
   addressIndices: number[];
   /** the one transparent pubkey that owns every input (ironwood builder only) */
   transparentPubkeyHex?: string;
+  /**
+   * zigner asked: the PCZT (`unsignedTxHex`) as a full `ur:zigner-module`
+   * request. Zigner recomputes the sighashes from it and shows the inputs,
+   * the ironwood output and the fee it proves; full, because a compact
+   * answer cannot carry transparent signatures.
+   */
+  zigner?: { urFrames: string[]; cborData: Uint8Array; cborBytes: number };
 }
 
 /**
@@ -1837,6 +1817,8 @@ export const buildUnsignedShieldInWorker = async (
   ledger?: { maxInputs: number },
   /** lets stopBuildInWorker stop this build */
   cancelKey?: string,
+  /** zigner signs it: also return the PCZT as a `ur:zigner-module` request */
+  zigner = false,
 ): Promise<ShieldUnsignedResult> => {
   return callWorker(
     network,
@@ -1848,6 +1830,7 @@ export const buildUnsignedShieldInWorker = async (
       ufvk,
       ...(ledger && { ...ledger, ledgerOvk: true }),
       cancelKey,
+      zigner,
     },
     walletId,
   );
@@ -1891,19 +1874,6 @@ export const shieldEligibilityInWorker = (
   maxInputs: number,
 ): Promise<ShieldEligibility> =>
   callWorker('zcash', 'shield-eligible', { serverUrl, tAddresses, maxInputs });
-
-/**
- * complete shielding transaction with signatures and broadcast
- */
-export const completeShieldInWorker = async (
-  network: NetworkType,
-  walletId: string,
-  serverUrl: string,
-  unsignedTxHex: string,
-  signatures: { sig_hex: string; pubkey_hex: string }[],
-): Promise<{ txid: string }> => {
-  return callWorker(network, 'shield-complete', { serverUrl, unsignedTxHex, signatures }, walletId);
-};
 
 /**
  * check if a specific wallet is syncing on a network
