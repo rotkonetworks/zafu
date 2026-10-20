@@ -6,6 +6,29 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.5.0
+
+### People
+
+- A line reaches someone who was away longer than the relay keeps it. While
+  zafu is open, your lines in a chat from the last seven days go to the relay
+  again before it lets them go; the other side sees each once. Nobody learns
+  anything new from it.
+- Read receipts, per chat, on the person's page. Off until you turn them on;
+  "read" shows under your line only while both of you have them on.
+
+### Sounds
+
+- A small bell for a new message and two wooden taps for money received,
+  each with its own switch under display. Both are off by default: anyone
+  nearby hears them. They play only while a zafu window is open.
+
+### Zcash testnet
+
+- A zcash testnet switch under networks: a seed wallet speaks testnet, amounts
+  read in taz, and tzcash.rotko.net is reached only while it is on. Shared
+  wallets can be made on testnet.
+
 ## 29.4.0
 
 ### Zigner
