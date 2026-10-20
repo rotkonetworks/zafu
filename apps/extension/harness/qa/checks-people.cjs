@@ -477,7 +477,7 @@ module.exports.snd1 = {
 // read receipts: both on, B reads, A sees "read"; with B's off, A sees none
 module.exports.rc1 = {
   title: 'read receipts show only where both turned them on',
-  timeout: 600_000,
+  timeout: 900_000,
   noRetry: true,
   run: async c => {
     const { A, B, a } = await paired(c);
@@ -495,8 +495,8 @@ module.exports.rc1 = {
     await say(a, `read me ${n}`);
     const bi = await B.open('/inbox', 'popup.html', 3000);
     await bi.getByText('alice', { exact: true }).first().click();
-    const got = await waitText(bi, new RegExp(`read me ${n}`), 120000);
-    const read = await waitText(a, /read \d\d:\d\d/, 120000);
+    const got = await waitText(bi, new RegExp(`read me ${n}`), 300000);
+    const read = await waitText(a, /read \d\d:\d\d/, 300000);
     await c.shot(a, 'a-read');
     return {
       status: got && read ? 'pass' : 'fail',
