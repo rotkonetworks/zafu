@@ -24,6 +24,23 @@ bumps for the workspace package.
   sending, shielding and swaps carry on through the upgrade without a zafu
   update on the day.
 
+### Chat and sending
+
+- A penumbra send waits until the wallet has caught up with the chain before
+  it is built. Sending mid-sync could pick notes already spent and be refused
+  ("nullifier was already spent").
+- A message whose send fails comes back to the composer for a minute instead
+  of being lost.
+- A message from a chat opens the send with 0.000001 filled in (UM on
+  penumbra), so it no longer needs an amount each time.
+- With someone whose card you hold, a message waits for the relay to connect
+  ("connecting…") instead of going out as a paid memo.
+- Shift+enter starts a new line in a message; enter sends.
+- Balances show at most 6 decimals, or 4 significant digits for dust, cut
+  down and never rounded up.
+- Penumbra amounts convert exactly: no lost base unit, no overflow on assets
+  with many decimals.
+
 ## 29.3.2
 
 ### People

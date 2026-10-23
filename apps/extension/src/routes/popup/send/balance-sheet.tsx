@@ -12,6 +12,7 @@ import { symbolFromMetadata } from '../../../utils/asset-display';
 import { positionLabel } from '../../../utils/is-fungible-asset';
 import { AssetBucketToggle, type AssetBucket } from '../../../components/asset-bucket-toggle';
 import { PickSheet } from './send-fields';
+import { shortAmount } from './amount-text';
 
 /** what the form shows for a balance: its symbol and display amount */
 export const balanceLook = (b: BalancesResponse | undefined) => {
@@ -62,7 +63,7 @@ export function BalanceSheet({
       }
       picks={list.map((b, i) => {
         const { symbol, amount } = balanceLook(b);
-        return { key: i, label: symbol, value: amount };
+        return { key: i, label: symbol, value: shortAmount(amount) };
       })}
       onPick={i => onPick(list[i]!, list === positions)}
       empty={bucket === 'positions' ? 'no open positions' : 'no assets yet'}

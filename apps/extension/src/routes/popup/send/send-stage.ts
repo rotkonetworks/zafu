@@ -69,11 +69,16 @@ const zcash: Stages = {
 const penumbra: Stages = {
   names: ['planning', 'approve and prove', 'broadcasting'],
   of: [
-    [/^(sending to the wallet|preparing|planning)/, 0],
+    [/^(sending to the wallet|preparing|waiting for the wallet to sync|planning)/, 0],
     [/^approve and build/, 1],
     [/^broadcasting/, 2],
   ],
-  note: (_steps, i, active) => (i === 1 && i === active ? 'in the approval window' : ''),
+  note: (steps, i, active) =>
+    i === 1 && i === active
+      ? 'in the approval window'
+      : i === 0 && i === active && steps.at(-1)?.step.startsWith('waiting for the wallet to sync')
+        ? 'waiting for sync'
+        : '',
   explain: (_steps, active) =>
     [
       NOTES_PAY,

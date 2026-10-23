@@ -74,6 +74,7 @@ import { dayOf } from '../../../utils/when';
 import { cardOf, counterparty, threadIdOf, whenOf } from './threads';
 import { SendState } from './send-state';
 import { chatPrivacy, withReply, withoutReply } from './chat';
+import { holdDraft, takeDraft } from './draft-hold';
 
 const ZCASH_LINK = /zcash:[^\s]+/i;
 
@@ -541,6 +542,9 @@ const Answers = ({ contactId, answers }: { contactId: string; answers: PairCard[
   );
 };
 
+/** what a message sends along unless you change it: the smallest everyday unit */
+const MESSAGE_AMOUNT = '0.000001';
+
 export function ThreadPage() {
   const navigate = useNavigate();
   const goBack = useBackNav(PopupPath.INBOX);
@@ -552,7 +556,8 @@ export function ThreadPage() {
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const addressSource = useContactAddressSource();
   const { address: ownAddress } = useActiveAddress();
-  const [draft, setDraft] = useState('');
+  // a memo send that failed hands its text back for a minute (draft-hold)
+  const [draft, setDraft] = useState(() => takeDraft(threadId) ?? '');
   const [paying, setPaying] = useState(false);
   const [explaining, setExplaining] = useState(false);
   const [dealing, setDealing] = useState(false);
@@ -593,7 +598,15 @@ export function ThreadPage() {
   // answers to that invite you have not confirmed: anyone who reads the memo can answer
   const answers = myRooms.find(r => contact && r.id === pairId(contact.id))?.pair?.answers ?? [];
   const [asMemo, setAsMemo] = useState(false);
-  const via: 'relay' | 'memo' = room && !asMemo ? 'relay' : 'memo';
+  // you hold each other's cards but the pair room has not joined yet: wait for
+  // it rather than quietly paying for a memo the relay would carry for free
+  const via: 'relay' | 'memo' | 'joining' = asMemo
+    ? 'memo'
+    : room
+      ? 'relay'
+      : mutual
+        ? 'joining'
+        : 'memo';
   // the pair room, or the one waiting for an answer to your invite: read while on screen (T2)
   useWatchRoom(room?.id ?? (waiting && contact ? pairId(contact.id) : undefined));
   useEffect(() => {
@@ -661,9 +674,9 @@ export function ThreadPage() {
 
   // someone whose card you hold is paid at the newest address they signed
   const payTo = (mutual && contact?.addresses.find(a => a.network === network)?.address) || address;
-  const send = (prefillMemo?: string, prefillAmount?: string) =>
+  const send = (prefillMemo?: string, prefillAmount?: string, prefillAsset?: string) =>
     navigate(PopupPath.SEND, {
-      state: { prefillRecipient: payTo, prefillMemo, prefillAmount, network },
+      state: { prefillRecipient: payTo, prefillMemo, prefillAmount, prefillAsset, network },
     });
   const myReply = () =>
     network === 'zcash' ? replyAddress(contact?.id, addressSource(), ownAddress) : undefined;
@@ -676,9 +689,16 @@ export function ThreadPage() {
     room?.pair?.pq?.box ? 'on' : room && wantsPq(room) ? 'securing' : 'off',
   );
 
+  // a message rides on the smallest amount, in UM on penumbra (it pays the fee anyway)
+  const sendMessage = (memo: string) =>
+    send(memo, MESSAGE_AMOUNT, network === 'penumbra' ? 'upenumbra' : undefined);
+
   const sendText = async () => {
     const text = draft.trim();
     if (!text) {
+      return;
+    }
+    if (via === 'joining') {
       return;
     }
     if (via === 'relay') {
@@ -687,15 +707,16 @@ export function ThreadPage() {
       return;
     }
     setAsMemo(false);
+    holdDraft(threadId, text);
     // the first memo to someone with no card from you invites them to chat
     if (invites && contact) {
       const memo = await memoInvite(contact, text).catch(() => undefined);
       if (memo) {
-        send(memo);
+        sendMessage(memo);
         return;
       }
     }
-    send(withReply(text, await myReply()));
+    sendMessage(withReply(text, await myReply()));
   };
 
   const pay = async (amount: string, note: string) => {
@@ -845,7 +866,7 @@ export function ThreadPage() {
       )}
       {canSend ? (
         <form
-          className='flex shrink-0 gap-2 border-t border-border-soft px-3 pb-3 pt-2.5'
+          className='flex shrink-0 items-end gap-2 border-t border-border-soft px-3 pb-3 pt-2.5'
           onSubmit={e => {
             e.preventDefault();
             void sendText();
@@ -863,33 +884,45 @@ export function ThreadPage() {
           </Button>
           <button
             type='button'
-            aria-label={via === 'relay' ? 'relay · tap to send as a memo' : 'memo'}
+            aria-label={via === 'memo' ? 'memo' : 'relay · tap to send as a memo'}
             aria-pressed={via === 'memo'}
-            disabled={!room}
+            disabled={!room && !mutual}
             onClick={() => setAsMemo(v => !v)}
             className='grid size-11 shrink-0 place-items-center border border-border-soft disabled:cursor-default'
           >
             <span
               className={cn(
                 'size-3.5',
-                via === 'relay' ? 'border border-fg-muted' : 'bg-zigner-gold',
+                via === 'memo' ? 'bg-zigner-gold' : 'border border-fg-muted',
               )}
               aria-hidden='true'
             />
           </button>
-          <Input
+          {/* enter sends, shift+enter starts a new line; grows to ~5 lines */}
+          <textarea
             aria-label='message'
             placeholder={via === 'relay' ? `message ${name} · free` : `message ${name}`}
             value={draft}
+            rows={1}
             onChange={e => setDraft(e.target.value)}
-            className='h-11 min-w-0 grow'
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                e.currentTarget.form?.requestSubmit();
+              }
+            }}
+            className='max-h-32 min-h-11 min-w-0 grow resize-none border border-border-soft bg-elev-1 px-3 py-[11px] text-sm leading-5 text-fg-high [field-sizing:content] placeholder:text-fg-muted focus-visible:border-zigner-gold focus-visible:outline-none'
           />
           <button
             type='submit'
-            disabled={!draft.trim()}
+            disabled={!draft.trim() || via === 'joining'}
             className='h-11 shrink-0 bg-zigner-gold px-3 text-xs text-zigner-gold-foreground hover:bg-zigner-gold-light disabled:bg-elev-2 disabled:text-fg-dim'
           >
-            {via === 'memo' && network === 'zcash' ? `send · ${MEMO_FEE}` : 'send'}
+            {via === 'joining'
+              ? 'connecting…'
+              : via === 'memo' && network === 'zcash'
+                ? `send · ${MEMO_FEE}`
+                : 'send'}
           </button>
         </form>
       ) : (
