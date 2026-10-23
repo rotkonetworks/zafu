@@ -195,6 +195,29 @@ describe('a direct thread', () => {
     });
   });
 
+  it('a message as a penumbra memo comes with the smallest UM, not an empty amount', async () => {
+    const CAROL = 'penumbra1carol';
+    threadId = CAROL;
+    store.messages.messages = [msg({ txId: 'p', network: 'penumbra', senderAddress: CAROL })];
+    render();
+    const box = container.querySelector<HTMLInputElement>('input[aria-label=message]')!;
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    act(() => {
+      set.call(box, 'see you at noon');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => box.form!.requestSubmit());
+    expect(navigate).toHaveBeenCalledWith('/send', {
+      state: {
+        prefillAmount: '0.000001',
+        prefillAsset: 'upenumbra',
+        prefillRecipient: CAROL,
+        prefillMemo: 'see you at noon',
+        network: 'penumbra',
+      },
+    });
+  });
+
   it('marks what you received as read once it is on screen', () => {
     store.messages.messages = [msg({ id: 'u', txId: 'u', content: 'hi', read: false })];
     render();

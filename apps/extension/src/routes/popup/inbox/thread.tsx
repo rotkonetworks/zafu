@@ -277,6 +277,8 @@ const RelayLine = ({
 
 /** the ZIP 317 floor for a shielded memo: two actions at 5000 zat */
 const MEMO_FEE = '0.0001';
+/** a penumbra memo rides an output: the smallest UM there is carries it */
+const MESSAGE_UM = { prefillAmount: '0.000001', prefillAsset: 'upenumbra' };
 
 /**
  * "pay" in the composer (ScPaySheet): an amount and a note for this person,
@@ -671,7 +673,14 @@ export function ThreadPage() {
   const payTo = (mutual && contact?.addresses.find(a => a.network === network)?.address) || address;
   const send = (prefillMemo?: string, prefillAmount?: string) =>
     navigate(PopupPath.SEND, {
-      state: { prefillRecipient: payTo, prefillMemo, prefillAmount, network },
+      state: {
+        // a message alone on penumbra still needs an amount: the smallest, unless one was given
+        ...(network === 'penumbra' && prefillMemo && !prefillAmount ? MESSAGE_UM : {}),
+        prefillRecipient: payTo,
+        prefillMemo,
+        ...(prefillAmount ? { prefillAmount } : {}),
+        network,
+      },
     });
   const myReply = () =>
     network === 'zcash' ? replyAddress(contact?.id, addressSource(), ownAddress) : undefined;
