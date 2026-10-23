@@ -20,6 +20,7 @@ import { isValidInternalSender } from '../../senders/internal';
 import { isPenumbraSendRequest } from '../penumbra-send';
 import { writeTxOp, type TxOp } from '../../tx-ops';
 import { penumbraTiming } from '../../penumbra/timing';
+import { waitForSync } from '../../penumbra/sync-gate';
 
 /** A short name for what the plan does, for the transaction tracker. */
 const describePlan = (req: TransactionPlannerRequest): string => {
@@ -156,6 +157,12 @@ async function runSend(
     }
 
     const client = await getViewClient();
+
+    // planning on a stale scan picks notes a recent tx already spent
+    await waitForSync({
+      status: () => client.status({}),
+      onWaiting: () => write({ status: 'pending', step: 'waiting for the wallet to sync' }),
+    });
 
     await write({ status: 'pending', step: 'planning' });
     const { plan } = await client.transactionPlanner(planRequest, {

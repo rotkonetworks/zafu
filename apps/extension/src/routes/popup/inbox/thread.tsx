@@ -74,6 +74,7 @@ import { dayOf } from '../../../utils/when';
 import { cardOf, counterparty, threadIdOf, whenOf } from './threads';
 import { SendState } from './send-state';
 import { chatPrivacy, withReply, withoutReply } from './chat';
+import { holdDraft, takeDraft } from './draft-hold';
 
 const ZCASH_LINK = /zcash:[^\s]+/i;
 
@@ -541,6 +542,9 @@ const Answers = ({ contactId, answers }: { contactId: string; answers: PairCard[
   );
 };
 
+/** what a message sends along unless you change it: the smallest everyday unit */
+const MESSAGE_AMOUNT = '0.000001';
+
 export function ThreadPage() {
   const navigate = useNavigate();
   const goBack = useBackNav(PopupPath.INBOX);
@@ -552,7 +556,8 @@ export function ThreadPage() {
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const addressSource = useContactAddressSource();
   const { address: ownAddress } = useActiveAddress();
-  const [draft, setDraft] = useState('');
+  // a memo send that failed hands its text back for a minute (draft-hold)
+  const [draft, setDraft] = useState(() => takeDraft(threadId) ?? '');
   const [paying, setPaying] = useState(false);
   const [explaining, setExplaining] = useState(false);
   const [dealing, setDealing] = useState(false);
@@ -661,9 +666,9 @@ export function ThreadPage() {
 
   // someone whose card you hold is paid at the newest address they signed
   const payTo = (mutual && contact?.addresses.find(a => a.network === network)?.address) || address;
-  const send = (prefillMemo?: string, prefillAmount?: string) =>
+  const send = (prefillMemo?: string, prefillAmount?: string, prefillAsset?: string) =>
     navigate(PopupPath.SEND, {
-      state: { prefillRecipient: payTo, prefillMemo, prefillAmount, network },
+      state: { prefillRecipient: payTo, prefillMemo, prefillAmount, prefillAsset, network },
     });
   const myReply = () =>
     network === 'zcash' ? replyAddress(contact?.id, addressSource(), ownAddress) : undefined;
@@ -676,6 +681,10 @@ export function ThreadPage() {
     room?.pair?.pq?.box ? 'on' : room && wantsPq(room) ? 'securing' : 'off',
   );
 
+  // a message rides on the smallest amount, in UM on penumbra (it pays the fee anyway)
+  const sendMessage = (memo: string) =>
+    send(memo, MESSAGE_AMOUNT, network === 'penumbra' ? 'upenumbra' : undefined);
+
   const sendText = async () => {
     const text = draft.trim();
     if (!text) {
@@ -687,15 +696,16 @@ export function ThreadPage() {
       return;
     }
     setAsMemo(false);
+    holdDraft(threadId, text);
     // the first memo to someone with no card from you invites them to chat
     if (invites && contact) {
       const memo = await memoInvite(contact, text).catch(() => undefined);
       if (memo) {
-        send(memo);
+        sendMessage(memo);
         return;
       }
     }
-    send(withReply(text, await myReply()));
+    sendMessage(withReply(text, await myReply()));
   };
 
   const pay = async (amount: string, note: string) => {

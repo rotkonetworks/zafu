@@ -23,6 +23,7 @@ import {
 } from '../../../addresses/kind';
 import { Sensitive } from '../../../components/sensitive';
 import { Helper } from './send-ui';
+import { shortAmount } from './amount-text';
 
 export interface BookRow {
   label: string;
@@ -326,7 +327,7 @@ export const AmountField = ({
       </label>
       {available !== undefined && (
         <span className='text-[11px] text-fg-muted'>
-          available <Sensitive>{available}</Sensitive>
+          available <Sensitive>{shortAmount(available)}</Sensitive>
         </span>
       )}
     </div>

@@ -25,12 +25,14 @@ import { Addr, Footer, Main } from './send-ui';
 import { AmountField, AddressSheet, ToField } from './send-fields';
 import { BalanceSheet, balanceLook } from './balance-sheet';
 import { PenumbraFlow } from './penumbra-flow';
+import { releaseDraft } from '../inbox/draft-hold';
 
 export function PenumbraSend({
   onClose,
   prefillAsset,
   prefillRecipient,
   prefillMemo,
+  prefillAmount,
   meta,
 }: {
   onClose: () => void;
@@ -40,6 +42,8 @@ export function PenumbraSend({
   prefillRecipient?: string;
   /** a message from a thread's composer */
   prefillMemo?: string;
+  /** a message's default amount, from a thread's composer */
+  prefillAmount?: string;
   /** the header's mode switch */
   meta?: ReactNode;
 }) {
@@ -56,7 +60,7 @@ export function PenumbraSend({
   const [saveOpen, setSaveOpen] = useState(false);
   const [sent, setSent] = useState<{ to: string; amount: string; unit: string; memo: string }>();
 
-  const { setRecipient, setMemo } = sendState;
+  const { setRecipient, setMemo, setAmount } = sendState;
   useEffect(() => {
     if (prefillRecipient) {
       setRecipient(prefillRecipient);
@@ -64,7 +68,10 @@ export function PenumbraSend({
     if (prefillMemo) {
       setMemo(prefillMemo);
     }
-  }, [prefillRecipient, prefillMemo, setRecipient, setMemo]);
+    if (prefillAmount) {
+      setAmount(prefillAmount);
+    }
+  }, [prefillRecipient, prefillMemo, prefillAmount, setRecipient, setMemo, setAmount]);
 
   // the ['balances', account] cache holds the raw list (home preloads it);
   // `select` buckets it per observer
@@ -107,6 +114,7 @@ export function PenumbraSend({
         onSent: () => {
           void recordUsage(to, 'penumbra');
           setSent({ to, amount: sendState.amount, unit, memo: sendState.memo });
+          releaseDraft(sendState.memo);
           sendState.reset();
         },
         review: {

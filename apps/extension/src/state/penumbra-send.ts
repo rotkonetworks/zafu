@@ -13,6 +13,8 @@ import {
 import { Address } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { Value } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
+import { splitLoHi } from '@penumbrafi/types/lo-hi';
+import { toBaseUnits } from './ibc-withdraw-amount';
 import { MemoPlaintext } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import { FeeTier_Tier } from '@penumbra-zone/protobuf/penumbra/core/component/fee/v1/fee_pb';
 import {
@@ -122,12 +124,9 @@ export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, ge
       const assetId = getAssetIdFromValueView(selectedAsset.balanceView);
       const exponent = getDisplayDenomExponentFromValueView(selectedAsset.balanceView);
 
-      // convert display amount to base units using exponent
-      const multiplier = 10 ** exponent;
-      const baseAmount = new Amount({
-        lo: BigInt(Math.floor(parseFloat(amount) * multiplier)),
-        hi: 0n,
-      });
+      // display amount -> base units, exactly: float math loses a unit on
+      // amounts like 0.000001, and a large exponent overflows the low 64 bits
+      const baseAmount = new Amount(splitLoHi(toBaseUnits(amount, exponent)));
 
       // get return address for memo
       const addressResponse = await viewClient.addressByIndex({ addressIndex: { account } });
@@ -152,8 +151,7 @@ export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, ge
         const totalBig = (baseAmount.hi << 64n) + baseAmount.lo;
         // 0.001 display-unit headroom for the dry-run so autoFee has
         // room to plan; ~2x the typical single-spend fee, plenty.
-        const HEADROOM_DISPLAY = 0.001;
-        const headroomBase = BigInt(Math.floor(HEADROOM_DISPLAY * multiplier));
+        const headroomBase = exponent >= 3 ? 10n ** BigInt(exponent - 3) : 1n;
         const dryBig = totalBig > headroomBase ? totalBig - headroomBase : 0n;
         if (dryBig <= 0n) {
           throw new Error('balance is too small for a spend-all send');
