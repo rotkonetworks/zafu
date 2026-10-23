@@ -78,6 +78,35 @@ const toHex = (bytes: Uint8Array): string =>
 const PLAN_TIMEOUT_MS = 2 * 60_000;
 const BUILD_STALL_MS = 3 * 60_000;
 
+/** how long a send waits for the wallet to read the chain up to its tip */
+const CATCH_UP_MS = 3 * 60_000;
+
+/**
+ * Plan only once the wallet has read the chain up to its tip. Planned before,
+ * a note spent in a block it has not read yet goes into the transaction and
+ * the chain refuses it ("nullifier was already spent").
+ */
+export const waitCaughtUp = async (
+  status: () => Promise<{ catchingUp: boolean }>,
+  { timeoutMs = CATCH_UP_MS, everyMs = 1_000 } = {},
+): Promise<void> => {
+  const until = Date.now() + timeoutMs;
+  while ((await status()).catchingUp) {
+    if (Date.now() > until) {
+      throw new Error(
+        'penumbra is still catching up with the chain · nothing was sent, please try again in a moment',
+      );
+    }
+    await new Promise(r => setTimeout(r, everyMs));
+  }
+};
+
+/** the chain's refusal, read calmly where we know what it means */
+export const calmError = (message: string): string =>
+  /nullifier .* already spent/i.test(message)
+    ? 'a note in this was spent a moment ago and zafu had not seen it yet · nothing was sent, please try again in a minute'
+    : message;
+
 /**
  * Run `authorizeAndBuild` to completion, failing if the stream goes silent.
  *
@@ -157,6 +186,11 @@ async function runSend(
 
     const client = await getViewClient();
 
+    if ((await client.status({})).catchingUp) {
+      await write({ status: 'pending', step: 'catching up with the chain' });
+      await waitCaughtUp(() => client.status({}));
+    }
+
     await write({ status: 'pending', step: 'planning' });
     const { plan } = await client.transactionPlanner(planRequest, {
       signal: AbortSignal.timeout(PLAN_TIMEOUT_MS),
@@ -201,7 +235,7 @@ async function runSend(
     await write({
       status: 'failed',
       step: undefined,
-      error: err instanceof Error ? err.message : 'transaction failed',
+      error: calmError(err instanceof Error ? err.message : 'transaction failed'),
     });
   }
 }
