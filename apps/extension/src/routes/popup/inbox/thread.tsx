@@ -866,7 +866,7 @@ export function ThreadPage() {
       )}
       {canSend ? (
         <form
-          className='flex shrink-0 gap-2 border-t border-border-soft px-3 pb-3 pt-2.5'
+          className='flex shrink-0 items-end gap-2 border-t border-border-soft px-3 pb-3 pt-2.5'
           onSubmit={e => {
             e.preventDefault();
             void sendText();
@@ -898,12 +898,20 @@ export function ThreadPage() {
               aria-hidden='true'
             />
           </button>
-          <Input
+          {/* enter sends, shift+enter starts a new line; grows to ~5 lines */}
+          <textarea
             aria-label='message'
             placeholder={via === 'relay' ? `message ${name} · free` : `message ${name}`}
             value={draft}
+            rows={1}
             onChange={e => setDraft(e.target.value)}
-            className='h-11 min-w-0 grow'
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                e.currentTarget.form?.requestSubmit();
+              }
+            }}
+            className='max-h-32 min-h-11 min-w-0 grow resize-none border border-border-soft bg-elev-1 px-3 py-[11px] text-sm leading-5 text-fg-high [field-sizing:content] placeholder:text-fg-muted focus-visible:border-zigner-gold focus-visible:outline-none'
           />
           <button
             type='submit'
