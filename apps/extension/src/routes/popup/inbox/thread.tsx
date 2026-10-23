@@ -598,7 +598,15 @@ export function ThreadPage() {
   // answers to that invite you have not confirmed: anyone who reads the memo can answer
   const answers = myRooms.find(r => contact && r.id === pairId(contact.id))?.pair?.answers ?? [];
   const [asMemo, setAsMemo] = useState(false);
-  const via: 'relay' | 'memo' = room && !asMemo ? 'relay' : 'memo';
+  // you hold each other's cards but the pair room has not joined yet: wait for
+  // it rather than quietly paying for a memo the relay would carry for free
+  const via: 'relay' | 'memo' | 'joining' = asMemo
+    ? 'memo'
+    : room
+      ? 'relay'
+      : mutual
+        ? 'joining'
+        : 'memo';
   // the pair room, or the one waiting for an answer to your invite: read while on screen (T2)
   useWatchRoom(room?.id ?? (waiting && contact ? pairId(contact.id) : undefined));
   useEffect(() => {
@@ -688,6 +696,9 @@ export function ThreadPage() {
   const sendText = async () => {
     const text = draft.trim();
     if (!text) {
+      return;
+    }
+    if (via === 'joining') {
       return;
     }
     if (via === 'relay') {
@@ -873,16 +884,16 @@ export function ThreadPage() {
           </Button>
           <button
             type='button'
-            aria-label={via === 'relay' ? 'relay · tap to send as a memo' : 'memo'}
+            aria-label={via === 'memo' ? 'memo' : 'relay · tap to send as a memo'}
             aria-pressed={via === 'memo'}
-            disabled={!room}
+            disabled={!room && !mutual}
             onClick={() => setAsMemo(v => !v)}
             className='grid size-11 shrink-0 place-items-center border border-border-soft disabled:cursor-default'
           >
             <span
               className={cn(
                 'size-3.5',
-                via === 'relay' ? 'border border-fg-muted' : 'bg-zigner-gold',
+                via === 'memo' ? 'bg-zigner-gold' : 'border border-fg-muted',
               )}
               aria-hidden='true'
             />
@@ -896,10 +907,14 @@ export function ThreadPage() {
           />
           <button
             type='submit'
-            disabled={!draft.trim()}
+            disabled={!draft.trim() || via === 'joining'}
             className='h-11 shrink-0 bg-zigner-gold px-3 text-xs text-zigner-gold-foreground hover:bg-zigner-gold-light disabled:bg-elev-2 disabled:text-fg-dim'
           >
-            {via === 'memo' && network === 'zcash' ? `send · ${MEMO_FEE}` : 'send'}
+            {via === 'joining'
+              ? 'connecting…'
+              : via === 'memo' && network === 'zcash'
+                ? `send · ${MEMO_FEE}`
+                : 'send'}
           </button>
         </form>
       ) : (
