@@ -11,28 +11,46 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../state';
 import { messagesSelector } from '../state/messages';
 import { queryInjectiveTx } from '@repo/wallet/networks/injective/client';
 import {
   awaitingConfirmation,
   claimTxOp,
+  forgetForm,
   isTerminal,
   isTxOpShown,
   readTxOps,
   removeTxOps,
   sweep,
   writeTxOp,
+  KEEP_FORM_MS,
   type TxOp,
 } from '../tx-ops';
 import { useTxOps } from '../tx-ops/use-tx-ops';
+import { PopupPath } from '../routes/popup/paths';
+import type { SendLocationState } from '../routes/popup/send/prefill';
 
 const TOAST_MS = 6_000;
 const SWEEP_EVERY_MS = 60_000;
 const CONFIRM_EVERY_MS = 6_000;
 
+/** a penumbra send that didn't go through, as its form was: to send it again */
+export const againOf = (op: TxOp): SendLocationState | undefined =>
+  op.status === 'failed' && op.network === 'penumbra' && op.recipient
+    ? {
+        network: 'penumbra',
+        prefillRecipient: op.recipient,
+        prefillMemo: op.memo,
+        prefillAmount: op.amount,
+        prefillAsset: op.asset,
+      }
+    : undefined;
+
 export const TxTrackerWatcher = () => {
   const { addMessage } = useStore(messagesSelector);
+  const navigate = useNavigate();
   const ops = useTxOps();
   const [toast, setToast] = useState<TxOp | undefined>();
   const dismissTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -72,7 +90,11 @@ export const TxTrackerWatcher = () => {
         }
         setToast(op);
         clearTimeout(dismissTimer.current);
-        dismissTimer.current = setTimeout(() => setToast(undefined), TOAST_MS);
+        // one that can go again stays as long as its form is kept
+        dismissTimer.current = setTimeout(
+          () => setToast(undefined),
+          againOf(op) ? KEEP_FORM_MS : TOAST_MS,
+        );
       });
     }
   }, [ops, addMessage]);
@@ -123,9 +145,12 @@ export const TxTrackerWatcher = () => {
     const run = () =>
       void readTxOps()
         .then(async list => {
-          const { stale, remove } = sweep(list, Date.now());
+          const { stale, remove, forget } = sweep(list, Date.now());
           for (const op of stale) {
             await writeTxOp(op.opId, { status: 'unknown' });
+          }
+          for (const opId of forget) {
+            await forgetForm(opId);
           }
           if (remove.length) {
             await removeTxOps(remove);
@@ -145,6 +170,7 @@ export const TxTrackerWatcher = () => {
   }
 
   const ok = toast.status === 'done';
+  const again = againOf(toast);
   const headline =
     toast.status === 'done'
       ? `${toast.label} · sent`
@@ -172,6 +198,18 @@ export const TxTrackerWatcher = () => {
           <p className='text-sm'>{headline}</p>
           {!ok && toast.error && (
             <p className='mt-0.5 break-words text-label text-fg-muted'>{toast.error}</p>
+          )}
+          {again && (
+            <button
+              type='button'
+              onClick={() => {
+                setToast(undefined);
+                navigate(PopupPath.SEND, { state: again });
+              }}
+              className='mt-1 text-xs text-zigner-gold hover:underline'
+            >
+              try again
+            </button>
           )}
         </div>
         <button

@@ -47,11 +47,13 @@ export const usePenumbraTransaction = ({
             label?: string;
             /** each step the service worker reports while the op is pending */
             onStep?: (step: string) => void;
+            /** the form's amount and asset, to fill it again if this fails */
+            again?: Pick<TxOp, 'amount' | 'asset'>;
           },
     ): Promise<PenumbraTransactionResult> => {
-      const { planRequest, label, onStep } =
+      const { planRequest, label, onStep, again } =
         input instanceof TransactionPlannerRequest
-          ? { planRequest: input, label: undefined, onStep: undefined }
+          ? { planRequest: input, label: undefined, onStep: undefined, again: undefined }
           : input;
       const opId = crypto.randomUUID();
       const key = txOpKey(opId);
@@ -97,6 +99,7 @@ export const usePenumbraTransaction = ({
           status: 'pending',
           step: 'sending to the wallet',
           ...(label ? { label } : {}),
+          ...again,
         });
 
         const request: PenumbraSendRequest = {

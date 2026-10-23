@@ -31,6 +31,7 @@ export function PenumbraSend({
   prefillAsset,
   prefillRecipient,
   prefillMemo,
+  prefillAmount,
   meta,
 }: {
   onClose: () => void;
@@ -40,6 +41,8 @@ export function PenumbraSend({
   prefillRecipient?: string;
   /** a message from a thread's composer */
   prefillMemo?: string;
+  /** display units: a message's token amount, or a failed send's again */
+  prefillAmount?: string;
   /** the header's mode switch */
   meta?: ReactNode;
 }) {
@@ -56,7 +59,7 @@ export function PenumbraSend({
   const [saveOpen, setSaveOpen] = useState(false);
   const [sent, setSent] = useState<{ to: string; amount: string; unit: string; memo: string }>();
 
-  const { setRecipient, setMemo } = sendState;
+  const { setRecipient, setMemo, setAmount } = sendState;
   useEffect(() => {
     if (prefillRecipient) {
       setRecipient(prefillRecipient);
@@ -64,7 +67,10 @@ export function PenumbraSend({
     if (prefillMemo) {
       setMemo(prefillMemo);
     }
-  }, [prefillRecipient, prefillMemo, setRecipient, setMemo]);
+    if (prefillAmount) {
+      setAmount(prefillAmount);
+    }
+  }, [prefillRecipient, prefillMemo, prefillAmount, setRecipient, setMemo, setAmount]);
 
   // the ['balances', account] cache holds the raw list (home preloads it);
   // `select` buckets it per observer
@@ -103,6 +109,10 @@ export function PenumbraSend({
       tx={{
         sending,
         label: `send ${sendState.amount} ${symbol}`,
+        again: {
+          amount: sendState.amount,
+          asset: getMetadataFromBalancesResponse.optional(asset)?.base,
+        },
         plan: () => sendState.buildPlanRequest(asset!),
         onSent: () => {
           void recordUsage(to, 'penumbra');

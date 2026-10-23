@@ -7,6 +7,7 @@ import {
   readTxOps,
   writeTxOp,
   KEEP_FINISHED_MS,
+  KEEP_FORM_MS,
   STALE_PENDING_MS,
   isTerminal,
   isTxOp,
@@ -53,7 +54,11 @@ describe('tx-ops', () => {
   });
 
   it('keeps a recent pending op alone', () => {
-    expect(sweep([op({ updatedAt: 0 })], STALE_PENDING_MS - 1)).toEqual({ stale: [], remove: [] });
+    expect(sweep([op({ updatedAt: 0 })], STALE_PENDING_MS - 1)).toEqual({
+      stale: [],
+      remove: [],
+      forget: [],
+    });
   });
 
   it('drops a finished op only once announced and old', () => {
@@ -61,6 +66,15 @@ describe('tx-ops', () => {
     expect(sweep([op({ status: 'done', notified: true })], late).remove).toEqual(['a']);
     expect(sweep([op({ status: 'done', notified: false })], late).remove).toEqual([]);
     expect(sweep([op({ status: 'failed', notified: true })], 1).remove).toEqual([]);
+  });
+
+  it('forgets what was written in a finished send after a minute, and keeps the record', () => {
+    const failed = op({ status: 'failed', notified: true, memo: 'hi', recipient: 'penumbra1x' });
+    expect(sweep([failed], KEEP_FORM_MS - 1).forget).toEqual([]);
+    expect(sweep([failed], KEEP_FORM_MS + 1)).toMatchObject({ forget: ['a'], remove: [] });
+    // not announced yet: no one has had the chance to send it again
+    expect(sweep([{ ...failed, notified: false }], KEEP_FORM_MS + 1).forget).toEqual([]);
+    expect(sweep([op({ status: 'failed', notified: true })], KEEP_FORM_MS + 1).forget).toEqual([]);
   });
 
   it('awaits chain confirmation only for pending ops with a hash and endpoint', () => {

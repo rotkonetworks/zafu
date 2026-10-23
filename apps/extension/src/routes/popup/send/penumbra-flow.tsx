@@ -9,6 +9,7 @@
 import { useState, type ReactNode } from 'react';
 import type { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
+import type { TxOp } from '../../../tx-ops';
 import { Done, Review, Sending, Stopped } from './send-ui';
 import { STAGES, type SendProgress } from './send-stage';
 
@@ -20,6 +21,8 @@ export interface PenumbraTx {
   done: ReactNode;
   plan: () => Promise<TransactionPlannerRequest>;
   label?: string;
+  /** the form's amount and asset, to fill it again if this fails */
+  again?: Pick<TxOp, 'amount' | 'asset'>;
   /** the network accepted it */
   onSent?: (txId: string) => void;
   /** a calmer reading of a failure, where the screen knows one */
@@ -63,6 +66,7 @@ export function PenumbraFlow({
       const { txId } = await penumbraTx.mutateAsync({
         planRequest,
         label: tx.label,
+        again: tx.again,
         onStep: s =>
           setStep(cur =>
             cur.at === 'sending' ? { ...cur, steps: [...cur.steps, { step: s }] } : cur,

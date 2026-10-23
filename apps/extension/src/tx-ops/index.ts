@@ -60,7 +60,13 @@ export interface TxOp {
   /** penumbra send: carried so the sent-message memo can be recorded */
   memo?: string;
   recipient?: string;
+  /** penumbra send: the form's amount and asset (base denom), to fill it again after a failure */
+  amount?: string;
+  asset?: string;
 }
+
+/** what a finished send keeps of its form: a minute to send it again, then gone */
+const FORM = ['memo', 'recipient', 'amount', 'asset'] as const;
 
 export const TX_OP_PREFIX = 'txOp:';
 export const txOpKey = (opId: string): string => `${TX_OP_PREFIX}${opId}`;
@@ -73,6 +79,8 @@ export const awaitingConfirmation = (ops: readonly TxOp[]): TxOp[] =>
 export const STALE_PENDING_MS = 10 * 60_000;
 /** a finished, already-announced op is dropped after this long */
 export const KEEP_FINISHED_MS = 10 * 60_000;
+/** ...and forgets its memo, recipient and amount after this long */
+export const KEEP_FORM_MS = 60_000;
 
 export const isTerminal = (s: TxOpStatus): boolean => s !== 'pending';
 
@@ -89,20 +97,42 @@ export const sortOps = (ops: readonly TxOp[]): TxOp[] =>
 
 /**
  * What housekeeping to do at `now`: pending ops silent for too long become
- * `unknown`; finished ops that were announced and are old enough go away.
+ * `unknown`; finished ops that were announced forget what was written in the
+ * form after a minute, and go away when old enough.
  */
-export const sweep = (ops: readonly TxOp[], now: number): { stale: TxOp[]; remove: string[] } => {
+export const sweep = (
+  ops: readonly TxOp[],
+  now: number,
+): { stale: TxOp[]; remove: string[]; forget: string[] } => {
   const stale: TxOp[] = [];
   const remove: string[] = [];
+  const forget: string[] = [];
   for (const op of ops) {
-    if (op.status === 'pending' && now - op.updatedAt > STALE_PENDING_MS) {
+    const age = now - op.updatedAt;
+    if (op.status === 'pending' && age > STALE_PENDING_MS) {
       stale.push({ ...op, status: 'unknown', updatedAt: now });
-    } else if (isTerminal(op.status) && op.notified && now - op.updatedAt > KEEP_FINISHED_MS) {
+    } else if (isTerminal(op.status) && op.notified && age > KEEP_FINISHED_MS) {
       remove.push(op.opId);
+    } else if (isTerminal(op.status) && op.notified && age > KEEP_FORM_MS) {
+      if (FORM.some(k => op[k] !== undefined)) {
+        forget.push(op.opId);
+      }
     }
   }
-  return { stale, remove };
+  return { stale, remove, forget };
 };
+
+/** the form of a finished op, gone; its record stays for activity */
+export const forgetForm = (opId: string): Promise<void> =>
+  withOp(opId, async () => {
+    const key = txOpKey(opId);
+    const op = await readOp(key);
+    if (op) {
+      const kept = { ...op };
+      FORM.forEach(k => delete kept[k]);
+      await chrome.storage.session.set({ [key]: kept });
+    }
+  });
 
 // ---------------------------------------------------------------------------
 // storage (chrome.storage.session)
