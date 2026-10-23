@@ -293,13 +293,18 @@ const Direct = ({ canCard }: { canCard: boolean }) => {
         (Array.isArray(messages) ? messages : []).filter(m => m.network === network),
       ).map(t => [t.id, rowOf(t)]),
     );
-    // relay lines from pair rooms join the person's row, newest wins
-    for (const room of network === 'zcash' ? pairRooms : []) {
+    // relay lines from pair rooms join the person's row, newest wins; chat is on every network
+    for (const room of pairRooms) {
       const t = relayThreads[threadKey(room)];
       const last = t?.items[t.items.length - 1];
-      const address = (Array.isArray(contacts) ? contacts : [])
-        .find(c => c.id === room.pair?.personId)
-        ?.addresses.find(a => a.network === 'zcash')?.address;
+      const addresses =
+        (Array.isArray(contacts) ? contacts : []).find(c => c.id === room.pair?.personId)
+          ?.addresses ?? [];
+      const address = (
+        addresses.find(a => a.network === network) ??
+        addresses.find(a => a.network === 'zcash') ??
+        addresses[0]
+      )?.address;
       if (!last || !address) {
         continue;
       }

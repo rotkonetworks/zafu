@@ -574,13 +574,14 @@ export function ThreadPage() {
     messages[0]?.network ?? (address?.startsWith('penumbra') ? 'penumbra' : 'zcash');
   const contact = useStore(s => (address ? s.contacts.findByAddress(address)?.contact : undefined));
   const name = useThreadName(address);
-  const canSend = !!address && !!keyInfo && keyInfoSupportsNetwork(keyInfo, network);
+  const canPay = !!address && !!keyInfo && keyInfoSupportsNetwork(keyInfo, network);
 
-  // the pair room, when you hold each other's cards
-  const mutual = network === 'zcash' && isMutual(contact, keyInfo?.id);
+  // the pair room, when you hold each other's cards: the relay chat is the same on every network
+  const mutual = isMutual(contact, keyInfo?.id);
   const roomId = mutual && contact ? pairId(contact.id) : undefined;
   const myRooms = useMyRooms();
   const room = myRooms.find(r => r.id === roomId && r.joined);
+  const canSend = canPay || !!room;
   const relay = useThread(room)?.items;
   // your last line they said they read: shown only while your own read receipts are on
   const seen = room?.pair?.receipts ? room.pair.seen : undefined;
@@ -862,21 +863,23 @@ export function ThreadPage() {
             void sendText();
           }}
         >
-          <Button
-            type='button'
-            variant='secondary'
-            aria-label={`pay ${name}`}
-            onClick={() => (network === 'zcash' ? setPaying(true) : send())}
-            className='h-11 shrink-0 px-2.5 text-xs text-zigner-gold'
-          >
-            <span className='i-ph-wallet size-4' aria-hidden='true' />
-            pay
-          </Button>
+          {canPay && (
+            <Button
+              type='button'
+              variant='secondary'
+              aria-label={`pay ${name}`}
+              onClick={() => (network === 'zcash' ? setPaying(true) : send())}
+              className='h-11 shrink-0 px-2.5 text-xs text-zigner-gold'
+            >
+              <span className='i-ph-wallet size-4' aria-hidden='true' />
+              pay
+            </Button>
+          )}
           <button
             type='button'
             aria-label={via === 'relay' ? 'relay · tap to send as a memo' : 'memo'}
             aria-pressed={via === 'memo'}
-            disabled={!room}
+            disabled={!room || !canPay}
             onClick={() => setAsMemo(v => !v)}
             className='grid size-11 shrink-0 place-items-center border border-border-soft disabled:cursor-default'
           >

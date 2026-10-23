@@ -9,6 +9,8 @@ import type { Message } from '../../../state/messages';
 // route module's other imports (send, wasm, workers) are replaced.
 const ALICE = 'u1alice0000000000000000000000000000000000000000';
 const navigate = vi.fn();
+let threadId = ALICE;
+let rooms: unknown[] = [];
 const addContact = vi.fn(async () => ({ id: 'c1' }));
 const msg = (over: Partial<Message>): Message => ({
   id: over.txId ?? 'id',
@@ -55,7 +57,7 @@ vi.mock('../../../hooks/use-address', () => ({ useActiveAddress: () => ({}) }));
 vi.mock('../../../people/client', () => ({
   peopleCall: vi.fn(async () => undefined),
   peopleSay: vi.fn(async () => undefined),
-  useMyRooms: () => [],
+  useMyRooms: () => rooms,
   useThread: () => undefined,
   useWatchRoom: () => undefined,
 }));
@@ -80,10 +82,11 @@ vi.mock('../../../services/zcashme/config', () => ({
 vi.mock('../../../services/zcashme/label', () => ({ zcashMeLabel: () => undefined }));
 vi.mock('react-router-dom', () => ({
   useNavigate: () => navigate,
-  useParams: () => ({ threadId: ALICE }),
+  useParams: () => ({ threadId }),
 }));
 
 import { ThreadPage } from './thread';
+import { pairId } from '../../../people/protocol';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -94,6 +97,9 @@ beforeEach(() => {
   Element.prototype.scrollTo = () => undefined;
 });
 afterEach(() => {
+  threadId = ALICE;
+  rooms = [];
+  store.contacts.findByAddress = () => undefined;
   act(() => root.unmount());
   container.remove();
   vi.clearAllMocks();
@@ -193,5 +199,24 @@ describe('a direct thread', () => {
     store.messages.messages = [msg({ id: 'u', txId: 'u', content: 'hi', read: false })];
     render();
     expect(store.messages.markRead).toHaveBeenCalledWith('u');
+  });
+
+  it('chats free on the relay with a penumbra address too: the pair room is not a zcash thing', () => {
+    const BOB = 'penumbra1bob';
+    threadId = BOB;
+    store.messages.messages = [];
+    store.contacts.findByAddress = () => ({
+      contact: {
+        id: 'c2',
+        name: 'bob',
+        rel: { walletId: 'w' },
+        pairKa: 'k',
+        zid: 'z',
+        addresses: [{ id: 'a', network: 'penumbra', address: BOB }],
+      },
+    });
+    rooms = [{ id: pairId('c2'), kind: 'pair', joined: true, pair: { personId: 'c2' } }];
+    render();
+    expect(container.querySelector('input')?.placeholder).toBe('message bob · free');
   });
 });
