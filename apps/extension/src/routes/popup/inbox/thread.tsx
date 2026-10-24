@@ -278,8 +278,6 @@ const RelayLine = ({
 
 /** the ZIP 317 floor for a shielded memo: two actions at 5000 zat */
 const MEMO_FEE = '0.0001';
-/** a penumbra memo rides an output: the smallest UM there is carries it */
-const MESSAGE_UM = { prefillAmount: '0.000001', prefillAsset: 'upenumbra' };
 
 /**
  * "pay" in the composer (ScPaySheet): an amount and a note for this person,
@@ -684,16 +682,9 @@ export function ThreadPage() {
 
   // someone whose card you hold is paid at the newest address they signed
   const payTo = (mutual && contact?.addresses.find(a => a.network === network)?.address) || address;
-  const send = (prefillMemo?: string, prefillAmount?: string) =>
+  const send = (prefillMemo?: string, prefillAmount?: string, prefillAsset?: string) =>
     navigate(PopupPath.SEND, {
-      state: {
-        // a message alone on penumbra still needs an amount: the smallest, unless one was given
-        ...(network === 'penumbra' && prefillMemo && !prefillAmount ? MESSAGE_UM : {}),
-        prefillRecipient: payTo,
-        prefillMemo,
-        ...(prefillAmount ? { prefillAmount } : {}),
-        network,
-      },
+      state: { prefillRecipient: payTo, prefillMemo, prefillAmount, prefillAsset, network },
     });
   const myReply = () =>
     network === 'zcash' ? replyAddress(contact?.id, addressSource(), ownAddress) : undefined;
@@ -706,9 +697,9 @@ export function ThreadPage() {
     room?.pair?.pq?.box ? 'on' : room && wantsPq(room) ? 'securing' : 'off',
   );
 
-  // a message rides on the smallest amount (send fills UM in on penumbra)
+  // a message rides on the smallest amount: zec, or um on penumbra
   const sendMessage = (memo: string) =>
-    send(memo, network === 'zcash' ? MESSAGE_AMOUNT : undefined);
+    send(memo, MESSAGE_AMOUNT, network === 'penumbra' ? 'upenumbra' : undefined);
 
   const sendText = async () => {
     const text = draft.trim();
