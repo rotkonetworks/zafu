@@ -1,139 +1,107 @@
-# Privacy practices — zafu wallet BETA
+# Privacy practices — zafu
 
-Paste-ready content for the CWS "Privacy practices" tab.
-
----
+Paste-ready content for the Chrome Web Store "Privacy practices" tab. Checked
+against the code (manifest, `service-worker.ts`, `offscreen-document.ts`,
+`buy/capture/run.ts`, `net/egress-policy.ts`) for 29.4.0.
 
 ## Single purpose
 
 ```
-zafu is a self-custodial privacy wallet that lets users send, receive, sign, and verify transactions for Zcash and Penumbra entirely from the browser. All cryptographic operations (key derivation, trial decryption, merkle witness maintenance, spend proving) run client-side; no viewing key or spending key ever leaves the user's device.
+zafu is a self-custodial privacy wallet for Zcash and Penumbra: send, receive, swap and sign shielded transactions from the browser, including encrypted memos and messages between the people paying each other. Keys are created and kept on the user's device; decryption and proving run locally, and no spending or viewing key leaves the device.
 ```
-
----
 
 ## Permission justifications
 
-### `storage`
+### storage
 
 ```
-Persists the encrypted wallet vault (mnemonic + derived keys), the locally-cached Zcash note set with per-note witnesses, the Penumbra view state, wallet preferences, and session metadata. All persisted data is scoped to the extension's origin and never transmitted.
+Persists the encrypted wallet vault (seed phrase and derived keys), the locally kept Zcash notes with their witnesses, the Penumbra view state, contacts and messages, and wallet preferences. All of it stays in the extension's own storage on the device.
 ```
 
-### `unlimitedStorage`
+### unlimitedStorage
 
 ```
-Zcash note witness state and Penumbra view state grow with chain history (hundreds of MB for active users). The default 5 MB storage quota is not sufficient for a light-client that verifies the chain end-to-end; unlimitedStorage is required to keep proofs and witnesses accessible offline without relying on a server.
+The wallet keeps Zcash notes with their merkle witnesses, the Penumbra view database and the shielded transaction history on the device, so balances and proofs work without handing a viewing key to a server. This state grows with chain history and passes Chrome's default storage quota for active wallets; unlimitedStorage keeps it from being evicted.
 ```
 
-### `offscreen`
+### offscreen
 
 ```
-Manifest V3 service workers cannot hold WebAssembly instances across events. The wallet's WASM provers (Zcash orchard, Penumbra halo2) run in an offscreen document which keeps the prover alive during the 5–15 seconds a shielded spend proof takes to generate. Without `offscreen`, proving would have to restart on every network event and would not be feasible in MV3.
+Used for one reason, WORKERS: Zcash Halo 2 proofs are built with a pool of web workers (rayon), which an MV3 service worker cannot start. The offscreen document hosts that worker pool while a shielded transaction is proved, then the result goes back to the wallet. It shows no UI and loads only files from the extension package.
 ```
 
-### `alarms`
+### alarms
 
 ```
-Schedules periodic background sync of Zcash compact blocks and Penumbra view state while the extension is installed, so balances are current when the user opens the popup. Uses the Chrome alarms API instead of setInterval because MV3 service workers are killed between events.
+Three alarms: "blockSync" every 30 minutes keeps Zcash and Penumbra balances current; "idleCheck" every minute locks the wallet after the user's chosen idle time; "ibcTransferPoll" every minute follows a pending IBC transfer to arrival or timeout. Alarms are used because MV3 service workers stop between events, so timers would not survive.
 ```
 
-### `sidePanel`
+### sidePanel
 
 ```
-Enables the wallet UI to open in Chrome's side panel in addition to the popup, so users can keep the wallet visible alongside a dApp they are signing transactions for. Required to register `sidePanel.setOptions` and toggle panel visibility.
+Enables the wallet UI to open in Chrome's side panel in addition to the popup, so users can keep the wallet visible alongside a site they are signing transactions for.
 ```
 
-### `contextMenus`
+### contextMenus
 
 ```
-Adds a single right-click action on selected text: "Send ZEC/Penumbra to this address" which opens the send flow pre-filled with the selected address. Does not inject any UI into the page itself.
+Adds one item to the right-click menu of zafu's own toolbar icon: "Open Zafu in Popup Window", which opens the wallet in a separate window. It adds nothing to web pages or to the page's context menu.
 ```
 
----
-
-## Host permission justifications
-
-### `host_permissions: ["<all_urls>"]`
+### webRequest (optional)
 
 ```
-zafu is a multichain self-custodial wallet (Zcash + Penumbra + Cosmos + Bitcoin + EVM + Polkadot ecosystem) that implements the standard web3 wallet provider pattern. Two independent reasons require broad host access:
-
-1. PROVIDER INJECTION. The extension implements the Penumbra wallet provider protocol and an ed25519 identity-signing API that any web application can request. dApps must be able to detect the wallet on page load, before any user gesture. Same architecture as MetaMask, Phantom, Rabby — the content scripts listen for postMessage connection requests on the page's own JavaScript. No page content is read.
-
-2. CHAIN DATA FETCH. The wallet fetches public blockchain data (block headers, compact blocks, RPC queries, market data) from a defined set of endpoints — one per supported chain. All endpoints are user-configurable in settings; an advanced user can swap in their own self-hosted node for any chain.
-
-Default endpoints bundled (grouped by purpose):
-
-- Zcash light-server:  zidecar.rotko.net
-- Penumbra gRPC-web:  penumbra.rotko.net, dex.penumbra.zone, tokenomics.penumbra.zone
-- Cosmos (Polkachu):  noble-{api,rpc}.polkachu.com, cosmos-{api,rpc}.polkachu.com
-- Bitcoin mempool:  mempool.space
-- Ethereum RPC:  eth.llamarpc.com
-- NEAR cross-chain swap:  1click.chaindefuser.com
-- Polkadot + parachains:  rpc.polkadot.io, kusama-rpc.polkadot.io, rpc.hydradx.cloud, rpc.astar.network, acala-rpc.dwellir.com, karura-rpc.dwellir.com, wss.api.moonbeam.network, wss.api.moonriver.moonbeam.network
-- Polkadot chain metadata:  metadata.novasama.io
-- License (pro subscription):  zpro.rotko.net
-- Poker (optional feature):  poker.zk.bot, relay.zk.bot
-
-The extension does not make arbitrary HTTP requests beyond this set and the user-configured overrides. Each endpoint serves a specific bounded purpose for the chain it supports.
+Optional, used only by "buy ZEC with cash" (Peer). When the user taps to confirm a cash payment, zafu opens their payment app (Revolut, Wise, Zelle, Monzo, Venmo, PayPal or Cash App) in a tab and uses webRequest to see that tab's requests to that app's own hosts, so it can find the one request that lists the payment and send proof of it to Peer's verifier. The listener is filtered to the payment app's hosts and to the single tab zafu opened; no other site or tab is observed. Nothing is stored: the data lives in memory for the seconds the check takes, then the tab is closed. The permission is requested only at that tap and given back when the check ends, unless the user chooses to keep it.
 ```
 
-### `content_scripts` (ISOLATED + MAIN world)
+### scripting (optional)
 
 ```
-Two lightweight scripts:
-
-• `injected-session.js` (ISOLATED world): relays messages between the page and the extension's service worker. Read-only relay — does not touch DOM or cookies.
-
-• `injected-penumbra-global.js` (MAIN world): exposes a minimal `window[Symbol.for('penumbra')]` provider object so dApps can detect that a Penumbra wallet is installed and request a connection. This is the standard pattern used by every existing Penumbra wallet (Prax, etc.). The global itself is frozen and only exposes `connect`, `disconnect`, `isConnected`, `state`, and event listeners.
+Optional, used only by "buy ZEC with cash" (Peer). For payment apps that need it, zafu uses scripting.executeScript to repeat the payment-list request inside the payment app tab it opened itself, so the request carries the app's own session and returns the payment for Peer to verify. It runs only in that one tab zafu opened, only on the payment app's own pages, and only during the check the user started with a tap. No script is injected into any other page or tab. Nothing is stored: the result is used in memory, then the tab is closed. The permission is requested only at that tap and given back when the check ends, unless the user chooses to keep it.
 ```
 
-### `externally_connectable: { matches: ["<all_urls>"] }`
+## Host permission justification (`<all_urls>` and content scripts)
 
 ```
-Same as host_permissions — the extension listens for connection requests from dApps across any origin. The extension validates the origin on every message and only shows a connection approval prompt for explicitly user-initiated requests.
+Content scripts on https pages, each limited to one job: (1) the Penumbra wallet provider and a Keplr-compatible API, which answer only connection and signing requests from the page's own JavaScript, after the user approves; (2) an optional passkey authenticator that offers zafu when a site calls WebAuthn, after the user confirms; (3) a link handler that opens zcash: and zafu: payment links the user clicks. None of them reads or sends page content. <all_urls> host access is needed because the user chooses the servers zafu talks to - Zcash light servers, Penumbra nodes, message relays - and can enter any address. zafu asks before contacting a server for the first time, and lists every server it talks to, and why, in its settings.
 ```
 
----
+Default servers (all changeable in settings; the full list, with the reason for
+each, is `net/egress-policy.ts`):
+
+- Zcash light server: `zcash.rotko.net`
+- Penumbra node: `penumbra.rotko.net`
+- Message relays: `relay.zafu.pro`
+- Swaps: `1click.chaindefuser.com` (NEAR Intents), THORChain nodes and Midgard, `api.skip.build` (IBC routes)
+- Buying ZEC: Peer, the Base network RPC, the payment app the user picks
+- Optional, off until turned on: contact discovery, zcash.me, governance voting, penumbra registry updates, nym, the pro license server (`license.zafu.pro`)
 
 ## Remote code
 
-```
-No remote code execution. All JavaScript and WebAssembly in the bundle is shipped in the package. The extension makes network requests only for chain data (block headers, compact blocks, note commitment proofs) which is treated as untrusted byte data and cryptographically verified before use.
-```
+**No.** Every JS and Wasm file is in the package. The only `eval` /
+`new Function` strings are library helpers (a `globalThis` fallback and
+wasm-bindgen glue), and the extension CSP (`script-src 'self'
+'wasm-unsafe-eval'`, no `'unsafe-eval'`) would block a string eval anyway.
+Zigner modules zafu relays to the phone are run there, never in zafu.
 
----
+## Data usage
 
-## Data use (CWS data disclosures)
+Tick:
 
-Mark each of the CWS data use categories as follows:
+- **Financial and payment information** — transactions go to the network
+  through the chosen node; swaps send an address and amount to the swap
+  service; "buy with cash" sends proof of one payment to Peer's verifier.
+- **Personal communications** — chat messages leave the device through a
+  relay, encrypted end to end.
 
-| Category                                  | Collected?                       | Notes                                                                                              |
-| ----------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Personally identifiable information (PII) | **No**                           | —                                                                                                  |
-| Health information                        | **No**                           | —                                                                                                  |
-| Financial & payment info                  | **No**                           | The extension manages the user's own wallet keys locally; no payment info is collected by us       |
-| Authentication info                       | **Yes, but stored locally only** | Mnemonic seed / passkey enters the user's own encrypted vault in local storage. Never transmitted. |
-| Personal communications                   | **No**                           | —                                                                                                  |
-| Location                                  | **No**                           | —                                                                                                  |
-| Web history                               | **No**                           | —                                                                                                  |
-| User activity                             | **No**                           | No analytics. No telemetry.                                                                        |
-| Website content                           | **No**                           | —                                                                                                  |
+Leave unticked: personally identifiable information, health, authentication
+information (passwords and passkeys are derived on the device, never sent),
+location, web history, user activity, website content.
 
-### Three required certifications (check all three)
-
-- [x] I do not sell or transfer user data to third parties, outside of the approved use cases.
-- [x] I do not use or transfer user data for purposes that are unrelated to my item's single purpose.
-- [x] I do not use or transfer user data to determine creditworthiness or for lending purposes.
-
----
+Certify all three disclosures.
 
 ## Privacy policy URL
 
-**Required.** Host `privacy-policy.md` (rendered as HTML or plain) at a
-stable URL. Suggested: `https://zafu.rotko.net/privacy`.
-
-Until that URL is live, a shorter-term host:
-`https://github.com/rotkonetworks/zafu/blob/main/docs/cws-listing/privacy-policy.md`
-(raw markdown rendered by GitHub is acceptable for CWS).
+```
+https://github.com/rotkonetworks/zafu/blob/main/docs/cws-listing/privacy-policy.md
+```
