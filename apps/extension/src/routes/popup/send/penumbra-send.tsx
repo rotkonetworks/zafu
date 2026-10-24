@@ -25,6 +25,7 @@ import { Addr, Footer, Main } from './send-ui';
 import { AmountField, AddressSheet, ToField } from './send-fields';
 import { BalanceSheet, balanceLook } from './balance-sheet';
 import { PenumbraFlow } from './penumbra-flow';
+import { releaseDraft } from '../inbox/draft-hold';
 
 export function PenumbraSend({
   onClose,
@@ -117,6 +118,7 @@ export function PenumbraSend({
         onSent: () => {
           void recordUsage(to, 'penumbra');
           setSent({ to, amount: sendState.amount, unit, memo: sendState.memo });
+          releaseDraft(sendState.memo);
           sendState.reset();
         },
         review: {

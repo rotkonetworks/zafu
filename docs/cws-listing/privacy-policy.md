@@ -1,79 +1,93 @@
 # Privacy policy — zafu wallet
 
-_Last updated: 2026-04-23_
+_Last updated: 2026-10-24_
 
 zafu wallet ("zafu", "the extension") is an open-source, self-custodial
-cryptocurrency wallet distributed by rotko networks. This policy describes
-what data the extension handles and what it does with it.
+wallet for Zcash and Penumbra, distributed by rotko networks. This policy
+describes what data the extension handles, where it goes, and why.
 
 ## Summary
 
-- zafu collects no user data.
-- zafu sends no telemetry, analytics, or crash reports.
-- Wallet keys never leave the user's device.
-- Network requests are made only to fetch public chain data.
+- Your keys never leave your device.
+- zafu sends no telemetry, analytics or crash reports.
+- zafu asks before it contacts a server for the first time, and lists every
+  server it talks to, and why, in settings.
+- Some features send data off the device by their nature: a transaction to
+  the network, a message to its recipient through a relay, a swap to the swap
+  service, proof of a cash payment to Peer. Each is described below.
 
 ## Data stored on your device
 
-The extension stores the following data locally, in your browser's
-extension storage. None of it is ever sent to rotko networks or any
-third party:
+Kept in your browser's extension storage, scoped to the extension:
 
-- **Encrypted wallet vault** — your mnemonic seed phrase and derived
-  private keys, encrypted with a password or passkey you choose.
-- **Cached chain state** — Zcash note commitments with merkle
-  witnesses, Penumbra view state, transaction history for your
-  addresses. Derived from public chain data.
-- **User preferences** — selected network, currency display,
-  connected sites, address book entries you create, sync progress.
+- **Encrypted wallet vault** — your seed phrase and derived keys, encrypted
+  with the password you choose.
+- **Chain state** — Zcash notes with their merkle witnesses, the Penumbra view
+  database, and your transaction history, derived from public chain data.
+- **People and messages** — contacts and cards you save, and the messages you
+  send and receive.
+- **Passkeys and passwords** — derived from your seed phrase when a site asks,
+  never stored. zafu keeps only an encrypted list of which sites have one, so
+  it can offer it again.
+- **Preferences** — networks, servers, connected sites, display settings,
+  sync progress.
 
-All of this stays within your browser's local storage and is scoped
-to the extension's origin.
+## Data that leaves your device
 
-## Network requests
+Only when you use the feature, and only to the server shown in settings:
 
-The extension makes requests to:
+- **Chain data** — zafu reads blocks and broadcasts your transactions through
+  the Zcash light server (default `https://zcash.rotko.net`) and the Penumbra
+  node (default `https://penumbra.rotko.net`) you choose; you can switch to
+  another server or your own. Requests are by block range, not by address:
+  decryption happens on your device, so the server does not learn which
+  transactions are yours. A transaction you send is public to the network in
+  the way the protocol defines (shielded transactions hide sender, recipient
+  and amount).
+- **Messages** — chat messages between people who hold each other's cards go
+  through a relay (default `relay.zafu.pro`), encrypted end to end so the
+  relay cannot read them. Other messages travel as encrypted memos inside a
+  shielded transaction.
+- **Swaps** — a swap sends the amounts and the addresses it needs to the swap
+  service you pick (NEAR Intents `1click.chaindefuser.com`, THORChain nodes,
+  Skip for IBC routes).
+- **Buying ZEC with cash** — Peer's service receives your order. To confirm a
+  cash payment, zafu opens your payment app in a tab, reads only the one
+  request that lists the payment, and sends proof of that payment to Peer's
+  verifier. Nothing from your payment app is stored.
+- **Optional services** — only if you turn them on: contact discovery, the
+  zcash.me directory, Zcash governance voting, penumbra registry updates, the
+  nym mixnet, and the pro license check (your zafu identity public key, which
+  is not linked to personal information).
 
-- **A Zcash light-server** (default: `https://zidecar.rotko.net`,
-  user-configurable). Requests compact blocks, tree states, and
-  commitment proofs. Requests are by block height range, not address;
-  the server cannot infer which transactions belong to you because
-  trial decryption happens locally.
-- **A Penumbra gRPC-web endpoint** (default:
-  `https://penumbra.rotko.net`, user-configurable). Requests
-  block-level shielded data; again, decryption is local.
-- **License server** (`https://zpro.rotko.net`) — if you subscribe to
-  the pro tier. Your Zafu Identity (ZID) public key is sent to check
-  license status. ZIDs are not linked to personal information.
+No request contains your seed phrase, spending key or viewing key.
 
-No request contains your mnemonic, private key, or viewing key.
+## Third parties
 
-## Third-party services
-
-- **rotko networks** operates the default light-server and Penumbra
-  endpoint above. rotko networks sees the IP address of your requests
-  (standard for any HTTPS endpoint). rotko networks does not log
-  request contents beyond routine operational logging, and does not
-  correlate requests to identities.
-- **Zcash Foundation / Penumbra Labs** — alternative endpoints you
-  can switch to in settings. Their privacy policies apply to
-  requests sent to them.
+- **rotko networks** runs the default Zcash and Penumbra servers and the zafu
+  relay. Like any HTTPS server they see the IP address of a request; rotko
+  networks keeps only routine operational logs and does not link requests to
+  people.
+- **Other services** — alternative chain servers, NEAR Intents, THORChain,
+  Skip and Peer have their own privacy policies, which apply to what you send
+  them.
 
 ## Data use
 
-Your on-device data is used only to display balances, generate
-transactions, and verify chain state within the extension. It is
-never exported, sold, transferred, or used for any other purpose.
+Data on your device is used only to run the wallet: show balances, build and
+sign transactions, send and show messages. zafu does not sell or transfer user
+data, and does not use it for advertising, creditworthiness or any purpose
+outside the wallet.
 
 ## Children
 
-zafu is not directed at children under 13 and does not knowingly
-collect information from them.
+zafu is not directed at children under 13 and does not knowingly collect
+information from them.
 
 ## Changes to this policy
 
-Updates will be committed to the extension's source repository with
-a new "Last updated" date above.
+Updates are committed to the extension's source repository with a new
+"Last updated" date above.
 
 ## Contact
 

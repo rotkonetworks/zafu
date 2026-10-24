@@ -165,7 +165,7 @@ describe('a direct thread', () => {
     render();
     expect(text()).toContain('shielded payments with a note');
     expect(text()).not.toContain('end-to-end');
-    const box = container.querySelector<HTMLInputElement>('input[aria-label=message]')!;
+    const box = container.querySelector<HTMLTextAreaElement>('textarea[aria-label=message]')!;
     expect(box.placeholder).not.toContain('free');
   });
 

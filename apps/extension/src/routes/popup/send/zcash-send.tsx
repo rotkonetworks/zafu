@@ -2,6 +2,7 @@
 
 import { shorten } from '@repo/ui/lib/utils';
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { releaseDraft } from '../inbox/draft-hold';
 import { Sensitive } from '../../../components/sensitive';
 import { discardTxOp, writeTxOp } from '../../../tx-ops';
 import { useStore } from '../../../state';
@@ -800,6 +801,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         complete(txid);
         setStep('complete');
         void recordUsage(recipient, 'zcash');
+        releaseDraft(memo);
         if (shouldSuggestSave(recipient)) {
           setShowSavePrompt(true);
         }
@@ -1368,6 +1370,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       complete(finalResult.txid);
       setStep('complete');
       void recordUsage(recipient, 'zcash');
+      releaseDraft(memo);
       if (shouldSuggestSave(recipient)) {
         setShowSavePrompt(true);
       }

@@ -23,6 +23,32 @@ bumps for the workspace package.
   each with its own switch under display. Both are off by default: anyone
   nearby hears them. They play only while a zafu window is open.
 
+### Chat and sending
+
+- Penumbra chat goes over the relay like zcash, instead of a paid memo, once
+  you hold each other's cards.
+- A penumbra send waits until the wallet has read up to the chain's tip before
+  it is built. Sending mid-sync could pick notes already spent and be refused
+  ("nullifier was already spent").
+- A send that didn't go through can go again for a minute, and a chat message
+  whose send fails comes back to the composer instead of being lost.
+- A message from a chat opens the send with 0.000001 filled in (UM on
+  penumbra), so it no longer needs an amount each time.
+- With someone whose card you hold, a message waits for the relay to connect
+  ("connecting…") instead of going out as a paid memo.
+- Shift+enter starts a new line in a message; enter sends.
+- Balances show at most 6 decimals, or 4 significant digits for dust, cut
+  down and never rounded up.
+- Penumbra amounts convert exactly: no lost base unit, no overflow on assets
+  with many decimals.
+
+### Zcash
+
+- The shield sheet shows the fee it will pay, and right after a shield home
+  counts the coins once, not twice.
+- The max the send form offers can be sent.
+- A memo with accents or CJK characters reaches the inbox.
+
 ### Zcash testnet
 
 - A zcash testnet switch under networks: a seed wallet speaks testnet, amounts

@@ -1,79 +1,97 @@
-# Store listing — zafu wallet BETA
+# Store listing - zafu
 
-Paste-ready content for the CWS "Store listing" tab.
+Paste-ready content for the Chrome Web Store "Store listing" tab, for both
+listings. Images are in `images/beta/` and `images/prod/`.
 
----
+|                         | beta                                         | prod                                        |
+| ----------------------- | -------------------------------------------- | ------------------------------------------- |
+| Title (from manifest)   | `zafu beta - private zcash wallet`           | `zafu - private zcash wallet`               |
+| Summary (from manifest) | see below                                    | same                                        |
+| Store icon              | `images/beta/store-icon-128.png` (gold seal) | `images/prod/store-icon-128.png` (red seal) |
 
-## Title
-
-Set by manifest: `zafu beta - private zcash wallet` (prod: `zafu - private zcash wallet`)
-
-## Summary
-
-Set by manifest description (126 chars):
+Title and summary come from the uploaded package and are not editable in the
+dashboard. Summary (manifest `description`):
 
 > shielded zcash and penumbra wallet. private chat, shared wallets, cold
 > signing with zigner. your keys never leave your device.
 
-## Description (paste into dashboard)
+## Description - beta
 
 ```
-zafu is an open-source privacy wallet for Zcash and Penumbra, built on a verified light-client architecture. Everything cryptographically sensitive — trial decryption, merkle witness maintenance, spend proving — runs client-side in your browser. No view key ever leaves your device.
+zafu is an open-source wallet for private money: Zcash and Penumbra, shielded by default.
 
-BETA BUILD. This is the rolling development channel. Expect occasional UX rough edges; production users should install the stable "zafu wallet" listing instead.
+BETA BUILD. This is the rolling test channel and updates often. For everyday use, install the stable "zafu - private zcash wallet" listing.
 
-Key features:
+• Shielded by default. Your Zcash balance and sends stay in the shielded pool, with a fresh address for every sender. Penumbra transfers, staking and swaps are private too.
+• Proofs on your computer. Notes are decrypted and transactions are proved in your browser; your keys and viewing keys never leave this device.
+• Private chat. Message the people you know. Once you have each other's cards, messages travel free over an encrypted relay; anyone else gets a shielded memo on chain.
+• Cold signing with zigner. Pair the zigner app on an offline phone and keep your spending keys off this computer. Every transaction is shown and signed on the phone, by QR code.
+• Shared wallets. Hold Zcash together with FROST threshold signatures: any k of n can spend, no one can spend alone.
+• Swaps and buying. Swap in and out of ZEC across NEAR Intents and THORChain, and buy ZEC with cash, with every fee shown before you confirm.
+• One identity per site. Sites that ask get their own key, so nothing links you across them.
+• Asks before it connects. zafu asks before it contacts a new server, and settings show who it talks to and why.
 
-• Zcash shielded pool — send and receive in the orchard pool, per-note witnesses kept in sync as you browse
-• Penumbra — shielded transfers, staking, and swaps with full client-side proving (under 15s on modern hardware)
-• Air-gapped cold signing — pair with zigner (Android) for offline key custody; signs over QR codes, seed never touches the browser
-• FROST 2-of-3 multisig — threshold signatures for shielded Zcash, no single point of compromise
-• ed25519 app identity — sites opt-in to receive a per-site pubkey for login/signing; one keypair per domain, nothing cross-correlates
-• Verified light-client — block headers and note commitment proofs are cross-checked against independent indexer proofs; no trusted server
-
-Source: https://github.com/rotkonetworks/zafu
+Open source: https://github.com/rotkonetworks/zafu
 ```
 
-Length: 1,152 characters. Limit: 16,000.
+## Description - prod
+
+```
+zafu is an open-source wallet for private money: Zcash and Penumbra, shielded by default.
+
+• Shielded by default. Your Zcash balance and sends stay in the shielded pool, with a fresh address for every sender. Penumbra transfers, staking and swaps are private too.
+• Proofs on your computer. Notes are decrypted and transactions are proved in your browser; your keys and viewing keys never leave this device.
+• Private chat. Message the people you know. Once you have each other's cards, messages travel free over an encrypted relay; anyone else gets a shielded memo on chain.
+• Cold signing with zigner. Pair the zigner app on an offline phone and keep your spending keys off this computer. Every transaction is shown and signed on the phone, by QR code.
+• Shared wallets. Hold Zcash together with FROST threshold signatures: any k of n can spend, no one can spend alone.
+• Swaps and buying. Swap in and out of ZEC across NEAR Intents and THORChain, and buy ZEC with cash, with every fee shown before you confirm.
+• One identity per site. Sites that ask get their own key, so nothing links you across them.
+• Asks before it connects. zafu asks before it contacts a new server, and settings show who it talks to and why.
+
+Open source: https://github.com/rotkonetworks/zafu
+```
 
 ## Category
 
-**Productivity**
-
-(Wallets generally land here on CWS; the alternative `Social &
-Communication` doesn't fit and there's no "Finance" or "Crypto"
-category.)
+**Privacy & Security**
 
 ## Language
 
-**English (United States)**
+**English**
 
-## Graphic assets (NOT scriptable — upload manually)
+## Graphic assets
 
-- **Store icon**: 128×128 PNG/JPEG. Use `apps/extension/public/favicon/icon128.png`.
-- **Screenshots**: 1280×800 or 640×400, 24-bit PNG (no alpha), at
-  least 1 required, up to 5. Capture from the running extension.
-  Suggested shots:
-  1. Wallet home (balance view, assets list)
-  2. Send flow (amount + recipient)
-  3. Receive (QR + address)
-  4. Zigner cold-signing QR flow
-  5. Settings / multi-network switcher
-- **Small promo tile** (optional): 440×280
-- **Marquee promo tile** (optional): 1400×560
-- **YouTube promo video** (optional): link to a demo walkthrough
+Same files in `images/beta/` and `images/prod/`; only the seal differs
+(beta gold, prod red). All screenshots and tiles are 24-bit PNG, no alpha.
+
+| Field                         | File                                                                            |
+| ----------------------------- | ------------------------------------------------------------------------------- |
+| Store icon (128x128)          | `store-icon-128.png` - 96px seal, 16px transparent margin                       |
+| Screenshot 1 (1280x800)       | `1-welcome.png` - the welcome page                                              |
+| Screenshot 2                  | `2-wallet.png` - "shielded by default": home and receive                        |
+| Screenshot 3                  | `3-people.png` - "private chat": identity and people                            |
+| Screenshot 4                  | `4-zigner.png` - "keys off this computer": zigner and tools                     |
+| Screenshot 5                  | `5-privacy.png` - "asks before it connects": settings and the connection prompt |
+| Small promo tile (440x280)    | `small-promo-440x280.png`                                                       |
+| Marquee promo tile (1400x560) | `marquee-1400x560.png`                                                          |
+
+Regenerate after a UI change (repo root, after a build):
+
+```
+node docs/cws-listing/tools/capture.cjs <unpacked build> docs/cws-listing/images/raw
+python3 docs/cws-listing/tools/compose.py
+```
+
+The screens come from the real build on the public bip39 test vector
+(`abandon ... art`, no funds).
 
 ## URLs
 
-| Field        | Value                                            |
-| ------------ | ------------------------------------------------ |
-| Official URL | None (unless you own + verify in Search Console) |
-| Homepage URL | `https://zafu.rotko.net`                         |
-| Support URL  | `https://github.com/rotkonetworks/zafu/issues`   |
-
-If `zafu.rotko.net` isn't live yet, use
-`https://github.com/rotkonetworks/zafu` as the homepage until the
-site stands up.
+| Field        | Value                                          |
+| ------------ | ---------------------------------------------- |
+| Official URL | `zafu.pro`                                     |
+| Homepage URL | `https://zafu.pro`                             |
+| Support URL  | `https://github.com/rotkonetworks/zafu/issues` |
 
 ## Mature content
 
@@ -81,4 +99,4 @@ site stands up.
 
 ## Item support visibility
 
-**On** — routes "Support" tab clicks to the GitHub issues URL above.
+**On** - support goes to the GitHub issues URL above.
