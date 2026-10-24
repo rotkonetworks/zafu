@@ -26,7 +26,13 @@ const PHRASE = 'abandon '.repeat(23) + 'art';
     console.log('onboarding:', await L.importSeed(z, PHRASE, { birthdayPreset: 'this month' }));
     // wait out the sync (up to ~15 min) so balances are real, not placeholders
     const home = await z.open('/', 'popup.html', 3000);
-    for (let i = 0; i < 180 && /syncing/.test(L.flat(await L.text(home))); i++) {
+    // done = no sync strip and a balance figure (the strip can be absent
+    // before sync starts, so its absence alone is not enough)
+    const synced = async () => {
+      const t = L.flat(await L.text(home));
+      return !/syncing/.test(t) && /balance [\d.,]+ zec/.test(t);
+    };
+    for (let i = 0; i < 180 && !(await synced()); i++) {
       await home.waitForTimeout(5000);
     }
     await home.close();
