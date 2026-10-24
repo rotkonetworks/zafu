@@ -200,8 +200,8 @@ describe('a direct thread', () => {
     threadId = CAROL;
     store.messages.messages = [msg({ txId: 'p', network: 'penumbra', senderAddress: CAROL })];
     render();
-    const box = container.querySelector<HTMLInputElement>('input[aria-label=message]')!;
-    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    const box = container.querySelector<HTMLTextAreaElement>('textarea[aria-label=message]')!;
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
     act(() => {
       set.call(box, 'see you at noon');
       box.dispatchEvent(new Event('input', { bubbles: true }));
@@ -240,6 +240,6 @@ describe('a direct thread', () => {
     });
     rooms = [{ id: pairId('c2'), kind: 'pair', joined: true, pair: { personId: 'c2' } }];
     render();
-    expect(container.querySelector('input')?.placeholder).toBe('message bob · free');
+    expect(container.querySelector('textarea')?.placeholder).toBe('message bob · free');
   });
 });
