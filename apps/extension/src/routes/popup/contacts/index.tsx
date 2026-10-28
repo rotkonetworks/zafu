@@ -16,6 +16,7 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { PopupPath, contactPath } from '../paths';
 import { sourceLine } from './seal';
 import { looksLikeLink } from '../../../links/router';
+import { scannedAddress } from '../send/scanned-address';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { ChainRow, useAddressDraft } from './chain-row';
 
@@ -109,7 +110,7 @@ export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () 
           onScan={data => {
             setScanning(false);
             if (!follow(data, 'scanned')) {
-              setAddress(data);
+              setAddress(scannedAddress(data));
             }
           }}
           onClose={() => setScanning(false)}

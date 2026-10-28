@@ -18,6 +18,7 @@ import { balancesQueryOptions } from '../../../hooks/penumbra-balances';
 import { ScreenHeader } from '../../../components/screen-header';
 import { Sensitive } from '../../../components/sensitive';
 import { SaveContactModal } from '../../../components/save-contact-modal';
+import { scannedAddress } from './scanned-address';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { useActiveAddress } from '../../../hooks/use-address';
 import { EMPTY_BALANCES } from './shared';
@@ -263,7 +264,7 @@ export function PenumbraSend({
           {scanOpen && (
             <QrScanner
               onScan={data => {
-                sendState.setRecipient(data);
+                sendState.setRecipient(scannedAddress(data));
                 setScanOpen(false);
               }}
               onClose={() => setScanOpen(false)}

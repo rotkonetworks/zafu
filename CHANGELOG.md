@@ -6,6 +6,15 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.5.2
+
+### Sending
+
+- A Zigner address scanned on the penumbra or zcash send screen, or when
+  adding a contact, fills in the address. Zigner's export QR wraps it as
+  `chain:address:0x…`, and penumbra keys from Zigner 0.12.0 and older say
+  `substrate:`, so the field got the whole string or a payment-link error.
+
 ## 29.5.1
 
 ### Sending
