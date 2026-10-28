@@ -1495,8 +1495,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             {showQrScanner && (
               <QrScanner
                 onScan={raw => {
-                  const data = scannedAddress(raw);
-                  if (!applyLink(data, 'scanned')) {
+                  const scanned = scannedAddress(raw);
+                  const data = scanned.address;
+                  if (scanned.refused) {
+                    setRequestError(scanned.refused);
+                  } else if (!applyLink(data, 'scanned')) {
                     setLinkVia(undefined);
                     setRecipient(data);
                   }

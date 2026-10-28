@@ -44,6 +44,7 @@ export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () 
   const [name, setName] = useState('');
   const { address, setAddress, chain, pick, refused } = useAddressDraft();
   const [scanning, setScanning] = useState(false);
+  const [scanRefused, setScanRefused] = useState<string>();
   /** a card link (or any zafu/zcash link) goes to the link reader, which opens the card */
   const follow = (text: string, via: 'pasted' | 'scanned'): boolean => {
     if (!looksLikeLink(text)) {
@@ -54,7 +55,7 @@ export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () 
     return true;
   };
   const save = async () => {
-    if (refused || (address.trim() && !chain)) {
+    if (scanRefused || refused || (address.trim() && !chain)) {
       return;
     }
     const contact = await addContact({ name: name.trim() });
@@ -85,6 +86,7 @@ export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () 
             placeholder='their card link, or an address'
             value={address}
             onChange={e => {
+              setScanRefused(undefined);
               if (!follow(e.target.value, 'pasted')) {
                 setAddress(e.target.value);
               }
@@ -98,8 +100,10 @@ export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () 
             onChange={e => setName(e.target.value)}
           />
           <ChainRow chain={chain} onPick={pick} />
-          {refused && <span className='text-[11px] text-warn'>{refused}</span>}
-          <Button type='submit' disabled={!name.trim() || !!refused}>
+          {(scanRefused ?? refused) && (
+            <span className='text-[11px] text-warn'>{scanRefused ?? refused}</span>
+          )}
+          <Button type='submit' disabled={!name.trim() || !!refused || !!scanRefused}>
             save
           </Button>
         </form>
@@ -110,7 +114,9 @@ export const AddContactSheet = ({ open, onClose }: { open: boolean; onClose: () 
           onScan={data => {
             setScanning(false);
             if (!follow(data, 'scanned')) {
-              setAddress(scannedAddress(data));
+              const scanned = scannedAddress(data);
+              setScanRefused(scanned.refused);
+              setAddress(scanned.address);
             }
           }}
           onClose={() => setScanning(false)}
