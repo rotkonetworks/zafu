@@ -36,6 +36,11 @@ vi.mock('../../net/egress-opt-in', async orig => ({
 }));
 const opens = vi.hoisted(() => ({ patch: vi.fn(() => Promise.resolve(true)) }));
 vi.mock('./open-swaps', async orig => ({ ...(await orig<object>()), patchOpenSwap: opens.patch }));
+const chain = vi.hoisted(() => ({ mainnet: true }));
+vi.mock('../wallets', async orig => ({
+  ...(await orig<object>()),
+  selectZcashIsMainnet: () => chain.mainnet,
+}));
 
 import {
   MOVED_POLL_MS,
@@ -431,6 +436,14 @@ describe('the second leg picks up after a reopened popup (funds path)', () => {
     const state = {} as never;
     // an old record, reviewed by the two-screen flow, has no reviewed deposit fee
     expect(() => resumeSwapLegs(swap({ depositFee: undefined }), state)).not.toThrow();
+    expect(worker.plan).not.toHaveBeenCalled();
+  });
+
+  it('home leaves a mainnet swap alone while zcash testnet is on', () => {
+    chain.mainnet = false;
+    // {} would throw if the legs tried to read a wallet
+    expect(() => resumeSwapLegs(swap(), {} as never)).not.toThrow();
+    chain.mainnet = true;
     expect(worker.plan).not.toHaveBeenCalled();
   });
 

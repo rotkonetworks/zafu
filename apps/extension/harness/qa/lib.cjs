@@ -7,6 +7,8 @@ const E = require('../egress-leak.cjs');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const PASSWORD = 'qa-harness-password-1';
+// QA_CHROME: another chromium (e.g. playwright's own) while the system one is broken
+const CHROME = process.env.QA_CHROME || '/usr/bin/chromium';
 
 // one browser on one profile, every request and console line from every realm recorded
 const launch = async (dist, o = {}) => {
@@ -20,7 +22,7 @@ const launch = async (dist, o = {}) => {
   // QA_HEADED=1 (under xvfb-run): a drawn side panel, so approvals there become visible
   const headed = process.env.QA_HEADED === '1';
   const ctx = await E.pw.chromium.launchPersistentContext(profile, {
-    executablePath: '/usr/bin/chromium',
+    executablePath: CHROME,
     headless: !headed,
     viewport: { width: 400, height: 628 },
     ...(o.contextOpts ?? {}),
@@ -436,6 +438,7 @@ const contrastScan = pg =>
   });
 
 module.exports = {
+  CHROME,
   E,
   sleep,
   PASSWORD,

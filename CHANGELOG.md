@@ -6,6 +6,19 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.5.1
+
+### Sending
+
+- "Try again" on a failed penumbra send keeps the asset it named. If that
+  asset is no longer in the balance, nothing is picked, instead of the first
+  asset in the list.
+
+### Swaps
+
+- An open THORChain swap waits while zcash testnet is on, and carries on once
+  zcash is on mainnet again.
+
 ## 29.5.0
 
 ### People

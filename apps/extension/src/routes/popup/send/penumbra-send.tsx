@@ -85,12 +85,12 @@ export function PenumbraSend({
 
   // not in zustand: immer and protobuf messages don't mix
   const [picked, setPicked] = useState<BalancesResponse>();
+  // a named asset that is gone picks nothing: a retried 100 usdc must not become 100 um
   const asset =
     picked ??
     (prefillAsset
       ? balances.find(b => getMetadataFromBalancesResponse.optional(b)?.base === prefillAsset)
-      : undefined) ??
-    balances[0];
+      : balances[0]);
   const { symbol, amount: available } = balanceLook(asset);
   const unit = symbol.toLowerCase();
 

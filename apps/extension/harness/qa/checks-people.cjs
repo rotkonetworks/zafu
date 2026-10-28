@@ -105,7 +105,7 @@ module.exports = {
         await dump(c, a, 'add');
         // the web page, fetched here (not by zafu): it should send people to install zafu
         const plain = await L.E.pw.chromium.launch({
-          executablePath: '/usr/bin/chromium',
+          executablePath: L.CHROME,
           headless: true,
         });
         let page = '';
