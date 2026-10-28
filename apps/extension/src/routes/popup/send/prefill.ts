@@ -12,7 +12,7 @@ export interface SendLocationState {
   /**
    * Row-level "Send X" quick-action on the home asset list: base denom of the
    * asset to preselect. Matched against `metadata.base` on the fetched balance
-   * list. Falls back to the top-priority balance if the denom is not found.
+   * list. Nothing is preselected if the denom is not found.
    */
   prefillAsset?: string;
   /** a contact's address on this network: open that network's send whatever is active */
