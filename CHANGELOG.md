@@ -13,6 +13,10 @@ bumps for the workspace package.
 - "Try again" on a failed penumbra send keeps the asset it named. If that
   asset is no longer in the balance, nothing is picked, instead of the first
   asset in the list.
+- A Zigner address scanned on the penumbra or zcash send screen, or when
+  adding a contact, fills in the address. Zigner's export QR wraps it as
+  `chain:address:0x…`, and penumbra keys from Zigner 0.12.0 and older say
+  `substrate:`, so the field got the whole string or a payment-link error.
 
 ### Swaps
 
