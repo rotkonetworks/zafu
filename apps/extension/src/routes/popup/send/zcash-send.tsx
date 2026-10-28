@@ -41,6 +41,7 @@ import { maxSendable, quoteSend } from './spendable';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { ScreenHeader } from '../../../components/screen-header';
+import { scannedAddress } from './scanned-address';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
@@ -1493,7 +1494,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
             {showQrScanner && (
               <QrScanner
-                onScan={data => {
+                onScan={raw => {
+                  const data = scannedAddress(raw);
                   if (!applyLink(data, 'scanned')) {
                     setLinkVia(undefined);
                     setRecipient(data);
