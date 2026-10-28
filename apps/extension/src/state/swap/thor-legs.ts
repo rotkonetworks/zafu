@@ -25,7 +25,7 @@ import {
 } from '../keyring/network-worker';
 import type { VaultUnlock } from '../keyring/types';
 import { activeAccountIndex, activeZcashStoreId } from '../pockets';
-import { selectActiveZcashWallet } from '../wallets';
+import { selectActiveZcashWallet, selectZcashIsMainnet } from '../wallets';
 import { zcashViewKey } from '../zcash-view-key';
 import { walletKind } from '../../signing/wallet-kind';
 import { moveAndDeposit } from '../../signing/move-and-deposit';
@@ -228,6 +228,10 @@ export const runSwapLegs = (swap: OpenSwap, c: LegContext, reviewed?: DepositPla
 /** a reopened popup picks a swap's legs up where its record stands (the active wallet's only) */
 export const resumeSwapLegs = (swap: OpenSwap, s: AllSlices): void => {
   if (swap.stage !== 'thor-out' || !swap.swapT || !swap.depositFee || isRunning(swap.id)) {
+    return;
+  }
+  // thorchain is mainnet; with zcash testnet on, the store and node are testnet's
+  if (!selectZcashIsMainnet(s)) {
     return;
   }
   const c = legContextOf(s);
