@@ -6,6 +6,16 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.5.3
+
+### Sending
+
+- A penumbra address scanned from Zigner 0.12.0 or older is refused, on the
+  send screens and when adding a contact. Those Zigner versions show a
+  penumbra address that their own key does not own: anything sent there can
+  never be found or spent (zigner#35). 29.5.2 accepted it. Update Zigner, and
+  do not send to an address an older Zigner showed.
+
 ## 29.5.2
 
 ### Sending

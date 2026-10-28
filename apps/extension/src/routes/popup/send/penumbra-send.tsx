@@ -58,6 +58,7 @@ export function PenumbraSend({
   const [assetOpen, setAssetOpen] = useState(false);
   const [bookOpen, setBookOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [scanRefused, setScanRefused] = useState<string>();
   const [saveOpen, setSaveOpen] = useState(false);
   const [sent, setSent] = useState<{ to: string; amount: string; unit: string; memo: string }>();
 
@@ -195,12 +196,16 @@ export function PenumbraSend({
           <Main className='gap-[18px] pt-5'>
             <ToField
               value={sendState.recipient}
-              onChange={sendState.setRecipient}
-              warn={!addressValid}
+              onChange={v => {
+                setScanRefused(undefined);
+                sendState.setRecipient(v);
+              }}
+              warn={!addressValid || !!scanRefused}
               helper={
-                !addressValid
+                scanRefused ??
+                (!addressValid
                   ? 'that is not a penumbra address · please check it'
-                  : toName && `${toName} · shielded`
+                  : toName && `${toName} · shielded`)
               }
               onContacts={() => setBookOpen(true)}
               onScan={() => setScanOpen(true)}
@@ -264,7 +269,9 @@ export function PenumbraSend({
           {scanOpen && (
             <QrScanner
               onScan={data => {
-                sendState.setRecipient(scannedAddress(data));
+                const scanned = scannedAddress(data);
+                setScanRefused(scanned.refused);
+                sendState.setRecipient(scanned.address);
                 setScanOpen(false);
               }}
               onClose={() => setScanOpen(false)}
