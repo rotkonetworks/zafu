@@ -397,3 +397,15 @@ export const getActiveWalletJson = (state: AllSlices) => {
   const { all, activeIndex } = state.wallets;
   return all[activeIndex];
 };
+/**
+ * The penumbra viewing key record of the selected wallet. activeIndex is left
+ * alone when a wallet without a record is selected, so it is checked against
+ * the vault; a record from before vaultId is trusted at its index.
+ */
+export const selectPenumbraWalletOfKey = (state: AllSlices) => {
+  const id = selectEffectiveKeyInfo(state)?.id;
+  const at = getActiveWalletJson(state);
+  return (
+    state.wallets.all.find(w => w.vaultId && w.vaultId === id) ?? (at?.vaultId ? undefined : at)
+  );
+};

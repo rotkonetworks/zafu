@@ -18,7 +18,7 @@ import {
   selectPenumbraAccount,
   keyRingSelector,
 } from '../../../state/keyring';
-import { getActiveWalletJson, selectZcashIsMainnet } from '../../../state/wallets';
+import { selectPenumbraWalletOfKey, selectZcashIsMainnet } from '../../../state/wallets';
 import {
   derivePenumbraEphemeralFromMnemonic,
   derivePenumbraEphemeralFromFvk,
@@ -139,11 +139,15 @@ export function PenumbraReceive() {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraAccount = useStore(selectPenumbraAccount);
   const keyRing = useStore(keyRingSelector);
-  const penumbraWallet = useStore(getActiveWalletJson);
+  const penumbraWallet = useStore(selectPenumbraWalletOfKey);
 
   // derivation touches the keyring/wasm, so it stays an effect; the nonce is
   // the rotate trigger, not a mirror of state
-  const [address, setAddress] = useState('');
+  // an address shows only for the wallet it was derived from: right after a
+  // switch the previous wallet's address must not be on screen to copy
+  const owner = `${selectedKeyInfo?.id}:${penumbraAccount}`;
+  const [derived, setDerived] = useState({ owner: '', address: '' });
+  const address = derived.owner === owner ? derived.address : '';
   const [loading, setLoading] = useState(false);
   const [nonce, setNonce] = useState(0);
   useEffect(() => {
@@ -168,7 +172,7 @@ export function PenumbraReceive() {
           return;
         }
         if (!cancelled) {
-          setAddress(addr);
+          setDerived({ owner, address: addr });
           setLoading(false);
         }
       } catch (err) {
@@ -182,6 +186,7 @@ export function PenumbraReceive() {
       cancelled = true;
     };
   }, [
+    owner,
     penumbraAccount,
     nonce,
     selectedKeyInfo?.id,

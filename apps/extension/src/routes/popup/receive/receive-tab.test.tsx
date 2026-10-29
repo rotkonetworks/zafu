@@ -19,7 +19,7 @@ vi.mock('../../../state/keyring', () => ({
   keyRingSelector: () => undefined,
 }));
 vi.mock('../../../state/wallets', () => ({
-  getActiveWalletJson: () => undefined,
+  selectPenumbraWalletOfKey: () => undefined,
   selectZcashIsMainnet: () => true,
 }));
 vi.mock('../../../hooks/use-address', () => ({

@@ -6,7 +6,7 @@
  * - zigner-zafu: use stored viewing keys/addresses (watch-only)
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '../state';
 import { zcashViewKey } from '../state/zcash-view-key';
 import {
@@ -17,8 +17,8 @@ import {
   selectGetVaultUnlock,
 } from '../state/keyring';
 import {
-  getActiveWalletJson,
   selectActiveZcashWallet,
+  selectPenumbraWalletOfKey,
   selectZcashIsMainnet,
 } from '../state/wallets';
 import { activeAccountIndex } from '../state/pockets';
@@ -138,12 +138,18 @@ export function useActiveAddress() {
   const penumbraAccount = useStore(selectPenumbraAccount);
   const getMnemonic = useStore(selectGetMnemonic);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
-  const penumbraWallet = useStore(getActiveWalletJson);
+  const penumbraWallet = useStore(selectPenumbraWalletOfKey);
   const zcashWallet = useStore(selectActiveZcashWallet);
   const pocket = useStore(activeAccountIndex);
   const zcashMainnet = useStore(selectZcashIsMainnet);
 
-  const [address, setAddress] = useState('');
+  // which wallet+network an address belongs to. A new diversifier for the same
+  // one is a value update: the address on screen stays until its replacement
+  // arrives. Another wallet's address is never returned, not even while the
+  // new one derives, so a copy right after a switch can't take the old one.
+  const identity = `${activeNetwork}:${zcashMainnet}:${selectedKeyInfo?.id}:${pocket}:${penumbraAccount}:${zcashWallet?.ufvk ?? zcashWallet?.orchardFvk ?? ''}`;
+  const [derived, setDerived] = useState({ identity: '', address: '' });
+  const address = derived.identity === identity ? derived.address : '';
   const [loading, setLoading] = useState(true);
   // the random diversifier index of the zcash shielded address on offer
   // (22 hex chars); undefined until read, and nothing is derived before then,
@@ -177,17 +183,12 @@ export function useActiveAddress() {
     return () => chrome.storage.local.onChanged.removeListener(listener);
   }, [activeNetwork]);
 
-  // which wallet+network `address` belongs to. A new diversifier for the same
-  // one is a value update: the address on screen stays until its replacement
-  // arrives, instead of the whole screen dropping back to a loading state.
-  const derivedFor = useRef<string | undefined>(undefined);
-
   useEffect(() => {
     let cancelled = false;
-    const identity = `${activeNetwork}:${zcashMainnet}:${selectedKeyInfo?.id}:${pocket}:${zcashWallet?.ufvk ?? zcashWallet?.orchardFvk ?? ''}`;
+    const setAddress = (a: string) => setDerived({ identity, address: a });
 
     const deriveAddress = async () => {
-      if (derivedFor.current !== identity) {
+      if (derived.identity !== identity) {
         setLoading(true);
       }
 
@@ -406,7 +407,6 @@ export function useActiveAddress() {
     const index = diversifier;
     void deriveAddress().then(() => {
       if (!cancelled) {
-        derivedFor.current = identity;
         setDerivedIndex(index);
       }
     });
@@ -429,5 +429,9 @@ export function useActiveAddress() {
     zcashMainnet,
   ]);
 
-  return { address, loading, shieldedIndex: derivedIndex };
+  return {
+    address,
+    loading: loading || derived.identity !== identity,
+    shieldedIndex: derivedIndex,
+  };
 }
