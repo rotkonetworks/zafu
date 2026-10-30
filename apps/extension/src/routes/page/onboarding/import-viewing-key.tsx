@@ -12,11 +12,13 @@ import { usePageNav } from '../../../utils/navigate';
 import { PagePath } from '../paths';
 import { useOnboarding } from '.';
 import { Clipped } from '@repo/ui/components/ui/clipped';
+import { QrScanner } from '../../../shared/components/qr-scanner';
 
 export const ImportViewingKey = () => {
   const navigate = usePageNav();
   const onboarding = useOnboarding();
   const [text, setText] = useState(onboarding.viewingKey);
+  const [scanning, setScanning] = useState(false);
   const { ok, note } = useViewingKey(text);
   const tone = note?.bad ? 'warn' : ok ? 'ok' : 'idle';
 
@@ -27,6 +29,21 @@ export const ImportViewingKey = () => {
       navigate(PagePath.VIEWING_KEY_BIRTHDAY);
     }
   };
+
+  if (scanning) {
+    return (
+      <QrScanner
+        inline
+        title='scan a viewing key'
+        description='the code your wallet shows for its viewing key'
+        onScan={data => {
+          setText(data.trim());
+          setScanning(false);
+        }}
+        onClose={() => setScanning(false)}
+      />
+    );
+  }
 
   return (
     <form onSubmit={submit} className='flex flex-col gap-5'>
@@ -79,6 +96,15 @@ export const ImportViewingKey = () => {
 
       <Button type='submit' disabled={!ok} className='h-14 w-full text-[15px]'>
         continue
+      </Button>
+      <Button
+        type='button'
+        variant='secondary'
+        className='h-12 w-full'
+        onClick={() => setScanning(true)}
+      >
+        <span className='i-ph-scan mr-2 size-4' />
+        scan a code instead
       </Button>
       <span className='text-label text-fg-dim'>
         checked on this computer · nothing is sent anywhere
