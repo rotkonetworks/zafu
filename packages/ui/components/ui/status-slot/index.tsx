@@ -54,9 +54,12 @@ export function StatusSlot({
     >
       {/* the action wraps under the text rather than squeezing it into a column */}
       <div className='flex flex-wrap items-start justify-between gap-x-2 gap-y-1.5'>
-        <div className='flex items-start gap-1.5'>
+        {/* min-w-0 + anywhere: a pasted link or key wraps inside the box, never past it */}
+        <div className='flex min-w-0 items-start gap-1.5'>
           {icon && <span className={cn(icon, 'mt-0.5 size-3.5 shrink-0')} aria-hidden='true' />}
-          <div className='flex flex-col gap-1 lowercase'>{children}</div>
+          <div className='flex min-w-0 flex-col gap-1 lowercase [overflow-wrap:anywhere]'>
+            {children}
+          </div>
         </div>
         {(action ? [action].flat() : []).map(a => (
           <button
