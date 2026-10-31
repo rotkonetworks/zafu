@@ -11,6 +11,8 @@ export interface Config {
   mnemonic: string;
   accountIndex: number;
   lcdUrl: string;
+  /** tx search for the status page; the official sentry doesn't index txs */
+  historyLcdUrl: string;
   chainId: string;
   host: string;
   port: number;
@@ -81,6 +83,7 @@ export const loadConfig = (): Config => {
     mnemonic,
     accountIndex: int('FEEGRANT_ACCOUNT_INDEX', 0),
     lcdUrl: str('INJECTIVE_LCD', 'https://sentry.lcd.injective.network'),
+    historyLcdUrl: str('INJECTIVE_HISTORY_LCD', 'https://injective-rest.publicnode.com'),
     chainId: str('INJECTIVE_CHAIN_ID', 'injective-1'),
     host: str('HOST', '127.0.0.1'),
     port: int('PORT', 3335),

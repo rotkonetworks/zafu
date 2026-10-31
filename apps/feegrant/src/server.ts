@@ -192,7 +192,7 @@ const main = async () => {
       dailyCap: config.dailyGrantCap,
       today: () => limits.grantsToday,
       balance: granterBalance,
-      records: () => injectiveGrants(config.lcdUrl, granter.address, fetch),
+      records: () => injectiveGrants(config.historyLcdUrl, granter.address, fetch),
     },
     base:
       baseGas && baseConfig

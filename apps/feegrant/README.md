@@ -58,23 +58,24 @@ deanonymization. The clients say so where sponsorship is offered.
 
 ## Configuration
 
-| Env                        | Default                                | Meaning                                                           |
-| -------------------------- | -------------------------------------- | ----------------------------------------------------------------- |
-| `FEEGRANT_MNEMONIC_FILE`   | required                               | path to the granter mnemonic (mode 0600)                          |
-| `FEEGRANT_ACCOUNT_INDEX`   | `0`                                    | HD account index of the granter                                   |
-| `INJECTIVE_LCD`            | `https://sentry.lcd.injective.network` | REST endpoint                                                     |
-| `HOST` / `PORT`            | `127.0.0.1` / `3335`                   | bind address (keep it behind the proxy)                           |
-| `TRUST_PROXY`              | `0`                                    | `1` = take client IP from `X-Forwarded-For`                       |
-| `SPEND_LIMIT`              | `1000000000000000`                     | per-grant allowance, base units (0.001 INJ)                       |
-| `GRANT_TTL_HOURS`          | `24`                                   | allowance lifetime                                                |
-| `SHIELD_FEE`               | `200000000000000`                      | largest single client fee; below this a grant counts as exhausted |
-| `MIN_USDC`                 | `1000000`                              | minimum USDC.inj held to qualify (1 USDC)                         |
-| `SPONSOR_BELOW_INJ`        | `1000000000000000`                     | only sponsor addresses holding less INJ than this                 |
-| `DAILY_GRANT_CAP`          | `200`                                  | new grants per UTC day, all clients                               |
-| `PER_IP_DAILY_GRANT_CAP`   | `3`                                    | new grants per IP per UTC day                                     |
-| `PER_IP_REQUESTS_PER_HOUR` | `30`                                   | request rate per IP                                               |
-| `MIN_GRANTER_BALANCE`      | `100000000000000000`                   | stop granting below this (0.1 INJ)                                |
-| `STATE_FILE`               | `./feegrant-state.json`                | persisted daily counter                                           |
+| Env                        | Default                                 | Meaning                                                           |
+| -------------------------- | --------------------------------------- | ----------------------------------------------------------------- |
+| `FEEGRANT_MNEMONIC_FILE`   | required                                | path to the granter mnemonic (mode 0600)                          |
+| `FEEGRANT_ACCOUNT_INDEX`   | `0`                                     | HD account index of the granter                                   |
+| `INJECTIVE_LCD`            | `https://sentry.lcd.injective.network`  | REST endpoint                                                     |
+| `INJECTIVE_HISTORY_LCD`    | `https://injective-rest.publicnode.com` | tx search for the status page (the sentry has no tx index)        |
+| `HOST` / `PORT`            | `127.0.0.1` / `3335`                    | bind address (keep it behind the proxy)                           |
+| `TRUST_PROXY`              | `0`                                     | `1` = take client IP from `X-Forwarded-For`                       |
+| `SPEND_LIMIT`              | `1000000000000000`                      | per-grant allowance, base units (0.001 INJ)                       |
+| `GRANT_TTL_HOURS`          | `24`                                    | allowance lifetime                                                |
+| `SHIELD_FEE`               | `200000000000000`                       | largest single client fee; below this a grant counts as exhausted |
+| `MIN_USDC`                 | `1000000`                               | minimum USDC.inj held to qualify (1 USDC)                         |
+| `SPONSOR_BELOW_INJ`        | `1000000000000000`                      | only sponsor addresses holding less INJ than this                 |
+| `DAILY_GRANT_CAP`          | `200`                                   | new grants per UTC day, all clients                               |
+| `PER_IP_DAILY_GRANT_CAP`   | `3`                                     | new grants per IP per UTC day                                     |
+| `PER_IP_REQUESTS_PER_HOUR` | `30`                                    | request rate per IP                                               |
+| `MIN_GRANTER_BALANCE`      | `100000000000000000`                    | stop granting below this (0.1 INJ)                                |
+| `STATE_FILE`               | `./feegrant-state.json`                 | persisted daily counter                                           |
 
 Worst-case spend per day with defaults: 200 grants x (0.001 INJ allowance +
 ~0.00004 INJ grant fee) = about 0.21 INJ.
@@ -140,7 +141,7 @@ cost of one person), today's count against the cap, and the last 20 sends. All
 of it is read from chain and cached for 60 seconds; only the daily count is
 local.
 
-- Injective: LCD tx search `message.sender='<granter>'` on `INJECTIVE_LCD`, keeping `MsgGrantAllowance`.
+- Injective: LCD tx search `message.sender='<granter>'` on `INJECTIVE_HISTORY_LCD`, keeping `MsgGrantAllowance`.
 - Base, with `BASE_DRIP_CONTRACT` set: each drip is sent as `drip(to)` to the Drip contract (`contracts/Drip.sol`), which forwards the eth and emits `Dripped(from, to, amount)`. The page reads them with `eth_getLogs` (topic1 = the sponsor, since anyone can call the contract), newest first, in 10,000-block chunks over about a day, stopping at 20. Block times are fetched only for the blocks of those 20.
 - Base, without it: plain transfers, and plain RPC cannot list an address's sends, so the last day of blocks is bisected on the sponsor's nonce (`eth_getTransactionCount` at a block) and only the blocks where it moved are fetched. This needs `BASE_RPC` to serve a day of historical state.
 
