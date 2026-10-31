@@ -218,7 +218,7 @@ export const cardLines = (
     case 'pay':
       return {
         title,
-        status: `pay ${b.offer.handle} ${fiat} on ${b.app}${left && ` · ${left} left`}`,
+        status: `pay ${b.offer.handle || 'the seller'} ${fiat} on ${b.app}${left && ` · ${left} left`}`,
         tone: 'gold',
       };
     case 'confirming':

@@ -12,7 +12,7 @@ import { payApp } from '../../buy/apps';
 import { clock, loadOffer, type OpenBuy } from '../../buy/machine';
 import { Column, useBuy, useNow } from './ui';
 import { StepLines } from '../../components/scroll-page';
-import { money, usdc2 } from '../../buy/fees';
+import { money, sellerName, usdc2 } from '../../buy/fees';
 import { zec4 } from './amount';
 import { finish, swapNow, type BuyState, type Step } from './store';
 
@@ -44,7 +44,7 @@ const trackSteps = (b: OpenBuy, now: number): (Step & { bad?: boolean })[] => {
   const swapping = b.at.swapping;
   return [
     {
-      t: `paid ${o.handle}`,
+      t: `paid ${sellerName(o)}`,
       d: `${money(o.fiat, b.currency)} on ${app?.name}`,
       at: b.at.confirming,
       state: 'done',

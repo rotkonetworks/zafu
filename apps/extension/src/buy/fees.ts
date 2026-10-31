@@ -13,7 +13,7 @@ import { ZAFU_BETA_FREE } from '../config/swap-fee';
 /** one seller's offer, as the buy page needs it */
 export interface Offer {
   depositId: string;
-  /** the seller's handle on the app (public in Peer's quote api) */
+  /** the seller's handle on the app, from Peer's quote; empty when Peer leaves it out */
   handle: string;
   payeeDetails: string;
   escrow: `0x${string}`;
@@ -72,6 +72,9 @@ export const toOffer = (q: PeerQuoteRow): Offer => {
     net: big(q.tokenAmount),
   };
 };
+
+/** what to call a seller Peer did not name */
+export const sellerName = (o: Offer): string => o.handle || 'the seller';
 
 /** best first: the most usdc on the buyer's address for the same fiat */
 export const byBest = (a: Offer, b: Offer): number => (b.net > a.net ? 1 : b.net < a.net ? -1 : 0);

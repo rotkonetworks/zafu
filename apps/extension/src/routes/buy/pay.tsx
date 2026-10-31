@@ -12,7 +12,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { payApp, ZELLE_BANKS, type TemplateKey } from '../../buy/apps';
 import { loadOffer, clock, INTENT_LIFETIME_MS } from '../../buy/machine';
 import { Column, useBuy, useNow } from './ui';
-import { money } from '../../buy/fees';
+import { money, sellerName } from '../../buy/fees';
 import { KEEP_DAYS } from '../../buy/capture/kept';
 import {
   allowRead,
@@ -119,7 +119,7 @@ export const PayScreen = () => {
           box: 'border-gold-line bg-elev-1',
         }
       : {
-          text: `${o.handle}'s ${(Number(o.gross) / 1e6).toFixed(2)} usdc is in escrow for you`,
+          text: `${sellerName(o)}'s ${(Number(o.gross) / 1e6).toFixed(2)} usdc is in escrow for you`,
           tone: 'text-green',
           box: 'border-border-soft bg-elev-1',
         };
@@ -132,7 +132,7 @@ export const PayScreen = () => {
       </div>
       <div className='flex items-end justify-between gap-4'>
         <h1 className='font-display text-[38px] leading-[1.15] text-fg-high'>
-          pay {o.handle}
+          pay {sellerName(o)}
           <br />
           on {app?.name}
         </h1>
@@ -149,7 +149,13 @@ export const PayScreen = () => {
       </div>
 
       <div className='flex flex-col border border-border-soft bg-elev-1'>
-        <CopyRow first k='to' v={o.handle} hint={app?.name ?? ''} />
+        {o.handle ? (
+          <CopyRow first k='to' v={o.handle} hint={app?.name ?? ''} />
+        ) : (
+          <span className='p-4 text-[13px] text-warn'>
+            peer did not say who this seller is. don't pay. cancel this buy and choose again.
+          </span>
+        )}
         <CopyRow k='amount' v={money(o.fiat, buy.currency)} hint='exactly' />
       </div>
 
@@ -238,7 +244,7 @@ export const AskScreen = () => {
           {where} once?
         </>
       }
-      sub={`to find your ${money(o.fiat, buy.currency)} to ${o.handle} and show it to the seller.`}
+      sub={`to find your ${money(o.fiat, buy.currency)} to ${sellerName(o)} and show it to ${sellerName(o)}.`}
     >
       {banks.length > 0 && (
         <div className='flex gap-2'>
@@ -341,7 +347,7 @@ export const FailedScreen = () => {
   const app = payApp(buy.app);
   const checks = [
     `if ${app?.name} still shows it as pending, please look again once it completes`,
-    `it needs to be exactly ${money(o.fiat, buy.currency)}, to ${o.handle}`,
+    `it needs to be exactly ${money(o.fiat, buy.currency)}, to ${sellerName(o)}`,
     `from the ${app?.name} account signed in on this computer`,
   ];
   return (
@@ -431,7 +437,7 @@ export const LapsedScreen = () => {
   }
   const o = loadOffer(buy.offer);
   const app = payApp(buy.app);
-  const what = `${money(o.fiat, buy.currency)} to ${o.handle} on ${app?.name ?? buy.app}`;
+  const what = `${money(o.fiat, buy.currency)} to ${sellerName(o)} on ${app?.name ?? buy.app}`;
   const steps = [
     `keep ${app?.name ?? buy.app}'s receipt for this payment`,
     "open a dispute with peer's support, with the record below",

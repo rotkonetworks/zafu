@@ -8,7 +8,16 @@ import { Sheet } from '@repo/ui/components/ui/sheet';
 import { cn } from '@repo/ui/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 import { appNote, CURRENCIES, PAY_APPS, payApp } from '../../buy/apps';
-import { fiatUnits, money, rate3, SYM, ticketRows, usdc2, type Offer } from '../../buy/fees';
+import {
+  fiatUnits,
+  money,
+  rate3,
+  sellerName,
+  SYM,
+  ticketRows,
+  usdc2,
+  type Offer,
+} from '../../buy/fees';
 import { loadOffer } from '../../buy/machine';
 import { peerBuyUrl } from '../../config/ramps';
 import { Column, useBuy, useNow } from './ui';
@@ -100,7 +109,9 @@ export const AmountScreen = () => {
   const offer = s.quotes?.kind === 'offers' ? s.quotes.offers[s.offerIdx] : undefined;
   const unsupported = s.quotes?.kind === 'unsupported';
   const limit = s.quotes?.kind === 'limit' ? s.quotes.max : undefined;
-  const canGo = !!offer && s.current && !!fiatUnits(s.amount);
+  // a seller peer did not name can't be paid: never hold their usdc
+  const unnamed = !!offer && !offer.handle;
+  const canGo = !!offer && !unnamed && s.current && !!fiatUnits(s.amount);
 
   return (
     <Column
@@ -216,10 +227,12 @@ export const AmountScreen = () => {
             onClick={() => openSheet('app')}
           />
           <RowButton
-            mark={offer ? offer.handle.slice(0, 2) : '-'}
+            mark={offer?.handle ? offer.handle.slice(0, 2) : '-'}
             label='seller'
             value={
-              offer ? `${s.offerIdx === 0 ? 'best rate · ' : ''}${offer.handle}` : 'the best seller'
+              offer
+                ? `${s.offerIdx === 0 ? 'best rate · ' : ''}${offer.handle || `seller ${s.offerIdx + 1}`}`
+                : 'the best seller'
             }
             note={offer && rate3(offer.rate)}
             onClick={() => openSheet('seller')}
@@ -228,6 +241,12 @@ export const AmountScreen = () => {
       )}
 
       {s.error && <span className='text-xs text-warn'>{s.error}</span>}
+      {unnamed && (
+        <span className='text-xs text-warn'>
+          peer isn't saying who its sellers are right now, so zafu can't show you who to pay.
+          nothing is held. please try again later.
+        </span>
+      )}
 
       {unsupported ? (
         <div className='flex gap-2.5'>
@@ -338,7 +357,7 @@ export const Ticket = () => {
         <span className='text-xs text-fg-muted'>you pay</span>
         <span className='font-display text-[28px] text-fg-high'>{money(o.fiat, currency)}</span>
         <span className='text-xs text-fg-muted'>
-          on {app?.name} · to {s.buy ? o.handle : 'the best seller'}
+          on {app?.name} · to {s.buy ? sellerName(o) : 'the best seller'}
         </span>
       </div>
       <div className='flex flex-col gap-2.5 border-b border-border-soft px-5 py-4'>
@@ -473,7 +492,7 @@ export const Sheets = () => {
               onClick={() => setOffer(i)}
             >
               <span className='flex flex-1 flex-col gap-0.5'>
-                <span className='text-sm text-fg-high'>{o.handle}</span>
+                <span className='text-sm text-fg-high'>{o.handle || `seller ${i + 1}`}</span>
                 <span className='text-[11px] text-fg-muted'>{usdc2(o.net)} usdc to you</span>
               </span>
               <span className='text-right text-xs text-fg-muted'>

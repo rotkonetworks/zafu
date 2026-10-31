@@ -32,7 +32,7 @@ import {
   TransferReverted,
   usdcOf,
 } from '../../buy/base-chain';
-import { fiatUnits, type Offer } from '../../buy/fees';
+import { fiatUnits, sellerName, type Offer } from '../../buy/fees';
 import {
   advance,
   isTerminal,
@@ -422,15 +422,15 @@ export const reserveNow = async () => {
   const s = get();
   const o = chosenOffer(s);
   // never an offer made for another amount than the one on screen
-  if (!o || !s.base || !s.zcash || !quoteIsCurrent(s)) {
+  if (!o?.handle || !s.base || !s.zcash || !quoteIsCurrent(s)) {
     return;
   }
   const estimate = estimateOf(s, o);
   const lines: [string, string?][] = [
     ['base gas', 'a few cents of eth for the network fee'],
     ['signed with your zafu base key', `asking for ${(Number(o.gross) / 1e6).toFixed(2)} usdc`],
-    [`holding ${o.handle}'s usdc`, 'waiting for a base block'],
-    [`pay ${o.handle}`, 'then you have 6 hours'],
+    [`holding ${sellerName(o)}'s usdc`, 'waiting for a base block'],
+    [`pay ${sellerName(o)}`, 'then you have 6 hours'],
   ];
   set({ overlay: 'reserve', steps: stepsOf(lines, 0), since: Date.now(), error: undefined });
   try {
@@ -587,7 +587,7 @@ const readPayment = async (appId: string, key: TemplateKey) => {
   const lines: [string, string?][] = [
     [`opened ${app.site} in a new tab`, 'signed in as you'],
     [
-      `found ${(Number(o.fiat) / 1e6).toFixed(2)} ${b.currency} to ${o.handle}`,
+      `found ${(Number(o.fiat) / 1e6).toFixed(2)} ${b.currency} to ${sellerName(o)}`,
       'the payment you made',
     ],
     ["sealing it for peer's verifier", 'encrypted here, kept in memory only'],
