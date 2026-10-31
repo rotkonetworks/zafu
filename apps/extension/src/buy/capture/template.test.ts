@@ -6,6 +6,7 @@ import {
   isPaymentRequest,
   jsonPath,
   matchingRows,
+  type Row,
   pinTemplate,
   replayOf,
   sessionMaterial,
@@ -176,5 +177,13 @@ describe('peer templates', () => {
       Cookie: 'sid=1',
       body: 'b',
     });
+  });
+});
+
+describe('matchingRows without a seller name', () => {
+  it('matches nothing, so no other payment can pass as this one', () => {
+    const rows = [{ amount: '100.00', currency: 'USD', recipient: 'anyone' }] as Row[];
+    expect(matchingRows(rows, { fiat: 100, currency: 'usd', handle: '' })).toEqual([]);
+    expect(matchingRows(rows, { fiat: 100, currency: 'usd', handle: 'anyone' })).toHaveLength(1);
   });
 });

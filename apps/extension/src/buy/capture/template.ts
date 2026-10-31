@@ -301,15 +301,18 @@ export const matchingRows = (
   rows: Row[],
   expect: { fiat: number; currency: string; handle: string },
 ): Row[] =>
-  rows.filter(
-    r =>
-      !r.hidden &&
-      sameMoney(r.amount, expect.fiat) &&
-      (r.currency === undefined || clean(r.currency) === expect.currency.toLowerCase()) &&
-      (r.recipient === undefined ||
-        clean(r.recipient).includes(clean(expect.handle)) ||
-        clean(r.recipientName).includes(clean(expect.handle))),
-  );
+  // without the seller's name, any payment of that amount would pass as theirs
+  !clean(expect.handle)
+    ? []
+    : rows.filter(
+        r =>
+          !r.hidden &&
+          sameMoney(r.amount, expect.fiat) &&
+          (r.currency === undefined || clean(r.currency) === expect.currency.toLowerCase()) &&
+          (r.recipient === undefined ||
+            clean(r.recipient).includes(clean(expect.handle)) ||
+            clean(r.recipientName).includes(clean(expect.handle))),
+      );
 
 /** what the verifier gets as session material: every captured header, plus the body */
 export const sessionMaterial = (s: Seen): Record<string, string> => {

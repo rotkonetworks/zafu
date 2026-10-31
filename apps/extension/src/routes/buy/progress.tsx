@@ -14,10 +14,19 @@ import { Column, useBuy, useNow } from './ui';
 import { StepLines } from '../../components/scroll-page';
 import { money, sellerName, usdc2 } from '../../buy/fees';
 import { zec4 } from './amount';
-import { finish, swapNow, type BuyState, type Step } from './store';
+import { closeOverlay, finish, swapNow, type BuyState, type Step } from './store';
 
 /** a wait on one service: its steps, and its clock against what is usual */
-export const ProgressScreen = ({ title, usually }: { title: string; usually: string }) => {
+export const ProgressScreen = ({
+  title,
+  usually,
+  back,
+}: {
+  title: string;
+  usually: string;
+  /** the wait can be left: nothing is in flight that the order needs */
+  back?: boolean;
+}) => {
   const { steps, since, error } = useBuy(
     useShallow((s: BuyState) => ({ steps: s.steps, since: s.since, error: s.error })),
   );
@@ -32,6 +41,11 @@ export const ProgressScreen = ({ title, usually }: { title: string; usually: str
       </div>
       <StepLines steps={steps} />
       {error && <span className='text-xs text-warn'>{error}</span>}
+      {back && (
+        <Button variant='secondary' className='h-12' onClick={closeOverlay}>
+          back to your order
+        </Button>
+      )}
     </Column>
   );
 };

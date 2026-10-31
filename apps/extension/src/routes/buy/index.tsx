@@ -102,9 +102,13 @@ const SCREENS: Record<Screen, () => ReactNode> = {
   reserve: () => <ProgressScreen title='holding the seller' usually='usually a few seconds' />,
   pay: () => <PayScreen />,
   ask: () => <AskScreen />,
-  reading: () => <ProgressScreen title='reading your payment' usually='usually under 30 seconds' />,
+  reading: () => (
+    <ProgressScreen title='reading your payment' usually='usually under 30 seconds' back />
+  ),
   choose: () => <ChooseScreen />,
-  verify: () => <ProgressScreen title='confirming your payment' usually='usually under a minute' />,
+  verify: () => (
+    <ProgressScreen title='confirming your payment' usually='usually under a minute' back />
+  ),
   failed: () => <FailedScreen />,
   lapsed: () => <LapsedScreen />,
   track: () => <TrackScreen />,
