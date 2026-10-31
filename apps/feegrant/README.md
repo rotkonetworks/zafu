@@ -21,6 +21,8 @@ MsgTransfer with `fee.granter = <granter>`, and Injective charges the fee to us.
 | GET    | `/health`                           | `{ ok, funded, capped, granter, balanceInj, balanceMilliInj, minBalanceInj, grantsToday, dailyGrantCap }`; 503 when not ok                                    |
 | GET    | `/v1/injective/granter`             | `{ granter, spendLimit, grantTtlHours }`, or 503 while the granter is below `MIN_GRANTER_BALANCE` - clients probe this to decide whether to offer sponsorship |
 | POST   | `/v1/injective/grant` `{ address }` | 200 `{ granter, status: 'granted'\|'exists', txhash?, height?, expiresAt? }`                                                                                  |
+| GET    | `/`                                 | the public status page for browsers (`Accept: text/html`), the stats JSON for everything else; `Vary: Accept, User-Agent`                                     |
+| GET    | `/v1/stats`                         | always JSON: per network `{ symbol, sponsor, balance, capacity, today, dailyCap, records[] }`; `base` is null when the drip is off                            |
 
 `balanceMilliInj` is the balance in milli-INJ as an **integer**: gatus and
 similar monitors compare integers only (`[BODY].balanceInj > 0.15` silently
@@ -129,3 +131,14 @@ transfer. Funds never pass through the sponsor; only gas.
   collide. Below `BASE_MIN_SPONSOR_WEI` it answers 503.
 - `/health` carries a `base` block (sponsor address, drips today, balance in
   micro-eth). The journal logs `base gas -> <status>` only, no address or IP.
+
+## Status page
+
+`GET /` and `/v1/stats` show, per sponsor: its address (also the donation
+address), balance, capacity (balance above the minimum reserve divided by the
+cost of one person), today's count against the cap, and the last 20 sends. All
+of it is read from chain and cached for 60 seconds; only the daily count is
+local.
+
+- Injective: LCD tx search `message.sender='<granter>'` on `INJECTIVE_LCD`, keeping `MsgGrantAllowance`.
+- Base: plain RPC cannot list an address's sends, so the last day of blocks is bisected on the sponsor's nonce (`eth_getTransactionCount` at a block) and only the blocks where it moved are fetched. This needs `BASE_RPC` to serve a day of historical state.

@@ -7,6 +7,8 @@
  *                                    dailyGrantCap }; 503 when not ok
  *   GET  /v1/injective/granter  -> { granter, spendLimit, grantTtlHours }
  *   POST /v1/injective/grant    -> { granter, status, txhash?, height?, expiresAt? }
+ *   GET  /                      -> status page for browsers, stats JSON for programs
+ *   GET  /v1/stats              -> stats JSON
  *
  * Issues small, time-boxed x/feegrant allowances (IBC MsgTransfer only) so a
  * user who holds USDC.inj but no INJ can shield it into Penumbra. See README.
@@ -22,6 +24,8 @@ import { handleGrant } from './handler';
 import { clientIpFrom } from './client-ip';
 import { initBaseKey, initGranter } from './init';
 import { handleBaseGas, loadBaseGasConfig, serialize } from './base-gas';
+import { handleStats } from './page';
+import { baseSends, injectiveGrants, makeStats, type BaseChain } from './stats';
 import { createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { base } from 'viem/chains';
@@ -108,6 +112,12 @@ const main = async () => {
             writer.sendTransaction({ to, value }),
           ),
           lastDrip: new Map<string, number>(),
+          chain: {
+            head: () => reader.getBlockNumber(),
+            nonceAt: (address, blockNumber) =>
+              reader.getTransactionCount({ address: address as `0x${string}`, blockNumber }),
+            block: blockNumber => reader.getBlock({ blockNumber, includeTransactions: true }),
+          } satisfies BaseChain,
         };
       })()
     : null;
@@ -145,12 +155,48 @@ const main = async () => {
   const clientIp = (req: IncomingMessage): string =>
     clientIpFrom(req.headers['x-forwarded-for'], req.socket.remoteAddress, config.trustProxy);
 
+  const stats = makeStats({
+    injective: {
+      symbol: 'INJ',
+      sponsor: granter.address,
+      addressUrl: `https://injscan.com/account/${granter.address}/`,
+      txUrl: h => `https://injscan.com/transaction/${h}/`,
+      unit: config.spendLimit,
+      reserve: config.minGranterBalance,
+      dailyCap: config.dailyGrantCap,
+      today: () => limits.grantsToday,
+      balance: granterBalance,
+      records: () => injectiveGrants(config.lcdUrl, granter.address, fetch),
+    },
+    base:
+      baseGas && baseConfig
+        ? {
+            symbol: 'ETH',
+            sponsor: baseGas.address,
+            addressUrl: `https://basescan.org/address/${baseGas.address}`,
+            txUrl: h => `https://basescan.org/tx/${h}`,
+            unit: baseConfig.dripWei,
+            reserve: baseConfig.minSponsorWei,
+            dailyCap: baseConfig.dailyDripCap,
+            today: () => baseGas.limits.grantsToday,
+            balance: () => baseGas.balanceOf(baseGas.address),
+            records: () => baseSends(baseGas.chain, baseGas.address),
+          }
+        : undefined,
+  });
+
+  void stats();
+
   const server = createServer((req, res) => {
     void (async () => {
       const path = (req.url ?? '/').split('?')[0];
       try {
         if (req.method === 'OPTIONS') {
           send(res, 204, {});
+        } else if (req.method === 'GET' && (path === '/' || path === '/v1/stats')) {
+          const r = await handleStats(stats, req.headers, path !== '/');
+          res.writeHead(r.status, r.headers);
+          res.end(r.body);
         } else if (req.method === 'GET' && path === '/health') {
           // Honest health: "the process answers" is not "sponsorship works".
           // ok = the granter's balance was read and covers the cutoff below
