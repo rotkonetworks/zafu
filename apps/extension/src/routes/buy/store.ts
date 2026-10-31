@@ -69,6 +69,7 @@ import { dropCaptureAccess, keepCaptureAccess, keptCaptureAccess } from '../../b
 import {
   capturePayment,
   releaseCaptureAccess,
+  hasCaptureAccess,
   requestCaptureAccess,
   sessionMaterial,
 } from '../../buy/capture/run';
@@ -537,7 +538,22 @@ export const paid = async () => {
   if (b && (b.stage === 'pay' || b.stage === 'expired')) {
     await save(advance(b, 'confirming'));
   }
-  set({ overlay: 'ask', error: undefined });
+  await askOrRead();
+};
+
+/** look at the app: straight away when access is already given, else ask first */
+const askOrRead = async () => {
+  const app = payApp(get().buy?.app);
+  const allowed =
+    !!app &&
+    (await hasCaptureAccess()) &&
+    !!(await readEgressView()).find(d => d.id === `pay-${app.id}`)?.on;
+  if (!allowed) {
+    set({ overlay: 'ask', error: undefined });
+    return;
+  }
+  set({ error: undefined });
+  await readGranted();
 };
 
 export const setBank = (bank: TemplateKey) => set({ bank });
@@ -560,16 +576,18 @@ const liveTemplate = async (key: TemplateKey, hosts: readonly string[]): Promise
 
 /** "allow for this buy": Chrome's grant inside the tap, then read the app once */
 export const allowRead = async () => {
+  // the first call after the tap: Chrome grants only inside a user gesture
+  if (await requestCaptureAccess()) {
+    await readGranted();
+  }
+};
+
+/** read the app once Chrome's grant is in hand */
+const readGranted = async () => {
   const s = get();
   const app = payApp(s.buy?.app);
   const key = app && (s.bank && app.templates.includes(s.bank) ? s.bank : app.templates[0]);
   if (!app || !key || !s.buy) {
-    return;
-  }
-  // the first call after the tap: Chrome grants only inside a user gesture
-  // (already granted resolves true with no prompt)
-  const granted = await requestCaptureAccess();
-  if (!granted) {
     return;
   }
   await setDestinationOptIn(`pay-${app.id}`, 'allowed');
@@ -825,6 +843,6 @@ export const finish = async () => {
 };
 
 export const closeOverlay = () => set({ overlay: null, error: undefined });
-export const lookAgain = () => set({ overlay: 'ask' });
+export const lookAgain = () => void askOrRead();
 
 export { PAY_APPS };
