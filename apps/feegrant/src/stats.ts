@@ -232,3 +232,50 @@ export const baseSends = async (chain: BaseChain, sponsor: string): Promise<RawR
   await bisect(lo, head, loNonce, hiNonce);
   return out;
 };
+
+export interface DripLog {
+  from: string;
+  txHash: string;
+  block: bigint;
+  to: string;
+  amount: bigint;
+}
+
+export interface BaseLogs {
+  head: () => Promise<bigint>;
+  /** Dripped events from this sponsor in [from, to], oldest first */
+  logs: (from: bigint, to: bigint) => Promise<DripLog[]>;
+  timestamp: (block: bigint) => Promise<bigint>;
+}
+
+/** public RPCs cap eth_getLogs ranges; 10k blocks is accepted by the ones we checked */
+export const LOG_CHUNK = 10_000n;
+
+/**
+ * The sponsor's drips from the Drip contract's events, newest first. The
+ * contract is callable by anyone, so `logs` asks for topic1 == sponsor and
+ * anything else is dropped here again.
+ */
+export const baseDrips = async (chain: BaseLogs, sponsor: string): Promise<RawRecord[]> => {
+  const head = await chain.head();
+  const floor = head > BASE_WINDOW ? head - BASE_WINDOW : 0n;
+  const found: DripLog[] = [];
+  for (let to = head; to >= floor && found.length < MAX_RECORDS; to -= LOG_CHUNK) {
+    const from = to - LOG_CHUNK + 1n > floor ? to - LOG_CHUNK + 1n : floor;
+    const mine = (await chain.logs(from, to)).filter(
+      l => l.from.toLowerCase() === sponsor.toLowerCase(),
+    );
+    found.push(...mine.reverse());
+  }
+  const recent = found.slice(0, MAX_RECORDS);
+  const blocks = [...new Set(recent.map(l => l.block))];
+  const times = new Map(
+    await Promise.all(blocks.map(async b => [b, await chain.timestamp(b)] as const)),
+  );
+  return recent.map(l => ({
+    time: new Date(Number(times.get(l.block)) * 1000).toISOString(),
+    txHash: l.txHash,
+    to: l.to,
+    amount: l.amount,
+  }));
+};

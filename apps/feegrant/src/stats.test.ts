@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  baseDrips,
   baseSends,
+  type BaseLogs,
   capacity,
   injectiveGrants,
   makeStats,
@@ -174,5 +176,52 @@ describe('baseSends', () => {
     const { chain, nonceAt } = fakeChain([]);
     expect(await baseSends(chain, me)).toEqual([]);
     expect(nonceAt).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('baseDrips', () => {
+  const me = '0xAbC0000000000000000000000000000000000001';
+  const log = (block: number, from = me) => ({
+    from,
+    txHash: `0xt${block}`,
+    block: BigInt(block),
+    to: '0xr',
+    amount: 20n,
+  });
+  const fake = (all: ReturnType<typeof log>[]) => {
+    const ranges: [bigint, bigint][] = [];
+    const logs: BaseLogs = {
+      head: () => Promise.resolve(100_000n),
+      logs: (from, to) => {
+        ranges.push([from, to]);
+        return Promise.resolve(all.filter(l => l.block >= from && l.block <= to));
+      },
+      timestamp: b => Promise.resolve(1000n + b),
+    };
+    return { logs, ranges };
+  };
+
+  it('drops events from other callers and returns newest first with block times', async () => {
+    const { logs } = fake([log(99_000), log(99_500, '0xsomeoneelse'), log(99_900)]);
+    const out = await baseDrips(logs, me.toLowerCase());
+    expect(out.map(r => r.txHash)).toEqual(['0xt99900', '0xt99000']);
+    expect(out[0]?.time).toBe(new Date((1000 + 99_900) * 1000).toISOString());
+  });
+
+  it('walks back in 10k chunks over about a day', async () => {
+    const { logs, ranges } = fake([]);
+    await baseDrips(logs, me);
+    expect(ranges[0]).toEqual([90_001n, 100_000n]);
+    expect(ranges).toHaveLength(5);
+    expect(ranges.at(-1)?.[0]).toBe(56_800n);
+  });
+
+  it('stops at 20 records without reading older chunks', async () => {
+    const many = Array.from({ length: 30 }, (_, i) => log(95_000 + i));
+    const { logs, ranges } = fake(many);
+    const out = await baseDrips(logs, me);
+    expect(out).toHaveLength(20);
+    expect(out[0]?.txHash).toBe('0xt95029');
+    expect(ranges).toHaveLength(1);
   });
 });

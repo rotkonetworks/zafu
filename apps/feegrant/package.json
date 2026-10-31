@@ -8,7 +8,9 @@
     "dev": "bun src/server.ts",
     "build": "bun build src/server.ts --compile --target=bun-linux-x64-baseline --outfile dist/feegrant",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:drip": "bun scripts/build-drip.ts",
+    "check:drip": "bun scripts/build-drip.ts --check"
   },
   "dependencies": {
     "@repo/wallet": "workspace:*",
@@ -16,6 +18,7 @@
     "viem": "^2.38.0"
   },
   "devDependencies": {
-    "cosmjs-types": "^0.9.0"
+    "cosmjs-types": "^0.9.0",
+    "solc": "0.8.38"
   }
 }

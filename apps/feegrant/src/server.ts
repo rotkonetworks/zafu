@@ -23,10 +23,18 @@ import { Limits } from './limits';
 import { handleGrant } from './handler';
 import { clientIpFrom } from './client-ip';
 import { initBaseKey, initGranter } from './init';
-import { handleBaseGas, loadBaseGasConfig, serialize } from './base-gas';
+import { dripSender, handleBaseGas, loadBaseGasConfig, serialize } from './base-gas';
 import { handleStats } from './page';
-import { baseSends, injectiveGrants, makeStats, type BaseChain } from './stats';
-import { createPublicClient, createWalletClient, http } from 'viem';
+import {
+  baseDrips,
+  baseSends,
+  injectiveGrants,
+  makeStats,
+  type BaseChain,
+  type BaseLogs,
+} from './stats';
+import { DRIP_ABI } from './drip-artifact';
+import { createPublicClient, getAbiItem, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { base } from 'viem/chains';
 
@@ -108,9 +116,7 @@ const main = async () => {
             perIpRequestsPerHour: baseConfig.perIpRequestsPerHour,
           }),
           balanceOf: (address: `0x${string}`) => reader.getBalance({ address }),
-          send: serialize((to: `0x${string}`, value: bigint) =>
-            writer.sendTransaction({ to, value }),
-          ),
+          send: serialize(dripSender(baseConfig.dripContract, tx => writer.sendTransaction(tx))),
           lastDrip: new Map<string, number>(),
           chain: {
             head: () => reader.getBlockNumber(),
@@ -118,6 +124,26 @@ const main = async () => {
               reader.getTransactionCount({ address: address as `0x${string}`, blockNumber }),
             block: blockNumber => reader.getBlock({ blockNumber, includeTransactions: true }),
           } satisfies BaseChain,
+          logs: {
+            head: () => reader.getBlockNumber(),
+            logs: async (fromBlock, toBlock) =>
+              (
+                await reader.getLogs({
+                  address: baseConfig.dripContract,
+                  event: getAbiItem({ abi: DRIP_ABI, name: 'Dripped' }),
+                  args: { from: account.address },
+                  fromBlock,
+                  toBlock,
+                })
+              ).map(l => ({
+                from: l.args.from ?? '',
+                txHash: l.transactionHash,
+                block: l.blockNumber,
+                to: l.args.to ?? '',
+                amount: l.args.amount ?? 0n,
+              })),
+            timestamp: async blockNumber => (await reader.getBlock({ blockNumber })).timestamp,
+          } satisfies BaseLogs,
         };
       })()
     : null;
@@ -180,7 +206,10 @@ const main = async () => {
             dailyCap: baseConfig.dailyDripCap,
             today: () => baseGas.limits.grantsToday,
             balance: () => baseGas.balanceOf(baseGas.address),
-            records: () => baseSends(baseGas.chain, baseGas.address),
+            records: () =>
+              baseConfig.dripContract
+                ? baseDrips(baseGas.logs, baseGas.address)
+                : baseSends(baseGas.chain, baseGas.address),
           }
         : undefined,
   });

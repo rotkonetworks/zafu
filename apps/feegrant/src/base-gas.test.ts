@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { handleBaseGas, serialize, type BaseGasDeps } from './base-gas';
+import { decodeFunctionData } from 'viem';
+import { dripSender, handleBaseGas, serialize, type BaseGasDeps } from './base-gas';
+import { DRIP_ABI } from './drip-artifact';
 
 const SPONSOR = '0x1111111111111111111111111111111111111111';
 const HASH: `0x${string}` = `0x${'ab'.repeat(32)}`;
@@ -99,5 +101,22 @@ describe('serialize', () => {
     expect(await a).toBe('failed');
     expect(await b).toBe('b');
     expect(order).toEqual(['start a', 'start b', 'end b']);
+  });
+});
+
+describe('dripSender', () => {
+  const CONTRACT = '0x3333333333333333333333333333333333333333';
+  it('is a plain transfer without a contract', async () => {
+    const sent: unknown[] = [];
+    await dripSender(undefined, tx => (sent.push(tx), Promise.resolve(HASH)))(BUYER, 20n);
+    expect(sent).toEqual([{ to: BUYER, value: 20n }]);
+  });
+  it('calls drip(to) on the contract, carrying the value', async () => {
+    const sent: { to: string; value: bigint; data?: `0x${string}` }[] = [];
+    await dripSender(CONTRACT, tx => (sent.push(tx), Promise.resolve(HASH)))(BUYER, 20n);
+    expect(sent[0]).toMatchObject({ to: CONTRACT, value: 20n });
+    const call = decodeFunctionData({ abi: DRIP_ABI, data: sent[0]!.data! });
+    expect(call.functionName).toBe('drip');
+    expect(call.args).toEqual([BUYER]);
   });
 });

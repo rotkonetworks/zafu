@@ -141,4 +141,13 @@ of it is read from chain and cached for 60 seconds; only the daily count is
 local.
 
 - Injective: LCD tx search `message.sender='<granter>'` on `INJECTIVE_LCD`, keeping `MsgGrantAllowance`.
-- Base: plain RPC cannot list an address's sends, so the last day of blocks is bisected on the sponsor's nonce (`eth_getTransactionCount` at a block) and only the blocks where it moved are fetched. This needs `BASE_RPC` to serve a day of historical state.
+- Base, with `BASE_DRIP_CONTRACT` set: each drip is sent as `drip(to)` to the Drip contract (`contracts/Drip.sol`), which forwards the eth and emits `Dripped(from, to, amount)`. The page reads them with `eth_getLogs` (topic1 = the sponsor, since anyone can call the contract), newest first, in 10,000-block chunks over about a day, stopping at 20. Block times are fetched only for the blocks of those 20.
+- Base, without it: plain transfers, and plain RPC cannot list an address's sends, so the last day of blocks is bisected on the sponsor's nonce (`eth_getTransactionCount` at a block) and only the blocks where it moved are fetched. This needs `BASE_RPC` to serve a day of historical state.
+
+### Deploying the Drip contract
+
+Optional. It has no owner, no storage and holds no funds. `src/drip-artifact.ts` is generated from the source with solc-js 0.8.38 (optimizer 200 runs, evm paris): `pnpm build:drip` rewrites it, `pnpm check:drip` verifies it, and a test recompiles it.
+
+    BASE_KEY_FILE=/root/feegrant/base.key bun scripts/deploy-drip.ts
+
+It deploys from the Base sponsor key (needs a little eth for gas) and prints the tx hash and the address. Put that in the env as `BASE_DRIP_CONTRACT=0x...` and restart the service; drips then go through the contract. Remove the variable to go back to plain transfers.

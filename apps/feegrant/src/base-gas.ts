@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { encodeFunctionData } from 'viem';
+import { DRIP_ABI } from './drip-artifact';
 import type { LimitDenial } from './limits';
 
 /**
@@ -34,6 +36,8 @@ export interface BaseGasConfig {
   perIpDailyDripCap: number;
   perIpRequestsPerHour: number;
   stateFile: string;
+  /** Drip contract: drips go through it so the page can read them as events; else a plain send */
+  dripContract?: `0x${string}`;
 }
 
 /** null when BASE_KEY_FILE is unset: the Base drip is simply not offered */
@@ -45,6 +49,10 @@ export const loadBaseGasConfig = (env = process.env): BaseGasConfig | null => {
   const privateKey = readFileSync(keyFile, 'utf8').trim();
   if (!/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
     throw new Error(`BASE_KEY_FILE (${keyFile}) does not hold a 0x private key`);
+  }
+  const dripContract = env['BASE_DRIP_CONTRACT'];
+  if (dripContract && !/^0x[0-9a-fA-F]{40}$/.test(dripContract)) {
+    throw new Error('env BASE_DRIP_CONTRACT must be a 0x address');
   }
   const big = (name: string, fallback: string): bigint => {
     const v = env[name] ?? fallback;
@@ -70,6 +78,7 @@ export const loadBaseGasConfig = (env = process.env): BaseGasConfig | null => {
     perIpDailyDripCap: int('BASE_PER_IP_DAILY_DRIP_CAP', 3),
     perIpRequestsPerHour: int('BASE_PER_IP_REQUESTS_PER_HOUR', 30),
     stateFile: env['BASE_STATE_FILE'] ?? './base-gas-state.json',
+    dripContract: dripContract as `0x${string}` | undefined,
   };
 };
 
@@ -178,6 +187,25 @@ export const handleBaseGas = async (
     return { status: 502, body: { error: 'could not send gas; try again later' } };
   }
 };
+
+/** drip(to) on the contract when configured, else a plain transfer */
+export const dripSender =
+  (
+    contract: `0x${string}` | undefined,
+    send: (tx: {
+      to: `0x${string}`;
+      value: bigint;
+      data?: `0x${string}`;
+    }) => Promise<`0x${string}`>,
+  ) =>
+  (to: `0x${string}`, value: bigint) =>
+    contract
+      ? send({
+          to: contract,
+          value,
+          data: encodeFunctionData({ abi: DRIP_ABI, functionName: 'drip', args: [to] }),
+        })
+      : send({ to, value });
 
 /** one send at a time, so the sponsor's nonces never collide */
 export const serialize = <A extends unknown[], R>(
