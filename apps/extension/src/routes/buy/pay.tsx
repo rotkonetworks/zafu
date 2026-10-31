@@ -183,7 +183,7 @@ export const PayScreen = () => {
       <Button className='h-14' disabled={expired} onClick={() => void paid()}>
         {buy.stage === 'confirming' ? 'look for my payment again' : "i've paid"}
       </Button>
-      {buy.stage === 'pay' && (
+      {(buy.stage === 'pay' || buy.stage === 'confirming') && (
         <button
           type='button'
           onClick={() => void cancelBuy()}
@@ -398,6 +398,13 @@ export const FailedScreen = () => {
           look again
         </Button>
       </div>
+      <button
+        type='button'
+        onClick={() => void cancelBuy()}
+        className='self-center text-xs text-fg-muted hover:text-fg-high'
+      >
+        i didn't pay · cancel this buy
+      </button>
     </Column>
   );
 };
