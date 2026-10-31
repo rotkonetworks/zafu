@@ -13,7 +13,8 @@ import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { deriveAddressInWorker, spawnNetworkWorker } from '../../state/keyring/network-worker';
 import { refreshEgress } from '../../net/egress';
 import { setDestinationOptIn } from '../../net/ledger';
-import { readEgressView } from '../../net/egress-opt-in';
+import { readEgressInputs, readEgressView } from '../../net/egress-opt-in';
+import { groupOverNym } from '../../net/egress-policy';
 import {
   appTakes,
   defaultApp,
@@ -110,6 +111,8 @@ export interface BuyState {
   /** the form (amount, currency, app) `quotes` answered: continue waits until it is the current one */
   quotedFor?: string;
   quoting: boolean;
+  /** buy requests go over nym, so a first answer can take a minute */
+  overNym: boolean;
   estimate?: SwapEstimate;
   /** the offer `estimate` was made for: an estimate for another one never shows or sticks */
   estimateFor?: string;
@@ -137,6 +140,7 @@ const initial: BuyState = {
   amount: '100',
   offerIdx: 0,
   quoting: false,
+  overNym: false,
   gas: 'unknown',
   buy: null,
   overlay: null,
@@ -268,10 +272,11 @@ export const init = async () => {
     set({ phase: 'cannot' });
     return;
   }
-  const [prefs, buy, view, keep] = await Promise.all([
+  const [prefs, buy, view, inputs, keep] = await Promise.all([
     readBuyPrefs(),
     readOpenBuy(),
     readEgressView(),
+    readEgressInputs(),
     // the box shows what is really kept (and an expired keep is given back here)
     keptCaptureAccess(),
   ]);
@@ -281,6 +286,7 @@ export const init = async () => {
   set({
     phase: 'ready',
     egress,
+    overNym: groupOverNym(inputs, 'buy'),
     currency,
     app,
     firstTime: !prefs.app,
@@ -327,6 +333,9 @@ const afterAllowed = async () => {
   }
 };
 
+/** a quote over nym can take a minute; past this it is not coming */
+const QUOTE_MS = 120_000;
+
 let quoteCtl: AbortController | undefined;
 let quoteTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -354,7 +363,7 @@ const runQuote = async () => {
       currency: s.currency,
       fiat,
       address: s.base,
-      signal: ctl.signal,
+      signal: AbortSignal.any([ctl.signal, AbortSignal.timeout(QUOTE_MS)]),
     });
     if (ctl.signal.aborted) {
       return;
@@ -371,7 +380,13 @@ const runQuote = async () => {
     }
   } catch (e) {
     if (!ctl.signal.aborted) {
-      set({ quoting: false, error: (e as Error).message });
+      const late = (e as Error).name === 'TimeoutError';
+      set({
+        quoting: false,
+        error: late
+          ? "peer didn't answer in two minutes. change the amount to ask again"
+          : (e as Error).message,
+      });
     }
   }
 };

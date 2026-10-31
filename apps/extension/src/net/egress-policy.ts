@@ -411,13 +411,13 @@ const chainNodes = (chain: CosmosChainConfig): DestinationSpec => ({
   ],
 });
 
-/** requests on cosmos chains go over nym: the global switch is on and cosmos is not set to direct */
-const cosmosOverNym = (i: EgressInputs): boolean => {
-  const group = NYM_GROUPS.find(g => g.id === 'cosmos');
+/** a nym group's requests go over nym: the global switch is on and the group is not set to direct */
+export const groupOverNym = (i: EgressInputs, id: NymGroup['id']): boolean => {
+  const group = NYM_GROUPS.find(g => g.id === id);
   return (
     transportFor({
       groupDefault: group?.on,
-      choice: i.netEgress?.optIns?.[nymGroupKey('cosmos')],
+      choice: i.netEgress?.optIns?.[nymGroupKey(id)],
       names: true,
       reachable: true,
       master: stateOf(destinationSpec(NYM)!, i).on,
@@ -578,7 +578,7 @@ export const DESTINATIONS: DestinationSpec[] = [
     // over nym it learns only that some address wants gas, so no ask; sent direct it would see your ip, so it asks first
     gate: {
       kind: 'optional',
-      setting: i => !!i.enabledNetworks?.includes('injective') && cosmosOverNym(i),
+      setting: i => !!i.enabledNetworks?.includes('injective') && groupOverNym(i, 'cosmos'),
     },
     urls: () => ['https://sponsor.zafu.pro'],
   },

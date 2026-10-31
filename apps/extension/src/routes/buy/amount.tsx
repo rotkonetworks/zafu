@@ -92,6 +92,8 @@ export const AmountScreen = () => {
       offerIdx: s.offerIdx,
       base: s.base,
       error: s.error,
+      quoting: s.quoting,
+      overNym: s.overNym,
     })),
   );
   const app = payApp(s.appId);
@@ -184,10 +186,16 @@ export const AmountScreen = () => {
                 !s.current && 'opacity-50',
               )}
             >
-              ≈ {s.estimate ? zec4(s.estimate.amountOut) : offer ? '…' : '-'}
+              ≈ {s.estimate ? zec4(s.estimate.amountOut) : offer || s.quoting ? '…' : '-'}
             </span>
             <span className='text-[15px] text-zigner-gold'>zec</span>
-            <span className='text-xs text-fg-muted'>shielded · all fees in</span>
+            <span className='text-xs text-fg-muted'>
+              {s.quoting && !s.quotes
+                ? s.overNym
+                  ? 'asking sellers over nym · the first answer can take a minute'
+                  : 'asking sellers'
+                : 'shielded · all fees in'}
+            </span>
             <span className='flex-1' />
             {s.quotes && s.quotes.kind === 'offers' && <QuoteAge at={s.quotes.at} />}
             {s.quotes?.kind === 'none' && (
