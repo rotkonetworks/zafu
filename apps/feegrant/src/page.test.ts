@@ -67,6 +67,14 @@ describe('renderPage', () => {
     expect(html).toContain('data-copy="0xbase"');
     expect(html).toContain('7 of 200');
   });
+  it('gives each network a tab and a donation qr, and drops base when unset', () => {
+    const both = renderPage({ ...stats, base: net({ symbol: 'ETH', sponsor: '0xbase' }) });
+    expect(both.match(/class="qr"/g)).toHaveLength(2);
+    expect(both).toContain('for="t-base"');
+    const injOnly = renderPage({ ...stats, base: null });
+    expect(injOnly.match(/class="qr"/g)).toHaveLength(1);
+    expect(injOnly).not.toContain('id="t-base"');
+  });
   it('says so when the chain could not be read', () => {
     const html = renderPage({ ...stats, injective: net({ balance: null, capacity: null }) });
     expect(html).toContain('not readable just now');

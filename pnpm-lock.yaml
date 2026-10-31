@@ -116,7 +116,7 @@ importers:
         version: 66.8.1(@unocss/postcss@66.8.1(postcss@8.5.26))(@unocss/webpack@66.8.1(esbuild@0.28.2)(rollup@4.62.5)(vite@5.4.21(@types/node@26.4.0)(lightningcss@1.32.0)(terser@5.50.0))(webpack@5.109.2(esbuild@0.28.2)(lightningcss@1.32.0)(postcss@8.5.26)))(vite@5.4.21(@types/node@26.4.0)(lightningcss@1.32.0)(terser@5.50.0))
       vitest:
         specifier: ~1.6.1
-        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
+        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
 
   apps/extension:
     dependencies:
@@ -379,10 +379,16 @@ importers:
       bip39:
         specifier: ^3.1.0
         version: 3.1.0
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
       viem:
         specifier: ^2.38.0
         version: 2.57.2(typescript@5.9.3)(zod@3.25.76)
     devDependencies:
+      '@types/qrcode':
+        specifier: ^1.5.6
+        version: 1.5.6
       cosmjs-types:
         specifier: ^0.9.0
         version: 0.9.0
@@ -467,7 +473,7 @@ importers:
         version: 8.5.0(jiti@2.7.0)(postcss@8.5.26)(tsx@4.23.12)(typescript@5.9.3)(yaml@2.9.0)
       vitest:
         specifier: ~1.6.1
-        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
+        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
 
   packages/media:
     dependencies:
@@ -489,7 +495,7 @@ importers:
         version: 0.0.270
       vitest:
         specifier: ~1.6.1
-        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
+        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
 
   packages/pq:
     dependencies:
@@ -544,7 +550,7 @@ importers:
         version: 8.5.0(jiti@2.7.0)(postcss@8.5.26)(tsx@4.23.12)(typescript@5.9.3)(yaml@2.9.0)
       vitest:
         specifier: ~1.6.1
-        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
+        version: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
 
   packages/storage-chrome:
     dependencies:
@@ -11776,7 +11782,7 @@ snapshots:
       picocolors: 1.1.1
       redent: 3.0.0
     optionalDependencies:
-      vitest: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
+      vitest: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
 
   '@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
@@ -12326,7 +12332,7 @@ snapshots:
       '@vitest/utils': 1.6.1
       magic-string: 0.30.21
       sirv: 2.0.4
-      vitest: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
+      vitest: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
     optionalDependencies:
       playwright: 1.62.1
 
@@ -13964,7 +13970,7 @@ snapshots:
       '@typescript-eslint/utils': 7.18.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
       eslint: 9.39.5(jiti@2.7.0)
     optionalDependencies:
-      vitest: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
+      vitest: 1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0)
     transitivePeerDependencies:
       - supports-color
       - typescript
@@ -17204,42 +17210,6 @@ snapshots:
       lightningcss: 1.32.0
       terser: 5.50.0
 
-  vitest@1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1(playwright@1.62.1)(vitest@1.6.1))(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0):
-    dependencies:
-      '@vitest/expect': 1.6.1
-      '@vitest/runner': 1.6.1
-      '@vitest/snapshot': 1.6.1
-      '@vitest/spy': 1.6.1
-      '@vitest/utils': 1.6.1
-      acorn-walk: 8.3.5
-      chai: 4.5.0
-      debug: 4.4.3
-      execa: 8.0.1
-      local-pkg: 0.5.1
-      magic-string: 0.30.21
-      pathe: 1.1.2
-      picocolors: 1.1.1
-      std-env: 3.10.0
-      strip-literal: 2.1.1
-      tinybench: 2.9.0
-      tinypool: 0.8.4
-      vite: 5.4.21(@types/node@26.4.0)(lightningcss@1.32.0)(terser@5.50.0)
-      vite-node: 1.6.1(@types/node@26.4.0)(lightningcss@1.32.0)(terser@5.50.0)
-      why-is-node-running: 2.3.0
-    optionalDependencies:
-      '@types/node': 26.4.0
-      '@vitest/browser': 1.6.1(playwright@1.62.1)(vitest@1.6.1)
-      jsdom: 30.0.1(@noble/hashes@2.4.0)
-    transitivePeerDependencies:
-      - less
-      - lightningcss
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - supports-color
-      - terser
-
   vitest@1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@1.8.0))(lightningcss@1.32.0)(terser@5.50.0):
     dependencies:
       '@vitest/expect': 1.6.1
@@ -17266,6 +17236,42 @@ snapshots:
       '@types/node': 26.4.0
       '@vitest/browser': 1.6.1(playwright@1.62.1)(vitest@1.6.1)
       jsdom: 30.0.1(@noble/hashes@1.8.0)
+    transitivePeerDependencies:
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+
+  vitest@1.6.1(@types/node@26.4.0)(@vitest/browser@1.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.50.0):
+    dependencies:
+      '@vitest/expect': 1.6.1
+      '@vitest/runner': 1.6.1
+      '@vitest/snapshot': 1.6.1
+      '@vitest/spy': 1.6.1
+      '@vitest/utils': 1.6.1
+      acorn-walk: 8.3.5
+      chai: 4.5.0
+      debug: 4.4.3
+      execa: 8.0.1
+      local-pkg: 0.5.1
+      magic-string: 0.30.21
+      pathe: 1.1.2
+      picocolors: 1.1.1
+      std-env: 3.10.0
+      strip-literal: 2.1.1
+      tinybench: 2.9.0
+      tinypool: 0.8.4
+      vite: 5.4.21(@types/node@26.4.0)(lightningcss@1.32.0)(terser@5.50.0)
+      vite-node: 1.6.1(@types/node@26.4.0)(lightningcss@1.32.0)(terser@5.50.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 26.4.0
+      '@vitest/browser': 1.6.1(playwright@1.62.1)(vitest@1.6.1)
+      jsdom: 30.0.1(@noble/hashes@2.4.0)
     transitivePeerDependencies:
       - less
       - lightningcss
