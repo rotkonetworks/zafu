@@ -214,6 +214,10 @@ jobs:
                   done
               gh release edit beta --title "beta ${VER}" --latest \
                 --notes "Rolling beta build. Follows main; version auto-stamped \`<base>.<run_number>\` per build."
+              # the releases page dates a release by when it was published, and
+              # an edit keeps the first one (2026-09-27); publishing again moves it
+              gh release edit beta --draft=true
+              gh release edit beta --draft=false --latest
             else
               gh release create beta $assets --latest \
                 --title "beta ${VER}" \
