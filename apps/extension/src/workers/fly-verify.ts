@@ -79,7 +79,19 @@ export interface FlyDeps {
    */
   accepted?: boolean;
   now?: () => number;
+  /** waits between tries at the proof (tests pass a no-op) */
+  pause?: (ms: number) => Promise<void>;
 }
+
+/**
+ * A proof that did not arrive is asked for again, after these pauses, before
+ * the chain is called unverified: a node under load or a proxy that cut one
+ * ~1.5 MB answer short is not a node without a proof. A node that says it has
+ * no such rpc is not asked again.
+ */
+export const FLY_RETRY_PAUSES_MS = [1000, 3000] as const;
+
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 const text = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -115,6 +127,7 @@ export const checkChain = async ({
   provedBefore = false,
   accepted = false,
   now = Date.now,
+  pause = sleep,
 }: FlyDeps): Promise<ChainCheck> => {
   if (!mainnet) {
     return { status: 'unverified', reason: 'testnet' };
@@ -124,13 +137,26 @@ export const checkChain = async ({
       ? downgrade()
       : { status: 'unverified', reason: accepted ? 'accepted' : 'lightwalletd' };
   }
-  let answer: FlyProof;
-  try {
-    answer = await fetchProof();
-  } catch (e) {
-    return provedBefore && refused(e)
-      ? downgrade(`${DOWNGRADE}: ${text(e)}`)
-      : { status: 'unverified', reason: accepted ? 'accepted' : 'unreachable', detail: text(e) };
+  let answer: FlyProof | undefined;
+  let lastError: unknown;
+  for (let attempt = 0; answer === undefined; attempt++) {
+    try {
+      answer = await fetchProof();
+    } catch (e) {
+      lastError = e;
+      if (provedBefore && refused(e)) {
+        return downgrade(`${DOWNGRADE}: ${text(e)}`);
+      }
+      const wait = FLY_RETRY_PAUSES_MS[attempt];
+      if (refused(e) || wait === undefined) {
+        return {
+          status: 'unverified',
+          reason: accepted ? 'accepted' : 'unreachable',
+          detail: text(lastError),
+        };
+      }
+      await pause(wait);
+    }
   }
   const minHeight = flyMinHeight(lastTip);
   const at = (ms: number) => () =>
