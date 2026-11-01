@@ -18,6 +18,7 @@ import {
   usdc2,
   type Offer,
 } from '../../buy/fees';
+import { NameCheck, NameTag } from './name-tag';
 import { loadOffer } from '../../buy/machine';
 import { peerBuyUrl } from '../../config/ramps';
 import { Column, useBuy, useNow } from './ui';
@@ -241,6 +242,7 @@ export const AmountScreen = () => {
         </div>
       )}
 
+      {offer && <NameCheck o={offer} />}
       {s.error && <span className='text-xs text-warn'>{s.error}</span>}
       {unnamed && (
         <span className='text-xs text-warn'>
@@ -494,7 +496,9 @@ export const Sheets = () => {
               onClick={() => setOffer(i)}
             >
               <span className='flex flex-1 flex-col gap-0.5'>
-                <span className='text-sm text-fg-high'>{o.handle || `seller ${i + 1}`}</span>
+                <span className='flex items-baseline gap-2 text-sm text-fg-high'>
+                  {o.handle || `seller ${i + 1}`} <NameTag o={o} />
+                </span>
                 <span className='text-[11px] text-fg-muted'>{usdc2(o.net)} usdc to you</span>
               </span>
               <span className='text-right text-xs text-fg-muted'>

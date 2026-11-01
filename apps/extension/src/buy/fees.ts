@@ -74,15 +74,34 @@ export const toOffer = (q: PeerQuoteRow): Offer => {
   };
 };
 
-/**
- * `name` as the seller's on-chain payee hash would have it (keccak of the
- * handle; cash app drops the `$`), so a name from anywhere can be checked
- * against the deposit before anyone is told to pay it. Venmo hashes something
- * else, so a venmo name never checks out here.
- */
-export const isPayee = (o: Pick<Offer, 'platform' | 'payeeDetails'>, name: string): boolean => {
-  const id = o.platform === 'cashapp' ? name.replace(/^\$/, '') : name;
-  return !!id && keccak256(toHex(id)) === o.payeeDetails.toLowerCase();
+/** apps whose payee hash is of a private account id, so a name can't be checked */
+const UNCHECKABLE = ['wise', 'venmo'];
+
+/** the seller's name hashes to their on-chain payee (cash app without its `$`) */
+const hashesTo = (o: Pick<Offer, 'platform' | 'payeeDetails'>, name: string): boolean =>
+  !!name &&
+  keccak256(toHex(o.platform === 'cashapp' ? name.replace(/^\$/, '') : name)) ===
+    o.payeeDetails.toLowerCase();
+
+/** whether `name` can be the seller behind a payee hash: checked where the app allows it */
+export const isPayee = (o: Pick<Offer, 'platform' | 'payeeDetails'>, name: string): boolean =>
+  !!name && (UNCHECKABLE.includes(o.platform) || hashesTo(o, name));
+
+/** zafu checked this seller's name against Peer's on-chain record */
+export const nameVerified = (o: Offer): boolean => hashesTo(o, o.handle);
+
+/** where an app takes a payment to a handle, when it has a public page */
+export const payLink = (app: string, handle: string): string | undefined => {
+  const h = encodeURIComponent(handle.replace(/^[@$]/, ''));
+  if (!h) {
+    return undefined;
+  }
+  return {
+    revolut: `https://revolut.me/${h}`,
+    wise: `https://wise.com/pay/me/${h}`,
+    venmo: `https://venmo.com/u/${h}`,
+    cashapp: `https://cash.app/$${h}`,
+  }[app];
 };
 
 /** what to call a seller Peer did not name */

@@ -3,7 +3,7 @@
  * (or point at it when several match), and the calm states around them.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import QRCode from 'qrcode';
 import { Button } from '@repo/ui/components/ui/button';
 import { Sheet } from '@repo/ui/components/ui/sheet';
@@ -12,7 +12,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { payApp, ZELLE_BANKS, type TemplateKey } from '../../buy/apps';
 import { loadOffer, clock, INTENT_LIFETIME_MS } from '../../buy/machine';
 import { Column, useBuy, useNow } from './ui';
-import { money, sellerName } from '../../buy/fees';
+import { money, payLink, sellerName } from '../../buy/fees';
+import { NameCheck, NameTag } from './name-tag';
 import { KEEP_DAYS } from '../../buy/capture/kept';
 import {
   allowRead,
@@ -28,10 +29,6 @@ import {
   type BuyState,
 } from './store';
 
-/** where an app takes a payment to a handle, when it has a public link */
-const payLink = (app: string, handle: string): string | undefined =>
-  app === 'revolut' ? `https://revolut.me/${encodeURIComponent(handle)}` : undefined;
-
 const Lock = ({ tone }: { tone: string }) => (
   <span className={cn('i-lucide-lock size-3.5', tone)} aria-hidden='true' />
 );
@@ -44,7 +41,7 @@ const CopyRow = ({
 }: {
   k: string;
   v: string;
-  hint: string;
+  hint: ReactNode;
   first?: boolean;
 }) => {
   const [copied, setCopied] = useState(false);
@@ -150,7 +147,7 @@ export const PayScreen = () => {
 
       <div className='flex flex-col border border-border-soft bg-elev-1'>
         {o.handle ? (
-          <CopyRow first k='to' v={o.handle} hint={app?.name ?? ''} />
+          <CopyRow first k='to' v={o.handle} hint={<NameTag o={o} />} />
         ) : (
           <span className='p-4 text-[13px] text-warn'>
             peer did not say who this seller is. don't pay. cancel this buy and choose again.
@@ -158,6 +155,7 @@ export const PayScreen = () => {
         )}
         <CopyRow k='amount' v={money(o.fiat, buy.currency)} hint='exactly' />
       </div>
+      <NameCheck o={o} />
 
       {app && (
         <div className='flex items-center gap-5'>
