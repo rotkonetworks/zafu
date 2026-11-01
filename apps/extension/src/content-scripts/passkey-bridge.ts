@@ -16,11 +16,24 @@
 // egress guard first: nothing may capture fetch or open a socket before it
 import '../net/egress-install-lite';
 
-import { passkeyMessage, passkeyPageResult, promptCooldown } from './passkey-wire';
+import { passkeyMessage, passkeyPageResult, promptCooldown, recentHand } from './passkey-wire';
 
 const CHANNEL = 'zafu-passkey';
 
 const cooldown = promptCooldown();
+const hand = recentHand();
+// the person's own clicks and key presses on this page (never a page's synthetic ones)
+for (const type of ['pointerdown', 'keydown'] as const) {
+  window.addEventListener(
+    type,
+    ev => {
+      if (ev.isTrusted) {
+        hand.saw(Date.now());
+      }
+    },
+    { capture: true, passive: true },
+  );
+}
 
 interface PasskeyWireRequest {
   channel: string;
@@ -54,7 +67,8 @@ window.addEventListener('message', (ev: MessageEvent) => {
   // a passkey screen only follows a click on the page, and not while the page
   // is waiting out a "not now"; activation is per frame, so this world sees
   // the page's own click
-  const asked = navigator.userActivation?.isActive && !cooldown.quiet(Date.now());
+  const now = Date.now();
+  const asked = hand.asked(now, navigator.userActivation?.isActive) && !cooldown.quiet(now);
   // orphaned content script (extension reloaded in an open tab) - fail cleanly
   if (!message || !asked || !chrome.runtime?.id || chrome.runtime.id === 'invalid') {
     respond(undefined);

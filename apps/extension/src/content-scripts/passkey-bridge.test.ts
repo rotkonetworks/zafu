@@ -5,7 +5,13 @@
  * that the bridge sets `type` itself and forwards only the fields each kind uses.
  */
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { passkeyMessage, passkeyPageResult, promptCooldown } from './passkey-wire';
+import {
+  passkeyMessage,
+  passkeyPageResult,
+  promptCooldown,
+  recentHand,
+  PASSKEY_ASK_WINDOW_MS,
+} from './passkey-wire';
 
 const sendMessage = chrome.runtime.sendMessage as unknown as ReturnType<typeof vi.fn>;
 
@@ -64,6 +70,14 @@ describe('passkey bridge', () => {
     clicked(false);
     pagePosts(hostile('get'));
     pagePosts(hostile('create'));
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("a page's own synthetic click does not count as the person's hand", () => {
+    clicked(false);
+    window.dispatchEvent(new PointerEvent('pointerdown'));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    pagePosts(hostile('get'));
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
@@ -160,5 +174,27 @@ describe('passkeyMessage', () => {
       prfSalts: { first: '01' },
       allowCredentials: [{ id: 'cc', type: 'public-key' }],
     });
+  });
+});
+
+describe('recentHand', () => {
+  it('a click a few seconds before the request still counts (the site fetched its challenge first)', () => {
+    const h = recentHand();
+    h.saw(1_000);
+    expect(h.asked(1_000 + 20_000, false)).toBe(true);
+  });
+
+  it('counts for a minute, not longer', () => {
+    const h = recentHand();
+    h.saw(1_000);
+    expect(h.asked(1_000 + PASSKEY_ASK_WINDOW_MS, false)).toBe(true);
+    expect(h.asked(1_000 + PASSKEY_ASK_WINDOW_MS + 1, false)).toBe(false);
+  });
+
+  it('with no hand at all, only the browser saying so counts', () => {
+    const h = recentHand();
+    expect(h.asked(5_000, false)).toBe(false);
+    expect(h.asked(5_000, undefined)).toBe(false);
+    expect(h.asked(5_000, true)).toBe(true);
   });
 });
