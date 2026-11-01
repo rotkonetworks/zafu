@@ -7,6 +7,7 @@
  * (6-decimal base units, string), rates as 18-decimal fixed point.
  */
 
+import { keccak256, toHex } from 'viem';
 import { ZAFU_BUY_FEE_BPS, ZAFU_BUY_FEE_BPS_LIST, ZAFU_BUY_FEE_RECIPIENT } from '../config/ramps';
 import { ZAFU_BETA_FREE } from '../config/swap-fee';
 
@@ -71,6 +72,17 @@ export const toOffer = (q: PeerQuoteRow): Offer => {
     zafuFee: big(q.takerReferralFeeAmount),
     net: big(q.tokenAmount),
   };
+};
+
+/**
+ * `name` as the seller's on-chain payee hash would have it (keccak of the
+ * handle; cash app drops the `$`), so a name from anywhere can be checked
+ * against the deposit before anyone is told to pay it. Venmo hashes something
+ * else, so a venmo name never checks out here.
+ */
+export const isPayee = (o: Pick<Offer, 'platform' | 'payeeDetails'>, name: string): boolean => {
+  const id = o.platform === 'cashapp' ? name.replace(/^\$/, '') : name;
+  return !!id && keccak256(toHex(id)) === o.payeeDetails.toLowerCase();
 };
 
 /** what to call a seller Peer did not name */

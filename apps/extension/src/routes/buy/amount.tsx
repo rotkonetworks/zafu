@@ -111,6 +111,7 @@ export const AmountScreen = () => {
   const limit = s.quotes?.kind === 'limit' ? s.quotes.max : undefined;
   // a seller peer did not name can't be paid: never hold their usdc
   const unnamed = !!offer && !offer.handle;
+  const anyNamed = s.quotes?.kind === 'offers' && s.quotes.offers.some(o => o.handle);
   const canGo = !!offer && !unnamed && s.current && !!fiatUnits(s.amount);
 
   return (
@@ -243,8 +244,9 @@ export const AmountScreen = () => {
       {s.error && <span className='text-xs text-warn'>{s.error}</span>}
       {unnamed && (
         <span className='text-xs text-warn'>
-          peer isn't saying who its sellers are right now, so zafu can't show you who to pay.
-          nothing is held. please try again later.
+          {anyNamed
+            ? "peer didn't say who this seller is, so zafu can't show you who to pay. choose another seller."
+            : "peer isn't saying who its sellers are right now, so zafu can't show you who to pay. nothing is held. please try again later."}
         </span>
       )}
 

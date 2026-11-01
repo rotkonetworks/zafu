@@ -64,7 +64,12 @@ export const PEER_API = 'https://api.zkp2p.xyz';
 export const PEER_ATTESTATION = 'https://attestation-service.zkp2p.xyz';
 /** the sdk reads intents from Base first and falls back to Peer's indexer */
 export const PEER_INDEXER = 'https://indexer.zkp2p.xyz';
-export const PEER_HOSTS = [PEER_API, PEER_ATTESTATION, PEER_INDEXER];
+/**
+ * Peer's preproduction curator: the same deposits and escrow as PEER_API, and
+ * it still names its sellers, which PEER_API stopped doing on 2026-11-01
+ */
+export const PEER_PREPROD_API = 'https://api-preprod.zkp2p.xyz';
+export const PEER_HOSTS = [PEER_API, PEER_PREPROD_API, PEER_ATTESTATION, PEER_INDEXER];
 
 /** Base's public rpc: reads, and the person's own transactions */
 export const BASE_RPC = 'https://mainnet.base.org';

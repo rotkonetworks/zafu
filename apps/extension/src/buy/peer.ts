@@ -6,8 +6,15 @@
 
 import type { PrivateKeyAccount } from 'viem/accounts';
 import { http, parseAbiItem, parseEventLogs } from 'viem';
-import { BASE_CHAIN_ID, BASE_RPC, BASE_USDC, PEER_API, PEER_ATTESTATION } from '../config/ramps';
-import { byBest, toOffer, zafuReferral, type Offer, type PeerQuoteRow } from './fees';
+import {
+  BASE_CHAIN_ID,
+  BASE_RPC,
+  BASE_USDC,
+  PEER_API,
+  PEER_ATTESTATION,
+  PEER_PREPROD_API,
+} from '../config/ramps';
+import { byBest, isPayee, toOffer, zafuReferral, type Offer, type PeerQuoteRow } from './fees';
 import { baseReader, baseWriter } from './base-chain';
 
 /** Peer's current escrow (EscrowV2), the only one the sdk signals on */
@@ -20,16 +27,25 @@ export type Quotes =
   | { kind: 'none'; at: number }
   | { kind: 'unsupported'; at: number };
 
-/** the best sellers on `platform` for exactly `fiat`, best first */
-export const fetchQuotes = async (q: {
+interface QuoteBody {
+  message?: string;
+  responseObject?: {
+    quotes?: PeerQuoteRow[];
+    nearbySuggestions?: { below?: { suggestedFiatAmount?: string }[] };
+  };
+}
+
+interface QuoteAsk {
   platform: string;
   currency: string;
   fiat: bigint;
   address: `0x${string}`;
   signal?: AbortSignal;
-}): Promise<Quotes> => {
+}
+
+const askCurator = async (api: string, q: QuoteAsk, nearby: boolean): Promise<QuoteBody> => {
   const referral = zafuReferral();
-  const resp = await fetch(`${PEER_API}/v3/quote/exact-fiat?quotesToReturn=5`, {
+  const resp = await fetch(`${api}/v3/quote/exact-fiat?quotesToReturn=5`, {
     method: 'POST',
     signal: q.signal,
     headers: { 'content-type': 'application/json' },
@@ -42,25 +58,41 @@ export const fetchQuotes = async (q: {
       destinationToken: BASE_USDC,
       exactFiatAmount: q.fiat.toString(),
       escrowAddresses: [ESCROW_V2],
-      includeNearbyQuotes: true,
-      nearbyQuotesCount: 1,
+      ...(nearby ? { includeNearbyQuotes: true, nearbyQuotesCount: 1 } : {}),
       ...(referral ? { referralFees: [referral] } : {}),
     }),
   });
-  const at = Date.now();
-  const body = (await resp.json().catch(() => ({}))) as {
-    message?: string;
-    responseObject?: {
-      quotes?: PeerQuoteRow[];
-      nearbySuggestions?: { below?: { suggestedFiatAmount?: string }[] };
-    };
+  return (await resp.json().catch(() => ({}))) as QuoteBody;
+};
+
+/** seller names preprod gives, by payee hash; never fails the quote */
+const namesFromPreprod = async (q: QuoteAsk): Promise<Map<string, string>> => {
+  const body = await askCurator(PEER_PREPROD_API, q, false).catch((): QuoteBody => ({}));
+  return new Map(
+    (body.responseObject?.quotes ?? []).flatMap(r =>
+      r.maker?.offchainId ? [[r.intent.payeeDetails.toLowerCase(), r.maker.offchainId]] : [],
+    ),
+  );
+};
+
+/** a seller PEER_API left unnamed, named by preprod if the name hashes to its payee */
+export const nameFrom =
+  (names: Map<string, string>) =>
+  (o: Offer): Offer => {
+    const name = o.handle ? undefined : names.get(o.payeeDetails.toLowerCase());
+    return name && isPayee(o, name) ? { ...o, handle: name } : o;
   };
+
+/** the best sellers on `platform` for exactly `fiat`, best first */
+export const fetchQuotes = async (q: QuoteAsk): Promise<Quotes> => {
+  const [body, names] = await Promise.all([askCurator(PEER_API, q, true), namesFromPreprod(q)]);
+  const at = Date.now();
   if (/unsupported currency/i.test(body.message ?? '')) {
     return { kind: 'unsupported', at };
   }
   const quotes = body.responseObject?.quotes ?? [];
   if (quotes.length) {
-    return { kind: 'offers', offers: quotes.map(toOffer).sort(byBest), at };
+    return { kind: 'offers', offers: quotes.map(toOffer).map(nameFrom(names)).sort(byBest), at };
   }
   const below = body.responseObject?.nearbySuggestions?.below?.[0]?.suggestedFiatAmount;
   return below && /^\d+$/.test(below) && BigInt(below) < q.fiat
