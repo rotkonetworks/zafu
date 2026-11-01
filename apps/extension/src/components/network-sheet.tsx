@@ -15,8 +15,8 @@ import {
   selectEnabledNetworks,
   selectSetActiveNetwork,
 } from '../state/keyring';
-import { useEnableNetwork } from '../hooks/enable-network';
-import { getNetwork, getTopLevelNetworks } from '../config/networks';
+import { useDisableNetwork, useEnableNetwork } from '../hooks/enable-network';
+import { getNetwork, getSubnetworks, getTopLevelNetworks } from '../config/networks';
 import { PopupPath } from '../routes/popup/paths';
 
 /** one line per network, so the pools read apart at a glance */
@@ -38,6 +38,7 @@ export const NetworkSheet = ({
   const enabledNetworks = useStore(selectEnabledNetworks);
   const setActiveNetwork = useStore(selectSetActiveNetwork);
   const enable = useEnableNetwork();
+  const disable = useDisableNetwork();
 
   const pick = (n: (typeof enabledNetworks)[number]) => {
     onOpenChange(false);
@@ -57,50 +58,90 @@ export const NetworkSheet = ({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title='networks' className='gap-0 px-3 pb-4'>
-      {getTopLevelNetworks().map(n => {
-        const info = getNetwork(n);
-        const enabled = enabledNetworks.includes(n);
-        const active = activeNetwork === n;
-        return (
-          <div key={n} className='flex h-[60px] items-center gap-3.5 px-2'>
-            <button
-              type='button'
-              disabled={!enabled}
-              onClick={() => pick(n)}
-              aria-label={`use ${info.name}`}
-              className='flex min-w-0 flex-1 items-center gap-3.5 text-left disabled:cursor-default'
-            >
-              <span
-                className={cn(
-                  'flex size-[18px] shrink-0 items-center justify-center',
-                  enabled && 'border',
-                  active ? 'border-zigner-gold' : 'border-surface-border',
-                )}
-                aria-hidden='true'
+      {getTopLevelNetworks()
+        .map(n => {
+          const info = getNetwork(n);
+          const enabled = enabledNetworks.includes(n);
+          const active = activeNetwork === n;
+          return (
+            <div key={n} className='flex h-[60px] items-center gap-3.5 px-2'>
+              <button
+                type='button'
+                disabled={!enabled}
+                onClick={() => pick(n)}
+                aria-label={`use ${info.name}`}
+                className='flex min-w-0 flex-1 items-center gap-3.5 text-left disabled:cursor-default'
               >
-                {active && <span className='size-2 bg-zigner-gold' />}
-              </span>
-              <span className={cn('size-2.5 shrink-0', info.color)} aria-hidden='true' />
-              <span className='flex min-w-0 flex-col gap-[3px]'>
-                <Clipped className='text-[15px] text-fg-high lowercase'>{info.name}</Clipped>
-                {NETWORK_BLURB[n] && (
-                  <Clipped className='text-[11px] text-fg-muted'>{NETWORK_BLURB[n]}</Clipped>
-                )}
-              </span>
-            </button>
-            {!enabled && (
-              <Button
-                variant='secondary'
-                size='sm'
-                className='h-8 border-surface-border px-3 text-zigner-gold'
-                onClick={() => void turnOn(n)}
-              >
-                turn on
-              </Button>
-            )}
-          </div>
-        );
-      })}
+                <span
+                  className={cn(
+                    'flex size-[18px] shrink-0 items-center justify-center',
+                    enabled && 'border',
+                    active ? 'border-zigner-gold' : 'border-surface-border',
+                  )}
+                  aria-hidden='true'
+                >
+                  {active && <span className='size-2 bg-zigner-gold' />}
+                </span>
+                <span className={cn('size-2.5 shrink-0', info.color)} aria-hidden='true' />
+                <span className='flex min-w-0 flex-col gap-[3px]'>
+                  <Clipped className='text-[15px] text-fg-high lowercase'>{info.name}</Clipped>
+                  {NETWORK_BLURB[n] && (
+                    <Clipped className='text-[11px] text-fg-muted'>{NETWORK_BLURB[n]}</Clipped>
+                  )}
+                </span>
+              </button>
+              {!enabled && (
+                <Button
+                  variant='secondary'
+                  size='sm'
+                  className='h-8 border-surface-border px-3 text-zigner-gold'
+                  onClick={() => void turnOn(n)}
+                >
+                  turn on
+                </Button>
+              )}
+            </div>
+          );
+        })
+        .flatMap((row, i) => {
+          // a network's own switches (zcash testnet) sit right under it while it is on
+          const n = getTopLevelNetworks()[i]!;
+          if (!enabledNetworks.includes(n)) {
+            return [row];
+          }
+          return [
+            row,
+            ...getSubnetworks(n).map(sub => {
+              const on = enabledNetworks.includes(sub);
+              return (
+                <div key={sub} className='flex h-12 items-center gap-3 pl-10 pr-2'>
+                  <span
+                    className={cn('size-2 shrink-0', getNetwork(sub).color)}
+                    aria-hidden='true'
+                  />
+                  <span className='flex min-w-0 flex-1 flex-col gap-[2px]'>
+                    <Clipped className='text-[13px] text-fg-high lowercase'>
+                      {getNetwork(sub).name}
+                    </Clipped>
+                    <Clipped className='text-[11px] text-fg-muted'>
+                      {on
+                        ? `on · ${getNetwork(n).name.toLowerCase()} speaks testnet`
+                        : (NETWORK_BLURB[sub] ?? '')}
+                    </Clipped>
+                  </span>
+                  <Button
+                    variant='secondary'
+                    size='sm'
+                    className='h-8 border-surface-border px-3 text-zigner-gold'
+                    onClick={() => void (on ? disable(sub) : turnOn(sub))}
+                  >
+                    {on ? 'turn off' : 'turn on'}
+                  </Button>
+                </div>
+              );
+            }),
+          ];
+        })}
       <button
         type='button'
         onClick={() => {
