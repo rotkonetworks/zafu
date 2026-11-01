@@ -41,27 +41,30 @@ const NetworksRow = () => {
       />
       <Sheet open={open} onOpenChange={setOpen} title='networks'>
         <RowGroup>
-          {/* zcash testnet has its own switch, always listed: it waits for zcash to be on */}
-          {[...getTopLevelNetworks(), ...getSubnetworks('zcash')].map(n => {
-            const parent = getNetwork(n).parent;
-            const waiting = !!parent && !enabled.includes(parent);
-            return (
+          {/* a network's own options (zcash: testnet) sit right under it while it is on */}
+          {getTopLevelNetworks().flatMap(n => [
+            <Row
+              key={n}
+              type='toggle'
+              label={getNetwork(n).name}
+              description={NETWORK_BLURB[n]}
+              checked={enabled.includes(n)}
+              onChange={on => void (on ? enable(n) : disable(n))}
+              {...explainProps(`network.${n}Enable` as ExplainId)}
+            />,
+            ...(enabled.includes(n) ? getSubnetworks(n) : []).map(sub => (
               <Row
-                key={n}
+                key={sub}
                 type='toggle'
-                label={getNetwork(n).name}
-                description={
-                  waiting
-                    ? `turn ${getNetwork(parent).name.toLowerCase()} on first`
-                    : NETWORK_BLURB[n]
-                }
-                disabled={waiting}
-                checked={enabled.includes(n)}
-                onChange={on => void (on ? enable(n) : disable(n))}
-                {...explainProps(`network.${n}Enable` as ExplainId)}
+                className='pl-8'
+                label='testnet'
+                description={NETWORK_BLURB[sub]}
+                checked={enabled.includes(sub)}
+                onChange={on => void (on ? enable(sub) : disable(sub))}
+                {...explainProps(`network.${sub}Enable` as ExplainId)}
               />
-            );
-          })}
+            )),
+          ])}
         </RowGroup>
       </Sheet>
       {sheet}
