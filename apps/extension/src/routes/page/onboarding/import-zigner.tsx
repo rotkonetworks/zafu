@@ -15,6 +15,10 @@ import { setOnboardingValuesInStorage } from './persist-parameters';
 import { SEED_PHRASE_ORIGIN } from './password/types';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { Clipped } from '@repo/ui/components/ui/clipped';
+import { QrCode } from '../../../components/qr-code';
+
+/** zigner's f-droid repo page: the app, its fingerprint and the apk */
+const ZIGNER_DOWNLOAD = 'https://foss.rotko.net';
 
 /**
  * access-level note on a scanned import. one tight line, no prose - the
@@ -367,6 +371,25 @@ export const ImportZigner = () => {
             <span className='i-ph-scan mr-2 size-4' />
             scan a signer
           </Button>
+
+          <div className='flex items-center gap-4 border border-border-soft bg-elev-1 p-3'>
+            <QrCode value={ZIGNER_DOWNLOAD} size={120} label='get zigner on your phone' />
+            <div className='flex flex-col gap-1.5 text-label lowercase'>
+              <span className='text-fg-high'>no zigner yet?</span>
+              <span className='text-fg-muted'>
+                scan with the android phone you'll sign with to install it from rotko's f-droid
+                repo.
+              </span>
+              <a
+                href={ZIGNER_DOWNLOAD}
+                target='_blank'
+                rel='noopener noreferrer'
+                className='text-zigner-gold underline-offset-2 hover:underline'
+              >
+                foss.rotko.net
+              </a>
+            </div>
+          </div>
 
           {errorMessage && (
             <StatusSlot tone='danger' icon='i-ph-warning'>
