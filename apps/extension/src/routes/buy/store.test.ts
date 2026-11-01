@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   sendUsdc: vi.fn(),
   quoteSwap: vi.fn(),
   usdcOf: vi.fn(),
+  cancel: vi.fn(),
 }));
 
 vi.mock('../../state', () => ({
@@ -41,6 +42,10 @@ vi.mock('../../buy/base-chain', async orig => ({
   gasState: () => Promise.resolve({ have: 1n, need: 0n }),
   sendUsdc: m.sendUsdc,
 }));
+vi.mock('../../buy/peer', async orig => ({
+  ...(await orig<object>()),
+  cancel: m.cancel,
+}));
 vi.mock('../../buy/near-leg', () => ({
   quoteSwap: m.quoteSwap,
   announceDeposit: () => Promise.resolve(),
@@ -51,7 +56,7 @@ vi.mock('../../buy/near-leg', () => ({
 const BASE = '0x9858EfFD232B4033E47d90003D41EC34EcaEda94' as const;
 
 import { TransferReverted } from '../../buy/base-chain';
-import { buyStore, formKey, quoteIsCurrent, swapNow, type BuyState } from './store';
+import { buyStore, cancelBuy, formKey, quoteIsCurrent, swapNow, type BuyState } from './store';
 
 const offer = toOffer(noFee.responseObject.quotes[0] as PeerQuoteRow);
 const released = (): OpenBuy =>
@@ -129,5 +134,36 @@ describe('the amount screen', () => {
     expect(quoteIsCurrent(s({ quotes, quotedFor: asked, app: 'wise' }))).toBe(false);
     // the same amount typed differently is the same amount
     expect(quoteIsCurrent(s({ quotes, quotedFor: asked, amount: '100.00' }))).toBe(true);
+  });
+});
+
+describe('cancelling a buy marked paid, when nothing was sent', () => {
+  const marked = (expiresAt: number): OpenBuy =>
+    advance(
+      startBuy({ app: 'wise', currency: 'usd', base: BASE, zcash: 'u1zec', offer }, 1),
+      'confirming',
+      { intentHash: '0xabc', expiresAt },
+      2,
+    );
+  beforeEach(() => {
+    vi.clearAllMocks();
+    m.writeOpenBuy.mockResolvedValue(true);
+    m.cancel.mockResolvedValue(undefined);
+  });
+
+  it("while the hold lasts, gives the seller's usdc back on chain and clears the buy", async () => {
+    buyStore.setState({ buy: marked(Date.now() + 60_000), error: undefined });
+    await cancelBuy();
+    expect(m.cancel).toHaveBeenCalledWith(expect.anything(), '0xabc');
+    expect(buyStore.getState().buy).toBeNull();
+    expect(buyStore.getState().error).toBeUndefined();
+  });
+
+  it('after the hold ended, asks nothing of the chain (the usdc already went back) and still clears it', async () => {
+    buyStore.setState({ buy: marked(Date.now() - 60_000), error: undefined });
+    await cancelBuy();
+    expect(m.cancel).not.toHaveBeenCalled();
+    expect(buyStore.getState().buy).toBeNull();
+    expect(buyStore.getState().error).toBeUndefined();
   });
 });

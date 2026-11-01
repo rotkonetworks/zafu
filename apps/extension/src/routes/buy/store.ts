@@ -820,11 +820,17 @@ const intentNow = async (b: OpenBuy): Promise<'held' | 'fulfilled' | 'gone' | un
   return released === undefined ? undefined : released ? 'fulfilled' : 'gone';
 };
 
-/** cancel before paying: the seller's usdc goes back at once, nothing was taken */
+/**
+ * cancel before paying (or after "i've paid" when nothing was paid): the seller's
+ * usdc goes back at once, nothing was taken. Once the hold has ended it already
+ * went back on its own - there is no intent left to cancel, and asking the chain
+ * would only fail and keep the person stuck - so only this record is cleared.
+ */
 export const cancelBuy = async () => {
   const b = get().buy;
   try {
-    if (b?.intentHash) {
+    const held = !b?.expiresAt || Date.now() < b.expiresAt;
+    if (b?.intentHash && held) {
       await withBaseAccount(await mnemonic(), account => cancel(account, b.intentHash!));
     }
     await save(null);
