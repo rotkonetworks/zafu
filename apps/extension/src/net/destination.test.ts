@@ -5,6 +5,7 @@ import {
   hostOf,
   hostnameOf,
   isLocalDeviceHost,
+  isPrivateNetworkHost,
   parseNetEgressLog,
   parseNetEgressState,
 } from './destination';
@@ -158,5 +159,26 @@ describe('parseNetEgressLog', () => {
   it('has a bound small enough to render', () => {
     expect(NET_EGRESS_LOG_LIMIT).toBeGreaterThan(0);
     expect(NET_EGRESS_LOG_LIMIT).toBeLessThanOrEqual(500);
+  });
+});
+
+describe('isPrivateNetworkHost', () => {
+  it.each([
+    ['192.168.1.5:9067', true],
+    ['10.0.0.2', true],
+    ['172.20.0.1:443', true],
+    ['100.101.102.103', true],
+    ['node.lan:8443', true],
+    ['zebra.local', true],
+    [hostOf('http://[fd00:a0::5]:9067')!, true],
+    [hostOf('https://[fe80::1]')!, true],
+    ['localhost:9067', true],
+    ['172.32.0.1', false],
+    ['100.128.0.1', false],
+    ['8.8.8.8', false],
+    ['zcash.rotko.net', false],
+    [hostOf('https://[2a01:4f8::1]')!, false],
+  ])('%s -> %s', (host, want) => {
+    expect(isPrivateNetworkHost(host)).toBe(want);
   });
 });

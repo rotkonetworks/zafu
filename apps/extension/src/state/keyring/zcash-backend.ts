@@ -168,6 +168,27 @@ export const createRedetector = (
  */
 const KNOWN_ZIDECAR_HOST_SUFFIXES: readonly string[] = ['rotko.net'];
 
+/**
+ * What to tell someone typing their own node's url, when it can't work:
+ * zebra's json-rpc is not a light-client server, and lightwalletd's native
+ * grpc needs http/2, which a browser only speaks over https.
+ */
+export const zcashNodeHint = (raw: string): string | undefined => {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return undefined;
+  }
+  if (url.port === '8232' || url.port === '18232') {
+    return "that's zebra's own rpc port. zafu talks to a light-client server next to zebra: zidecar (plain http works), or lightwalletd / zaino behind https.";
+  }
+  if (url.protocol === 'http:' && (url.port === '9067' || url.port === '9068')) {
+    return 'lightwalletd and zaino need https: a browser only speaks their grpc over tls. put them behind https, or run zidecar, which works over plain http.';
+  }
+  return undefined;
+};
+
 export const backendOfEndpoint = (serverUrl: string): ZcashBackend =>
   isZidecarEndpoint(serverUrl) ? 'zidecar' : 'lightwalletd';
 

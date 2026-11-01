@@ -458,6 +458,19 @@ describe('send over nym: the transport is chosen per request class', () => {
   };
   const NYM_OFF: EgressInputs = { ...ZCASH_ONLY, netEgress: { optIns: { nym: 'blocked' } } };
 
+  it("a node on the person's own network sends direct: nym's exits cannot reach it", () => {
+    const zidecar = (node: string) => ({
+      ...ZCASH_ONLY,
+      networkEndpoints: { zcash: node },
+      zcashBackends: { [node]: 'zidecar' },
+    });
+    for (const node of ['http://192.168.1.5', 'https://10.0.0.2', 'http://[fd00:a0::5]']) {
+      expect(nymOf(zidecar(node), `${node}/zidecar.v1.Zidecar/SendTransaction`)).toBe('direct');
+    }
+    const pub = 'http://203.0.113.7';
+    expect(nymOf(zidecar(pub), `${pub}/zidecar.v1.Zidecar/SendTransaction`)).toBe('broadcast');
+  });
+
   it('sends and looks up your own transactions over nym, and syncs directly', () => {
     const rows: [string, string][] = [
       ['https://zcash.rotko.net/zidecar.v1.Zidecar/SendTransaction', 'broadcast'],

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ZCASH_BACKENDS, zidecarExtras } from './zcash-backend';
+import { ZCASH_BACKENDS, zcashNodeHint, zidecarExtras } from './zcash-backend';
 import { ZidecarClient } from './zidecar-client';
 import { isMempoolWatchEnabled } from '../../services/mempool-watch/strategy';
 
@@ -39,5 +39,23 @@ describe('zcash backends', () => {
     }
     grpc.mockResolvedValueOnce(answer('orchard double-spend: duplicate nullifier'));
     expect((await client.sendTransaction(new Uint8Array([1]))).errorCode).not.toBe(0);
+  });
+});
+
+describe('zcashNodeHint', () => {
+  it.each([
+    ['http://localhost:8232', /zebra's own rpc/],
+    ['http://192.168.1.5:18232', /zebra's own rpc/],
+    ['http://localhost:9067', /need https/],
+    ['https://node.example:9067', undefined],
+    ['http://localhost:8137', undefined],
+    ['not a url', undefined],
+  ])('%s', (url, want) => {
+    const hint = zcashNodeHint(url);
+    if (want) {
+      expect(hint).toMatch(want);
+    } else {
+      expect(hint).toBeUndefined();
+    }
   });
 });

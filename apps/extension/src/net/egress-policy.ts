@@ -41,7 +41,7 @@ import {
 import { BUNDLED_SERVICE_CONFIG } from '../services/voting/bundled-config';
 import { BASE_RPC, PEER_HOSTS } from '../config/ramps';
 import { PAY_APPS } from '../buy/apps';
-import { hostOf } from './destination';
+import { hostOf, isPrivateNetworkHost } from './destination';
 import { backendKey, backendOfEndpoint, isZcashBackend } from '../state/keyring/zcash-backend';
 import {
   matchRules,
@@ -326,9 +326,11 @@ const portOf = (url: string): string => {
   return u.port || (u.protocol === 'http:' || u.protocol === 'ws:' ? '80' : '443');
 };
 
-/** nym can carry a request to this node: the port is open at the exits, and the node speaks it */
+/** nym can carry a request to this node: open at the exits, on the internet, and it speaks it */
 const nymReaches = (spec: DestinationSpec, i: EgressInputs, url: string): boolean =>
-  NYM_EXIT_PORTS.has(portOf(url)) && (spec.overNym?.(i, url) ?? true);
+  NYM_EXIT_PORTS.has(portOf(url)) &&
+  !isPrivateNetworkHost(hostOf(url) ?? '') &&
+  (spec.overNym?.(i, url) ?? true);
 
 /** what a network's sheet row shows: the person's choice, and whether nym can carry it */
 export type NymGroupView = 'nym' | 'direct' | 'unreachable';

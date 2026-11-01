@@ -178,6 +178,26 @@ persisted in local storage independently of the default configuration. zcash
 ships a set of regional presets: the rotko zidecar (trustless, the shipped
 default) plus public lightwalletd fallbacks (stardust, zec.rocks, and others).
 
+### your own zcash node
+
+zafu speaks the light-client protocol, not zebra's json-rpc, so pointing it at
+zebra itself (`:8232`) cannot work. run
+[zidecar](https://github.com/rotkonetworks/zcli/tree/master/bin/zidecar) next
+to zebra and point zafu at zidecar:
+
+```sh
+zidecar --zebrad-rpc http://127.0.0.1:8232 --zidecar-rpc --flyclient nu6.3
+# zafu: settings > zcash > node > your own node > http://localhost:50051
+```
+
+zidecar answers grpc-web over plain http, so `http://` works, on this machine
+or across your lan or vpn. lightwalletd and zaino only answer native grpc,
+which a browser speaks over https alone: put them behind https (a reverse
+proxy with a certificate) or use zidecar.
+
+a node on this machine, your lan or a vpn (wireguard, tailscale) is always
+reached directly: nym's exits are on the internet and cannot reach it.
+
 ## network selection in settings
 
 networks can be enabled or disabled after onboarding through the settings >

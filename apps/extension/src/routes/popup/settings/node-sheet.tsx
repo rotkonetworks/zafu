@@ -60,6 +60,7 @@ export const NodeSheet = ({
   egress,
   measure,
   custom,
+  ownHint,
   className,
   onExplain,
 }: {
@@ -74,6 +75,8 @@ export const NodeSheet = ({
   measure: () => Promise<NodeSpeeds>;
   /** extra controls on the your-own-node step */
   custom?: ReactNode;
+  /** what to say about a typed url that can't be what this chain needs */
+  ownHint?: (url: string) => string | undefined;
   /** column-align the sheet where the page itself isn't full width (onboarding) */
   className?: string;
   /** opens a Sheet explaining node choice, via a small "?" after the label */
@@ -166,6 +169,9 @@ export const NodeSheet = ({
             className='font-mono text-xs'
             autoFocus
           />
+          {ownHint?.(draft) && (
+            <span className='text-xs leading-relaxed text-warn'>{ownHint(draft)}</span>
+          )}
           {custom}
           <div className='flex gap-2'>
             <Button variant='secondary' className='w-[110px]' onClick={() => setStep('list')}>

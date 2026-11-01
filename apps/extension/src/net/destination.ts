@@ -182,6 +182,33 @@ export const isLocalDeviceHost = (host: string): boolean => {
   return name === 'localhost' || name === '127.0.0.1' || name === '0.0.0.0';
 };
 
+/**
+ * A host only reachable inside a private network: LAN, a vpn (wireguard,
+ * tailscale's 100.64/10), link-local, IPv6 ULA, or a local-only name. Nym's
+ * exits are on the internet and can never reach one, so a node here goes direct.
+ */
+export const isPrivateNetworkHost = (host: string): boolean => {
+  // hostOf leaves IPv6 unbracketed (`fd00::1:9067`), so several colons mean IPv6
+  const name = (
+    host.split(':').length > 2 ? host.replace(/^\[|\]/g, '') : hostnameOf(host)
+  ).toLowerCase();
+  if (isLocalDeviceHost(host) || /\.(local|lan|internal|home\.arpa)$/.test(name)) {
+    return true;
+  }
+  const v4 = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(name);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return (
+      a === 10 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254)
+    );
+  }
+  return /^(f[cd][0-9a-f]{0,2}|fe[89ab][0-9a-f]?):/.test(name);
+};
+
 export const parseNetEgressLog = (raw: unknown): NetEgressLogEntry[] => {
   if (!Array.isArray(raw)) {
     return [];

@@ -26,7 +26,7 @@ import { cn } from '@repo/ui/lib/utils';
 import { useExplain, type ExplainId } from './settings-explain';
 import { OptionsRow } from './sheet-options';
 import { selectChosenZcashBackend } from '../../../state/networks';
-import { ZCASH_BACKENDS } from '../../../state/keyring/zcash-backend';
+import { ZCASH_BACKENDS, zcashNodeHint } from '../../../state/keyring/zcash-backend';
 import type { ExplorerLinks } from '../../../state/privacy';
 import { BUNDLED_SERVICE_CONFIG } from '../../../services/voting/bundled-config';
 import { usePopupNav } from '../../../utils/navigate';
@@ -91,6 +91,7 @@ export const ZcashNodeSheet = ({
       egress='zcash-servers'
       measure={speedTest}
       onPick={url => setEndpoint('zcash', url)}
+      ownHint={zcashNodeHint}
       onExplain={onExplain}
     />
   );
