@@ -7,6 +7,7 @@ import {
   type EgressInputs,
 } from './egress-policy';
 import { decideEgress, type EgressRealm } from './egress-table';
+import { PEOPLE_RELAY } from '../config/people-relay';
 
 const decide = (inputs: EgressInputs, url: string, realm: EgressRealm = 'popup') =>
   decideEgress(url, realm, compileEgress(inputs));
@@ -653,7 +654,7 @@ describe('send over nym: the choice per network', () => {
   it('says which networks send over nym, and whether to keep it ready', () => {
     const base = { enabledNetworks: ['zcash', 'penumbra', 'noble'] };
     expect(compileEgress(base)).toMatchObject({
-      nymVia: ['zcash', 'penumbra', 'noble'],
+      nymVia: ['zcash', 'penumbra', 'noble', 'contact-discovery'],
       nymKeepReady: true,
     });
     const optIns = {
@@ -662,9 +663,25 @@ describe('send over nym: the choice per network', () => {
       'nym-ready': 'blocked',
     } as const;
     expect(compileEgress({ ...base, netEgress: { optIns } })).toMatchObject({
-      nymVia: ['penumbra', 'noble'],
+      nymVia: ['penumbra', 'noble', 'contact-discovery'],
       nymKeepReady: false,
     });
+    // the relays go over nym with every other network, and can go direct on their own
+    const relays = {
+      'nym:messages': 'blocked',
+      [PEOPLE_RELAY]: 'allowed',
+      'multisig-relay': 'allowed',
+    } as const;
+    expect(compileEgress(base).nymVia).not.toContain(PEOPLE_RELAY);
+    expect(
+      compileEgress({ ...base, netEgress: { optIns: { ...relays, 'nym:messages': 'allowed' } } })
+        .nymVia,
+    ).toEqual(expect.arrayContaining([PEOPLE_RELAY, 'multisig-relay', 'contact-discovery']));
+    expect(compileEgress({ ...base, netEgress: { optIns: relays } }).nymVia).toEqual([
+      'zcash',
+      'penumbra',
+      'noble',
+    ]);
     expect(compileEgress({ ...base, netEgress: { optIns: { nym: 'blocked' } } }).nymVia).toEqual(
       [],
     );

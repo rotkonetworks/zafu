@@ -207,13 +207,22 @@ const NYM_CLASSES: {
   // its answers can be large (nym moves about 11 KB/s), so it stays direct
   { cls: 'names-you', destination: 'voting', paths: ['/shielded-vote'] },
   // every request to these names you or what you look up
-  ...['zcash-me', 'peer', 'base', 'sponsor', 'thorchain', 'midgard', 'near-swap'].map(
-    destination => ({
-      cls: 'names-you' as const,
-      destination,
-      paths: [''],
-    }),
-  ),
+  ...[
+    'zcash-me',
+    'peer',
+    'base',
+    'sponsor',
+    'thorchain',
+    'midgard',
+    'near-swap',
+    PEOPLE_RELAY,
+    'contact-discovery',
+    'multisig-relay',
+  ].map(destination => ({
+    cls: 'names-you' as const,
+    destination,
+    paths: [''],
+  })),
 ];
 
 /**
@@ -286,6 +295,14 @@ export const NYM_GROUPS: {
     nym: 'everything it sends',
     direct: 'the apps see your ip and address',
     members: ['peer', 'base'],
+  },
+  {
+    id: 'messages',
+    label: 'messages',
+    on: true,
+    nym: 'every relay poll',
+    direct: 'the relay sees your ip and when you are online',
+    members: [PEOPLE_RELAY, 'contact-discovery', 'multisig-relay'],
   },
 ];
 
