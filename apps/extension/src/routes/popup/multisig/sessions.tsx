@@ -30,6 +30,7 @@ import { hasFeature } from '../../../config/networks';
 import { Sensitive } from '../../../components/sensitive';
 import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
+import { useBackNav } from '../../../utils/navigate';
 import { BackupModal } from './backup/backup-modal';
 import { exportSingleBackup } from './backup/export-helpers';
 import {
@@ -407,6 +408,7 @@ const AppManagedTablesSection = () => {
 };
 
 export const MultisigPage = () => {
+  const goBack = useBackNav(PopupPath.INDEX);
   const navigate = useNavigate();
   const activeNetwork = useStore(selectActiveNetwork);
   const zcashWallets = useStore(selectZcashWallets);
@@ -473,9 +475,16 @@ export const MultisigPage = () => {
         }}
         onClose={() => setBackupTarget(null)}
       />
-      {/* header */}
+      {/* header: back where you came from (home when opened directly), like every screen */}
       <div className='flex items-center justify-between'>
-        <div className='flex items-center gap-2'>
+        <div className='-ml-2 flex items-center gap-2'>
+          <button
+            onClick={goBack}
+            aria-label='back'
+            className='grid size-10 shrink-0 place-items-center text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg-high'
+          >
+            <span className='i-lucide-chevron-left size-[18px]' />
+          </button>
           <span className='i-ph-shield h-5 w-5 text-zigner-gold' />
           <h2 className='text-lg'>shared wallets</h2>
         </div>
