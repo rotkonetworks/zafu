@@ -29,12 +29,12 @@ describe('the chain notice on zcash home', () => {
     });
   });
 
-  test('a timeout or a 5xx is said quietly, never silently', () => {
+  test('a timeout or a 5xx is said quietly, never silently, as passing', () => {
     const id = chainNoticeOf(false, { status: 'unverified', reason: 'unreachable' });
     expect(id).toBe('unverified');
     expect(CHAIN_NOTICE[id!]).toMatchObject({
       quiet: true,
-      lines: ['chain not verified', expect.any(String)],
+      lines: ['chain not verified yet', expect.stringContaining('asks again')],
     });
   });
 

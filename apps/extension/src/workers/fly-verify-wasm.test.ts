@@ -13,6 +13,7 @@ import {
   poolsOffProof,
   type FlyDeps,
   type ProvenChain,
+  FLY_RETRY_PAUSES_MS,
 } from './fly-verify';
 
 const TIP = 3_509_023;
@@ -42,6 +43,7 @@ describe('flyclient chain check on the real wasm', () => {
       verify: (...a) => wasm.verify_flyclient(...a),
       lastTip: 0,
       now: () => TIP_TIME_MS + 60_000,
+      pause: () => Promise.resolve(),
       ...over,
     });
 
@@ -88,6 +90,44 @@ describe('flyclient chain check on the real wasm', () => {
       status: 'unverified',
       reason: 'lightwalletd',
     });
+  });
+
+  test('a proof that did not arrive is asked for again before the chain is unverified', async () => {
+    let tries = 0;
+    const flaky = () =>
+      ++tries < 3
+        ? Promise.reject(new Error('GetFlyClientProof: read body: error decoding response body'))
+        : Promise.resolve({ proof: PROOF });
+    const waits: number[] = [];
+    const r = await check({ fetchProof: flaky, pause: ms => (waits.push(ms), Promise.resolve()) });
+    expect(r.status).toBe('checked');
+    expect(tries).toBe(3);
+    expect(waits).toEqual([...FLY_RETRY_PAUSES_MS]);
+  });
+
+  test('a node that keeps not answering is unverified after the last try', async () => {
+    let tries = 0;
+    const down = () => (tries++, Promise.reject(new TypeError('Failed to fetch')));
+    expect(await check({ fetchProof: down })).toMatchObject({
+      status: 'unverified',
+      reason: 'unreachable',
+    });
+    expect(tries).toBe(FLY_RETRY_PAUSES_MS.length + 1);
+  });
+
+  test('a node that says it has no such rpc is not asked again', async () => {
+    let tries = 0;
+    const none = () => (
+      tries++,
+      Promise.reject(
+        Object.assign(new Error('GetFlyClientProof: unimplemented'), { grpcStatus: 12 }),
+      )
+    );
+    expect(await check({ fetchProof: none })).toMatchObject({
+      status: 'unverified',
+      reason: 'unreachable',
+    });
+    expect(tries).toBe(1);
   });
 
   test('a zidecar without --flyclient (or unreachable) is unverified, not paused', async () => {
@@ -148,7 +188,13 @@ describe('a node that proved its chain before', () => {
       }),
     );
   const check = (over: Partial<FlyDeps>) =>
-    checkChain({ mainnet: true, verify: () => '', lastTip: 0, ...over });
+    checkChain({
+      mainnet: true,
+      verify: () => '',
+      lastTip: 0,
+      pause: () => Promise.resolve(),
+      ...over,
+    });
 
   test('answering unimplemented now is a downgrade: failed', async () => {
     expect((await check({ provedBefore: true, fetchProof: unimplemented })).status).toBe('failed');

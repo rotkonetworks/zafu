@@ -42,7 +42,10 @@ export const CHAIN_NOTICE: Record<ChainNoticeId, ChainNotice> = {
   unverified: {
     tone: 'info',
     icon: 'i-ph-shield',
-    lines: ['chain not verified', "the node's proof didn't arrive · balances rest on it alone"],
+    lines: [
+      'chain not verified yet',
+      "the node's proof didn't arrive · zafu asks again as it syncs · balances rest on the node meanwhile",
+    ],
     quiet: true,
   },
   accepted: {
