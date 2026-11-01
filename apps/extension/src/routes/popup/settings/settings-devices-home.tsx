@@ -41,21 +41,27 @@ const NetworksRow = () => {
       />
       <Sheet open={open} onOpenChange={setOpen} title='networks'>
         <RowGroup>
-          {/* zcash testnet has its own switch, shown while zcash is on */}
-          {[
-            ...getTopLevelNetworks(),
-            ...(enabled.includes('zcash') ? getSubnetworks('zcash') : []),
-          ].map(n => (
-            <Row
-              key={n}
-              type='toggle'
-              label={getNetwork(n).name}
-              description={NETWORK_BLURB[n]}
-              checked={enabled.includes(n)}
-              onChange={on => void (on ? enable(n) : disable(n))}
-              {...explainProps(`network.${n}Enable` as ExplainId)}
-            />
-          ))}
+          {/* zcash testnet has its own switch, always listed: it waits for zcash to be on */}
+          {[...getTopLevelNetworks(), ...getSubnetworks('zcash')].map(n => {
+            const parent = getNetwork(n).parent;
+            const waiting = !!parent && !enabled.includes(parent);
+            return (
+              <Row
+                key={n}
+                type='toggle'
+                label={getNetwork(n).name}
+                description={
+                  waiting
+                    ? `turn ${getNetwork(parent).name.toLowerCase()} on first`
+                    : NETWORK_BLURB[n]
+                }
+                disabled={waiting}
+                checked={enabled.includes(n)}
+                onChange={on => void (on ? enable(n) : disable(n))}
+                {...explainProps(`network.${n}Enable` as ExplainId)}
+              />
+            );
+          })}
         </RowGroup>
       </Sheet>
       {sheet}
