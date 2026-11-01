@@ -147,6 +147,29 @@ export const passkeyPageResult = (res: unknown): Record<string, unknown> | undef
 };
 
 /**
+ * A passkey request is the person's own when it follows their hand on the page.
+ * The browser's own click window lasts a few seconds, and a site that fetches
+ * its challenge (or runs a captcha) first often asks after it closed - zafu
+ * stepped aside and the browser showed its "use a phone" QR for a passkey zafu
+ * holds. So the last real click or key press counts for this long. Only
+ * trusted input moves it: a page's synthetic events cannot.
+ */
+export const PASSKEY_ASK_WINDOW_MS = 60_000;
+
+export const recentHand = (window_ = PASSKEY_ASK_WINDOW_MS) => {
+  let last = 0;
+  return {
+    /** a trusted click or key press, now */
+    saw: (now: number) => {
+      last = now;
+    },
+    /** the person's hand is on this request: the browser says so, or they acted within the window */
+    asked: (now: number, activeNow: boolean | undefined) =>
+      !!activeNow || (last > 0 && now - last <= window_),
+  };
+};
+
+/**
  * After "not now" or a closed window a page waits before zafu shows it another
  * passkey screen: 30 s, then twice as long each time, back to 30 s after a
  * sign-in goes through. Kept in memory by the bridge, per page.
