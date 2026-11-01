@@ -90,6 +90,39 @@ const QR = ({ text }: { text: string }) => {
   );
 };
 
+/**
+ * the way out of a buy marked paid when nothing was sent: asked twice, because if
+ * money did go, cancelling gives the seller's usdc back and what was sent is lost
+ */
+const CancelPaid = () => {
+  const [sure, setSure] = useState(false);
+  return sure ? (
+    <div className='flex flex-col gap-2.5 border border-border-soft bg-elev-1 p-3.5'>
+      <span className='text-xs text-fg-high'>only if no money left your account for this buy</span>
+      <span className='text-xs text-fg-muted'>
+        if it did, keep looking for your payment instead: cancelling gives the seller's usdc back
+        and what you sent would be lost.
+      </span>
+      <div className='flex gap-2.5'>
+        <Button variant='secondary' className='h-11 flex-1' onClick={() => setSure(false)}>
+          keep looking
+        </Button>
+        <Button className='h-11 flex-1' onClick={() => void cancelBuy()}>
+          i sent nothing · cancel
+        </Button>
+      </div>
+    </div>
+  ) : (
+    <button
+      type='button'
+      onClick={() => setSure(true)}
+      className='self-center text-xs text-fg-muted hover:text-fg-high'
+    >
+      i didn't send it · cancel this buy
+    </button>
+  );
+};
+
 export const PayScreen = () => {
   const { buy, resumed, error } = useBuy(
     useShallow((s: BuyState) => ({ buy: s.buy, resumed: s.resumed, error: s.error })),
@@ -181,7 +214,7 @@ export const PayScreen = () => {
       <Button className='h-14' disabled={expired} onClick={() => void paid()}>
         {buy.stage === 'confirming' ? 'look for my payment again' : "i've paid"}
       </Button>
-      {(buy.stage === 'pay' || buy.stage === 'confirming') && (
+      {buy.stage === 'pay' && (
         <button
           type='button'
           onClick={() => void cancelBuy()}
@@ -190,6 +223,7 @@ export const PayScreen = () => {
           cancel this buy
         </button>
       )}
+      {buy.stage === 'confirming' && <CancelPaid />}
 
       <Sheet
         open={expired}
