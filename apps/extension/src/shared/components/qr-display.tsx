@@ -47,8 +47,14 @@ export function QrDisplay({
     <div className='flex flex-col items-center gap-3'>
       {title && <h3 className='text-lg text-fg'>{title}</h3>}
 
+      {/* a dense code shrinks to the frame instead of losing its sides to the popup */}
       <div className='max-w-full bg-white p-3'>
-        <QrCode hex={data} size={size} label={title ?? 'qr code'} />
+        <QrCode
+          hex={data}
+          size={size}
+          label={title ?? 'qr code'}
+          className='block h-auto max-w-full'
+        />
       </div>
 
       {description && <p className='text-sm text-fg-muted text-center max-w-xs'>{description}</p>}
