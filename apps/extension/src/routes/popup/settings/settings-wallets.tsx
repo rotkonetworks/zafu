@@ -109,14 +109,18 @@ export const SettingsWallets = () => {
                   onPress={() => void openPageInTab(PagePath.CONNECT_LEDGER, true)}
                 />
               )}
-              {!hasSeed && (
-                <Row
-                  type='screen'
-                  icon='i-ph-key'
-                  label='import a recovery phrase'
-                  onPress={() => void chrome.runtime.openOptionsPage()}
-                />
-              )}
+              {/* the options page is the apps page once any wallet exists, so the
+                  import opens on its own screen; a second phrase is not offered yet */}
+              <Row
+                type='screen'
+                icon='i-ph-key'
+                label='import a recovery phrase'
+                description={
+                  hasSeed ? 'one recovery-phrase wallet is supported for now' : undefined
+                }
+                disabled={hasSeed}
+                onPress={() => void openPageInTab(PagePath.IMPORT_SEED_PHRASE, true)}
+              />
               {zcashOn && (
                 <Row
                   type='screen'
