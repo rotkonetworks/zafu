@@ -114,12 +114,6 @@ export function encodePlanToQR(plan: TransactionPlan, effectHash: Uint8Array): s
     offset += 32;
   }
 
-  if (payload.length > 2900) {
-    console.warn(
-      `Large transaction (${payload.length} bytes). Consider implementing multi-frame QR.`,
-    );
-  }
-
   return bytesToHex(payload);
 }
 
@@ -218,12 +212,30 @@ export function validateAuthorization(
   }
 }
 
+/** the most bytes one byte-mode QR holds (version 40, level L) */
+const SINGLE_QR_BYTES = 2953;
+
 /**
- * Estimate number of QR codes needed for a payload
+ * The codes that carry a Zigner payload: the payload itself when it fits one
+ * code, otherwise Zigner's legacy multi-frame transport
+ * ([0x00][total:2 BE][index:2 BE][chunk]), which its scanner reassembles
+ * before parsing. Either way Zigner reads one payload and signs it once.
  */
-export function estimateQRCodeCount(bytes: number): number {
-  const BYTES_PER_QR = 2900;
-  return Math.ceil(bytes / BYTES_PER_QR);
+export function zignerQrFrames(hex: string, frameBytes: number): string[] {
+  const bytes = hexToBytes(hex);
+  if (bytes.length <= SINGLE_QR_BYTES) {
+    return [hex];
+  }
+  const total = Math.ceil(bytes.length / frameBytes);
+  return Array.from({ length: total }, (_, i) => {
+    const chunk = bytes.subarray(i * frameBytes, (i + 1) * frameBytes);
+    const frame = new Uint8Array(5 + chunk.length);
+    const view = new DataView(frame.buffer);
+    view.setUint16(1, total);
+    view.setUint16(3, i);
+    frame.set(chunk, 5);
+    return bytesToHex(frame);
+  });
 }
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {

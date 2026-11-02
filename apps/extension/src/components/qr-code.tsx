@@ -29,7 +29,7 @@ const LOGO_FRACTION = 0.22;
  */
 const MIN_PX_PER_MODULE = 3;
 
-const hexToBytes = (hex: string): Buffer | Uint8Array => {
+export const hexToBytes = (hex: string): Buffer | Uint8Array => {
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
