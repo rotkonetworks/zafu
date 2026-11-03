@@ -83,6 +83,18 @@ export const nameFrom =
     return name && isPayee(o, name) ? { ...o, handle: name } : o;
   };
 
+/**
+ * The sellers a buy can pay, best first. Peer's curator stopped giving out
+ * sellers' handles (2026-11), and with no handle there is nobody to pay after
+ * reserving: such a seller is dropped, as Peer's own sdk drops them.
+ */
+export const payableOffers = (rows: PeerQuoteRow[], names: Map<string, string>): Offer[] =>
+  rows
+    .map(toOffer)
+    .map(nameFrom(names))
+    .filter(o => o.handle)
+    .sort(byBest);
+
 /** the best sellers on `platform` for exactly `fiat`, best first */
 export const fetchQuotes = async (q: QuoteAsk): Promise<Quotes> => {
   const [body, names] = await Promise.all([askCurator(PEER_API, q, true), namesFromPreprod(q)]);
@@ -92,7 +104,8 @@ export const fetchQuotes = async (q: QuoteAsk): Promise<Quotes> => {
   }
   const quotes = body.responseObject?.quotes ?? [];
   if (quotes.length) {
-    return { kind: 'offers', offers: quotes.map(toOffer).map(nameFrom(names)).sort(byBest), at };
+    const offers = payableOffers(quotes, names);
+    return offers.length ? { kind: 'offers', offers, at } : { kind: 'none', at };
   }
   const below = body.responseObject?.nearbySuggestions?.below?.[0]?.suggestedFiatAmount;
   return below && /^\d+$/.test(below) && BigInt(below) < q.fiat

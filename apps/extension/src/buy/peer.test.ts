@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { keccak256, toHex } from 'viem';
 import { isPayee, nameVerified, payLink } from './fees';
-import { nameFrom } from './peer';
-import type { Offer } from './fees';
+import { nameFrom, payableOffers } from './peer';
+import type { Offer, PeerQuoteRow } from './fees';
 
 const offer = (platform: string, id: string, handle = ''): Offer => ({
   depositId: '1',
@@ -51,5 +51,32 @@ describe('seller names', () => {
     expect(payLink('venmo', '@barry-blaha')).toBe('https://venmo.com/u/barry-blaha');
     expect(payLink('zelle', 'a@b.c')).toBeUndefined();
     expect(payLink('wise', '')).toBeUndefined();
+  });
+});
+
+describe('sellers a buy can pay', () => {
+  const row = (id: string, offchainId?: string): PeerQuoteRow => ({
+    fiatAmount: '50000000',
+    tokenAmount: '49000000',
+    conversionRate: '1020000000000000000',
+    intent: {
+      depositId: id,
+      payeeDetails: keccak256(toHex(id)),
+      processorName: 'revolut',
+      escrowAddress: '0x777777779d229cdF3110e9de47943791c26300Ef',
+      fiatCurrencyCode: '0x',
+    },
+    ...(offchainId ? { maker: { offchainId } } : {}),
+  });
+
+  it('drops a seller peer left unnamed, since there is nobody to pay', () => {
+    expect(payableOffers([row('a'), row('b')], new Map())).toEqual([]);
+  });
+
+  it('keeps a seller peer named, or one a checked name was found for', () => {
+    const named = payableOffers([row('a', 'alice'), row('b')], new Map());
+    expect(named.map(o => o.handle)).toEqual(['alice']);
+    const borrowed = payableOffers([row('b')], new Map([[keccak256(toHex('b')), 'b']]));
+    expect(borrowed.map(o => o.handle)).toEqual(['b']);
   });
 });
