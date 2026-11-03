@@ -16,6 +16,14 @@ export const PEER_REFERRAL_CODE = 'L59SD4';
  */
 export const PEER_SELL_URL = `https://app.peer.xyz/referrals?referralCode=${PEER_REFERRAL_CODE}`;
 
+/**
+ * Peer's buy page, set to deliver zec (via NEAR Intents) with zafu's buyer
+ * referral: the prod buy, while the in-wallet buy is beta only. Cash app and
+ * usd are only its starting choice; the person picks their own on Peer.
+ */
+export const PEER_BUY_ZEC_URL =
+  'https://app.peer.xyz/buy/cashapp/usd/zcash/nep141%3Azec.omft.near?referralCode=UOW41E';
+
 /** a cash-out swap: zec into usdc on base, the asset a peer listing sells */
 export const isCashOutToken = (t: { symbol: string; chain: string } | undefined): boolean =>
   t?.symbol.toUpperCase() === 'USDC' && t.chain === 'base';
