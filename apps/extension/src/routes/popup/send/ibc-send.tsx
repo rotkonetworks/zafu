@@ -11,6 +11,7 @@ import {
   getCosmosChain,
   type CosmosChainId,
 } from '@repo/wallet/networks/cosmos/chains';
+import { zignerKeyAddress } from '@repo/wallet/networks/cosmos/zigner-key';
 import { Button } from '@repo/ui/components/ui/button';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { useStore } from '../../../state';
@@ -30,9 +31,11 @@ import { balancesQueryOptions } from '../../../hooks/penumbra-balances';
 import { allocateTransparentAddress } from '../../../transparent/hd';
 import { ScreenHeader } from '../../../components/screen-header';
 import { Sensitive } from '../../../components/sensitive';
+import { QrScanner } from '../../../shared/components/qr-scanner';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { IbcTransferStatusLine } from '../ibc-transfer-status';
 import { EMPTY_BALANCES } from './shared';
+import { scannedAddress } from './scanned-address';
 import { Addr, Footer, Main } from './send-ui';
 import { AmountField, AddressSheet, PickSheet, ToField } from './send-fields';
 import { BalanceSheet, balanceLook } from './balance-sheet';
@@ -266,6 +269,10 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
   const [chainOpen, setChainOpen] = useState(false);
   const [bookOpen, setBookOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanRefused, setScanRefused] = useState<string>();
+  // the destination came from a zigner key: review shows it whole, not clipped
+  const [fromKey, setFromKey] = useState<string>();
   const [sent, setSent] = useState<{ address: string; chainId?: string }>();
 
   const chainName = ibcState.chain?.displayName ?? 'cosmos';
@@ -274,6 +281,25 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
   const toName = to ? findByAddress(to)?.contact.name : undefined;
   const { symbol } = balanceLook(selectedAsset);
   const unit = symbol.toLowerCase();
+  // a zigner key derives a coin-118 address; it owns nothing on an Ethermint
+  // chain or one on another coin type, so a key scan is refused there
+  const keyChain = cosmosChainId ? getCosmosChain(cosmosChainId) : undefined;
+  const keyFits =
+    !!keyChain && keyChain.keyAlgo !== 'eth_secp256k1' && (keyChain.coinType ?? 118) === 118;
+  const onScanned = (text: string) => {
+    setScanOpen(false);
+    const key = destPrefix ? zignerKeyAddress(text, destPrefix) : undefined;
+    const scanned =
+      key && !keyFits
+        ? { address: '', refused: `zigner has no key for ${chainName} · nothing was filled` }
+        : (key ?? scannedAddress(text));
+    setScanRefused(scanned.refused);
+    setFromKey(key && !scanned.refused ? scanned.address : undefined);
+    if (!scanned.refused) {
+      ibcState.setDestinationAddress(scanned.address);
+    }
+  };
+
   const sending = (
     <>
       withdraw <Sensitive>{`${ibcState.amount} ${unit}`}</Sensitive> to {chainName}
@@ -337,6 +363,8 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
                 <>
                   {toName} · <Addr>{to}</Addr>
                 </>
+              ) : to === fromKey ? (
+                <span className='break-all font-mono'>{to}</span>
               ) : (
                 <Addr>{to}</Addr>
               ),
@@ -385,18 +413,24 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
             </RowGroup>
             <ToField
               value={own ? shorten(to, 6, 5) : to}
-              onChange={ibcState.setDestinationAddress}
+              onChange={v => {
+                setScanRefused(undefined);
+                ibcState.setDestinationAddress(v);
+              }}
               placeholder={ibcState.chain ? `${ibcState.chain.addressPrefix}1…` : 'address'}
               disabled={own || !ibcState.chain}
-              warn={!!to && !addressValid}
+              warn={(!!to && !addressValid) || !!scanRefused}
               helper={
                 own
                   ? `your own ${chainName} address · transparent`
-                  : to && !addressValid
-                    ? `that is not a ${chainName} address · please check it`
-                    : toName
+                  : scanRefused
+                    ? scanRefused
+                    : to && !addressValid
+                      ? `that is not a ${chainName} address · please check it`
+                      : toName
               }
               onContacts={own ? undefined : () => setBookOpen(true)}
+              onScan={own ? undefined : () => setScanOpen(true)}
             >
               {ownAddress && (
                 <Button
@@ -454,6 +488,13 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
             own={ownAddress ? [{ label: 'your own address', address: ownAddress }] : []}
             onPick={row => ibcState.setDestinationAddress(row.address)}
           />
+          {scanOpen && (
+            <QrScanner
+              onScan={onScanned}
+              onClose={() => setScanOpen(false)}
+              title='scan an address or zigner key'
+            />
+          )}
         </>
       )}
     </PenumbraFlow>
