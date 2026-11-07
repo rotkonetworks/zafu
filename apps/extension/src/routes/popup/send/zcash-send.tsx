@@ -2,6 +2,7 @@
 
 import { shorten } from '@repo/ui/lib/utils';
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { releaseDraft } from '../inbox/draft-hold';
 import { Sensitive } from '../../../components/sensitive';
 import { discardTxOp, writeTxOp } from '../../../tx-ops';
@@ -28,6 +29,9 @@ import {
   getBalanceInWorker,
   getTransparentUtxosInWorker,
   broadcastRawTxInWorker,
+  lookupTxInWorker,
+  planTransparentDepositInWorker,
+  sendTransparentDepositInWorker,
   stopBuildInWorker,
   type SendTxPcztUnsignedResult,
 } from '../../../state/keyring/network-worker';
@@ -91,6 +95,9 @@ import { formatZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import { looksLikeLink, notYet, parseLink } from '../../../links/router';
 import { viaLine } from '../../../links/land';
 import { zcashAddressOf, zcashPayRefusal } from '../../../addresses/kind';
+import { useSwapTAddress, useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
+import { isFinished, readOpenSwaps } from '../../../state/swap/open-swaps';
+import { payTex, texRoute, type TexPayment } from './tex-pay';
 import {
   Done,
   Footer,
@@ -112,7 +119,8 @@ import { isLedgerGone } from '../../../ledger/disconnect';
 import { zignerCodeChain, type ZignerChain } from '../../../shared/zigner-code';
 import { useCatchUp } from '../../../state/witness-rebuild';
 import { signedPcztOfAnswer } from '../../../signing/zigner-answer';
-import { selectZcashEndpoint } from '../../../state/networks';
+import { selectZcashBackend, selectZcashEndpoint } from '../../../state/networks';
+import { utxosEach, zcashClient } from '../../../state/keyring/zcash-backend';
 
 const SEND_FLAGS = {
   hardwareWallet: HARDWARE_WALLET_ENABLED,
@@ -532,6 +540,29 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
   const recipientPool = zcashAddressOf(recipient)?.pool;
   const recipientIsTransparent = recipientPool === 'transparent' || recipientPool === 'tex';
+  // a tex takes transparent inputs only (ZIP 320): a hot wallet pays it from its own
+  // transparent address, funded from the shielded pool first when none covers it (tex-pay.ts)
+  const texPay = recipientPool === 'tex' && kind === 'hot';
+  const queryClient = useQueryClient();
+  const { tAddresses } = useTransparentAddresses(mainnet);
+  const claimFreshT = useSwapTAddress(mainnet, queryClient).claim;
+  const zcashBackend = useStore(selectZcashBackend);
+  /** the pocket's transparent addresses and what each holds, less any an open swap is funding */
+  const ownT = async () => {
+    const busy = new Set(
+      (await readOpenSwaps()).filter(s => !isFinished(s)).map(s => s.swapT?.index),
+    );
+    const utxos = await utxosEach(zcashClient(zidecarUrl, zcashBackend), tAddresses);
+    return tAddresses
+      .map((address, index) => ({
+        index,
+        address,
+        zat: utxos.filter(u => u.address === address).reduce((n, u) => n + u.valueZat, 0n),
+      }))
+      .filter(t => !busy.has(t.index));
+  };
+  const planT = (req: Parameters<typeof planTransparentDepositInWorker>[1]) =>
+    planTransparentDepositInWorker(zidecarUrl, req);
   // The real max: spends every note in the pool, priced with the ZIP-317 fee
   // that transaction would actually pay. Recomputed when the recipient type
   // changes, because a transparent output is priced differently.
@@ -560,7 +591,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // What the form says about the recipient and the amount, derived as typed:
   // decoded for this wallet's network before review, never by its prefix
   const to = recipient.trim();
-  const toRefusal = zcashPayRefusal(to, mainnet, kind === 'ledger-transparent');
+  const toRefusal = zcashPayRefusal(to, mainnet, kind === 'ledger-transparent' || kind === 'hot');
   const toValid = !!to && !toRefusal;
   const toName =
     recipientContact?.contact.name ??
@@ -585,8 +616,51 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // Priced here, not after a witness build and a halo2 prove: the worker
   // applies the same ZIP-317 arithmetic. Unknown balance (notes not loaded
   // yet) is never read as "too little".
-  const overLimit = amountQuote !== null && !amountQuote.ok;
+  // a tex may be paid from transparent coins this form doesn't count: its review prices the route
+  const overLimit = !texPay && amountQuote !== null && !amountQuote.ok;
   const canReview = toValid && Number(amount) > 0 && !overLimit;
+
+  // how a tex is paid, asked once the person reviews it: the light client is asked per address
+  const texPayment: TexPayment = {
+    to,
+    amountZat: String(Math.round(Number(amount) * 1e8)),
+    mainnet,
+  };
+  // what the pocket's addresses hold is read once a tex is the recipient, while the amount is typed
+  const texOwn = useQuery({
+    queryKey: ['zcashTexOwn', storeId, tAddresses.length],
+    queryFn: ownT,
+    enabled: texPay && toValid && tAddresses.length > 0,
+    staleTime: 60_000,
+    retry: false,
+    structuralSharing: false, // bigint
+  });
+  const tex = useQuery({
+    queryKey: ['zcashTexRoute', storeId, to, texPayment.amountZat, texOwn.dataUpdatedAt],
+    queryFn: () => texRoute({ own: () => Promise.resolve(texOwn.data!), plan: planT }, texPayment),
+    enabled: texPay && step === 'review' && toValid && Number(amount) > 0 && !!texOwn.data,
+    staleTime: 30_000,
+    retry: false,
+  });
+  /** the move's own fee, when the shielded pool funds the tex */
+  const texMove =
+    tex.data && 'move' in tex.data
+      ? quoteSend(spendableNotes, BigInt(tex.data.move), { transparentRecipient: true })
+      : undefined;
+  const texFeeZat = tex.data
+    ? BigInt(tex.data.fee) + (texMove?.ok ? texMove.feeZat : 0n)
+    : undefined;
+  const texLine =
+    tex.isError || texOwn.isError
+      ? "the network didn't answer · please try again"
+      : texMove && !texMove.ok
+        ? "your balance doesn't cover this and its fees · nothing was sent"
+        : texMove
+          ? 'moves through a fresh public address of yours first · two transactions'
+          : undefined;
+  const texReady = !texPay || (texFeeZat !== undefined && (!texMove || texMove.ok));
+  /** what the review says the fee is; undefined while a tex route is still asked */
+  const reviewFee = !texPay ? fee : texFeeZat === undefined ? undefined : fmtZecShort(texFeeZat);
 
   // Keep the DISPLAYED fee in step with the quote.
   //
@@ -852,6 +926,58 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           // the build's clock starts now, not while the password was asked
           buildStartRef.current = Date.now();
           setSendSteps([]);
+          if (texPay) {
+            if (!tex.data || texFeeZat === undefined) {
+              throw new Error("zafu couldn't price this yet · nothing was sent, please try again");
+            }
+            const store = storeId ?? walletId;
+            const sent = await payTex(
+              {
+                own: ownT,
+                plan: planT,
+                claim: claimFreshT,
+                move: async (t, zat) => {
+                  const moved = await buildSendTxInWorker(
+                    'zcash',
+                    store,
+                    zidecarUrl,
+                    t,
+                    zat,
+                    '',
+                    accountIndex,
+                    mainnet,
+                    await getVaultUnlock(walletId),
+                    run.key,
+                  );
+                  if (!('txid' in moved)) {
+                    throw new Error("the move didn't reach the network · nothing was sent");
+                  }
+                  return moved.txid;
+                },
+                mined: async txid => (await lookupTxInWorker(zidecarUrl, txid)).height,
+                pay: async req =>
+                  sendTransparentDepositInWorker(
+                    store,
+                    zidecarUrl,
+                    req,
+                    await getVaultUnlock(walletId),
+                  ),
+                sleep: ms => new Promise(r => setTimeout(r, ms)),
+                step: line =>
+                  window.dispatchEvent(
+                    new CustomEvent('zcash-send-progress', {
+                      detail: { step: line, elapsedMs: Date.now() - buildStartRef.current },
+                    }),
+                  ),
+                live: () => run.live,
+              },
+              texPayment,
+              tex.data,
+            );
+            setFee(fmtZecShort(texFeeZat));
+            finish(sent.txid);
+            return;
+          }
           const vault = await getVaultUnlock(walletId);
           const result = await buildSendTxInWorker(
             'zcash',
@@ -1547,13 +1673,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               [
                 'fee',
                 <Sensitive key='fee'>
-                  {fee} {unit}
+                  {reviewFee ?? '…'} {unit}
                 </Sensitive>,
               ],
               [
                 'total',
                 <Sensitive key='total'>
-                  {fmtZecShort(Math.round((Number(amount) + Number(fee)) * 1e8))} {unit}
+                  {reviewFee === undefined
+                    ? '…'
+                    : fmtZecShort(Math.round((Number(amount) + Number(reviewFee)) * 1e8))}{' '}
+                  {unit}
                 </Sensitive>,
               ],
             ]}
@@ -1564,8 +1693,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             }
             confirm={kind ? CAPS[kind].signLabel : ''}
             onEdit={handleBack}
-            onConfirm={() => void handleSign()}
+            onConfirm={() => texReady && void handleSign()}
           >
+            {texLine && (
+              <span
+                className={`text-center text-[11px] ${texReady ? 'text-fg-muted' : 'text-warn'}`}
+              >
+                {texLine}
+              </span>
+            )}
             {linkVia && (
               <span className='text-center text-[11px] text-fg-muted'>{viaLine(linkVia)}</span>
             )}

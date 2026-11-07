@@ -160,17 +160,21 @@ export const transparentOutputs = (txHex: string): { value: bigint; script: stri
 export const transparentInputs = (txHex: string): { txid: string; vout: number }[] =>
   transparentParts(txHex).inputs;
 
-/** throws unless the signed bytes pay [to, OP_RETURN(memo), change to own] and nothing else */
+/**
+ * Throws unless the signed bytes pay [to, OP_RETURN(memo), change to own] and
+ * nothing else; with no memo (a plain tex payment) there is no OP_RETURN.
+ */
 export const checkDeposit = (
   txHex: string,
   want: { toScript: string; amountZat: bigint; memoHex: string; ownScript: string },
 ): void => {
-  const [pay, memo, ...change] = transparentOutputs(txHex);
+  const [pay, ...rest] = transparentOutputs(txHex);
+  const memo = want.memoHex ? rest.shift() : undefined;
+  const change = rest;
   const ok =
     pay?.script === want.toScript &&
     pay.value === want.amountZat &&
-    memo?.value === 0n &&
-    memo.script === opReturnScript(want.memoHex) &&
+    (!want.memoHex || (memo?.value === 0n && memo.script === opReturnScript(want.memoHex))) &&
     change.length <= 1 &&
     change.every(c => c.script === want.ownScript);
   if (!ok) {

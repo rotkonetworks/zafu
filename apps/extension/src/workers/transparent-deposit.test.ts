@@ -265,6 +265,29 @@ describe('a tex vault (ZIP 320) is paid as its P2PKH', () => {
         value: 500_000n,
         script: await transparentAddressToScriptHex(TEX, true),
       });
+
+      // a plain payment to an exchange's tex: no OP_RETURN, only the pay and change
+      const plain = { ...req, memo: '' };
+      const plainPlan = await planDeposit(wasm, chain, { ...plain, amountZat: '500000' });
+      expect(plainPlan).toEqual({ fee: '10000', change: '390000', short: '0' });
+      const paid = await sendDeposit(wasm, chain, keys, {
+        ...plain,
+        amountZat: '500000',
+        reviewedFee: plainPlan.fee,
+      });
+      expect(transparentOutputs(paid.txHex)).toEqual([
+        { value: 500_000n, script: await transparentAddressToScriptHex(TEX, true) },
+        { value: 390_000n, script: own },
+      ]);
+      // a memo-less review never passes bytes that carry an OP_RETURN
+      expect(() =>
+        checkDeposit(sent.txHex, {
+          toScript: pay!.script,
+          amountZat: 500_000n,
+          memoHex: '',
+          ownScript: own,
+        }),
+      ).toThrow(/does not match/);
     } finally {
       keys.free();
     }
