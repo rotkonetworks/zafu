@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { hexToBytes } from '../../components/qr-code';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const QRCode = require('qrcode');
@@ -57,6 +58,8 @@ interface AnimatedQrDisplayProps {
   data?: Uint8Array;
   /** pre-built UR string frames (e.g. from WASM ur_encode_frames) */
   urFrames?: string[];
+  /** pre-built binary frames as hex, drawn in QR byte mode (e.g. zignerQrFrames) */
+  hexFrames?: string[];
   /** UR type string (e.g. 'zcash-notes', 'zafu-stream') - used with data prop */
   urType?: string;
   /** size of QR code in pixels */
@@ -134,6 +137,7 @@ function estimateQrVersion(payloadBytes: number): number {
 export function AnimatedQrDisplay({
   data,
   urFrames,
+  hexFrames,
   urType,
   size = 256,
   chunkSize = DEFAULT_CHUNK_SIZE,
@@ -284,8 +288,12 @@ export function AnimatedQrDisplay({
   // Effective frame list:
   //  UR-source → re-encoded frames (fall back to urFrames until regenerated)
   //  data      → legacy P-frames at the chosen density
+  //  hexFrames → as supplied, drawn in byte mode
   //  else      → as-supplied urFrames
   const frames = useMemo(() => {
+    if (hexFrames) {
+      return hexFrames;
+    }
     if (urSource) {
       return urDensityFrames ?? urFrames ?? [];
     }
@@ -301,7 +309,7 @@ export function AnimatedQrDisplay({
       setError(e instanceof Error ? e.message : "zafu couldn't draw this code · please try again");
       return [];
     }
-  }, [data, urFrames, urType, density, urSource, urDensityFrames]);
+  }, [data, urFrames, hexFrames, urType, density, urSource, urDensityFrames]);
 
   // Fullscreen QR: a weak phone camera (e.g. Pixel 3) scanning a laptop screen
   // needs the biggest possible target. Tap the QR to blow it up to the full
@@ -356,7 +364,7 @@ export function AnimatedQrDisplay({
     setCurrentFrame(idx + 1);
     QRCode.toCanvas(
       canvas,
-      frames[idx],
+      hexFrames ? [{ data: hexToBytes(frames[idx] ?? ''), mode: 'byte' }] : frames[idx],
       {
         width: renderSize,
         margin: 2,
@@ -369,7 +377,7 @@ export function AnimatedQrDisplay({
         }
       },
     );
-  }, [frames, renderSize]);
+  }, [frames, hexFrames, renderSize]);
 
   useEffect(() => {
     if (frames.length === 0) {

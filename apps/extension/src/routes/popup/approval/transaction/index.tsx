@@ -25,8 +25,10 @@ import {
   encodePlanToQR,
   parseAuthorizationQR,
   validateAuthorization,
+  zignerQrFrames,
 } from '@repo/wallet/airgap-signer';
 import { QrDisplay } from '../../../../shared/components/qr-display';
+import { AnimatedQrDisplay } from '../../../../shared/components/animated-qr-display';
 import { zignerCodeChain } from '../../../../shared/zigner-code';
 import { QrScanner } from '../../../../shared/components/qr-scanner';
 import { Button } from '@repo/ui/components/ui/button';
@@ -69,6 +71,9 @@ const hasTransparentAddress = (txv?: TransactionView): boolean => {
 
 type AirgapStep = 'review' | 'show-qr' | 'scan-qr';
 
+/** payload bytes per frame when a plan needs more than one code (the density default) */
+const PLAN_FRAME_BYTES = 200;
+
 export const TransactionApproval = () => {
   const {
     authorizeRequest,
@@ -95,7 +100,7 @@ export const TransactionApproval = () => {
   const navigate = usePopupNav();
 
   const [airgapStep, setAirgapStep] = useState<AirgapStep>('review');
-  const [qrHex, setQrHex] = useState('');
+  const [qrFrames, setQrFrames] = useState<string[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
   const [showPasswordGate, setShowPasswordGate] = useState(false);
   const [showJson, setShowJson] = useState(false);
@@ -164,8 +169,7 @@ export const TransactionApproval = () => {
     }
     const plan = new TransactionPlan(authorizeRequest.plan);
     const hashBytes = hexToBytes(effectHash);
-    const hex = encodePlanToQR(plan, hashBytes);
-    setQrHex(hex);
+    setQrFrames(zignerQrFrames(encodePlanToQR(plan, hashBytes), PLAN_FRAME_BYTES));
     setAirgapStep('show-qr');
   };
 
@@ -197,7 +201,15 @@ export const TransactionApproval = () => {
       <div className='flex h-full min-h-0 flex-col bg-canvas'>
         <ScreenHeader title='sign on zigner' onBack={() => setAirgapStep('review')} />
         <Main className='items-center gap-4 px-5 pt-6'>
-          <QrDisplay data={qrHex} size={300} showCopy />
+          {qrFrames.length > 1 ? (
+            <AnimatedQrDisplay
+              hexFrames={qrFrames}
+              size={300}
+              totalBytes={qrFrames.reduce((n, f) => n + f.length / 2, 0)}
+            />
+          ) : (
+            <QrDisplay data={qrFrames[0] ?? ''} size={300} showCopy />
+          )}
           <span className='text-[13px] text-fg-high'>scan this with zigner, approve there</span>
         </Main>
         <Footer>
