@@ -21,6 +21,7 @@ import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 import { ExplainSheet, useExplain, type Explain } from './settings-explain';
 import { SendOverNymRows, useConnections } from './nym-rows';
+import { ProxyRows } from './proxy-rows';
 
 /** `zcash.rotko.net`, or `noble-rpc.polkachu.com +3` */
 const hostsLine = (hosts: string[]) => {
@@ -109,6 +110,7 @@ export const SettingsConnections = () => {
               inputs={data.inputs}
               {...explainProps('privacy.sendOverNym')}
             />
+            <ProxyRows />
           </RowGroup>
         </section>
 

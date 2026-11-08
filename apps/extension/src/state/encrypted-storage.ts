@@ -195,6 +195,8 @@ const ENCRYPTED_KEYS = new Set<string>([
   'zecLp',
   // what zafu contacted lately: destinations and when, kept on this computer only
   'netContacted',
+  // the person's own proxy login (the address stays plain so the pac holds while locked)
+  'netProxyLogin',
 ]);
 
 /** should this storage key be encrypted? */

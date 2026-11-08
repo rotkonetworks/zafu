@@ -48,7 +48,9 @@ export class EgressBlockedError extends TypeError {
   constructor(readonly refusal: EgressRefusal) {
     super(
       refusal.reason === 'transport-down'
-        ? NYM_DOWN[refusal.nym ?? 'names-you']
+        ? refusal.proxy
+          ? "your proxy isn't carrying zafu right now · nothing was sent"
+          : NYM_DOWN[refusal.nym ?? 'names-you']
         : `zafu did not contact ${refusal.host}`,
     );
   }

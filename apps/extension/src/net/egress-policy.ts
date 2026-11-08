@@ -52,6 +52,7 @@ import {
 } from './egress-table';
 import type { NetPurpose } from './purpose';
 import { NYM } from './nym-bridge';
+import { PROXY_APPLIED_KEY, PROXY_KEY, proxyInUse } from './proxy';
 import { transportFor } from './nym-plan';
 
 export type { EgressDecision, EgressRealm, EgressReason, EgressTable } from './egress-table';
@@ -77,6 +78,8 @@ export const EGRESS_INPUT_KEYS: string[] = [
   'zcashWallets',
   'vaults',
   'zcashBackends',
+  PROXY_KEY,
+  PROXY_APPLIED_KEY,
   PEOPLE_RELAY_KEY,
   ...Object.keys(COSMOS_CHAINS).map(rpcPoolKey),
 ];
@@ -103,7 +106,15 @@ export interface EgressInputs {
   peopleRelay?: PeopleRelaySetting;
   /** what each zcash node said it is, by `backendKey` */
   zcashBackends?: Record<string, unknown>;
+  /** the person's own proxy (./proxy): with it on, nym carries nothing */
+  netProxy?: unknown;
+  /** what the service worker found applying it: 'ok' or why not */
+  netProxyApplied?: unknown;
 }
+
+/** nym's master switch as it acts: chosen, and no proxy of the person's carrying zafu instead */
+const nymActive = (i: EgressInputs): boolean =>
+  stateOf(destinationSpec(NYM)!, i).on && !proxyInUse(i.netProxy);
 
 /**
  * How a destination earns its allowance:
@@ -439,7 +450,7 @@ export const groupOverNym = (i: EgressInputs, id: NymGroup['id']): boolean => {
       choice: i.netEgress?.optIns?.[nymGroupKey(id)],
       names: true,
       reachable: true,
-      master: stateOf(destinationSpec(NYM)!, i).on,
+      master: nymActive(i),
       destinationOn: true,
     }) === 'nym'
   );
@@ -775,7 +786,7 @@ export const describeEgress = (i: EgressInputs): DestinationView[] => {
 /** Compile settings into the table every realm decides against. */
 export const compileEgress = (i: EgressInputs): EgressTable => {
   const rules: EgressRule[] = [];
-  const nym = stateOf(destinationSpec(NYM)!, i).on;
+  const nym = nymActive(i);
   const carrying = new Set<string>();
   for (const spec of DESTINATIONS) {
     const { on, why } = stateOf(spec, i);
@@ -846,5 +857,6 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
     nym,
     nymVia: [...carrying],
     nymKeepReady: i.netEgress?.optIns?.[NYM_KEEP_READY] !== 'blocked',
+    ...(proxyInUse(i.netProxy) && i.netProxyApplied !== 'ok' ? { proxyDown: true } : {}),
   };
 };

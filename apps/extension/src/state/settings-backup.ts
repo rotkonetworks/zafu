@@ -6,6 +6,9 @@
  */
 
 import { localExtStorage } from '@repo/storage-chrome/local';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
+import { readEncrypted, writeEncrypted } from './encrypted-storage';
+import { isProxyConfig, isProxyLogin, PROXY_KEY, PROXY_LOGIN_KEY } from '../net/proxy';
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { rpcPoolKey } from '../net/egress-policy';
 import { NETWORKS } from '../config/networks';
@@ -86,6 +89,8 @@ export interface SettingsBackup {
    * ones every scan covers, and the seed alone can't say how far they reach.
    */
   tIndices?: Record<string, number>;
+  /** the person's own proxy (net/proxy) and its login; the backup itself is sealed */
+  proxy?: { config?: unknown; login?: unknown };
 }
 
 /** a pocket's highest handed-out transparent index, as storage names it (state/pocket-id) */
@@ -140,6 +145,14 @@ export const exportSettings = async (
     nodePools,
     birthdays,
     tIndices,
+    proxy: {
+      config: (await chrome.storage.local.get(PROXY_KEY))[PROXY_KEY],
+      login: await readEncrypted<unknown>(
+        localExtStorage,
+        sessionExtStorage,
+        PROXY_LOGIN_KEY as never,
+      ).catch(() => undefined),
+    },
   };
 };
 
@@ -210,5 +223,23 @@ export const importTIndices = async (tIndices: SettingsBackup['tIndices']): Prom
     if (!isIndex(here) || here < v) {
       await chrome.storage.local.set({ [k]: v });
     }
+  }
+};
+
+/**
+ * Put back the person's proxy and its login. A proxy that was on comes back
+ * on: until Chrome's permission is granted again (settings > your proxy >
+ * allow) zafu sends nothing, rather than going direct.
+ */
+export const importProxy = async (proxy: SettingsBackup['proxy']): Promise<void> => {
+  if (!isProxyConfig(proxy?.config)) {
+    return;
+  }
+  await chrome.storage.local.set({ [PROXY_KEY]: proxy.config });
+  if (isProxyLogin(proxy.login)) {
+    await writeEncrypted(localExtStorage, sessionExtStorage, PROXY_LOGIN_KEY as never, {
+      username: proxy.login.username,
+      password: proxy.login.password,
+    });
   }
 };
