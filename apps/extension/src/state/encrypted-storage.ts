@@ -189,6 +189,8 @@ const ENCRYPTED_KEYS = new Set<string>([
   'openBuy',
   // swaps in flight: deposit addresses, memos, the swap's own t-address
   'openSwaps',
+  // payments from a fresh t-address in flight: the recipient, the fresh address
+  'openPayments',
   // zec liquidity: each pocket's lp address index, its last read, an add or take-out in flight
   'zecLp',
   // what zafu contacted lately: destinations and when, kept on this computer only
