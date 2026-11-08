@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
-const optIns: Record<string, string> = {};
+const optIns: Record<string, string> = { nym: 'allowed' };
 const setOptIn = vi.fn(async () => undefined);
 vi.mock('../../../net/ledger', () => ({
   readNetEgress: async () => ({ destinations: {}, optIns }),
@@ -31,10 +31,12 @@ afterEach(() => {
   for (const k of Object.keys(optIns)) {
     delete optIns[k];
   }
+  // the person chose nym: it is never on by default
+  optIns.nym = 'allowed';
 });
 
 describe('the nym line where a send waits on it', () => {
-  it('says a penumbra send goes over nym by default, and goes direct in one tap', async () => {
+  it('says a penumbra send goes over nym once nym is chosen, and goes direct in one tap', async () => {
     const { el, root } = await show();
     expect(el.textContent).toContain('over nym · about 10 s more');
     await act(async () => el.querySelector('button')!.click());

@@ -70,18 +70,22 @@ afterEach(() => {
 
 describe('ready to shield on penumbra home', () => {
   it('checks the deposit addresses on open, with no ask, while cosmos goes over nym', async () => {
+    optIns.nym = 'allowed';
     const t = await run();
     expect(check.mock.calls.map(c => c[0])).toEqual(['injective']);
     expect(t.ready.map(r => [r.symbol, r.chain])).toEqual([['usdc.inj', 'injective']]);
   });
 
   it('checks nothing on its own when cosmos is set to direct: the first check asks', async () => {
+    optIns.nym = 'allowed';
     optIns['nym:cosmos'] = 'blocked';
     await run();
     expect(check).not.toHaveBeenCalled();
   });
 
-  it('checks nothing on its own when nym is off', async () => {
+  it('checks nothing on its own when nym is off, and nym is off until chosen', async () => {
+    await run();
+    expect(check).not.toHaveBeenCalled();
     optIns.nym = 'blocked';
     await run();
     expect(check).not.toHaveBeenCalled();

@@ -51,16 +51,16 @@ describe('egress choices in the personal-data backup', () => {
     expect(Object.keys(after.optIns)).toEqual(Object.keys(before.optIns));
   });
 
-  it('carries "send over nym" turned off through a backup and its restore', async () => {
-    await setDestinationOptIn(NYM, 'blocked');
+  it('carries "send over nym" chosen through a backup and its restore', async () => {
+    await setDestinationOptIn(NYM, 'allowed');
     const backup = JSON.parse(JSON.stringify(await exportEgressChoices())) as Awaited<
       ReturnType<typeof exportEgressChoices>
     >;
-    // a fresh install: the default, on
+    // a fresh install: the default, off until chosen
     await setDestinationOptIn(NYM, undefined);
-    expect(compileEgress({ netEgress: await readNetEgress() }).nym).toBe(true);
-    await importEgressChoices(backup);
     expect(compileEgress({ netEgress: await readNetEgress() }).nym).toBe(false);
+    await importEgressChoices(backup);
+    expect(compileEgress({ netEgress: await readNetEgress() }).nym).toBe(true);
     await setDestinationOptIn(NYM, undefined);
   });
 

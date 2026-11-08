@@ -16,8 +16,16 @@ import { hostOf } from './destination';
 import { ensureOffscreenDocument } from '../offscreen-document';
 import type { RequestClass } from './egress-table';
 
-/** the nym destination: "send over nym" is on unless the person blocks it (`optIns.nym`) */
+/**
+ * The nym destination: "send over nym" is on only when the person chose it
+ * (`optIns.nym === 'allowed'`), asked in onboarding and in settings. It is
+ * slower and fails more often, so it is never on by default.
+ */
 export const NYM = 'nym';
+
+/** did the person choose nym */
+export const nymChosen = (optIns: Record<string, unknown> | undefined): boolean =>
+  optIns?.[NYM] === 'allowed';
 export const NYM_CHANNEL = 'zafu-nym';
 /** the tunnel worker's name: its egress realm is `nym` */
 export const NYM_WORKER_NAME = 'zafu-nym';

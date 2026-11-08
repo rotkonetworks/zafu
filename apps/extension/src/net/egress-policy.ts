@@ -227,7 +227,7 @@ const NYM_CLASSES: {
 
 /**
  * The person's per-network choice of nym, stored as `optIns['nym:<id>']`
- * beside the master switch (`optIns.nym`). Unset means `on` here. penumbra is
+ * beside the master switch (`optIns.nym`, off unless chosen). Unset means `on` here. penumbra is
  * off by default: its transactions are already shielded, and ~10 s through
  * nym is two blocks. `direct` says what going direct reveals.
  */
@@ -638,7 +638,8 @@ export const DESTINATIONS: DestinationSpec[] = [
     // its websocket port.
     label: 'nym',
     purpose: 'relay',
-    gate: { kind: 'optional', setting: () => true },
+    // on only when the person chose it (onboarding, settings): slower, fails more
+    gate: { kind: 'optional' },
     urls: () => ['https://validator.nymtech.net/api', 'wss://*:9001'],
     realm: 'nym',
   },

@@ -22,7 +22,7 @@ import { useStore } from '../../../state';
 import { UnshieldedLine, type LineAction } from '../../../components/wallet/balance-rows';
 import { useOpenIntent } from '../../../hooks/open-link';
 import { useConnections } from '../settings/nym-rows';
-import { NYM } from '../../../net/nym-bridge';
+import { nymChosen } from '../../../net/nym-bridge';
 import { NYM_GROUPS, nymGroupView } from '../../../net/egress-policy';
 
 const chainName = (c: CosmosChainId) => getCosmosChain(c).name.toLowerCase();
@@ -162,7 +162,7 @@ const useCosmosOverNym = (): boolean => {
   return (
     !!data &&
     !!cosmos &&
-    data.ledger.optIns[NYM] !== 'blocked' &&
+    nymChosen(data.ledger.optIns) &&
     nymGroupView({ ...data.inputs, netEgress: data.ledger }, cosmos) === 'nym'
   );
 };

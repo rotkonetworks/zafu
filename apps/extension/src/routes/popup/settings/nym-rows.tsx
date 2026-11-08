@@ -4,7 +4,7 @@ import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { readNetEgress, setDestinationOptIn } from '../../../net/ledger';
 import { readEgressInputs } from '../../../net/egress-opt-in';
-import { NYM } from '../../../net/nym-bridge';
+import { NYM, nymChosen } from '../../../net/nym-bridge';
 import {
   describeEgress,
   EGRESS_INPUT_KEYS,
@@ -37,7 +37,7 @@ export function SendOverNymRows({
   onExplain?: (label: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const master = optIns[NYM] !== 'blocked';
+  const master = nymChosen(optIns);
   const keepReady = optIns[NYM_KEEP_READY] !== 'blocked';
   const view = (g: (typeof NYM_GROUPS)[number]) =>
     nymGroupView({ ...inputs, netEgress: { ...inputs.netEgress, optIns } }, g);
@@ -48,7 +48,7 @@ export function SendOverNymRows({
         label='send over nym'
         description="slower · nym's directory sees that you use nym"
         checked={master}
-        onChange={v => void setDestinationOptIn(NYM, v ? undefined : 'blocked')}
+        onChange={v => void setDestinationOptIn(NYM, v ? 'allowed' : 'blocked')}
         onExplain={onExplain}
       />
       <Row
@@ -130,7 +130,7 @@ const setGroupNym = (g: (typeof NYM_GROUPS)[number], v: boolean) =>
 export function NymRouteLine({ group, slower }: { group: string; slower: string }) {
   const data = useConnections();
   const g = NYM_GROUPS.find(x => x.id === group);
-  if (!data || !g || data.ledger.optIns[NYM] === 'blocked') {
+  if (!data || !g || !nymChosen(data.ledger.optIns)) {
     return null;
   }
   const view = nymGroupView({ ...data.inputs, netEgress: data.ledger }, g);

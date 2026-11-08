@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { legacyEnabledNetworks, migrateNetEgress, runNetEgressMigration } from './egress-migrate';
+import {
+  legacyEnabledNetworks,
+  migrateNetEgress,
+  NYM_SETTLED,
+  runNetEgressMigration,
+} from './egress-migrate';
 import { compileEgress, type EgressInputs } from './egress-policy';
 import { decideEgress } from './egress-table';
 
@@ -158,5 +163,43 @@ describe('runNetEgressMigration', () => {
     await runNetEgressMigration();
     const { netEgress } = await chrome.storage.local.get('netEgress');
     expect(netEgress).toMatchObject({ v: 2, optIns: { 'multisig-relay': 'allowed' } });
+  });
+
+  it('an install that had a wallet keeps nym on, once; a new one stays off until asked', async () => {
+    const wallet = {
+      netEgress: { v: 2, destinations: {}, optIns: {} },
+      enabledNetworks: ['zcash'],
+    };
+    await chrome.storage.local.set({ ...wallet, vaults: [{ id: 'v1', type: 'mnemonic' }] });
+    await runNetEgressMigration();
+    expect(await chrome.storage.local.get(['netEgress', NYM_SETTLED])).toMatchObject({
+      netEgress: { v: 2, optIns: { nym: 'allowed' } },
+      [NYM_SETTLED]: true,
+    });
+
+    // a person who turned nym off keeps it off
+    await chrome.storage.local.clear();
+    await chrome.storage.local.set({
+      ...wallet,
+      netEgress: { v: 2, destinations: {}, optIns: { nym: 'blocked' } },
+      vaults: [{ id: 'v1', type: 'mnemonic' }],
+    });
+    await runNetEgressMigration();
+    expect((await chrome.storage.local.get('netEgress'))['netEgress']).toMatchObject({
+      optIns: { nym: 'blocked' },
+    });
+
+    // a fresh install is settled with no wallet: skipping the onboarding question leaves it off
+    await chrome.storage.local.clear();
+    await chrome.storage.local.set(wallet);
+    await runNetEgressMigration();
+    await chrome.storage.local.set({ vaults: [{ id: 'v1', type: 'mnemonic' }] });
+    await runNetEgressMigration();
+    expect((await chrome.storage.local.get('netEgress'))['netEgress']).toMatchObject({
+      optIns: {},
+    });
+    expect(
+      ((await chrome.storage.local.get('netEgress'))['netEgress'] as { optIns: object }).optIns,
+    ).not.toHaveProperty('nym');
   });
 });
