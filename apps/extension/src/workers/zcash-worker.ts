@@ -6970,6 +6970,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           cancelKey?: string;
           /** zigner signs it: return the PCZT as a ur:zigner-module request too */
           zigner?: boolean;
+          /** shield only these addresses' coins; position in `tAddresses` still signs */
+          only?: string[];
         };
         const build = builds.begin(shieldUnsignedPayload.cancelKey);
         const progress = buildProgress(walletId);
@@ -6980,7 +6982,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
         const shieldUBranchIdHex = await build.race(fetchBranchIdHex(shieldUClient));
         const shieldUAll = await build.race(
-          utxosEach(shieldUClient, shieldUnsignedPayload.tAddresses),
+          utxosEach(shieldUClient, shieldUnsignedPayload.only ?? shieldUnsignedPayload.tAddresses),
         );
         const shieldUUtxos =
           shieldUnsignedPayload.maxInputs === undefined

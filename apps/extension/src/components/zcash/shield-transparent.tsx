@@ -59,6 +59,9 @@ import { LedgerSteps } from '../../routes/popup/send/send-states';
 import { Proving, SendingFooter, type SendingNote } from '../../routes/popup/send/send-ui';
 import { STAGES, sendStage, type SendProgress } from '../../routes/popup/send/send-stage';
 import { shieldFeeFor } from '../../routes/popup/send/spendable';
+import { selectZcashBackend } from '../../state/networks';
+import { utxosEach, zcashClient } from '../../state/keyring/zcash-backend';
+import { fundedFirst } from '../../transparent/zcash-check';
 import { isHeartbeat, phaseOf, useSendWatch, watchNote } from '../../routes/popup/send/send-watch';
 import { stopBuildInWorker } from '../../state/keyring/network-worker';
 import { isBuildStopped } from '../../workers/build-abort';
@@ -111,6 +114,7 @@ export const ShieldTransparent = ({
   const keyRing = useStore(keyRingSelector);
   const { requestAuth, PasswordModal } = usePasswordGate();
   const { last, shielded } = useTransparentBalance(tAddresses);
+  const backend = useStore(selectZcashBackend);
   // what went out: the sheet keeps showing it once the coins leave the figures
   const [moved, setMoved] = useState<{ zat: bigint; funded?: number; feeZat?: bigint }>();
   // the figures as they are now: the shield callbacks are memoised and would keep old ones
@@ -263,41 +267,54 @@ export const ShieldTransparent = ({
     setZignerStep('building');
     setZignerTxid(null);
     setZignerError(null);
-    const key = startBuild();
 
     try {
       await spawnNetworkWorker('zcash');
-      const result = await buildUnsignedShieldInWorker(
-        'zcash',
-        selectedKeyInfo.id,
-        zidecarUrl,
-        tAddresses,
-        isMainnet,
-        ufvk,
-        undefined,
-        key,
-        true,
-      );
-      if (!result.zigner) {
-        throw new Error('the shielding build came back without a zigner request');
+      // one transaction per address, one signature each: shielded together they
+      // would tell everyone the addresses are one wallet
+      const coins = last?.utxos ?? (await utxosEach(zcashClient(zidecarUrl, backend), tAddresses));
+      const order = fundedFirst(coins);
+      if (!order.length) {
+        throw new Error('no transparent UTXOs to shield');
       }
-      // zigner recomputes the sighashes from the PCZT and shows what it signs
-      setZignerStep('signing');
-      const signed = await round.sign(
-        {
-          pcztHex: result.unsignedTxHex,
-          urFrames: result.zigner.urFrames,
-          cborData: result.zigner.cborData,
-          cborBytes: result.zigner.cborBytes,
-          compactRequest: false,
-        },
-        'shield into ironwood',
-      );
-      setZignerStep('broadcasting');
-      const { txHex } = await extractSignedPcztTxInWorker(signed);
-      const sent = await broadcastSignedTxInWorker(selectedKeyInfo.id, zidecarUrl, txHex);
-      setZignerTxid(sent.txid);
-      shieldWentOut(transparentZat);
+      for (const [i, { address, zat }] of order.entries()) {
+        const key = startBuild();
+        setZignerStep('building');
+        const result = await buildUnsignedShieldInWorker(
+          'zcash',
+          selectedKeyInfo.id,
+          zidecarUrl,
+          tAddresses,
+          isMainnet,
+          ufvk,
+          undefined,
+          key,
+          true,
+          [address],
+        );
+        if (!result.zigner) {
+          throw new Error('the shielding build came back without a zigner request');
+        }
+        // zigner recomputes the sighashes from the PCZT and shows what it signs
+        setZignerStep('signing');
+        const signed = await round.sign(
+          {
+            pcztHex: result.unsignedTxHex,
+            urFrames: result.zigner.urFrames,
+            cborData: result.zigner.cborData,
+            cborBytes: result.zigner.cborBytes,
+            compactRequest: false,
+          },
+          order.length > 1
+            ? `shield address ${i + 1} of ${order.length} into ironwood`
+            : 'shield into ironwood',
+        );
+        setZignerStep('broadcasting');
+        const { txHex } = await extractSignedPcztTxInWorker(signed);
+        const sent = await broadcastSignedTxInWorker(selectedKeyInfo.id, zidecarUrl, txHex);
+        setZignerTxid(sent.txid);
+        shieldWentOut(zat);
+      }
       setZignerStep('complete');
     } catch (err) {
       if (isBuildStopped(err)) {
@@ -310,7 +327,7 @@ export const ShieldTransparent = ({
       setZignerError(err instanceof Error ? err.message : String(err));
       setZignerStep('error');
     }
-  }, [watchOnly, selectedKeyInfo, tAddresses, isMainnet, zidecarUrl, round, transparentZat]);
+  }, [watchOnly, selectedKeyInfo, tAddresses, isMainnet, zidecarUrl, round, last, backend]);
 
   const ledger = useLedgerShield({
     onShielded: () => shieldWentOut(transparentZat),
@@ -341,7 +358,7 @@ export const ShieldTransparent = ({
   const feeZat = last?.utxos
     ? shieldFeeFor(
         last.utxos.map(u => u.address),
-        method === 'zigner',
+        false,
       )
     : undefined;
   latest.current = { zat: transparentZat, funded, feeZat };
@@ -452,11 +469,11 @@ export const ShieldTransparent = ({
         </div>
       </div>
 
-      {/* hot and ledger shield one address per transaction; zigner signs them all in one */}
+      {/* every method shields one address per transaction */}
       {!!shown.funded && shown.funded > 1 && (
         <p className='text-label text-fg-muted lowercase'>
           {method === 'zigner'
-            ? `these ${funded} addresses are shielded together in one transaction · that links them on chain`
+            ? `each address is shielded in its own transaction, one zigner signature each · they stay unlinked`
             : `each address is shielded in its own transaction, each with its own fee · they stay unlinked`}
         </p>
       )}
