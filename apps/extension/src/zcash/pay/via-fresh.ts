@@ -268,31 +268,55 @@ export const isRunning = (id: string): boolean => live.has(id);
 /** how many legs one password signs at a security level */
 export const legsPerUnlock = (level: TxSigningSecurity): number => (level === 'foilhat' ? 1 : 2);
 
+type Unlocks = Record<string, { until: number; legs?: number }>;
+
+/** every running payment's unlock, each its own: one never takes or ends another's */
+const changeUnlocks = async <T>(fn: (u: Unlocks) => { next: Unlocks; out: T }): Promise<T> =>
+  (await navigator.locks.request(
+    `${chrome.runtime.id}.pay-unlock`,
+    { mode: 'exclusive' },
+    async () => {
+      const stored = await sessionExtStorage.get('swapUnlock');
+      // an older build kept one payment's unlock flat ({ id, until, legs }): not a map
+      const u: Unlocks = Object.fromEntries(
+        Object.entries(stored ?? {}).filter(
+          ([, v]) => typeof v === 'object' && v !== null && typeof v.until === 'number',
+        ),
+      );
+      const { next, out } = fn(u);
+      if (Object.keys(next).length) {
+        await sessionExtStorage.set('swapUnlock', next);
+      } else {
+        await sessionExtStorage.remove('swapUnlock');
+      }
+      return out;
+    },
+  )) as T;
+
 export const openPayUnlock = (
   id: string,
   expiresAt: number | undefined,
   legs: number,
   now = Date.now(),
 ) =>
-  sessionExtStorage.set('swapUnlock', {
-    id,
-    until: Math.min(expiresAt ?? Infinity, now + SIGN_GRACE_MS),
-    legs,
-  });
+  changeUnlocks(u => ({
+    next: { ...u, [id]: { until: Math.min(expiresAt ?? Infinity, now + SIGN_GRACE_MS), legs } },
+    out: undefined,
+  }));
 
 /** true, and one leg spent, when this payment's unlock still covers a leg */
-export const takePayUnlock = async (id: string, now = Date.now()): Promise<boolean> => {
-  const w = await sessionExtStorage.get('swapUnlock');
-  const left = w?.id === id ? (w.legs ?? 0) : 0;
-  if (!left || shouldPromptPassword('grace', now, w!.until)) {
-    return false;
-  }
-  await sessionExtStorage.set('swapUnlock', { ...w!, legs: left - 1 });
-  return true;
-};
+export const takePayUnlock = (id: string, now = Date.now()): Promise<boolean> =>
+  changeUnlocks(u => {
+    const w = u[id];
+    const left = w?.legs ?? 0;
+    if (!w || !left || shouldPromptPassword('grace', now, w.until)) {
+      return { next: u, out: false };
+    }
+    return { next: { ...u, [id]: { ...w, legs: left - 1 } }, out: true };
+  });
 
-const closePayUnlock = async (id: string) => {
-  if ((await sessionExtStorage.get('swapUnlock'))?.id === id) {
-    await sessionExtStorage.remove('swapUnlock');
-  }
-};
+const closePayUnlock = (id: string) =>
+  changeUnlocks(u => {
+    const { [id]: _, ...rest } = u;
+    return { next: rest, out: undefined };
+  });
