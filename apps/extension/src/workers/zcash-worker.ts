@@ -109,8 +109,7 @@ import {
   finishDeposit,
   planDeposit,
   sendDeposit,
-  transparentInputs,
-  transparentOutputs,
+  v5TransparentParts,
   wantOf,
   withCoin,
   type DepositChain,
@@ -1740,10 +1739,10 @@ const fetchTransparentHistory = async (
         // its coins in and out, so a payment we hold no record of can be rebuilt (rebuilt-sends.ts)
         let parts: Pick<TOuts, 'inputs' | 'outputs'> | undefined;
         try {
-          const hex = hexEncode(rawTx.data);
-          parts = {
-            inputs: transparentInputs(hex),
-            outputs: transparentOutputs(hex).map(o => ({ ...o, ours: ourScripts.has(o.script) })),
+          const v5 = v5TransparentParts(hexEncode(rawTx.data));
+          parts = v5 && {
+            inputs: v5.inputs,
+            outputs: v5.outputs.map(o => ({ ...o, ours: ourScripts.has(o.script) })),
           };
         } catch {
           // a layout the parser doesn't know: the row stays a plain receive check

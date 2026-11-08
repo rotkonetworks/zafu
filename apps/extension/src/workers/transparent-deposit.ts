@@ -158,6 +158,14 @@ const transparentParts = (txHex: string) => {
 export const transparentOutputs = (txHex: string): { value: bigint; script: string }[] =>
   transparentParts(txHex).outputs;
 
+/**
+ * A v5 transaction's transparent inputs and outputs; undefined for any other
+ * version, whose layout these offsets don't describe (v5's transparent
+ * bundle comes first, after a 20-byte header).
+ */
+export const v5TransparentParts = (txHex: string) =>
+  txHex.startsWith('05000080') ? transparentParts(txHex) : undefined;
+
 /** the outpoints a transparent-only V5 transaction spends */
 export const transparentInputs = (txHex: string): { txid: string; vout: number }[] =>
   transparentParts(txHex).inputs;

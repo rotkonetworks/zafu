@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { scriptAddress } from '../ledger/address';
-import { transparentInputs, transparentOutputs } from './transparent-deposit';
+import { transparentInputs, transparentOutputs, v5TransparentParts } from './transparent-deposit';
 import { rebuildSends, type TOuts } from './rebuilt-sends';
 
 // mainnet 2026-11-08: the tex payment (e62da7a4...) whose record an older build pruned,
@@ -51,5 +51,10 @@ describe('rebuildSends', () => {
     };
     expect(await rebuildSends([move, self], new Set([MOVE]), 'w', addr)).toEqual([]);
     expect(await rebuildSends([pay], new Set(), 'w', addr)).toEqual([]);
+  });
+
+  it('reads coins only from a v5 transaction, whose layout it knows', () => {
+    expect(v5TransparentParts(PAY_HEX)?.inputs).toEqual([{ txid: MOVE, vout: 0 }]);
+    expect(v5TransparentParts('06000080' + PAY_HEX.slice(8))).toBeUndefined();
   });
 });
