@@ -1225,6 +1225,8 @@ export interface HistoryEntry {
   memo?: string;
   fee?: string;
   sentAt?: number;
+  /** the unshield that funded a fresh-address payment, folded into this row */
+  moveTxid?: string;
   expiryHeight?: number;
 }
 

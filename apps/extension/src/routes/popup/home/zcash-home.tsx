@@ -65,6 +65,7 @@ import type { BalanceView } from '../../../components/wallet/balance-hero';
 import { SharedWallets } from './shared-wallets';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { BuyInFlight } from '../../../components/buy-in-flight';
+import { PaymentInFlight, usePaymentMoves } from '../../../components/payment-in-flight';
 import { SwapInFlight } from '../../../components/swap-in-flight';
 import { BUY_PRELOAD, openBuyPage } from '../../../buy/open';
 import { LP_PRELOAD, openLpPage } from '../../../lp/open';
@@ -190,6 +191,8 @@ export const ZcashContent = ({
   // Never another pocket's: these are not carried over a switch.
   const pendingSends =
     useWorkerValue(zcashWorkerQuery.pending(storeId), workerSyncHeight).data ?? NO_PENDING;
+  // a payment's move is the payment's first step: its own card says where it stands
+  const payMoves = usePaymentMoves();
 
   // the figures still show the pocket switched away from: dimmed, never current
   const held = balance.isPlaceholderData || poolsQ.isPlaceholderData;
@@ -266,7 +269,7 @@ export const ZcashContent = ({
                 ? 'unknown'
                 : 'partial';
 
-  const inFlight = pendingSends.filter(t => t.status === 'pending');
+  const inFlight = pendingSends.filter(t => t.status === 'pending' && !payMoves.has(t.id));
   const failedSends = pendingSends.filter(t => t.status === 'failed');
   // a swap or lp address was handed out and never checked: keep its row and its
   // "check now" on screen rather than calling the pocket empty
@@ -412,6 +415,7 @@ export const ZcashContent = ({
       </InFlightCard>
       <BuyInFlight />
       <SwapInFlight />
+      <PaymentInFlight />
 
       {messageSlot}
 

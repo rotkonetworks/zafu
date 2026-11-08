@@ -2,7 +2,6 @@
 
 import { shorten } from '@repo/ui/lib/utils';
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { releaseDraft } from '../inbox/draft-hold';
 import { Sensitive } from '../../../components/sensitive';
 import { discardTxOp, writeTxOp } from '../../../tx-ops';
@@ -29,9 +28,6 @@ import {
   getBalanceInWorker,
   getTransparentUtxosInWorker,
   broadcastRawTxInWorker,
-  lookupTxInWorker,
-  planTransparentDepositInWorker,
-  sendTransparentDepositInWorker,
   stopBuildInWorker,
   type SendTxPcztUnsignedResult,
 } from '../../../state/keyring/network-worker';
@@ -95,9 +91,19 @@ import { formatZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import { looksLikeLink, notYet, parseLink } from '../../../links/router';
 import { viaLine } from '../../../links/land';
 import { zcashAddressOf, zcashPayRefusal } from '../../../addresses/kind';
-import { useSwapTAddress, useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
-import { isFinished, readOpenSwaps } from '../../../state/swap/open-swaps';
-import { payTex, texRoute, type TexPayment } from './tex-pay';
+import {
+  FRESH_WORDS,
+  PUBLIC_LINE,
+  PUBLIC_WORDS,
+  useTransparentPay,
+  type TransparentStart,
+} from './use-transparent-pay';
+import { FreshPayTracker } from '../../../components/fresh-pay-tracker';
+import { Segmented } from '@repo/ui/components/ui/segmented';
+import { legContextOf } from '../../../zcash/pay/legs';
+import { openPayments } from '../../../zcash/pay/open-payments';
+import { runPayment } from '../../../zcash/pay/run';
+import { openPayUnlock } from '../../../zcash/pay/via-fresh';
 import {
   Done,
   Footer,
@@ -119,8 +125,7 @@ import { isLedgerGone } from '../../../ledger/disconnect';
 import { zignerCodeChain, type ZignerChain } from '../../../shared/zigner-code';
 import { useCatchUp } from '../../../state/witness-rebuild';
 import { signedPcztOfAnswer } from '../../../signing/zigner-answer';
-import { selectZcashBackend, selectZcashEndpoint } from '../../../state/networks';
-import { utxosEach, zcashClient } from '../../../state/keyring/zcash-backend';
+import { selectZcashEndpoint } from '../../../state/networks';
 
 const SEND_FLAGS = {
   hardwareWallet: HARDWARE_WALLET_ENABLED,
@@ -154,7 +159,9 @@ type SendStep =
   | 'ledger-gone'
   | 'frost-room'
   | 'frost-signing'
-  | 'airgap-flow';
+  | 'airgap-flow'
+  // a payment from a fresh or public transparent address, run by zcash/pay
+  | 'fresh-pay';
 
 /** zatoshi → ZEC, trailing zeros trimmed. Matches the formatting used inline. */
 const fmtZecShort = (zat: bigint | string | number): string =>
@@ -540,29 +547,19 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
   const recipientPool = zcashAddressOf(recipient)?.pool;
   const recipientIsTransparent = recipientPool === 'transparent' || recipientPool === 'tex';
-  // a tex takes transparent inputs only (ZIP 320): a hot wallet pays it from its own
-  // transparent address, funded from the shielded pool first when none covers it (tex-pay.ts)
-  const texPay = recipientPool === 'tex' && kind === 'hot';
-  const queryClient = useQueryClient();
-  const { tAddresses } = useTransparentAddresses(mainnet);
-  const claimFreshT = useSwapTAddress(mainnet, queryClient).claim;
-  const zcashBackend = useStore(selectZcashBackend);
-  /** the pocket's transparent addresses and what each holds, less any an open swap is funding */
-  const ownT = async () => {
-    const busy = new Set(
-      (await readOpenSwaps()).filter(s => !isFinished(s)).map(s => s.swapT?.index),
-    );
-    const utxos = await utxosEach(zcashClient(zidecarUrl, zcashBackend), tAddresses);
-    return tAddresses
-      .map((address, index) => ({
-        index,
-        address,
-        zat: utxos.filter(u => u.address === address).reduce((n, u) => n + u.valueZat, 0n),
-      }))
-      .filter(t => !busy.has(t.index));
-  };
-  const planT = (req: Parameters<typeof planTransparentDepositInWorker>[1]) =>
-    planTransparentDepositInWorker(zidecarUrl, req);
+  // a transparent recipient may be paid from the public balance; a tex from the
+  // shielded pool goes through a fresh address of its own (use-transparent-pay.ts)
+  const tPay = useTransparentPay({
+    hot: kind === 'hot',
+    pool: recipientPool,
+    to: recipient.trim(),
+    amount,
+    mainnet,
+    review: step === 'review',
+    notes: spendableNotes,
+    walletId: selectedKeyInfo?.id,
+    getVaultUnlock,
+  });
   // The real max: spends every note in the pool, priced with the ZIP-317 fee
   // that transaction would actually pay. Recomputed when the recipient type
   // changes, because a transparent output is priced differently.
@@ -616,51 +613,20 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // Priced here, not after a witness build and a halo2 prove: the worker
   // applies the same ZIP-317 arithmetic. Unknown balance (notes not loaded
   // yet) is never read as "too little".
-  // a tex may be paid from transparent coins this form doesn't count: its review prices the route
-  const overLimit = !texPay && amountQuote !== null && !amountQuote.ok;
+  const overLimit = tPay.active ? tPay.overLimit : amountQuote !== null && !amountQuote.ok;
+  /** what max fills: the public address's most, a fresh payment's, or the pool's */
+  const sendMax = tPay.fromPublic
+    ? (tPay.available ?? 0n)
+    : tPay.active
+      ? tPay.freshMax(maxSend.amountZat)
+      : maxSend.amountZat;
   const canReview = toValid && Number(amount) > 0 && !overLimit;
-
-  // how a tex is paid, asked once the person reviews it: the light client is asked per address
-  const texPayment: TexPayment = {
-    to,
-    amountZat: String(Math.round(Number(amount) * 1e8)),
-    mainnet,
-  };
-  // what the pocket's addresses hold is read once a tex is the recipient, while the amount is typed
-  const texOwn = useQuery({
-    queryKey: ['zcashTexOwn', storeId, tAddresses.length],
-    queryFn: ownT,
-    enabled: texPay && toValid && tAddresses.length > 0,
-    staleTime: 60_000,
-    retry: false,
-    structuralSharing: false, // bigint
-  });
-  const tex = useQuery({
-    queryKey: ['zcashTexRoute', storeId, to, texPayment.amountZat, texOwn.dataUpdatedAt],
-    queryFn: () => texRoute({ own: () => Promise.resolve(texOwn.data!), plan: planT }, texPayment),
-    enabled: texPay && step === 'review' && toValid && Number(amount) > 0 && !!texOwn.data,
-    staleTime: 30_000,
-    retry: false,
-  });
-  /** the move's own fee, when the shielded pool funds the tex */
-  const texMove =
-    tex.data && 'move' in tex.data
-      ? quoteSend(spendableNotes, BigInt(tex.data.move), { transparentRecipient: true })
-      : undefined;
-  const texFeeZat = tex.data
-    ? BigInt(tex.data.fee) + (texMove?.ok ? texMove.feeZat : 0n)
-    : undefined;
-  const texLine =
-    tex.isError || texOwn.isError
-      ? "the network didn't answer · please try again"
-      : texMove && !texMove.ok
-        ? "your balance doesn't cover this and its fees · nothing was sent"
-        : texMove
-          ? 'moves through a fresh public address of yours first · two transactions'
-          : undefined;
-  const texReady = !texPay || (texFeeZat !== undefined && (!texMove || texMove.ok));
-  /** what the review says the fee is; undefined while a tex route is still asked */
-  const reviewFee = !texPay ? fee : texFeeZat === undefined ? undefined : fmtZecShort(texFeeZat);
+  /** what the review says the fee is; undefined while a transparent route is still planned */
+  const reviewFee = !tPay.active
+    ? fee
+    : tPay.feeZat === undefined
+      ? undefined
+      : fmtZecShort(tPay.feeZat);
 
   // Keep the DISPLAYED fee in step with the quote.
   //
@@ -785,6 +751,50 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     }
     setSendNote('leave');
     setStep('review');
+  };
+
+  /** a held open payment: carry on (a hot wallet unlocks again) */
+  const resumeOpenPay = async (id: string) => {
+    const p = (await openPayments.read()).find(x => x.id === id);
+    const ctx = legContextOf(useStore.getState());
+    if (!p || !ctx || !(await requestAuth())) {
+      return;
+    }
+    await openPayUnlock(p.id, undefined, ctx.legsPerUnlock);
+    runPayment(p, ctx);
+  };
+  // what "shield the rest" did, on the done screen
+  const [restLine, setRestLine] = useState<string>();
+  const shieldRest = async () => {
+    const from = openPay?.from;
+    if (!from || !(await requestAuth())) {
+      return;
+    }
+    setRestLine('shielding what is left on that address…');
+    try {
+      await tPay.shieldRest(from.address);
+      setRestLine('the rest is on its way to your shielded balance');
+    } catch (e) {
+      setRestLine(e instanceof Error ? e.message : "it didn't shield · nothing was moved");
+    }
+  };
+
+  /** an open payment from a transparent address: zcash/pay runs it, the tracker shows it */
+  const [openPay, setOpenPay] = useState<TransparentStart>();
+  const startTransparent = async () => {
+    if (!tPay.ready || openPay || !(await requestAuth())) {
+      return;
+    }
+    setFormError(null);
+    try {
+      const started = await tPay.start();
+      setFee(fmtZecShort(started.feeZat));
+      setOpenPay(started);
+      setStep('fresh-pay');
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : "the payment didn't start · nothing was sent");
+      setStep('error');
+    }
   };
 
   const handleSign = async () => {
@@ -926,58 +936,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           // the build's clock starts now, not while the password was asked
           buildStartRef.current = Date.now();
           setSendSteps([]);
-          if (texPay) {
-            if (!tex.data || texFeeZat === undefined) {
-              throw new Error("zafu couldn't price this yet · nothing was sent, please try again");
-            }
-            const store = storeId ?? walletId;
-            const sent = await payTex(
-              {
-                own: ownT,
-                plan: planT,
-                claim: claimFreshT,
-                move: async (t, zat) => {
-                  const moved = await buildSendTxInWorker(
-                    'zcash',
-                    store,
-                    zidecarUrl,
-                    t,
-                    zat,
-                    '',
-                    accountIndex,
-                    mainnet,
-                    await getVaultUnlock(walletId),
-                    run.key,
-                  );
-                  if (!('txid' in moved)) {
-                    throw new Error("the move didn't reach the network · nothing was sent");
-                  }
-                  return moved.txid;
-                },
-                mined: async txid => (await lookupTxInWorker(zidecarUrl, txid)).height,
-                pay: async req =>
-                  sendTransparentDepositInWorker(
-                    store,
-                    zidecarUrl,
-                    req,
-                    await getVaultUnlock(walletId),
-                  ),
-                sleep: ms => new Promise(r => setTimeout(r, ms)),
-                step: line =>
-                  window.dispatchEvent(
-                    new CustomEvent('zcash-send-progress', {
-                      detail: { step: line, elapsedMs: Date.now() - buildStartRef.current },
-                    }),
-                  ),
-                live: () => run.live,
-              },
-              texPayment,
-              tex.data,
-            );
-            setFee(fmtZecShort(texFeeZat));
-            finish(sent.txid);
-            return;
-          }
           const vault = await getVaultUnlock(walletId);
           const result = await buildSendTxInWorker(
             'zcash',
@@ -1559,6 +1517,22 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 />
               </ToField>
 
+              {/* shielded is the default; the public balance is the person's pick, said plainly */}
+              {tPay.canPublic && (
+                <div className='flex flex-col gap-1.5'>
+                  <Segmented
+                    label='pay from'
+                    value={tPay.source}
+                    onChange={tPay.setSource}
+                    options={[
+                      { value: 'shielded', label: 'shielded', icon: 'i-ph-shield-check' },
+                      { value: 'public', label: 'public balance', icon: 'i-ph-eye' },
+                    ]}
+                  />
+                  {tPay.fromPublic && <span className='text-[11px] text-warn'>{PUBLIC_LINE}</span>}
+                </div>
+              )}
+
               {/* the active pool only, so it can differ from home's total; max is
                 every note in the pool minus the ZIP-317 fee that transaction pays */}
               <AmountField
@@ -1568,18 +1542,28 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   setAmount(v);
                 }}
                 unit={unit}
-                available={balanceZat !== null ? fmtZecShort(balanceZat) : undefined}
+                available={
+                  tPay.available !== undefined
+                    ? tPay.available === null
+                      ? undefined
+                      : fmtZecShort(tPay.available)
+                    : balanceZat !== null
+                      ? fmtZecShort(balanceZat)
+                      : undefined
+                }
                 onMax={() => {
                   filledByRequest.current.amount = false;
-                  setAmount(fmtZecShort(maxSend.amountZat));
+                  setAmount(fmtZecShort(sendMax));
                 }}
-                canMax={maxSend.amountZat > 0n}
+                canMax={sendMax > 0n}
                 warn={overLimit}
                 helper={
-                  overLimit ? (
+                  tPay.fromPublic && tPay.available === null ? (
+                    'reading your public balance, one address at a time'
+                  ) : overLimit ? (
                     <>
                       a little more than you have · up to{' '}
-                      <Sensitive>{fmtZecShort(maxSend.amountZat)}</Sensitive>
+                      <Sensitive>{fmtZecShort(sendMax)}</Sensitive>
                     </>
                   ) : (
                     // orchard funds are real but consensus-disabled post-NU6.3:
@@ -1596,21 +1580,24 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 }
               />
 
-              <div className='flex flex-col gap-1.5'>
-                <label htmlFor='send-memo' className='text-xs text-fg-muted'>
-                  memo
-                </label>
-                <Input
-                  id='send-memo'
-                  placeholder={`optional, only ${toName ?? 'they'} can read it`}
-                  value={memo}
-                  onChange={e => {
-                    filledByRequest.current.memo = false;
-                    setMemo(e.target.value);
-                  }}
-                  maxLength={512}
-                />
-              </div>
+              {/* a transparent payment carries no memo: none is offered */}
+              {!tPay.active && (
+                <div className='flex flex-col gap-1.5'>
+                  <label htmlFor='send-memo' className='text-xs text-fg-muted'>
+                    memo
+                  </label>
+                  <Input
+                    id='send-memo'
+                    placeholder={`optional, only ${toName ?? 'they'} can read it`}
+                    value={memo}
+                    onChange={e => {
+                      filledByRequest.current.memo = false;
+                      setMemo(e.target.value);
+                    }}
+                    maxLength={512}
+                  />
+                </div>
+              )}
             </Main>
             <Footer>
               <Button onClick={() => setStep('review')} disabled={!canReview} className='w-full'>
@@ -1687,19 +1674,20 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               ],
             ]}
             privacy={
-              recipientIsTransparent
+              tPay.privacy ??
+              (recipientIsTransparent
                 ? 'public · the address and amount are visible to anyone'
-                : 'shielded · amount and memo stay private'
+                : 'shielded · amount and memo stay private')
             }
             confirm={kind ? CAPS[kind].signLabel : ''}
             onEdit={handleBack}
-            onConfirm={() => texReady && void handleSign()}
+            onConfirm={() => (tPay.active ? void startTransparent() : void handleSign())}
           >
-            {texLine && (
+            {tPay.line && (
               <span
-                className={`text-center text-[11px] ${texReady ? 'text-fg-muted' : 'text-warn'}`}
+                className={`text-center text-[11px] ${tPay.line.warn ? 'text-warn' : 'text-fg-muted'}`}
               >
-                {texLine}
+                {tPay.line.text}
               </span>
             )}
             {linkVia && (
@@ -1903,6 +1891,31 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           />
         );
 
+      case 'fresh-pay': {
+        if (!openPay) {
+          return null;
+        }
+        const p = openPay.running;
+        return (
+          <FreshPayTracker
+            id={p.id}
+            storeId={p.wallet}
+            amountZat={BigInt(p.req.amountZat)}
+            tAddress={p.req.tAddress}
+            to={shorten(p.req.to, 6, 5)}
+            words={openPay.from ? PUBLIC_WORDS : FRESH_WORDS}
+            onSent={txid => {
+              complete(txid);
+              setStep('complete');
+              void recordUsage(recipient, 'zcash');
+            }}
+            onLeave={onClose}
+            onResume={() => void resumeOpenPay(p.id)}
+            onDrop={() => navigate(PopupPath.INDEX)}
+          />
+        );
+      }
+
       case 'complete': {
         const offerSave =
           showSavePrompt && !!recipient && !findByAddress(recipient) && !showContactModal;
@@ -1922,8 +1935,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 )
               }
               txHash={txHash ?? undefined}
+              note={restLine && <span className='text-[11px] text-fg-muted'>{restLine}</span>}
               onDone={handleClose}
             >
+              {/* the change went back to the public address that paid: offer it alone */}
+              {openPay?.from && !restLine && (
+                <Button variant='secondary' onClick={() => void shieldRest()} className='px-3'>
+                  shield the rest
+                </Button>
+              )}
               {/* a cold device's offline view is stale after a send */}
               {kind && CAPS[kind].afterSend === 'sync-zigner' && (
                 <Button

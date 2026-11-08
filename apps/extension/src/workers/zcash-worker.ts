@@ -7139,6 +7139,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           pool: 'transparent',
           kind: 'send',
           memo: req.memo,
+          moveTxid: req.moveTxid,
           sentAt: Date.now(),
           expiryHeight: parseExpiryHeight(sent.txHex),
         });
@@ -7258,6 +7259,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           pool: 'transparent',
           kind: 'send',
           memo: req.memo,
+          moveTxid: req.moveTxid,
           sentAt: Date.now(),
           expiryHeight: parseExpiryHeight(sent.txHex),
         });

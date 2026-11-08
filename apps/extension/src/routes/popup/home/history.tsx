@@ -160,6 +160,7 @@ export const zcashHistoryQuery = (
         recipient: e.recipient,
         payments: e.payments?.map(p => ({ ...p, amount: zatToZec(BigInt(p.amount)) })),
         sentAt: e.sentAt,
+        moveTxid: e.moveTxid,
       }));
     },
   });

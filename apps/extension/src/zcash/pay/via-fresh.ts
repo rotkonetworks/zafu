@@ -147,11 +147,13 @@ export const runViaFresh = async (
   const short = deps.short ?? SHORT;
   let held = p.held;
   let moved = !!p.moveTxid;
+  let moveTxid = p.moveTxid;
   let plan = reviewed;
   let leg: Step = 'move';
   const hold = async (h: Held | undefined) => {
     held = h;
     moved = !!h;
+    moveTxid = h?.moveTxid;
     await deps.save({ held: h, moveTxid: h?.moveTxid });
   };
   try {
@@ -199,7 +201,7 @@ export const runViaFresh = async (
       await deps.check?.(leg);
       if (next === 'move') {
         report(p.id, { at: 'moving', moved });
-        const moveTxid = await legs.move(plan.short, hold);
+        moveTxid = await legs.move(plan.short, hold);
         moved = true;
         await deps.save({ moveTxid });
         report(p.id, { at: 'funding', moved });
@@ -208,7 +210,8 @@ export const runViaFresh = async (
         continue;
       }
       report(p.id, { at: 'paying', moved });
-      const txid = await legs.pay(req, held);
+      // the payment's record carries its move, so history shows one row
+      const txid = await legs.pay(moveTxid ? { ...req, moveTxid } : req, held);
       await deps.done(txid);
       report(p.id, { at: 'sent', moved: true, txid });
       await closePayUnlock(p.id);

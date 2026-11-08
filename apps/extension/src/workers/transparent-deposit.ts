@@ -26,6 +26,8 @@ export interface DepositRequest {
   /** sent verbatim as the OP_RETURN payload */
   memo: string;
   mainnet: boolean;
+  /** the move that funded `tAddress`, written on the payment's record (history folds it in) */
+  moveTxid?: string;
 }
 
 export interface DepositPlan {
