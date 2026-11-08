@@ -550,7 +550,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // a transparent recipient may be paid from the public balance; a tex from the
   // shielded pool goes through a fresh address of its own (use-transparent-pay.ts)
   const tPay = useTransparentPay({
-    hot: kind === 'hot',
+    // a hot wallet signs in the worker; zigner signs both legs in one qr round
+    signs: kind === 'hot' || kind === 'zigner',
     pool: recipientPool,
     to: recipient.trim(),
     amount,
@@ -588,7 +589,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // What the form says about the recipient and the amount, derived as typed:
   // decoded for this wallet's network before review, never by its prefix
   const to = recipient.trim();
-  const toRefusal = zcashPayRefusal(to, mainnet, kind === 'ledger-transparent' || kind === 'hot');
+  const toRefusal = zcashPayRefusal(
+    to,
+    mainnet,
+    kind === 'ledger-transparent' || kind === 'hot' || kind === 'zigner',
+  );
   const toValid = !!to && !toRefusal;
   const toName =
     recipientContact?.contact.name ??
@@ -757,10 +762,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const resumeOpenPay = async (id: string) => {
     const p = (await openPayments.read()).find(x => x.id === id);
     const ctx = legContextOf(useStore.getState());
-    if (!p || !ctx || !(await requestAuth())) {
+    if (!p || !ctx || (!ctx.cold && !(await requestAuth()))) {
       return;
     }
-    await openPayUnlock(p.id, undefined, ctx.legsPerUnlock);
+    if (!ctx.cold) {
+      await openPayUnlock(p.id, undefined, ctx.legsPerUnlock);
+    }
     runPayment(p, ctx);
   };
   // what "shield the rest" did, on the done screen
@@ -782,7 +789,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   /** an open payment from a transparent address: zcash/pay runs it, the tracker shows it */
   const [openPay, setOpenPay] = useState<TransparentStart>();
   const startTransparent = async () => {
-    if (!tPay.ready || openPay || !(await requestAuth())) {
+    // zigner's device is the approval: no password for it
+    if (!tPay.ready || openPay || (kind === 'hot' && !(await requestAuth()))) {
       return;
     }
     setFormError(null);

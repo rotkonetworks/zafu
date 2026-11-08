@@ -52,10 +52,12 @@ export const PaymentInFlight = () => {
 
   const carryOn = async (p: OpenPayment) => {
     const ctx = legContextOf(useStore.getState());
-    if (!ctx || !(await requestAuth())) {
+    if (!ctx || (!ctx.cold && !(await requestAuth()))) {
       return;
     }
-    await openPayUnlock(p.id, undefined, ctx.legsPerUnlock);
+    if (!ctx.cold) {
+      await openPayUnlock(p.id, undefined, ctx.legsPerUnlock);
+    }
     runPayment(p, ctx);
   };
 

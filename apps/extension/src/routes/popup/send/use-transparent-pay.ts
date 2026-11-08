@@ -1,5 +1,5 @@
 /**
- * The send form's transparent payments, for a hot wallet paying a t1/t3 or
+ * The send form's transparent payments, for a hot or zigner wallet paying a t1/t3 or
  * tex address. Shielded is the default source, as everywhere in zafu. The
  * person may pick their public balance instead: one address that covers the
  * payment alone pays it, never several together, and the form says plainly
@@ -81,7 +81,7 @@ const busyIndices = async (): Promise<Set<number>> => {
 };
 
 export const useTransparentPay = ({
-  hot,
+  signs,
   pool,
   to,
   amount,
@@ -91,7 +91,8 @@ export const useTransparentPay = ({
   walletId,
   getVaultUnlock,
 }: {
-  hot: boolean;
+  /** the wallet signs transparent payments here: a hot wallet in the worker, zigner over qr */
+  signs: boolean;
   /** the recipient's pool, decoded */
   pool?: 'shielded' | 'transparent' | 'tex';
   to: string;
@@ -118,10 +119,10 @@ export const useTransparentPay = ({
     : 0n;
   const payment: TPayment = { to, amountZat: String(amountZat), mainnet };
   /** the person may pick the public balance for a transparent recipient */
-  const canPublic = hot && (pool === 'transparent' || pool === 'tex');
+  const canPublic = signs && (pool === 'transparent' || pool === 'tex');
   const fromPublic = canPublic && source === 'public';
   /** a tex from the shielded pool, through a fresh address */
-  const viaFresh = hot && pool === 'tex' && !fromPublic;
+  const viaFresh = signs && pool === 'tex' && !fromPublic;
 
   const own = useQuery({
     queryKey: ['zcashOwnT', storeId, tAddresses.length, !!session],
@@ -220,7 +221,9 @@ export const useTransparentPay = ({
       };
       // remembered (sealed) before anything moves, so a closed popup loses nothing
       await openPayments.save(p);
-      await openPayUnlock(p.id, undefined, ctx.legsPerUnlock);
+      if (!ctx.cold) {
+        await openPayUnlock(p.id, undefined, ctx.legsPerUnlock);
+      }
       // a fresh address is empty: the reviewed plan is the whole move
       runPayment(p, ctx, fresh && { fee: fresh.fee, change: '0', short: fresh.move });
       void queryClient.invalidateQueries({ queryKey: ['zcashOwnT'] });
