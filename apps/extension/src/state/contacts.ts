@@ -32,6 +32,7 @@ import {
   importPrefs,
   importBirthdays,
   importNodePools,
+  importTIndices,
   restoredPrivacy,
   type SettingsBackup,
 } from './settings-backup';
@@ -911,6 +912,7 @@ export const createContactsSlice =
         await importPrefs(parsed.settings?.prefs);
         await importNodePools(parsed.settings?.nodePools);
         await importBirthdays(parsed.settings?.birthdays, backupWallets());
+        await importTIndices(parsed.settings?.tIndices);
 
         return {
           contacts: newContacts.length,
