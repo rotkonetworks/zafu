@@ -292,7 +292,9 @@ export function reconcileSentTxs({
     }
 
     txs.push({ ...base, height: 0, status: 'failed' });
-    if (scannedHeight > expiry + EXPIRY_GRACE_BLOCKS) {
+    // a send only transparent coins paid is never seen by the scan: its record
+    // is the one place the payment is told, so the scan's word never deletes it
+    if (scannedHeight > expiry + EXPIRY_GRACE_BLOCKS && rec.pool !== 'transparent') {
       prune.push(rec.txid);
     }
   }

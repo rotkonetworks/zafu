@@ -109,6 +109,8 @@ import {
   finishDeposit,
   planDeposit,
   sendDeposit,
+  transparentInputs,
+  transparentOutputs,
   wantOf,
   withCoin,
   type DepositChain,
@@ -130,6 +132,8 @@ import {
   type SentTxRecord,
 } from './sent-tx-reconcile';
 import { lookupOwnTx, ownTxHeights } from './own-tx-height';
+import { rebuildSends, type TOuts } from './rebuilt-sends';
+import { scriptAddress } from '../ledger/address';
 import {
   isChainContinuityError,
   rewindDistanceForAttempt,
@@ -1698,7 +1702,7 @@ const computeFee = (
  * pricing and witness building. Mirrors the Rust
  * `parse_ironwood_recipient`, which decodes the base58 version bytes.
  */
-interface TransparentHistoryRow {
+interface TransparentHistoryRow extends Partial<Omit<TOuts, 'txid' | 'height'>> {
   txid: string;
   height: number;
   received: string;
@@ -1733,10 +1737,22 @@ const fetchTransparentHistory = async (
       batch.map(async txidBytes => {
         const rawTx = await tClient.getTransaction(txidBytes);
         const parsed = parseTransparentTx(rawTx.data, ourScripts);
+        // its coins in and out, so a payment we hold no record of can be rebuilt (rebuilt-sends.ts)
+        let parts: Pick<TOuts, 'inputs' | 'outputs'> | undefined;
+        try {
+          const hex = hexEncode(rawTx.data);
+          parts = {
+            inputs: transparentInputs(hex),
+            outputs: transparentOutputs(hex).map(o => ({ ...o, ours: ourScripts.has(o.script) })),
+          };
+        } catch {
+          // a layout the parser doesn't know: the row stays a plain receive check
+        }
         return {
           txid: hexEncode(txidBytes),
           height: rawTx.height,
           received: parsed.toString(),
+          ...parts,
         };
       }),
     );
@@ -4541,6 +4557,23 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           ownSentTxids = new Set(ownSent.map(s => s.txid));
         } catch {
           // best effort - a missing record must not break history
+        }
+
+        // a payment from our own coins with no record of ours is rebuilt and kept,
+        // so it shows as the payment it was (and never as received change)
+        try {
+          const rebuilt = await rebuildSends(
+            tHistory.filter((r): r is TOuts & { received: string } => !!r.inputs && !!r.outputs),
+            ownSentTxids,
+            walletId,
+            script => scriptAddress(script, storeIsMainnet(walletId)),
+          );
+          for (const rec of rebuilt) {
+            await recordSentTx(rec);
+            ownSentTxids.add(rec.txid);
+          }
+        } catch (e) {
+          console.warn(`[zcash-worker] could not rebuild transparent sends: ${errText(e)}`);
         }
 
         for (const tTx of tHistory) {
