@@ -1081,74 +1081,6 @@ export function apply_signature_contributions(pczt_hex, contributions_json) {
 }
 
 /**
- * Build the governance delegation PCZT for one bundle (phase 1 of 2).
- *
- * Args:
- * * `fvk_hex` — 96-byte Orchard FVK of the voter's account.
- * * `seed_fingerprint_hex` — 32-byte ZIP-32 seed fingerprint.
- * * `account_index` — ZIP-32 account index.
- * * `hotkey_pubkey_hex` — 43-byte hotkey raw Orchard address (from
- *   `generate_voting_hotkey`); the governance output target.
- * * `notes_json` — `[NoteInfoDto]` (the delegated notes).
- * * `round_params_json` — `RoundParamsDto`.
- * * `consensus_branch_id` — branch id the host's node reports (lightwalletd).
- *   It must have the Ironwood pool (NU6.3 or later, NU7 included), and so
- *   must the snapshot height. It only selects the note protocol: the PCZT is
- *   always built under TX1 v1's V6 / NU6.3 profile, the one the vote chain
- *   rebuilds the signed digest under.
- * * `round_name` — display memo text.
- * * `network` — "mainnet" | "testnet" | "regtest".
- * * `bundle_index` — delegation bundle index (echoed into `delegation_state`).
- *
- * Returns `{ redacted_pczt_hex, pczt_sighash_hex, rk_hex, action_index,
- * delegated_weight, display_memo, real_note_nullifiers_hex, dummy_note_
- * nullifiers_hex, delegation_context_json, delegation_state_json }`.
- * @param {string} fvk_hex
- * @param {string} seed_fingerprint_hex
- * @param {number} account_index
- * @param {string} hotkey_pubkey_hex
- * @param {string} notes_json
- * @param {string} round_params_json
- * @param {number} consensus_branch_id
- * @param {string} round_name
- * @param {string} network
- * @param {number} bundle_index
- * @returns {string}
- */
-export function build_delegation_pczt(fvk_hex, seed_fingerprint_hex, account_index, hotkey_pubkey_hex, notes_json, round_params_json, consensus_branch_id, round_name, network, bundle_index) {
-    let deferred9_0;
-    let deferred9_1;
-    try {
-        const ptr0 = passStringToWasm0(fvk_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(seed_fingerprint_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(hotkey_pubkey_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len3 = WASM_VECTOR_LEN;
-        const ptr4 = passStringToWasm0(round_params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len4 = WASM_VECTOR_LEN;
-        const ptr5 = passStringToWasm0(round_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len5 = WASM_VECTOR_LEN;
-        const ptr6 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len6 = WASM_VECTOR_LEN;
-        const ret = wasm.build_delegation_pczt(ptr0, len0, ptr1, len1, account_index, ptr2, len2, ptr3, len3, ptr4, len4, consensus_branch_id, ptr5, len5, ptr6, len6, bundle_index);
-        var ptr8 = ret[0];
-        var len8 = ret[1];
-        if (ret[3]) {
-            ptr8 = 0; len8 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred9_0 = ptr8;
-        deferred9_1 = len8;
-        return getStringFromWasm0(ptr8, len8);
-    } finally {
-        wasm.__wbindgen_free(deferred9_0, deferred9_1, 1);
-    }
-}
-
-/**
  * Seed-free general ironwood send builder (zigner, watch-only and, signed in the
  * worker by [`SpendKeys`], hot wallets): build the
  * general ironwood send PCZT - spend the wallet's REAL ironwood notes to an
@@ -1596,85 +1528,6 @@ export function build_unsigned_transparent_transaction(utxos_json, pubkey_hex, r
 }
 
 /**
- * Build the `POST /cast-vote` body ([`VoteCommitmentWire`]) for one HOT vote.
- *
- * Binary fields are base64 STANDARD; `vote_round_id` is hex-decoded then
- * base64-encoded (matching `wire_codec`). Runs the ZKP #2 proof.
- * @param {string} hotkey_secret_hex
- * @param {string} round_params_json
- * @param {string} delegation_state_json
- * @param {string} van_witness_json
- * @param {string} vote_json
- * @param {string} network
- * @returns {string}
- */
-export function build_vote_commitment_wire(hotkey_secret_hex, round_params_json, delegation_state_json, van_witness_json, vote_json, network) {
-    let deferred8_0;
-    let deferred8_1;
-    try {
-        const ptr0 = passStringToWasm0(hotkey_secret_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(round_params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(delegation_state_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(van_witness_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len3 = WASM_VECTOR_LEN;
-        const ptr4 = passStringToWasm0(vote_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len4 = WASM_VECTOR_LEN;
-        const ptr5 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len5 = WASM_VECTOR_LEN;
-        const ret = wasm.build_vote_commitment_wire(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
-        var ptr7 = ret[0];
-        var len7 = ret[1];
-        if (ret[3]) {
-            ptr7 = 0; len7 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred8_0 = ptr7;
-        deferred8_1 = len7;
-        return getStringFromWasm0(ptr7, len7);
-    } finally {
-        wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
-    }
-}
-
-/**
- * Build the helper-share payloads (`[VoteShareWire]`, `POST {helper}/shielded-vote/v1/shares`)
- * for a vote that is already on chain.
- *
- * `commitment_bundle_json` is the recovery bundle `cast_vote_hot_wire`
- * returned for this vote; `vc_tree_position` is the vote commitment's leaf
- * index in the round's commitment tree, known once the cast-vote transaction
- * is included. No proof runs here, so the shares match the submitted
- * commitment.
- * @param {string} commitment_bundle_json
- * @param {bigint} vc_tree_position
- * @param {bigint} submit_at
- * @returns {string}
- */
-export function build_vote_shares_from_recovery(commitment_bundle_json, vc_tree_position, submit_at) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passStringToWasm0(commitment_bundle_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.build_vote_shares_from_recovery(ptr0, len0, vc_tree_position, submit_at);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
  * One-shot witness + path builder used for initial backfill: replays blocks
  * the same way `build_merkle_paths` does but also returns serialized
  * witnesses and the resulting frontier so the caller can cache them.
@@ -1698,66 +1551,6 @@ export function build_witnesses_and_paths(tree_state_hex, compact_blocks_json, n
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * Build the `POST /cast-vote` body plus what the host keeps for after it lands.
- *
- * Runs ZKP #2 once. Returns
- * `{ proposal_id, wire, commitment_bundle_json, next_delegation_state_json }`.
- *
- * No helper shares come back from here: a share commits to the vote's leaf
- * index in the round's commitment tree (`vc_tree_position`), which only
- * exists once the cast-vote transaction is included. Shares built before
- * that carry a guessed position, and the helper's reveal for them never
- * matches the tree, so the vote silently drops out of the tally. Build them
- * with [`build_vote_shares_from_recovery`] from `commitment_bundle_json` and
- * the included position.
- *
- * `commitment_bundle_json` holds the share secrets (it can rebuild shares,
- * which carry `vote_decision`): store it encrypted.
- *
- * `next_delegation_state_json` is this bundle's state for its next cast
- * (this proposal's authority bit cleared). Store it only after the cast is
- * on chain: if the cast never lands, the old state is still the valid one,
- * and a cleared bit would lock the proposal out of a retry.
- * @param {string} hotkey_secret_hex
- * @param {string} round_params_json
- * @param {string} delegation_state_json
- * @param {string} van_witness_json
- * @param {string} vote_json
- * @param {string} network
- * @returns {string}
- */
-export function cast_vote_hot_wire(hotkey_secret_hex, round_params_json, delegation_state_json, van_witness_json, vote_json, network) {
-    let deferred8_0;
-    let deferred8_1;
-    try {
-        const ptr0 = passStringToWasm0(hotkey_secret_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(round_params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(delegation_state_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(van_witness_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len3 = WASM_VECTOR_LEN;
-        const ptr4 = passStringToWasm0(vote_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len4 = WASM_VECTOR_LEN;
-        const ptr5 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len5 = WASM_VECTOR_LEN;
-        const ret = wasm.cast_vote_hot_wire(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
-        var ptr7 = ret[0];
-        var len7 = ret[1];
-        if (ret[3]) {
-            ptr7 = 0; len7 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred8_0 = ptr7;
-        deferred8_1 = len7;
-        return getStringFromWasm0(ptr7, len7);
-    } finally {
-        wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
-    }
 }
 
 /**
@@ -2250,55 +2043,6 @@ export function extract_signed_tx_from_pczt(pczt_hex) {
         return getStringFromWasm0(ptr2, len2);
     } finally {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
- * Finalize delegation (phase 2 of 2): run ZKP #1 with host-injected IMT proofs
- * and attach the cold signer's spend-auth signature into the submission wire.
- *
- * Args:
- * * `delegation_context_json` — the opaque blob from `build_delegation_pczt`.
- * * `merkle_witnesses_json` — `[WitnessDto]`, one per note, in note order.
- * * `imt_proofs_json` — `[ImtProofDto]` covering BOTH the real note nullifiers
- *   and the `dummy_note_nullifiers_hex` reported by phase 1 (keyed by nullifier).
- * * `spend_auth_sig_hex` — 64-byte SpendAuth signature from the cold signer.
- * * `sighash_hex` — 32-byte sighash the signer signed (must equal the PCZT sighash).
- *
- * Returns `{ delegation_submission_wire_json }` — the `POST /delegate-vote` body.
- * @param {string} delegation_context_json
- * @param {string} merkle_witnesses_json
- * @param {string} imt_proofs_json
- * @param {string} spend_auth_sig_hex
- * @param {string} sighash_hex
- * @returns {string}
- */
-export function finalize_delegation(delegation_context_json, merkle_witnesses_json, imt_proofs_json, spend_auth_sig_hex, sighash_hex) {
-    let deferred7_0;
-    let deferred7_1;
-    try {
-        const ptr0 = passStringToWasm0(delegation_context_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(merkle_witnesses_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(imt_proofs_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(spend_auth_sig_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len3 = WASM_VECTOR_LEN;
-        const ptr4 = passStringToWasm0(sighash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len4 = WASM_VECTOR_LEN;
-        const ret = wasm.finalize_delegation(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
-        var ptr6 = ret[0];
-        var len6 = ret[1];
-        if (ret[3]) {
-            ptr6 = 0; len6 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred7_0 = ptr6;
-        deferred7_1 = len6;
-        return getStringFromWasm0(ptr6, len6);
-    } finally {
-        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
     }
 }
 
@@ -3081,37 +2825,6 @@ export function generate_seed_phrase() {
 }
 
 /**
- * Generate a fresh app-owned voting hotkey.
- *
- * Returns `{ hotkey_secret_hex, hotkey_pubkey_hex }` where `hotkey_secret_hex`
- * is the 64-byte stored secret (persist in secure storage) and
- * `hotkey_pubkey_hex` is the 43-byte raw Orchard address that the delegation
- * PCZT targets as the hotkey output (the hotkey's public identity).
- * @param {string} network
- * @returns {string}
- */
-export function generate_voting_hotkey(network) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passStringToWasm0(network, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.generate_voting_hotkey(ptr0, len0);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
  * Get the commitment proof request data for a note
  * Returns the cmx that should be sent to zidecar's GetCommitmentProof
  * @param {string} note_cmx_hex
@@ -3323,28 +3036,6 @@ export function pczt_has_ironwood_actions(pczt_hex) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return ret[0] !== 0;
-}
-
-/**
- * Fetch circuit-ready IMT non-membership proofs for a set of nullifiers.
- *
- * `nullifiers_json` is a JSON array of 32-byte LE hex strings — the host passes
- * the UNION of the real-note nullifiers and the dummy-note nullifiers reported
- * by `build_delegation_pczt`. Resolves to a JSON `[ImtProofDto]` exactly as
- * `finalize_delegation` consumes it: `[{nullifier_hex, root_hex,
- * nf_bounds_hex[3], leaf_pos, path_hex[29]}]`.
- * @param {string} pir_base_url
- * @param {string} nullifiers_json
- * @param {Function} js_fetch
- * @returns {Promise<string>}
- */
-export function pir_fetch_imt_proofs(pir_base_url, nullifiers_json, js_fetch) {
-    const ptr0 = passStringToWasm0(pir_base_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(nullifiers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.pir_fetch_imt_proofs(ptr0, len0, ptr1, len1, js_fetch);
-    return ret;
 }
 
 /**
@@ -4018,9 +3709,6 @@ function __wbg_get_imports(memory) {
             getDataViewMemory0().setFloat64(arg0 + 8 * 1, isLikeNone(ret) ? 0 : ret, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
         },
-        __wbg___wbindgen_rethrow_4915403b40f010b4: function(arg0) {
-            throw arg0;
-        },
         __wbg___wbindgen_string_get_b0ca35b86a603356: function(arg0, arg1) {
             const obj = arg1;
             const ret = typeof(obj) === 'string' ? obj : undefined;
@@ -4032,21 +3720,6 @@ function __wbg_get_imports(memory) {
         __wbg___wbindgen_throw_344f42d3211c4765: function(arg0, arg1) {
             throw new Error(getStringFromWasm0(arg0, arg1));
         },
-        __wbg__wbg_cb_unref_fffb441def202758: function(arg0) {
-            arg0._wbg_cb_unref();
-        },
-        __wbg_async_37b7cd4cbabb646c: function(arg0) {
-            const ret = arg0.async;
-            return ret;
-        },
-        __wbg_buffer_0f212447ac64c53b: function(arg0) {
-            const ret = arg0.buffer;
-            return ret;
-        },
-        __wbg_call_44b7209e1e252e6a: function() { return handleError(function (arg0, arg1, arg2, arg3, arg4) {
-            const ret = arg0.call(arg1, arg2, arg3, arg4);
-            return ret;
-        }, arguments); },
         __wbg_call_8a2dd23819f8a60a: function() { return handleError(function (arg0, arg1) {
             const ret = arg0.call(arg1);
             return ret;
@@ -4057,10 +3730,6 @@ function __wbg_get_imports(memory) {
         }, arguments); },
         __wbg_crypto_38df2bab126b63dc: function(arg0) {
             const ret = arg0.crypto;
-            return ret;
-        },
-        __wbg_data_0965368f2b7f680a: function(arg0) {
-            const ret = arg0.data;
             return ret;
         },
         __wbg_done_89b2b13e91a60321: function(arg0) {
@@ -4112,16 +3781,6 @@ function __wbg_get_imports(memory) {
             let result;
             try {
                 result = arg0 instanceof ArrayBuffer;
-            } catch (_) {
-                result = false;
-            }
-            const ret = result;
-            return ret;
-        },
-        __wbg_instanceof_Promise_4cb210c0b8f8c959: function(arg0) {
-            let result;
-            try {
-                result = arg0 instanceof Promise;
             } catch (_) {
                 result = false;
             }
@@ -4183,28 +3842,6 @@ function __wbg_get_imports(memory) {
             const ret = new Array();
             return ret;
         },
-        __wbg_new_70f79e80a78a1f78: function(arg0) {
-            const ret = new Int32Array(arg0);
-            return ret;
-        },
-        __wbg_new_aec3e25493d729fe: function(arg0, arg1) {
-            try {
-                var state0 = {a: arg0, b: arg1};
-                var cb0 = (arg0, arg1) => {
-                    const a = state0.a;
-                    state0.a = 0;
-                    try {
-                        return wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___Function_fn_wasm_bindgen_aeea2c632802c019___JsValue_____wasm_bindgen_aeea2c632802c019___sys__Undefined___js_sys_74738dcabc251f8d___Function_fn_wasm_bindgen_aeea2c632802c019___JsValue_____wasm_bindgen_aeea2c632802c019___sys__Undefined_______true_(a, state0.b, arg0, arg1);
-                    } finally {
-                        state0.a = a;
-                    }
-                };
-                const ret = new Promise(cb0);
-                return ret;
-            } finally {
-                state0.a = 0;
-            }
-        },
         __wbg_new_cd45aabdf6073e84: function(arg0) {
             const ret = new Uint8Array(arg0);
             return ret;
@@ -4217,30 +3854,8 @@ function __wbg_get_imports(memory) {
             const ret = new Uint8Array(getArrayU8FromWasm0(arg0, arg1));
             return ret;
         },
-        __wbg_new_typed_1824d93f294193e5: function(arg0, arg1) {
-            try {
-                var state0 = {a: arg0, b: arg1};
-                var cb0 = (arg0, arg1) => {
-                    const a = state0.a;
-                    state0.a = 0;
-                    try {
-                        return wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___Function_fn_wasm_bindgen_aeea2c632802c019___JsValue_____wasm_bindgen_aeea2c632802c019___sys__Undefined___js_sys_74738dcabc251f8d___Function_fn_wasm_bindgen_aeea2c632802c019___JsValue_____wasm_bindgen_aeea2c632802c019___sys__Undefined_______true_(a, state0.b, arg0, arg1);
-                    } finally {
-                        state0.a = a;
-                    }
-                };
-                const ret = new Promise(cb0);
-                return ret;
-            } finally {
-                state0.a = 0;
-            }
-        },
         __wbg_new_with_length_e6785c33c8e4cce8: function(arg0) {
             const ret = new Uint8Array(arg0 >>> 0);
-            return ret;
-        },
-        __wbg_new_worker_a37b91c84b1f9aa5: function(arg0, arg1) {
-            const ret = new Worker(getStringFromWasm0(arg0, arg1));
             return ret;
         },
         __wbg_next_6dbf2c0ac8cde20f: function(arg0) {
@@ -4255,13 +3870,6 @@ function __wbg_get_imports(memory) {
             const ret = arg0.node;
             return ret;
         },
-        __wbg_of_b0cd2e09b31a9684: function(arg0, arg1, arg2) {
-            const ret = Array.of(arg0, arg1, arg2);
-            return ret;
-        },
-        __wbg_postMessage_f48bc524bea113e2: function() { return handleError(function (arg0, arg1) {
-            arg0.postMessage(arg1);
-        }, arguments); },
         __wbg_process_44c7a14e11e9f69e: function(arg0) {
             const ret = arg0.process;
             return ret;
@@ -4273,13 +3881,6 @@ function __wbg_get_imports(memory) {
             const ret = arg0.push(arg1);
             return ret;
         },
-        __wbg_queueMicrotask_0ab5b2d2393e99b9: function(arg0) {
-            const ret = arg0.queueMicrotask;
-            return ret;
-        },
-        __wbg_queueMicrotask_6a09b7bc46549209: function(arg0) {
-            queueMicrotask(arg0);
-        },
         __wbg_randomFillSync_6c25eac9869eb53c: function() { return handleError(function (arg0, arg1) {
             arg0.randomFillSync(arg1);
         }, arguments); },
@@ -4287,10 +3888,6 @@ function __wbg_get_imports(memory) {
             const ret = module.require;
             return ret;
         }, arguments); },
-        __wbg_resolve_2191a4dfe481c25b: function(arg0) {
-            const ret = Promise.resolve(arg0);
-            return ret;
-        },
         __wbg_set_6be42768c690e380: function(arg0, arg1, arg2) {
             arg0[arg1] = arg2;
         },
@@ -4300,9 +3897,6 @@ function __wbg_get_imports(memory) {
         }, arguments); },
         __wbg_set_8a16b38e4805b298: function(arg0, arg1, arg2) {
             arg0[arg1 >>> 0] = arg2;
-        },
-        __wbg_set_onmessage_e3a42c9af9f677a1: function(arg0, arg1) {
-            arg0.onmessage = arg1;
         },
         __wbg_stack_3b0d974bbf31e44f: function(arg0, arg1) {
             const ret = arg1.stack;
@@ -4335,22 +3929,6 @@ function __wbg_get_imports(memory) {
             const ret = arg0.subarray(arg1 >>> 0, arg2 >>> 0);
             return ret;
         },
-        __wbg_then_16d107c451e9905d: function(arg0, arg1, arg2) {
-            const ret = arg0.then(arg1, arg2);
-            return ret;
-        },
-        __wbg_then_6ec10ae38b3e92f7: function(arg0, arg1) {
-            const ret = arg0.then(arg1);
-            return ret;
-        },
-        __wbg_then_e0960b859f3ff223: function(arg0, arg1) {
-            const ret = arg0.then(arg1);
-            return ret;
-        },
-        __wbg_value_99213de42db60201: function(arg0) {
-            const ret = arg0.value;
-            return ret;
-        },
         __wbg_value_a5d5488a9589444a: function(arg0) {
             const ret = arg0.value;
             return ret;
@@ -4359,45 +3937,22 @@ function __wbg_get_imports(memory) {
             const ret = arg0.versions;
             return ret;
         },
-        __wbg_waitAsync_06c45f5361ba204a: function() {
-            const ret = Atomics.waitAsync;
-            return ret;
-        },
-        __wbg_waitAsync_919777b30820ea59: function(arg0, arg1, arg2) {
-            const ret = Atomics.waitAsync(arg0, arg1 >>> 0, arg2);
-            return ret;
-        },
-        __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 321, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue______true_);
-            return ret;
-        },
-        __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4825, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_);
-            return ret;
-        },
-        __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4827, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_);
-            return ret;
-        },
-        __wbindgen_cast_0000000000000004: function(arg0) {
+        __wbindgen_cast_0000000000000001: function(arg0) {
             // Cast intrinsic for `F64 -> Externref`.
             const ret = arg0;
             return ret;
         },
-        __wbindgen_cast_0000000000000005: function(arg0, arg1) {
+        __wbindgen_cast_0000000000000002: function(arg0, arg1) {
             // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
             const ret = getArrayU8FromWasm0(arg0, arg1);
             return ret;
         },
-        __wbindgen_cast_0000000000000006: function(arg0, arg1) {
+        __wbindgen_cast_0000000000000003: function(arg0, arg1) {
             // Cast intrinsic for `Ref(String) -> Externref`.
             const ret = getStringFromWasm0(arg0, arg1);
             return ret;
         },
-        __wbindgen_cast_0000000000000007: function(arg0) {
+        __wbindgen_cast_0000000000000004: function(arg0) {
             // Cast intrinsic for `U64 -> Externref`.
             const ret = BigInt.asUintN(64, arg0);
             return ret;
@@ -4411,45 +3966,12 @@ function __wbg_get_imports(memory) {
             table.set(offset + 2, true);
             table.set(offset + 3, false);
         },
-        __wbindgen_link_580560c8bba509f2: function(arg0) {
-            const val = `onmessage = function (ev) {
-                let [ia, index, value] = ev.data;
-                ia = new Int32Array(ia.buffer);
-                let result = Atomics.wait(ia, index, value);
-                postMessage(result);
-            };
-            `;
-            const ret = typeof URL.createObjectURL === 'undefined' ? "data:application/javascript," + encodeURIComponent(val) : URL.createObjectURL(new Blob([val], { type: "text/javascript" }));
-            const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-            const len1 = WASM_VECTOR_LEN;
-            getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
-            getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-        },
-        memory: memory || new WebAssembly.Memory({initial:59,maximum:32768,shared:true}),
+        memory: memory || new WebAssembly.Memory({initial:50,maximum:32768,shared:true}),
     };
     return {
         __proto__: null,
         "./zafu_wasm_bg.js": import0,
     };
-}
-
-function wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue______true_(arg0, arg1, arg2) {
-    wasm.wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue______true_(arg0, arg1, arg2);
-}
-
-function wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_(arg0, arg1, arg2) {
-    wasm.wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_(arg0, arg1, arg2);
-}
-
-function wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_(arg0, arg1, arg2) {
-    const ret = wasm.wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_(arg0, arg1, arg2);
-    if (ret[1]) {
-        throw takeFromExternrefTable0(ret[0]);
-    }
-}
-
-function wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___Function_fn_wasm_bindgen_aeea2c632802c019___JsValue_____wasm_bindgen_aeea2c632802c019___sys__Undefined___js_sys_74738dcabc251f8d___Function_fn_wasm_bindgen_aeea2c632802c019___JsValue_____wasm_bindgen_aeea2c632802c019___sys__Undefined_______true_(arg0, arg1, arg2, arg3) {
-    wasm.wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___Function_fn_wasm_bindgen_aeea2c632802c019___JsValue_____wasm_bindgen_aeea2c632802c019___sys__Undefined___js_sys_74738dcabc251f8d___Function_fn_wasm_bindgen_aeea2c632802c019___JsValue_____wasm_bindgen_aeea2c632802c019___sys__Undefined_______true_(arg0, arg1, arg2, arg3);
 }
 
 const FrostRelayCipherFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -4482,10 +4004,6 @@ function _assertClass(instance, klass) {
         throw new Error(`expected instance of ${klass.name}`);
     }
 }
-
-const CLOSURE_DTORS = (typeof FinalizationRegistry === 'undefined')
-    ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(state => wasm.__wbindgen_destroy_closure(state.a, state.b));
 
 function debugString(val) {
     // primitive types
@@ -4596,34 +4114,6 @@ function handleError(f, args) {
 
 function isLikeNone(x) {
     return x === undefined || x === null;
-}
-
-function makeMutClosure(arg0, arg1, f) {
-    const state = { a: arg0, b: arg1, cnt: 1 };
-    const real = (...args) => {
-
-        // First up with a closure we increment the internal reference
-        // count. This ensures that the Rust closure environment won't
-        // be deallocated while we're invoking it.
-        state.cnt++;
-        const a = state.a;
-        state.a = 0;
-        try {
-            return f(a, state.b, ...args);
-        } finally {
-            state.a = a;
-            real._wbg_cb_unref();
-        }
-    };
-    real._wbg_cb_unref = () => {
-        if (--state.cnt === 0) {
-            wasm.__wbindgen_destroy_closure(state.a, state.b);
-            state.a = 0;
-            CLOSURE_DTORS.unregister(state);
-        }
-    };
-    CLOSURE_DTORS.register(real, state, state);
-    return real;
 }
 
 function passArray32ToWasm0(arg, malloc) {

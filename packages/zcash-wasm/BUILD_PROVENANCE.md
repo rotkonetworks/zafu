@@ -177,6 +177,38 @@ commitment_bundle_json, next_delegation_state_json }` (no `shares`) and
   `voting-wasm` `local_chain_e2e` ran these bindings against a local svoted
   v1.6.1-rc.5 (37 proposals, votes on 37 and 17, tally finalized).
 
+## 2026-11-10 rebuild - zakura common 4.0 (NU7 mainnet height built in)
+
+- source repo: zcli, branch `chore/zcash-crates-upstream`, rev `ea9e9a0`
+  (zcli PR #36, on master `7816394`). Built with the recipe above
+  (RUSTFLAGS unset).
+- why: Zakura Common 4.0.0 carries NU7's mainnet activation (3,543,405). The
+  blob now binds NU7 from that height on its own and refuses an NU6.3 build
+  there (the chain would refuse it too); before, it bound NU7 only when the
+  node said so. The testnet NU7 shims are gone with it.
+- exports: the seven voting functions (`build_delegation_pczt`,
+  `build_vote_commitment_wire`, `build_vote_shares_from_recovery`,
+  `cast_vote_hot_wire`, `finalize_delegation`, `generate_voting_hotkey`,
+  `pir_fetch_imt_proofs`) leave this blob; zafu already loads them from
+  voting-wasm (`state/voting-wasm.ts`). Nothing else changed.
+- tests: zcli workspace 354 passed, 0 failed. zafu
+  `mainnet-consensus-wasm.test.ts` updated to the NU7 boundary (8 pass).
+- toolchain: nightly `rustc 1.101.0-nightly (249c1e4e3 2026-11-05)`,
+  wasm-bindgen CLI 0.2.126, binaryen 130.
+- rayon snippet hash unchanged (`wasm-bindgen-rayon-38edf6e439f6d70d`), the
+  patched `workerHelpers.js` kept in both trees.
+- size: post `-Oz` 7,064,932 bytes (was 13,464,263).
+- sha256(parallel zafu_wasm_bg.wasm) =
+  3b7a2ff03e7cfc3c00957491bcf29ae1f8da8292911b5b70eb7f976d5175db4c
+- sha256(zafu_wasm.js) =
+  c9d24faa6ea02eed8a26628451f3660d3558987c138d6c804dc1f663aa485c76
+- sha256(zafu_wasm.d.ts) =
+  d8be77b509619c31aa43f95a92b5191c6fa5166a9a680444dc849d0a6bac2d6a
+- sha256(zafu_wasm_bg.wasm.d.ts) =
+  0ba8df5478a3b178afa65b82a5ef083fb531b2c9187a4081119b601858519cdd
+- shared imported memory confirmed post-bindgen:
+  `(memory $mimport$0 50 32768 shared)`.
+
 ## 2026-10-15 rebuild (2) - a memo in any script reads as text
 
 - source repo: zcli, branch `master`, rev `d456c26` (the merge of zcli PR
