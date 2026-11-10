@@ -21,6 +21,11 @@ import {
 // the client pulls @cosmjs/stargate -> crypto/bip39, a Node-only dependency the
 // service-worker build can't resolve. We broadcast with a raw RPC fetch below.
 import { getCosmosChain } from '@repo/wallet/networks/cosmos/chains';
+import {
+  adr036SignDoc,
+  verifyAdr036,
+  type StdSignatureWire,
+} from '@repo/wallet/networks/cosmos/adr036';
 import { POPUP_WINDOW_WIDTH, POPUP_WINDOW_HEIGHT } from '../../utils/popup-window';
 
 /** requestId -> resolver for an in-flight approval popup */
@@ -29,6 +34,7 @@ const pending = new Map<
   (payload: { approved: boolean; payload?: unknown; error?: string }) => void
 >();
 
+const b64ToBytes = (b64: string): Uint8Array => Uint8Array.from(atob(b64), c => c.charCodeAt(0));
 const bytesToB64 = (bytes: Uint8Array): string => {
   let s = '';
   for (const b of bytes) {
@@ -213,6 +219,40 @@ async function handleMethod(
         throw new Error(decision.error ?? 'signature rejected');
       }
       return decision.payload;
+    }
+
+    // ADR-036: an off-chain signature over bytes the site chose, approved as a message
+    case 'signArbitrary': {
+      const chainId = String(params['chainId'] ?? '');
+      const signerAddress = String(params['signerAddress'] ?? '');
+      const decision = await openApproval({
+        requestId: crypto.randomUUID(),
+        method,
+        origin,
+        chainId,
+        signerAddress,
+        signDoc: adr036SignDoc(signerAddress, b64ToBytes(String(params['dataB64'] ?? ''))),
+        ...meta,
+      });
+      if (!decision.approved) {
+        throw new Error(decision.error ?? 'signature rejected');
+      }
+      return decision.payload;
+    }
+
+    // checks a signature only, with no key and no prompt
+    case 'verifyArbitrary': {
+      const chainId = String(params['chainId'] ?? '');
+      const cosmosId = cosmosChainIdFromKeplr(chainId);
+      if (!cosmosId) {
+        throw new Error(`unsupported chain ${chainId}`);
+      }
+      return verifyAdr036(
+        getCosmosChain(cosmosId).bech32Prefix,
+        String(params['signerAddress'] ?? ''),
+        b64ToBytes(String(params['dataB64'] ?? '')),
+        params['signature'] as StdSignatureWire,
+      );
     }
 
     case 'sendTx': {

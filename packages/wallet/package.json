@@ -29,6 +29,7 @@
     "./networks/cosmos/signer": "./src/networks/cosmos/signer.ts",
     "./networks/cosmos/fresh-address": "./src/networks/cosmos/fresh-address.ts",
     "./networks/cosmos/airgap": "./src/networks/cosmos/airgap.ts",
+    "./networks/cosmos/adr036": "./src/networks/cosmos/adr036.ts",
     "./networks/cosmos/zigner-key": "./src/networks/cosmos/zigner-key.ts",
     "./networks/cosmos/client": "./src/networks/cosmos/client.ts",
     "./networks/cosmos/penumbra-routes": "./src/networks/cosmos/penumbra-routes.ts",

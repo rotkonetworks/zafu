@@ -17,6 +17,7 @@ import {
   signKeplrDirect,
   type KeplrDirectWireDoc,
 } from '@repo/wallet/networks/cosmos/signer';
+import { adr036SignDoc, describeArbitraryData } from '@repo/wallet/networks/cosmos/adr036';
 import {
   cosmosChainIdFromKeplr,
   keplrApprovalKey,
@@ -104,6 +105,23 @@ export const KeplrApproval = () => {
 
       const prefix = prefixFor(req.chainId, req.signerAddress);
 
+      if (req.method === 'signArbitrary') {
+        const res = await signKeplrAmino(
+          mnemonic,
+          prefix,
+          req.signerAddress ?? '',
+          req.signDoc as ReturnType<typeof adr036SignDoc>,
+        );
+        await respond({
+          approved: true,
+          payload: {
+            pub_key: { type: 'tendermint/PubKeySecp256k1', value: res.pubKeyB64 },
+            signature: res.signatureB64,
+          },
+        });
+        return;
+      }
+
       if (req.method === 'signAmino') {
         const payload = await signKeplrAmino(
           mnemonic,
@@ -140,7 +158,16 @@ export const KeplrApproval = () => {
     return <div className='p-6 text-center text-sm text-fg-muted'>loading…</div>;
   }
 
-  const isSign = req.method === 'signAmino' || req.method === 'signDirect';
+  const isSign = req.method !== 'enable';
+  const message =
+    req.method === 'signArbitrary'
+      ? describeArbitraryData(
+          Uint8Array.from(
+            atob((req.signDoc as ReturnType<typeof adr036SignDoc>).msgs[0]?.value.data ?? ''),
+            c => c.charCodeAt(0),
+          ),
+        )
+      : undefined;
   // A stored request missing origin (partial/forward-incompatible write) would
   // otherwise throw on .replace during render.
   const originHost = (req.origin ?? '').replace(/^https?:\/\//, '');
@@ -149,7 +176,7 @@ export const KeplrApproval = () => {
       <header className='flex flex-col items-center justify-center border-b border-border-soft py-4'>
         <span className='kicker mb-1'>keplr · {originHost}</span>
         <h1 className='text-title text-fg-high lowercase'>
-          {isSign ? 'approve transaction' : 'connect wallet'}
+          {message ? 'sign a message' : isSign ? 'approve transaction' : 'connect wallet'}
         </h1>
       </header>
 
@@ -165,7 +192,20 @@ export const KeplrApproval = () => {
         </div>
 
         <div className='mt-3 border border-border-soft p-3 text-sm'>
-          {isSign ? (
+          {message ? (
+            <>
+              <p className='text-fg'>
+                {originHost} wants you to sign a message. it moves no funds.
+              </p>
+              <p className='mt-1 break-all font-mono text-label text-fg-muted'>
+                {req.signerAddress}
+              </p>
+              <span className='kicker mt-2 block'>{message.hex ? 'message (hex)' : 'message'}</span>
+              <pre className='mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-all bg-elev-1 p-2 text-label text-fg'>
+                {message.text}
+              </pre>
+            </>
+          ) : isSign ? (
             <>
               <p className='text-fg'>
                 {originHost} wants you to sign a{' '}
