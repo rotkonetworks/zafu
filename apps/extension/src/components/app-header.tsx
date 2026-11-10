@@ -72,9 +72,14 @@ export const AppHeader = () => {
       ? (activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet')
       : (selectedKeyInfo?.name ?? 'no wallet');
   const viewOnly = isViewOnly(selectedKeyInfo);
-  // pockets exist only for the hot wallet - shows which one is active
+  // pockets exist only for the hot wallet - shows which one is active; a
+  // penumbra account outside them goes by its number, for any wallet kind
   const subtitle =
-    pockets.find(p => p.account === pocketAccount)?.name ?? (viewOnly ? 'view only' : undefined);
+    pockets.find(p => p.account === pocketAccount)?.name ??
+    (activeNetwork === 'penumbra' && pocketAccount !== 0
+      ? `account #${pocketAccount}`
+      : undefined) ??
+    (viewOnly ? 'view only' : undefined);
 
   return (
     <header className='sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border-soft bg-canvas pl-3 pr-2'>

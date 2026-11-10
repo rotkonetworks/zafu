@@ -21,6 +21,7 @@ import {
   hidePocket,
   MAX_POCKETS,
   mergePocketBooks,
+  penumbraAccountRows,
   pocketOwner,
   renamePocket,
   sanitizePocketBook,
@@ -437,5 +438,44 @@ describe('existing wallets are untouched (account 0 migration)', () => {
   test('pockets get fresh keys that never collide with account 0', () => {
     expect(zcashTransparentIndexKey(1)).toBe('zcashTransparentIndex#1');
     expect(zcashSyncHeightKey(pocketStoreId(hot.id, 1))).not.toBe(zcashSyncHeightKey(hot.id));
+  });
+});
+
+describe('penumbra accounts beyond the pockets', () => {
+  const pockets = [
+    { account: 0, name: 'main' },
+    { account: 3, name: 'savings' },
+    { account: 4, name: 'old', hidden: true },
+  ];
+
+  test('every funded account is listed, past MAX_POCKETS and outside the pocket book', () => {
+    const rows = penumbraAccountRows(pockets, [4173902, 0, 3, 100055], 0);
+    expect(rows).toEqual([
+      { account: 0, name: 'main', pocket: true },
+      { account: 3, name: 'savings', pocket: true },
+      { account: 100055, name: 'account #100055', pocket: false },
+      { account: 4173902, name: 'account #4173902', pocket: false },
+    ]);
+  });
+
+  test('a hidden pocket stays hidden even when it holds funds', () => {
+    expect(penumbraAccountRows(pockets, [4], 0).map(r => r.account)).toEqual([0, 3]);
+  });
+
+  test('a wallet with no pockets (zigner, view only) still lists main and every funded account', () => {
+    expect(penumbraAccountRows([], [100055], 0)).toEqual([
+      { account: 0, name: 'main', pocket: false },
+      { account: 100055, name: 'account #100055', pocket: false },
+    ]);
+  });
+
+  test('the active account always shows, even once it holds nothing', () => {
+    expect(penumbraAccountRows([], [], 739525).map(r => r.account)).toEqual([0, 739525]);
+  });
+
+  test('pockets 0-9 list exactly as before when nothing else holds funds', () => {
+    expect(penumbraAccountRows(pockets, [], 3)).toEqual(
+      visiblePockets(pockets).map(p => ({ account: p.account, name: p.name, pocket: true })),
+    );
   });
 });

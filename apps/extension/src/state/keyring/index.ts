@@ -941,6 +941,8 @@ export const createKeyRingSlice =
             isSelected: k.id === vaultId,
           }));
           state.keyRing.selectedKeyInfo = state.keyRing.keyInfos.find(k => k.isSelected);
+          // a penumbra account is the wallet's own, never carried to another one
+          state.keyRing.penumbraAccount = 0;
           if (walletIdx >= 0) {
             state.wallets.activeIndex = walletIdx;
           }

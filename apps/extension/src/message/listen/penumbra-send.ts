@@ -101,11 +101,22 @@ export const waitCaughtUp = async (
   }
 };
 
-/** the chain's refusal, read calmly where we know what it means */
+const CALM_ERRORS: [RegExp, string][] = [
+  [
+    /nullifier .* already spent/i,
+    'a note in this was spent a moment ago and zafu had not seen it yet · nothing was sent, please try again in a minute',
+  ],
+  // the planner pays fees from the source account only, in UM or an
+  // accepted fee asset; nothing else in the wallet can cover them
+  [
+    /not able to pay fee/i,
+    'this account has no UM for the fee · nothing was sent, please send a little UM to it first',
+  ],
+];
+
+/** the chain's or planner's refusal, read calmly where we know what it means */
 export const calmError = (message: string): string =>
-  /nullifier .* already spent/i.test(message)
-    ? 'a note in this was spent a moment ago and zafu had not seen it yet · nothing was sent, please try again in a minute'
-    : message;
+  CALM_ERRORS.find(([pattern]) => pattern.test(message))?.[1] ?? message;
 
 /**
  * Run `authorizeAndBuild` to completion, failing if the stream goes silent.

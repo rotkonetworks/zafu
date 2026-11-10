@@ -103,6 +103,40 @@ export const visiblePockets = (pockets: Pocket[]): Pocket[] => pockets.filter(p 
 
 export const hiddenPockets = (pockets: Pocket[]): Pocket[] => pockets.filter(p => p.hidden);
 
+/** a penumbra account in the accounts sheet: a pocket, or an account found holding funds */
+export interface PenumbraAccountRow {
+  account: number;
+  name: string;
+  pocket: boolean;
+}
+
+/**
+ * The penumbra accounts to list. One viewing key finds notes for every
+ * account, so any account holding funds is listed beside the pockets, for
+ * any wallet kind. Such an account is not a pocket: it starts no zcash store
+ * or scan, is outside MAX_POCKETS, and needs nothing stored, so it comes back
+ * after a restore once sync finds its notes. Main and the active account
+ * always show, so the selection is never off the list.
+ */
+export const penumbraAccountRows = (
+  pockets: Pocket[],
+  funded: number[],
+  active: number,
+): PenumbraAccountRow[] => {
+  const pocketAccounts = new Set(pockets.map(p => p.account));
+  const others = [...new Set([0, ...funded, active])]
+    .filter(account => !pocketAccounts.has(account))
+    .sort((a, b) => a - b);
+  return [
+    ...visiblePockets(pockets).map(p => ({ account: p.account, name: p.name, pocket: true })),
+    ...others.map(account => ({
+      account,
+      name: account === 0 ? MAIN.name : `account #${account}`,
+      pocket: false,
+    })),
+  ];
+};
+
 /**
  * Hide a pocket (never deleted: it keeps syncing, its name and balance stay).
  * Main (account 0) can never be hidden. Hiding the active pocket switches

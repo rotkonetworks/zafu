@@ -23,4 +23,10 @@ describe('a penumbra send waits for the wallet to catch up', () => {
     expect(calmError(raw)).toContain('spent a moment ago');
     expect(calmError('something else')).toBe('something else');
   });
+
+  it("says plainly when the account can't pay the fee", () => {
+    expect(calmError('[internal] Not able to pay fee for transaction')).toBe(
+      'this account has no UM for the fee · nothing was sent, please send a little UM to it first',
+    );
+  });
 });
