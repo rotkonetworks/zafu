@@ -65,6 +65,8 @@ module.exports = {
       const z = await fresh(c);
       try {
         const pg = await z.open('/settings/network/connections', 'popup.html', 2000);
+        // nym is opt-in: its per-network sheet opens once it is chosen
+        await L.toggle(pg, 'send over nym', true);
         await pg
           .getByRole('button', { name: /^nym, per network/ })
           .first()
@@ -118,6 +120,8 @@ module.exports = {
         const z = await fresh(c);
         try {
           const pg = await z.open('/settings/network/connections', 'popup.html', 1500);
+          // nym is opt-in: its per-network sheet opens once it is chosen
+          await L.toggle(pg, 'send over nym', true);
           await pg
             .getByRole('button', { name: /^nym, per network/ })
             .first()
