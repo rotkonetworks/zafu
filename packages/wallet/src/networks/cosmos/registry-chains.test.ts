@@ -86,7 +86,7 @@ describe('COSMOS_CHAINS from the bundled registry and presets', () => {
       noble: ['noble-1', 'noble', 118, 'uusdc', 'channel-2'],
       osmosis: ['osmosis-1', 'osmo', 118, 'uosmo', 'channel-20'],
       juno: ['juno-1', 'juno', 118, 'ujuno', undefined],
-      terpnetwork: ['morocco-1', 'terp', 118, 'uterp', undefined],
+      terpnetwork: ['morocco-1', 'terp', 118, 'uterp', 'channel-25'],
     });
   });
 

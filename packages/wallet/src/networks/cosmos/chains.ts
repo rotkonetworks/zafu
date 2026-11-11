@@ -219,8 +219,9 @@ const PRESETS: Record<CosmosChainId, CosmosChainConfig> = {
     penumbraSourceChannel: 'channel-20', // penumbra -> osmosis
   },
   // Terp Network and Juno: standard cosmos chains (secp256k1, coin type 118, per
-  // cosmos/chain-registry). The registry pins no penumbra channel for either,
-  // so no penumbra flow offers them; they serve the cosmos provider and settings.
+  // cosmos/chain-registry). Terp's penumbra pair is in the penumbrafi registry
+  // (main, not yet in a release), pinned here since this preset wins over it.
+  // Juno has no penumbra channel; it serves the cosmos provider and settings.
   terpnetwork: {
     id: 'terpnetwork',
     name: 'Terp Network',
@@ -237,6 +238,8 @@ const PRESETS: Record<CosmosChainId, CosmosChainConfig> = {
     restEndpoint: 'https://api.terp.network',
     gasPrice: '0.05uthiol',
     gasAsset: { symbol: 'THIOL', denom: 'uthiol', decimals: 6 },
+    penumbraChannel: 'channel-16', // terp -> penumbra
+    penumbraSourceChannel: 'channel-25', // penumbra -> terp
   },
   juno: {
     id: 'juno',
