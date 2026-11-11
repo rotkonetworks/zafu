@@ -3,6 +3,10 @@
  * access, so it is where the cosmos address is derived and where amino/direct
  * signing happens (via the tested cosmjs wallets). The service worker only
  * orchestrated getting us here; we post the result back and close.
+ *
+ * A zigner wallet connects with the cosmos key it exported, and signs amino
+ * docs (signArbitrary, signAmino) through the cosmos sign QR: show the
+ * request, scan zigner's answer, check it against the key and the doc.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -25,6 +29,17 @@ import {
   type KeplrWireKey,
 } from '../../../message/keplr';
 import { Clipped } from '@repo/ui/components/ui/clipped';
+import { Button } from '@repo/ui/components/ui/button';
+import { isCosmosSignatureQR, parseCosmosSignatureQR } from '@repo/wallet/networks/cosmos/airgap';
+import { verifyAdr036 } from '@repo/wallet/networks/cosmos/adr036';
+import {
+  zignerAminoRequest,
+  zignerAminoSignature,
+  zignerKeplrKey,
+} from '@repo/wallet/networks/cosmos/zigner-keplr';
+import { QrDisplay } from '../../../shared/components/qr-display';
+import { QrScanner } from '../../../shared/components/qr-scanner';
+import { CAPS, walletKind } from '../../../signing/wallet-kind';
 
 /** prefix for a keplr chain id, from our config or a bech32 signer address */
 const prefixFor = (chainId: string, signerAddress?: string): string => {
@@ -52,6 +67,12 @@ export const KeplrApproval = () => {
   const [req, setReq] = useState<KeplrApprovalRequest | null>(null);
   const [loadError, setLoadError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
+  /** a zigner signature in progress: the request QR, then the camera; a bad scan says why */
+  const [zigner, setZigner] = useState<
+    { qr: string; scanning: boolean; error?: string } | undefined
+  >();
+  const cold = !!keyInfo && CAPS[walletKind(keyInfo)].cosmos === 'zigner';
+  const coldKeyHex = keyInfo?.insensitive['cosmosPublicKey'] as string | undefined;
 
   useEffect(() => {
     const key = keplrApprovalKey(requestId);
@@ -86,12 +107,93 @@ export const KeplrApproval = () => {
 
   const deny = () => void respond({ approved: false, error: 'rejected' });
 
+  /** the amino doc a zigner signs for this request */
+  const coldDoc = () => req?.signDoc as Parameters<typeof zignerAminoRequest>[2];
+
+  const fail = (err: unknown) =>
+    respond({
+      approved: false,
+      error: err instanceof Error ? err.message : "it wasn't signed · please try again",
+    });
+
+  const approveCold = async () => {
+    if (!req || !keyInfo) {
+      return;
+    }
+    if (req.method === 'enable') {
+      const keys: Record<string, KeplrWireKey> = {};
+      for (const cid of chainIds) {
+        const key = zignerKeplrKey(coldKeyHex, prefixFor(cid), keyInfo.name ?? 'zigner');
+        if (!key) {
+          throw new Error('this wallet has no cosmos key · import it again from zigner');
+        }
+        keys[cid] = key;
+      }
+      await respond({ approved: true, payload: { keys } });
+      return;
+    }
+    if (req.method === 'signDirect') {
+      throw new Error('zigner signs amino only · this site asked for a direct signature');
+    }
+    const accountIndex = (keyInfo.insensitive['accountIndex'] as number | undefined) ?? 0;
+    const chainName =
+      cosmosChainIdFromKeplr(req.chainId) ?? prefixFor(req.chainId, req.signerAddress);
+    setZigner({ qr: zignerAminoRequest(accountIndex, chainName, coldDoc()), scanning: false });
+  };
+
+  /**
+   * zigner's answer: checked against the key and the doc before the site gets
+   * it. A code that fails goes back to the request QR to scan again.
+   */
+  const onColdScan = async (hex: string) => {
+    if (!req || !zigner) {
+      return;
+    }
+    try {
+      if (!isCosmosSignatureQR(hex)) {
+        throw new Error("that code isn't zigner's answer · please scan again");
+      }
+      const signer = req.signerAddress ?? '';
+      const doc = coldDoc();
+      const signature = zignerAminoSignature(coldKeyHex, signer, doc, parseCosmosSignatureQR(hex));
+      if (req.method === 'signArbitrary') {
+        const data = Uint8Array.from(atob(String(doc.msgs[0]?.value?.data ?? '')), c =>
+          c.charCodeAt(0),
+        );
+        if (!verifyAdr036(prefixFor(req.chainId, signer), signer, data, signature)) {
+          throw new Error("that answer isn't zigner's signature for this message");
+        }
+        await respond({ approved: true, payload: signature });
+        return;
+      }
+      await respond({
+        approved: true,
+        payload: {
+          signed: doc,
+          signatureB64: signature.signature,
+          pubKeyB64: signature.pub_key.value,
+        },
+      });
+    } catch (err) {
+      setZigner({
+        qr: zigner.qr,
+        scanning: false,
+        error:
+          err instanceof Error ? err.message : "that answer didn't check out · please scan again",
+      });
+    }
+  };
+
   const approve = async () => {
     if (!req || !keyInfo) {
       return;
     }
     setBusy(true);
     try {
+      if (cold) {
+        await approveCold();
+        return;
+      }
       const mnemonic = await getMnemonic(keyInfo.id);
 
       if (req.method === 'enable') {
@@ -142,10 +244,7 @@ export const KeplrApproval = () => {
       );
       await respond({ approved: true, payload });
     } catch (err) {
-      await respond({
-        approved: false,
-        error: err instanceof Error ? err.message : "it wasn't signed · please try again",
-      });
+      await fail(err);
     } finally {
       setBusy(false);
     }
@@ -156,6 +255,55 @@ export const KeplrApproval = () => {
   }
   if (!req) {
     return <div className='p-6 text-center text-sm text-fg-muted'>loading…</div>;
+  }
+
+  if (zigner?.scanning) {
+    return (
+      <div className='flex h-full min-h-0 flex-col bg-canvas'>
+        <QrScanner
+          onScan={hex => void onColdScan(hex)}
+          onClose={() => setZigner({ ...zigner, scanning: false })}
+          title="scan zigner's answer"
+          description="point the camera at zigner's answer"
+        />
+      </div>
+    );
+  }
+  if (zigner) {
+    return (
+      <div className='flex h-full min-h-0 flex-col bg-canvas'>
+        <header className='shrink-0 border-b border-border-soft p-4'>
+          <span className='kicker'>keplr · {(req.origin ?? '').replace(/^https?:\/\//, '')}</span>
+          <h1 className='mt-1 text-title text-fg-high lowercase'>sign with zigner</h1>
+        </header>
+        <div className='flex min-h-0 flex-1 flex-col items-center overflow-y-auto p-4'>
+          <QrDisplay
+            data={zigner.qr}
+            size={840}
+            title='scan with zigner'
+            description='open zigner and scan this code to sign'
+            showCopy
+          />
+          {zigner.error && (
+            <p role='alert' className='mt-3 text-center text-sm text-red-400'>
+              {zigner.error}
+            </p>
+          )}
+        </div>
+        <div className='flex shrink-0 gap-3 border-t border-border-soft p-4'>
+          <Button variant='secondary' className='flex-1' onClick={deny}>
+            not now
+          </Button>
+          <Button
+            variant='primary'
+            className='flex-1'
+            onClick={() => setZigner({ ...zigner, scanning: true })}
+          >
+            scan zigner's answer
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   const isSign = req.method !== 'enable';

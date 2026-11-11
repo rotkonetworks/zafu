@@ -31,6 +31,7 @@
     "./networks/cosmos/airgap": "./src/networks/cosmos/airgap.ts",
     "./networks/cosmos/adr036": "./src/networks/cosmos/adr036.ts",
     "./networks/cosmos/zigner-key": "./src/networks/cosmos/zigner-key.ts",
+    "./networks/cosmos/zigner-keplr": "./src/networks/cosmos/zigner-keplr.ts",
     "./networks/cosmos/client": "./src/networks/cosmos/client.ts",
     "./networks/cosmos/penumbra-routes": "./src/networks/cosmos/penumbra-routes.ts",
     "./networks/injective/derive": "./src/networks/injective/derive.ts",
