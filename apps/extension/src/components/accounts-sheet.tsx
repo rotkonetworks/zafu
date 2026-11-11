@@ -13,12 +13,22 @@ import { useStore, type AllSlices } from '../state';
 import {
   selectActiveNetwork,
   selectEffectiveKeyInfo,
-  selectKeyInfosForActiveNetwork,
+  selectEnabledNetworks,
+  selectSetActiveNetwork,
+  selectSwitcherKeyInfos,
   selectSelectKeyRing,
   selectRenameKeyRing,
   selectLock,
+  type KeyInfo,
   type NetworkType,
 } from '../state/keyring';
+import {
+  keyInfoNetworks,
+  keyInfoSupportsNetwork,
+  networkForWallet,
+} from '../state/keyring/vault-ops';
+import { getNetwork } from '../config/networks';
+import { useEnableNetwork } from '../hooks/enable-network';
 import {
   MAX_POCKETS,
   activeAccountIndex,
@@ -183,10 +193,16 @@ export const AccountsSheet = ({
 }) => {
   const navigate = useNavigate();
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  // every wallet, not only the active network's: one that can't serve this
+  // network is listed and marked, and picking it moves to a network it serves.
   // perf: .filter()s a new array every read - shallow-equal it so this
   // sheet's subscription doesn't re-render on unrelated state ticks.
-  const keyInfos = useStore(useShallow(selectKeyInfosForActiveNetwork));
+  const keyInfos = useStore(useShallow(selectSwitcherKeyInfos));
   const selectKeyRing = useStore(selectSelectKeyRing);
+  const activeNetwork = useStore(selectActiveNetwork);
+  const enabledNetworks = useStore(selectEnabledNetworks);
+  const setActiveNetwork = useStore(selectSetActiveNetwork);
+  const enableNetwork = useEnableNetwork();
   const lock = useStore(selectLock);
   const inSidePanel = isSidePanel();
 
@@ -198,7 +214,7 @@ export const AccountsSheet = ({
   const pockets = useStore(useShallow(activePockets));
   const shown = visiblePockets(pockets);
   const hiddenCount = pockets.length - shown.length;
-  const target = pocketTarget(useStore(selectActiveNetwork));
+  const target = pocketTarget(activeNetwork);
   const activeAccount = useStore(target.active);
   const renamePocket = useStore(s => s.pockets.rename);
   const hidePocket = useStore(s => s.pockets.hide);
@@ -215,11 +231,18 @@ export const AccountsSheet = ({
     enabled: open && !!activeStore,
   });
 
-  const pickWallet = (id: string) => {
-    if (id !== selectedKeyInfo?.id) {
-      void selectKeyRing(id);
-    }
+  const pickWallet = async (k: KeyInfo) => {
     onOpenChange(false);
+    const network = networkForWallet(k, activeNetwork, enabledNetworks);
+    if (k.id !== selectedKeyInfo?.id) {
+      await selectKeyRing(k.id);
+    }
+    if (network !== activeNetwork) {
+      await (enabledNetworks.includes(network)
+        ? setActiveNetwork(network)
+        : enableNetwork(network));
+      navigate(PopupPath.INDEX);
+    }
   };
 
   const pickPocket = (account: number) => {
@@ -331,21 +354,40 @@ export const AccountsSheet = ({
       <div className='-mx-4 flex flex-col border-t border-border-soft px-3 pb-3.5 pt-2.5'>
         {otherKeyInfos.map(k => {
           const custody = custodyOf(k);
+          const networks = keyInfoNetworks(k);
+          const elsewhere = !keyInfoSupportsNetwork(k, activeNetwork);
           return (
             <button
               key={k.id}
               type='button'
-              onClick={() => pickWallet(k.id)}
+              onClick={() => void pickWallet(k)}
               className='flex h-[54px] items-center gap-3 px-2 text-left transition-colors hover:bg-surface-elev-2'
             >
               <span
-                className={cn('size-[18px] shrink-0', CUSTODY_ICON[custody])}
+                className={cn(
+                  'size-[18px] shrink-0',
+                  CUSTODY_ICON[custody],
+                  elsewhere && 'opacity-50',
+                )}
                 aria-hidden='true'
               />
               <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
-                <Clipped className='text-sm text-fg-high lowercase'>{k.name}</Clipped>
-                <Clipped className='text-[11px] text-fg-muted'>{CUSTODY_META[custody]}</Clipped>
+                <Clipped
+                  className={cn('text-sm lowercase', elsewhere ? 'text-fg-muted' : 'text-fg-high')}
+                >
+                  {k.name}
+                </Clipped>
+                <Clipped className='text-[11px] text-fg-muted'>
+                  {[CUSTODY_META[custody], ...(networks ?? []).map(n => getNetwork(n).name)]
+                    .join(' · ')
+                    .toLowerCase()}
+                </Clipped>
               </span>
+              {elsewhere && (
+                <span className='shrink-0 text-[11px] text-fg-muted lowercase'>
+                  no {getNetwork(activeNetwork).name}
+                </span>
+              )}
             </button>
           );
         })}

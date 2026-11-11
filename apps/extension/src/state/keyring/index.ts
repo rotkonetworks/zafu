@@ -1292,6 +1292,10 @@ export const selectRenameKeyRing = (state: AllSlices) => state.keyRing.renameKey
 // use selectMultisigWallets (unfiltered) so payout signing still resolves them.
 const isHidden = (k: KeyInfo) => k.insensitive?.['hidden'] === true;
 
+/** every wallet the accounts sheet lists, whichever networks it serves */
+export const selectSwitcherKeyInfos = (state: AllSlices) =>
+  state.keyRing.keyInfos.filter(k => !isHidden(k));
+
 export const selectKeyInfosForActiveNetwork = (state: AllSlices) => {
   const { keyInfos, activeNetwork } = state.keyRing;
   return keyInfos.filter(k => keyInfoSupportsNetwork(k, activeNetwork) && !isHidden(k));
