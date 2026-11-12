@@ -303,6 +303,26 @@ export const keyInfoSupportsNetwork = (k: KeyInfo, network: NetworkType): boolea
   return supported.includes(network);
 };
 
+/** the networks a wallet is limited to, or undefined when it serves every one (a seed phrase) */
+export const keyInfoNetworks = (k: KeyInfo): NetworkType[] | undefined =>
+  k.insensitive['supportedNetworks'] as NetworkType[] | undefined;
+
+/**
+ * where picking a wallet lands: the active network when the wallet serves it,
+ * else the first network it serves that is on, else the first it serves
+ */
+export const networkForWallet = (
+  k: KeyInfo,
+  active: NetworkType,
+  enabled: readonly NetworkType[],
+): NetworkType => {
+  if (keyInfoSupportsNetwork(k, active)) {
+    return active;
+  }
+  const own = keyInfoNetworks(k) ?? [];
+  return own.find(n => enabled.includes(n)) ?? own[0] ?? active;
+};
+
 export const findCompatibleVault = (
   keyInfos: KeyInfo[],
   network: NetworkType,
