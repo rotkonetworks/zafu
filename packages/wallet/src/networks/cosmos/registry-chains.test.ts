@@ -85,12 +85,14 @@ describe('COSMOS_CHAINS from the bundled registry and presets', () => {
       neutron: ['neutron-1', 'neutron', 118, 'untrn', 'channel-9'],
       noble: ['noble-1', 'noble', 118, 'uusdc', 'channel-2'],
       osmosis: ['osmosis-1', 'osmo', 118, 'uosmo', 'channel-20'],
+      juno: ['juno-1', 'juno', 118, 'ujuno', undefined],
+      terpnetwork: ['morocco-1', 'terp', 118, 'uterp', 'channel-25'],
     });
   });
 
   it('talks only to trusted node operators', () => {
     const trusted =
-      /(^|\.)(polkachu\.com|publicnode\.com|cosmos\.directory|keplr\.app|injective\.network)$/;
+      /(^|\.)(polkachu\.com|publicnode\.com|cosmos\.directory|keplr\.app|injective\.network|terp\.network|chaintools\.tech)$/;
     for (const c of Object.values(COSMOS_CHAINS)) {
       for (const url of [c.rpcEndpoint, c.restEndpoint, ...(c.rpcEndpoints ?? [])]) {
         expect(new URL(url).hostname, `${c.id} ${url}`).toMatch(trusted);

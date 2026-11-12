@@ -218,6 +218,48 @@ const PRESETS: Record<CosmosChainId, CosmosChainConfig> = {
     penumbraChannel: 'channel-111093', // osmosis -> penumbra
     penumbraSourceChannel: 'channel-20', // penumbra -> osmosis
   },
+  // Terp Network and Juno: standard cosmos chains (secp256k1, coin type 118, per
+  // cosmos/chain-registry). Terp's penumbra pair is in the penumbrafi registry
+  // (main, not yet in a release), pinned here since this preset wins over it.
+  // Juno has no penumbra channel; it serves the cosmos provider and settings.
+  terpnetwork: {
+    id: 'terpnetwork',
+    name: 'Terp Network',
+    chainId: 'morocco-1',
+    bech32Prefix: 'terp',
+    // the staking token; fees are paid in THIOL (see gasAsset)
+    symbol: 'TERP',
+    denom: 'uterp',
+    decimals: 6,
+    rpcEndpoint: 'https://rpc.terp.network',
+    // the network's own nodes first, chaintools as the fallback; both
+    // verified reachable on morocco-1 (2026-11)
+    rpcEndpoints: ['https://rpc.terp.network', 'https://rpc.terp.chaintools.tech'],
+    restEndpoint: 'https://api.terp.network',
+    gasPrice: '0.05uthiol',
+    gasAsset: { symbol: 'THIOL', denom: 'uthiol', decimals: 6 },
+    penumbraChannel: 'channel-16', // terp -> penumbra
+    penumbraSourceChannel: 'channel-25', // penumbra -> terp
+  },
+  juno: {
+    id: 'juno',
+    name: 'Juno',
+    chainId: 'juno-1',
+    bech32Prefix: 'juno',
+    symbol: 'JUNO',
+    denom: 'ujuno',
+    decimals: 6,
+    rpcEndpoint: 'https://juno-rpc.polkachu.com',
+    // rotated per address for privacy, all from chain-registry (cosmos.directory
+    // proxies it) and verified reachable (2026-11)
+    rpcEndpoints: [
+      'https://juno-rpc.polkachu.com',
+      'https://rpc.cosmos.directory/juno',
+      'https://juno-rpc.publicnode.com:443',
+    ],
+    restEndpoint: 'https://juno-api.polkachu.com',
+    gasPrice: '0.075ujuno',
+  },
 };
 
 const registryConnections = () => {
