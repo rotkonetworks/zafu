@@ -10,10 +10,10 @@ import { Navigate } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { SeedPhraseLength } from '../../../state/seed-phrase/mnemonic';
 import { useStore } from '../../../state';
 import { usePageNav } from '../../../utils/navigate';
 import { PagePath } from '../paths';
+import { ONBOARDING_GENERATE_LENGTH } from './flow';
 import { useOnboarding } from '.';
 import { useFinalizeOnboarding } from './password/hooks';
 import { SEED_PHRASE_ORIGIN } from './password/types';
@@ -39,7 +39,7 @@ export const GenerateSeedPhrase = () => {
 
   useEffect(() => {
     if (!phrase.length) {
-      generate(SeedPhraseLength.TWENTY_FOUR_WORDS);
+      generate(ONBOARDING_GENERATE_LENGTH);
     }
   }, [generate, phrase.length]);
 
@@ -56,7 +56,7 @@ export const GenerateSeedPhrase = () => {
 
       <div className='relative border border-border-soft bg-elev-1'>
         <ol className='grid grid-cols-4 p-3.5'>
-          {Array.from({ length: 24 }, (_, i) => (
+          {Array.from({ length: ONBOARDING_GENERATE_LENGTH }, (_, i) => (
             <li key={i} className='flex h-[34px] items-baseline gap-2 px-1.5 pt-2'>
               <span className='w-[18px] text-right text-[11px] text-fg-dim'>{i + 1}</span>
               <span className='text-body text-fg-high'>{revealed ? phrase[i] : ''}</span>
