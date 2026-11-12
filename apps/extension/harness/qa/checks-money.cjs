@@ -57,6 +57,13 @@ const checkNow = async pg => {
 // while the testnet nym route is unreliable; restored after)
 const nymZcash = async (z, on) => {
   const pg = await z.open('/settings/network/connections', 'popup.html', 1500);
+  // nym is opt-in: while it is off, zcash is already direct
+  const master = pg.getByRole('switch', { name: 'send over nym', exact: true }).first();
+  if (!on && (await master.getAttribute('aria-checked')) !== 'true') {
+    await pg.close();
+    return false;
+  }
+  await L.toggle(pg, 'send over nym', true);
   await pg
     .getByRole('button', { name: /^nym, per network/ })
     .first()

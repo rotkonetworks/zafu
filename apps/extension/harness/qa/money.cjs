@@ -26,6 +26,9 @@ const wallet = async (c, seed, o = {}) => {
     const ks = Object.keys(all).filter(k => k.startsWith('zcashBirthday_'));
     await chrome.storage.local.set(Object.fromEntries(ks.map(k => [k, b])));
   }, o.birthday ?? BIRTHDAY);
+  // testnet is a network the person turns on: a seed wallet's zcash then speaks it
+  const { enabledNetworks = ['zcash'] } = await z.storage();
+  await z.set({ enabledNetworks: [...new Set([...enabledNetworks, 'zcash-testnet'])] });
   await T.setNode(z);
   await z.set({ autoLockMinutes: 0 });
   await T.syncToTip(z, 10 * 60_000);
