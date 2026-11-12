@@ -6,6 +6,51 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.6.0
+
+### Sending
+
+- Pay a transparent address (t1, t3) or a tex address from shielded funds
+  (the default) or from the public balance, on hot and Zigner wallets. A
+  shielded payment moves through a fresh public address first, then pays.
+- A payment that only public coins paid is confirmed from the node, and one
+  zafu has no record of is rebuilt from the public history. Payments that
+  were running keep going after a restart, each with its own unlock.
+- Zigner shields each public address in its own signature round.
+- Large penumbra transactions show as flashing codes Zigner can read, and a
+  dense Zigner code fits the popup.
+
+### Privacy
+
+- Nym is now your choice, asked once during setup ("connect: direct / over
+  nym"). Wallets that already had nym on keep it.
+- Your own proxy: route zafu's traffic through an http, https or socks5
+  proxy you name, with a login. If it stops answering, zafu waits instead of
+  going direct.
+- A node on your lan or vpn is always reached directly, never over nym.
+
+### Zcash
+
+- NU7: zafu's built-in consensus knows NU7's mainnet height, and refuses to
+  build a transaction on the old branch past it.
+- Zcash testnet is its own entry in the network picker, right under zcash.
+- The chain proof is asked for again before zafu calls the chain unverified.
+
+### Buying
+
+- Buy zec opens Peer's zec page with our referral; the in-wallet buy is in
+  the beta build only.
+
+### Also
+
+- A site asking for your zid or to decrypt, while zafu is locked, opens the
+  unlock instead of failing.
+- Scan a viewing key's code instead of pasting it, when adding a view-only
+  wallet.
+- Withdraw to a cosmos chain fills the destination from a scanned Zigner key.
+- Receive never shows the previous wallet's address after a switch.
+- A setting that is off still opens its "?" explanation.
+
 ## 29.5.3
 
 ### Sending
