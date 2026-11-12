@@ -16,7 +16,8 @@ export type SessionStorageState = {
    * when, and how many legs it still signs. removed with signGraceUntil, and
    * when the swap's last leg is sent.
    */
-  swapUnlock?: { id: string; until: number; legs?: number };
+  /** each running payment's (swap, tex, public) one unlock, by its id */
+  swapUnlock?: Record<string, { until: number; legs?: number }>;
   /**
    * The key a password change just replaced, for a minute: a context still
    * holding wallet records from before the change writes their old-key inner

@@ -11,15 +11,12 @@
  * not a setting, so it is not in the personal backup.
  */
 
-import { localExtStorage, type LocalStorageState } from '@repo/storage-chrome/local';
-import { sessionExtStorage } from '@repo/storage-chrome/session';
-import { readEncrypted, readEncryptedWithMigration, writeEncrypted } from '../encrypted-storage';
+import { sealedList } from '../sealed-list';
 import type { Quote, SwapPhase, SwapToken } from './provider';
 import type { RouteId, SwapPair } from './routes';
 import type { Held } from '../../signing/move-and-deposit';
 
 export const OPEN_SWAPS_KEY = 'openSwaps';
-const KEY = OPEN_SWAPS_KEY as keyof LocalStorageState;
 
 /**
  *  deposit -> sent -> done | refunded | failed
@@ -106,56 +103,17 @@ export const isStale = (s: OpenSwap, now = Date.now()): boolean =>
   !!s.expiresAt &&
   now > s.expiresAt + (s.watch === 'deposit' ? 24 * 3600_000 : 0);
 
+const list = sealedList(OPEN_SWAPS_KEY, isOpenSwap, s => isStale(s), 'open-swaps');
+
 /** the open swaps; [] when locked or none, never a crash on the home screen */
-export const readOpenSwaps = async (): Promise<OpenSwap[]> => {
-  if (!(await sessionExtStorage.get('passwordKey'))) {
-    return [];
-  }
-  const v = await readEncrypted<unknown>(localExtStorage, sessionExtStorage, KEY).catch(() => null);
-  return Array.isArray(v) ? v.filter(isOpenSwap) : [];
-};
-
-/**
- * One change to the list, read-modify-write under a lock every realm shares.
- * False when locked (nothing written). A box that won't open is kept aside
- * (`openSwaps.unopened`), never overwritten in place.
- */
-const change = async (fn: (list: OpenSwap[]) => OpenSwap[]): Promise<boolean> =>
-  navigator.locks.request(`${chrome.runtime.id}.open-swaps`, { mode: 'exclusive' }, async () => {
-    if (!(await sessionExtStorage.get('passwordKey'))) {
-      return false;
-    }
-    const v = await readEncryptedWithMigration<unknown>(localExtStorage, sessionExtStorage, KEY);
-    const list = Array.isArray(v) ? v.filter(isOpenSwap) : [];
-    const next = fn(list).filter(s => !isStale(s));
-    if (!next.length) {
-      await chrome.storage.local.remove(OPEN_SWAPS_KEY);
-      return true;
-    }
-    return writeEncrypted(localExtStorage, sessionExtStorage, KEY, next);
-  });
-
+export const readOpenSwaps = list.read;
 /** remember a swap, or replace the one with its id */
-export const saveOpenSwap = (s: OpenSwap): Promise<boolean> =>
-  change(list => [...list.filter(x => x.id !== s.id), s]);
-
+export const saveOpenSwap = list.save;
 /** update one swap in place; nothing when it is gone */
-export const patchOpenSwap = (id: string, patch: Partial<OpenSwap>): Promise<boolean> =>
-  change(list => list.map(s => (s.id === id ? { ...s, ...patch } : s)));
-
-export const forgetOpenSwap = (id: string): Promise<boolean> =>
-  change(list => list.filter(s => s.id !== id));
-
+export const patchOpenSwap = list.patch;
+export const forgetOpenSwap = list.forget;
 /** call `fn` whenever the open swaps change in any realm */
-export const onOpenSwapsChange = (fn: () => void): (() => void) => {
-  const l = (changes: Record<string, chrome.storage.StorageChange>) => {
-    if (OPEN_SWAPS_KEY in changes) {
-      fn();
-    }
-  };
-  chrome.storage.local.onChanged.addListener(l);
-  return () => chrome.storage.local.onChanged.removeListener(l);
-};
+export const onOpenSwapsChange = list.onChange;
 
 /** a quote as the record keeps it: strings for the bigints, no raw node answer */
 export const openSwapOf = (

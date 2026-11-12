@@ -16,6 +16,7 @@ import {
   saveCheck,
   toStored,
   type TransparentCheck,
+  fundedFirst,
 } from './zcash-check';
 
 const utxo = (address: string, valueZat: bigint): Utxo => ({
@@ -167,5 +168,21 @@ describe('flows ask only their own address', () => {
     ).rejects.toThrow(/no spendable/);
     expect(fetchUtxos).toHaveBeenCalledTimes(1);
     expect(fetchUtxos).toHaveBeenCalledWith('https://node', 't1from');
+  });
+});
+
+describe('fundedFirst', () => {
+  it('names each address once with its sum, most first, so each shields on its own', () => {
+    expect(
+      fundedFirst([
+        { address: 'a', valueZat: 5n },
+        { address: 'b', valueZat: 9n },
+        { address: 'a', valueZat: 6n },
+      ]),
+    ).toEqual([
+      { address: 'a', zat: 11n },
+      { address: 'b', zat: 9n },
+    ]);
+    expect(fundedFirst([])).toEqual([]);
   });
 });

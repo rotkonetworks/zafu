@@ -338,6 +338,19 @@ const TxDetailContent = ({ tx, network }: { tx: ParsedTransaction; network: Netw
               </span>
               <CopyButton text={tx.id} />
             </div>
+            {tx.moveTxid && (
+              <div className='flex min-h-[52px] items-center gap-3 px-3.5 py-2'>
+                <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
+                  <Clipped className='text-data text-fg-high font-mono' label='unshield id'>
+                    {tx.moveTxid}
+                  </Clipped>
+                  <span className='text-label text-fg-muted lowercase'>
+                    first, unshielded to a fresh address of yours
+                  </span>
+                </span>
+                <CopyButton text={tx.moveTxid} />
+              </div>
+            )}
             {explorer && (
               <div className='flex min-h-[52px] items-center gap-3 px-3.5 py-2'>
                 <span className='flex min-w-0 flex-1 flex-col gap-0.5'>

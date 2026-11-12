@@ -225,11 +225,30 @@ export async function transparentAddressToScriptHex(
  */
 export async function payableTransparentAddress(addr: string, mainnet: boolean): Promise<string> {
   const { kind, hash } = await decodeTransparentAddress(addr, mainnet);
-  if (!isTexAddress(addr)) {
-    return addr;
-  }
+  return isTexAddress(addr) ? base58Address(kind, hash, mainnet) : addr;
+}
+
+const base58Address = async (
+  kind: 'p2pkh' | 'p2sh',
+  hash: Uint8Array,
+  mainnet: boolean,
+): Promise<string> => {
   const v = ADDRESS_VERSIONS[mainnet ? 'mainnet' : 'testnet'];
   const body = Uint8Array.from([...(kind === 'p2pkh' ? v.p2pkh : v.p2sh), ...hash]);
   const check = (await sha256(await sha256(body))).subarray(0, 4);
   return encodeBase58(Uint8Array.from([...body, ...check]));
-}
+};
+
+/** the t-address an output script pays (P2PKH or P2SH); undefined for any other script */
+export const scriptAddress = (scriptHex: string, mainnet: boolean): Promise<string | undefined> => {
+  const pkh = /^76a914([0-9a-f]{40})88ac$/.exec(scriptHex);
+  const sh = /^a914([0-9a-f]{40})87$/.exec(scriptHex);
+  const hex = pkh?.[1] ?? sh?.[1];
+  return hex
+    ? base58Address(
+        pkh ? 'p2pkh' : 'p2sh',
+        Uint8Array.from(hex.match(/../g)!, b => parseInt(b, 16)),
+        mainnet,
+      )
+    : Promise.resolve(undefined);
+};

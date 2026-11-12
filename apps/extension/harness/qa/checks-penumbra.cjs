@@ -70,7 +70,8 @@ module.exports = {
   },
 
   n3: {
-    title: 'penumbra sends over nym by default (29.2.0); turning it off says direct',
+    title:
+      'nym starts off; once chosen penumbra sends over it, and turning penumbra off says direct',
     timeout: 300_000,
     run: async c => {
       const z = await L.launch(c.dist);
@@ -78,6 +79,12 @@ module.exports = {
         await L.importSeed(z, L.genPhrase(24));
         await setPenumbra(z, true);
         const pg = await z.open('/settings/network/connections', 'popup.html', 1500);
+        // nym is the person's choice: off on a fresh install
+        const nymFirst = await pg
+          .getByRole('switch', { name: 'send over nym', exact: true })
+          .first()
+          .getAttribute('aria-checked');
+        await L.toggle(pg, 'send over nym', true);
         await pg
           .getByRole('button', { name: /^nym, per network/ })
           .first()
@@ -118,13 +125,14 @@ module.exports = {
           .match(/penumbra (direct|over nym) · [^·]+/) ?? [''])[0];
         await c.shot(pg, 'nym-off');
         const ok =
+          nymFirst === 'false' &&
           def === 'true' &&
           /^penumbra over nym/.test(row0) &&
           /^penumbra direct/.test(row1) &&
           !direct.length;
         return {
           status: ok ? 'pass' : 'fail',
-          note: `default "${row0}" (switch ${def}); turned off: "${row1}"; by default an empty BroadcastTxSync from the popup answered ${JSON.stringify(res)}, direct on the wire: ${direct.length}, nym ${JSON.stringify(nymUp)} (${c.dir}/nym-off.png)`,
+          note: `nym on a fresh install: ${nymFirst}; once chosen "${row0}" (switch ${def}); turned off: "${row1}"; by default an empty BroadcastTxSync from the popup answered ${JSON.stringify(res)}, direct on the wire: ${direct.length}, nym ${JSON.stringify(nymUp)} (${c.dir}/nym-off.png)`,
         };
       } finally {
         await z.close();

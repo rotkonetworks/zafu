@@ -109,6 +109,7 @@ import {
   finishDeposit,
   planDeposit,
   sendDeposit,
+  v5TransparentParts,
   wantOf,
   withCoin,
   type DepositChain,
@@ -129,6 +130,9 @@ import {
   type SentPool,
   type SentTxRecord,
 } from './sent-tx-reconcile';
+import { lookupOwnTx, ownTxHeights } from './own-tx-height';
+import { rebuildSends, type TOuts } from './rebuilt-sends';
+import { scriptAddress } from '../ledger/address';
 import {
   isChainContinuityError,
   rewindDistanceForAttempt,
@@ -260,6 +264,9 @@ const flyTrustKey = (serverUrl: string, mainnet: boolean) =>
   [`chain:${mainnet ? 'main' : 'test'}`, `proved:${backendKey(serverUrl)}`] as const;
 
 /** the sync client for an endpoint; call sites without a backend in scope use the registry */
+/** when each pending transparent-only send was last asked about (own-tx-height.ts) */
+const ownTxAsked = new Map<string, number>();
+
 const makeZcashClient = (
   serverUrl: string,
   backend?: ZcashBackend,
@@ -1694,7 +1701,7 @@ const computeFee = (
  * pricing and witness building. Mirrors the Rust
  * `parse_ironwood_recipient`, which decodes the base58 version bytes.
  */
-interface TransparentHistoryRow {
+interface TransparentHistoryRow extends Partial<Omit<TOuts, 'txid' | 'height'>> {
   txid: string;
   height: number;
   received: string;
@@ -1729,10 +1736,22 @@ const fetchTransparentHistory = async (
       batch.map(async txidBytes => {
         const rawTx = await tClient.getTransaction(txidBytes);
         const parsed = parseTransparentTx(rawTx.data, ourScripts);
+        // its coins in and out, so a payment we hold no record of can be rebuilt (rebuilt-sends.ts)
+        let parts: Pick<TOuts, 'inputs' | 'outputs'> | undefined;
+        try {
+          const v5 = v5TransparentParts(hexEncode(rawTx.data));
+          parts = v5 && {
+            inputs: v5.inputs,
+            outputs: v5.outputs.map(o => ({ ...o, ours: ourScripts.has(o.script) })),
+          };
+        } catch {
+          // a layout the parser doesn't know: the row stays a plain receive check
+        }
         return {
           txid: hexEncode(txidBytes),
           height: rawTx.height,
           received: parsed.toString(),
+          ...parts,
         };
       }),
     );
@@ -4539,6 +4558,23 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // best effort - a missing record must not break history
         }
 
+        // a payment from our own coins with no record of ours is rebuilt and kept,
+        // so it shows as the payment it was (and never as received change)
+        try {
+          const rebuilt = await rebuildSends(
+            tHistory.filter((r): r is TOuts & { received: string } => !!r.inputs && !!r.outputs),
+            ownSentTxids,
+            walletId,
+            script => scriptAddress(script, storeIsMainnet(walletId)),
+          );
+          for (const rec of rebuilt) {
+            await recordSentTx(rec);
+            ownSentTxids.add(rec.txid);
+          }
+        } catch (e) {
+          console.warn(`[zcash-worker] could not rebuild transparent sends: ${errText(e)}`);
+        }
+
         for (const tTx of tHistory) {
           const existingIdx = seenTxids.get(tTx.txid);
           if (existingIdx !== undefined) {
@@ -4547,7 +4583,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
           if (ownSentTxids.has(tTx.txid)) {
             // ours: the reconciliation pass below supplies the real amount,
-            // recipient and fee from the record we wrote at broadcast.
+            // recipient and fee from the record we wrote at broadcast. Its
+            // height is kept: a transparent-only send has no other witness.
+            if (tTx.height > 0) {
+              histTxs.push({
+                id: tTx.txid,
+                height: tTx.height,
+                type: 'send',
+                amount: '0',
+                asset: unitOf(walletId),
+              });
+              seenTxids.set(tTx.txid, histTxs.length - 1);
+            }
             continue;
           }
           const receivedZat = BigInt(tTx.received);
@@ -4579,9 +4626,19 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         try {
           const sent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
 
-          // A send is confirmed by sync finding its spend, never by asking the
-          // node for our own txid: that lookup would tie the txid to this
-          // client's address.
+          // A shielded send is confirmed by sync finding its spend, never by
+          // asking the node for our own txid: that lookup would tie the txid
+          // to this client. A send only transparent coins paid has no spend
+          // sync can find, so the server it was broadcast through is asked
+          // (own-tx-height.ts), once per block while it is pending.
+          for (const { txid, height } of await ownTxHeights(
+            makeZcashClient(histServerUrl),
+            sent.filter(rec => !seenTxids.has(rec.txid)),
+            histScannedHeight,
+            ownTxAsked,
+          )) {
+            histTxs.push({ id: txid, height, type: 'send', amount: '0', asset: unitOf(walletId) });
+          }
           const result = reconcileSentTxs({
             chainTxs: histTxs,
             sent,
@@ -6913,6 +6970,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           cancelKey?: string;
           /** zigner signs it: return the PCZT as a ur:zigner-module request too */
           zigner?: boolean;
+          /** shield only these addresses' coins; position in `tAddresses` still signs */
+          only?: string[];
         };
         const build = builds.begin(shieldUnsignedPayload.cancelKey);
         const progress = buildProgress(walletId);
@@ -6923,7 +6982,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
         const shieldUBranchIdHex = await build.race(fetchBranchIdHex(shieldUClient));
         const shieldUAll = await build.race(
-          utxosEach(shieldUClient, shieldUnsignedPayload.tAddresses),
+          utxosEach(shieldUClient, shieldUnsignedPayload.only ?? shieldUnsignedPayload.tAddresses),
         );
         const shieldUUtxos =
           shieldUnsignedPayload.maxInputs === undefined
@@ -7114,6 +7173,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           pool: 'transparent',
           kind: 'send',
           memo: req.memo,
+          moveTxid: req.moveTxid,
           sentAt: Date.now(),
           expiryHeight: parseExpiryHeight(sent.txHex),
         });
@@ -7233,6 +7293,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           pool: 'transparent',
           kind: 'send',
           memo: req.memo,
+          moveTxid: req.moveTxid,
           sentAt: Date.now(),
           expiryHeight: parseExpiryHeight(sent.txHex),
         });
@@ -7486,32 +7547,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         return;
       }
       case 'lookup-tx': {
-        // whether the server that was asked to broadcast our own tx has it; a
-        // failure reads as "not seen", never "gone". Backends disagree on the
-        // byte order of TxFilter.hash, so try display order, then wire order.
+        // whether the server that was asked to broadcast our own tx has it
         const { serverUrl: lUrl, txid: lTxid } = payload as { serverUrl: string; txid: string };
-        const lClient = makeZcashClient(lUrl);
-        const lDisplay = hexDecode(lTxid);
-        let lFound = false;
-        let lHeight: number | undefined;
-        for (const lHash of [lDisplay, lDisplay.slice().reverse()]) {
-          try {
-            const lRaw = await lClient.getTransaction(lHash);
-            lFound = lRaw.data.length > 0;
-            lHeight = lRaw.height > 0 ? lRaw.height : undefined;
-          } catch {
-            // not in this order, or unreachable
-          }
-          if (lFound) {
-            break;
-          }
-        }
         workerSelf.postMessage({
           type: 'result',
           id,
           network: 'zcash',
           walletId,
-          payload: { found: lFound, height: lHeight },
+          payload: await lookupOwnTx(makeZcashClient(lUrl), lTxid),
         });
         return;
       }

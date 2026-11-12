@@ -13,6 +13,7 @@ import { hostedWorkerCount, initNetworkWorkerHost } from '../state/keyring/netwo
 import type { ParallelProveRequest } from '@penumbrafi/types/internal-msg/offscreen';
 import type { ParallelWorkerFailure, ParallelWorkerRequest } from '../wasm-build-parallel';
 import { nymTunnelRunning } from '../net/nym-host';
+import { PRIME_PROXY, primeIn } from '../net/proxy-primer';
 
 // this document is the one long-lived home for the zcash/penumbra sync
 // workers - every popup, settings screen and approval window is a client
@@ -58,6 +59,19 @@ chrome.runtime.onMessage.addListener((req: unknown, sender, respond) => {
       idleMs: Date.now() - lastJobAt,
     });
     return false;
+  }
+  // the person's proxy login, given once so zafu's own requests carry it (net/proxy-primer)
+  if (
+    typeof req === 'object' &&
+    req !== null &&
+    'type' in req &&
+    req.type === PRIME_PROXY &&
+    'url' in req &&
+    typeof req.url === 'string' &&
+    req.url.startsWith('https://')
+  ) {
+    void primeIn(document, req.url).then(() => respond(true));
+    return true;
   }
   if (isProveParallel(req)) {
     void handleBuildRequest(

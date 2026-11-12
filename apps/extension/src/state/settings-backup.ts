@@ -6,6 +6,9 @@
  */
 
 import { localExtStorage } from '@repo/storage-chrome/local';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
+import { readEncrypted, writeEncrypted } from './encrypted-storage';
+import { isProxyConfig, isProxyLogin, PROXY_KEY, PROXY_LOGIN_KEY } from '../net/proxy';
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { rpcPoolKey } from '../net/egress-policy';
 import { NETWORKS } from '../config/networks';
@@ -80,7 +83,19 @@ export interface SettingsBackup {
   nodePools?: Record<string, string[]>;
   /** each wallet's zcash sync start height, by owner key (see pocketOwner) */
   birthdays?: Record<string, number>;
+  /**
+   * The highest transparent index each pocket handed out (zcashTransparentIndex,
+   * #N per pocket): the fresh addresses of swaps and payments sit above the
+   * ones every scan covers, and the seed alone can't say how far they reach.
+   */
+  tIndices?: Record<string, number>;
+  /** the person's own proxy (net/proxy) and its login; the backup itself is sealed */
+  proxy?: { config?: unknown; login?: unknown };
 }
+
+/** a pocket's highest handed-out transparent index, as storage names it (state/pocket-id) */
+const T_INDEX = /^zcashTransparentIndex(#\d+)?$/;
+const isIndex = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0;
 
 /** a wallet as the backup names it: its vault id here, its owner key everywhere */
 export interface BackupWallet {
@@ -118,12 +133,26 @@ export const exportSettings = async (
       birthdays[w.owner] = h;
     }
   }
+  const tIndices = Object.fromEntries(
+    Object.entries(await chrome.storage.local.get(null)).filter(
+      ([k, v]) => T_INDEX.test(k) && isIndex(v),
+    ),
+  ) as Record<string, number>;
   // only known keys of the right type ride along, so nothing stale or retired is carried
   return {
     privacy: restoredPrivacy(DEFAULT_PRIVACY_SETTINGS, privacy),
     prefs,
     nodePools,
     birthdays,
+    tIndices,
+    proxy: {
+      config: (await chrome.storage.local.get(PROXY_KEY))[PROXY_KEY],
+      login: await readEncrypted<unknown>(
+        localExtStorage,
+        sessionExtStorage,
+        PROXY_LOGIN_KEY as never,
+      ).catch(() => undefined),
+    },
   };
 };
 
@@ -177,5 +206,40 @@ export const importNodePools = async (pools: SettingsBackup['nodePools']): Promi
     if (Array.isArray(list) && list.every(u => typeof u === 'string' && /^https?:\/\//.test(u))) {
       await chrome.storage.local.set({ [k]: list });
     }
+  }
+};
+
+/**
+ * Put back each pocket's highest transparent index, never lower than the one
+ * here: a lower counter would hand out again an address that already took
+ * funds, and would stop the scan short of a fresh address that may hold some.
+ */
+export const importTIndices = async (tIndices: SettingsBackup['tIndices']): Promise<void> => {
+  for (const [k, v] of Object.entries(tIndices ?? {})) {
+    if (!T_INDEX.test(k) || !isIndex(v)) {
+      continue;
+    }
+    const here: unknown = (await chrome.storage.local.get(k))[k];
+    if (!isIndex(here) || here < v) {
+      await chrome.storage.local.set({ [k]: v });
+    }
+  }
+};
+
+/**
+ * Put back the person's proxy and its login. A proxy that was on comes back
+ * on: until Chrome's permission is granted again (settings > your proxy >
+ * allow) zafu sends nothing, rather than going direct.
+ */
+export const importProxy = async (proxy: SettingsBackup['proxy']): Promise<void> => {
+  if (!isProxyConfig(proxy?.config)) {
+    return;
+  }
+  await chrome.storage.local.set({ [PROXY_KEY]: proxy.config });
+  if (isProxyLogin(proxy.login)) {
+    await writeEncrypted(localExtStorage, sessionExtStorage, PROXY_LOGIN_KEY as never, {
+      username: proxy.login.username,
+      password: proxy.login.password,
+    });
   }
 };

@@ -92,6 +92,26 @@ export const legacyEnabledNetworks = (storage: Raw): string[] | undefined => {
   return nets.length > 0 ? [...new Set(nets)] : undefined;
 };
 
+/** marks that nym's default was settled once on this install (keepNym) */
+export const NYM_SETTLED = 'nymDefaultSettled';
+
+/**
+ * Nym became opt-in: asked in onboarding, never on by default. An install
+ * that already had a wallet had it on without ever choosing, so it keeps it
+ * (nothing is weakened behind anyone's back) unless the person turned it
+ * off; one with no wallet yet will be asked. Settled once per install, so a
+ * new wallet whose person skipped the question stays off. Pure: the optIns
+ * to write, or undefined for none.
+ */
+export const keepNym = (storage: Raw): Raw | undefined => {
+  if (storage[NYM_SETTLED]) {
+    return undefined;
+  }
+  const optIns = obj(obj(storage['netEgress'])['optIns']);
+  const hadWallet = Array.isArray(storage['vaults']) && storage['vaults'].length > 0;
+  return hadWallet && optIns['nym'] === undefined ? { ...optIns, nym: 'allowed' } : optIns;
+};
+
 /**
  * Run once, from the service worker. Idempotent: a v2 ledger is left alone. A
  * missing ledger is migrated too - a zcash-only install never wrote one (its
@@ -100,17 +120,24 @@ export const legacyEnabledNetworks = (storage: Raw): string[] | undefined => {
  * writes the empty v2 ledger.
  */
 export const runNetEgressMigration = async (): Promise<void> => {
-  const head = await chrome.storage.local.get(['netEgress', 'enabledNetworks']);
-  if (obj(head['netEgress'])['v'] === 2 && head['enabledNetworks'] !== undefined) {
+  const head = await chrome.storage.local.get(['netEgress', 'enabledNetworks', NYM_SETTLED]);
+  if (
+    obj(head['netEgress'])['v'] === 2 &&
+    head['enabledNetworks'] !== undefined &&
+    head[NYM_SETTLED]
+  ) {
     return;
   }
   const storage = await chrome.storage.local.get(null);
   const next = migrateNetEgress(storage);
   const enabledNetworks = legacyEnabledNetworks(storage);
-  if (next || enabledNetworks) {
-    await chrome.storage.local.set({
-      ...(next ? { netEgress: next } : {}),
-      ...(enabledNetworks ? { enabledNetworks } : {}),
-    });
-  }
+  const ledger = next ?? obj(storage['netEgress']);
+  const optIns = keepNym({ ...storage, netEgress: ledger });
+  await chrome.storage.local.set({
+    ...(next || optIns
+      ? { netEgress: { ...ledger, v: 2, optIns: optIns ?? ledger['optIns'] ?? {} } }
+      : {}),
+    ...(enabledNetworks ? { enabledNetworks } : {}),
+    [NYM_SETTLED]: true,
+  });
 };

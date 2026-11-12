@@ -34,6 +34,7 @@ import {
 } from './message/listen/contact-discovery-request';
 import { destinationConsentResultListener } from './net/prompt';
 import { runNetEgressMigration } from './net/egress-migrate';
+import { startProxy } from './net/proxy-apply';
 import { loadStoredRegistry } from './transparent/registry-live';
 import { refreshEgress } from './net/egress';
 import {
@@ -176,6 +177,8 @@ void keptCaptureAccess().catch(() => undefined);
 
 // nym: kept up while unlocked, or started on demand (net/nym-plan.ts)
 const nym = startNymLifecycle();
+// the person's own proxy, for zafu's hosts only (net/proxy-apply.ts)
+startProxy();
 
 const ui = startUiOpenSession(
   {

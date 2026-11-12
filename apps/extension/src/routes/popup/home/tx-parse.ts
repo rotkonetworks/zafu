@@ -41,6 +41,8 @@ export interface ParsedTransaction {
   payments?: { recipient: string; amount: string; memo?: string }[];
   /** wall-clock ms at broadcast, used to date a row that has no height yet */
   sentAt?: number;
+  /** the unshield that funded this payment's fresh address, its first step */
+  moveTxid?: string;
   /** penumbra account indices associated with this transaction (from visible actions) */
   accountIndices?: Set<number>;
   /** the decoded penumbra transaction this row came from */

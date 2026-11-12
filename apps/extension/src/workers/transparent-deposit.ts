@@ -26,6 +26,8 @@ export interface DepositRequest {
   /** sent verbatim as the OP_RETURN payload */
   memo: string;
   mainnet: boolean;
+  /** the move that funded `tAddress`, written on the payment's record (history folds it in) */
+  moveTxid?: string;
 }
 
 export interface DepositPlan {
@@ -156,21 +158,33 @@ const transparentParts = (txHex: string) => {
 export const transparentOutputs = (txHex: string): { value: bigint; script: string }[] =>
   transparentParts(txHex).outputs;
 
+/**
+ * A v5 transaction's transparent inputs and outputs; undefined for any other
+ * version, whose layout these offsets don't describe (v5's transparent
+ * bundle comes first, after a 20-byte header).
+ */
+export const v5TransparentParts = (txHex: string) =>
+  txHex.startsWith('05000080') ? transparentParts(txHex) : undefined;
+
 /** the outpoints a transparent-only V5 transaction spends */
 export const transparentInputs = (txHex: string): { txid: string; vout: number }[] =>
   transparentParts(txHex).inputs;
 
-/** throws unless the signed bytes pay [to, OP_RETURN(memo), change to own] and nothing else */
+/**
+ * Throws unless the signed bytes pay [to, OP_RETURN(memo), change to own] and
+ * nothing else; with no memo (a plain tex payment) there is no OP_RETURN.
+ */
 export const checkDeposit = (
   txHex: string,
   want: { toScript: string; amountZat: bigint; memoHex: string; ownScript: string },
 ): void => {
-  const [pay, memo, ...change] = transparentOutputs(txHex);
+  const [pay, ...rest] = transparentOutputs(txHex);
+  const memo = want.memoHex ? rest.shift() : undefined;
+  const change = rest;
   const ok =
     pay?.script === want.toScript &&
     pay.value === want.amountZat &&
-    memo?.value === 0n &&
-    memo.script === opReturnScript(want.memoHex) &&
+    (!want.memoHex || (memo?.value === 0n && memo.script === opReturnScript(want.memoHex))) &&
     change.length <= 1 &&
     change.every(c => c.script === want.ownScript);
   if (!ok) {

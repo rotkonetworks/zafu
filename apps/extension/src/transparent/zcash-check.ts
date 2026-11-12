@@ -83,3 +83,16 @@ export const afterShield = (c: TransparentCheck, spentZat: bigint): TransparentC
 /** the opt-in per-block refresh: on, and a tip newer than the one last checked at */
 export const newTip = (on: boolean, tip: number, last: TransparentCheck | null | undefined) =>
   on && tip > (last?.height ?? 0);
+
+/** the addresses holding coins, most first: each is shielded on its own */
+export const fundedFirst = (
+  utxos: readonly { address: string; valueZat: bigint }[],
+): { address: string; zat: bigint }[] => {
+  const by = new Map<string, bigint>();
+  for (const u of utxos) {
+    by.set(u.address, (by.get(u.address) ?? 0n) + u.valueZat);
+  }
+  return [...by]
+    .map(([address, zat]) => ({ address, zat }))
+    .sort((a, b) => (b.zat > a.zat ? 1 : b.zat < a.zat ? -1 : 0));
+};

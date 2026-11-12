@@ -30,6 +30,8 @@ import {
 import { ContactDiscoveryRow } from '../../popup/settings/settings-people';
 import { ExplorerLinksRow, ZcashNodeSheet } from '../../popup/settings/settings-zcash-network';
 import { useAutoLock, AUTO_LOCK_OPTIONS } from '../../popup/settings/use-auto-lock';
+import { readNetEgress, setDestinationOptIn } from '../../../net/ledger';
+import { NYM, nymChosen } from '../../../net/nym-bridge';
 
 // the three choices worth a tap before there is anything to lock; "off" and
 // the finer options stay in settings > security, same list, same storage
@@ -67,6 +69,16 @@ export const Personalize = () => {
   const { settings, setSetting } = useStore(privacySelector);
   const { minutes, set: setAutoLock } = useAutoLock();
   const zcashEndpoint = useStore(s => s.networks.networks.zcash.endpoint);
+  // nym is the person's choice, never a default: it hides the ip from nodes but is slower
+  const [nym, setNym] = useState(false);
+  useEffect(() => {
+    void readNetEgress().then(l => setNym(nymChosen(l.optIns)));
+  }, []);
+  const chooseNym = (on: boolean) => {
+    setTouched(true);
+    setNym(on);
+    void setDestinationOptIn(NYM, on ? 'allowed' : undefined);
+  };
   const setNetworkEndpoint = useStore(s => s.networks.setNetworkEndpoint);
 
   // one snapshot, taken once every value here has loaded for real (not the
@@ -117,6 +129,7 @@ export const Personalize = () => {
       void setSetting('openZcashLinks', s.openZcashLinks);
       void setSetting('openZafuLinks', s.openZafuLinks);
       void setSetting('keepPenumbraSyncing', s.keepPenumbraSyncing);
+      void setDestinationOptIn(NYM, undefined);
     }
     navigate(PagePath.ONBOARDING_SUCCESS, { state, replace: true });
   };
@@ -189,6 +202,26 @@ export const Personalize = () => {
             options={AUTO_LOCK_CHOICES}
             className='w-[180px]'
           />
+        </div>
+        <div className='flex flex-col gap-1.5 px-3.5 py-2.5'>
+          <div className='flex items-center justify-between gap-3'>
+            <span className='text-sm text-fg-high lowercase'>connect</span>
+            <Segmented
+              label='connect'
+              value={nym ? 'nym' : 'direct'}
+              onChange={v => chooseNym(v === 'nym')}
+              options={[
+                { value: 'direct', label: 'direct' },
+                { value: 'nym', label: 'over nym' },
+              ]}
+              className='w-[200px]'
+            />
+          </div>
+          <span className={cn('text-label', nym ? 'text-warn' : 'text-fg-dim')}>
+            {nym
+              ? 'nodes no longer see your ip · much slower, and sends fail more often'
+              : 'nodes see your ip · fast · nym can hide it, at a cost'}
+          </span>
         </div>
         <Row type='screen' label='more settings' onPress={() => setMoreOpen(true)} />
       </RowGroup>

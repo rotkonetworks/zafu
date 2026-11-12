@@ -124,6 +124,16 @@ module.exports = {
       await L.button(home, 'buy').click();
       await home.waitForTimeout(4000);
       const bp = z.ctx.pages().find(p => /buy\.html/.test(p.url()));
+      // prod links to Peer's own buy page with our referral; the in-wallet flow is beta-only
+      if (!/beta/.test(c.dist)) {
+        const peer = z.ctx.pages().find(p => /app\.peer\.xyz\/buy\//.test(p.url()));
+        const url = peer?.url() ?? '';
+        const ok = !bp && /\/zcash\//.test(url) && /referralCode=UOW41E/.test(url);
+        return {
+          status: ok ? 'pass' : 'fail',
+          note: `prod: home > buy opened ${url ? url.split('?')[0] : 'no peer tab'} (referralCode=UOW41E: ${/referralCode=UOW41E/.test(url)}; buy.html opened: ${!!bp})`,
+        };
+      }
       if (!bp) {
         return { status: 'fail', note: 'home > buy opened no buy.html' };
       }

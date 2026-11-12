@@ -18,6 +18,8 @@ const outcome = (inputs: EgressInputs, url: string, realm?: EgressRealm) => {
 };
 
 const ZCASH_ONLY: EgressInputs = { enabledNetworks: ['zcash'] };
+/** the person chose nym (onboarding or settings): it is never on by default */
+const NYM_ON: EgressInputs = { ...ZCASH_ONLY, netEgress: { optIns: { nym: 'allowed' } } };
 
 describe('a fresh zcash-only wallet', () => {
   it('reaches its light client and nothing else', () => {
@@ -274,18 +276,18 @@ describe('edges', () => {
   });
 
   // nym is on, but only the nym worker reaches it, and only when a send needs it
-  it('nothing is on with nothing enabled, but private contact discovery and nym', () => {
+  it('nothing is on with nothing enabled, but private contact discovery', () => {
     expect(outcome({}, 'https://zcash.rotko.net/x')).toBe('network-off');
     expect(
       describeEgress({})
         .filter(d => d.on)
         .map(d => d.id),
-    ).toEqual(['custom-networks', 'contact-discovery', 'nym']);
+    ).toEqual(['custom-networks', 'contact-discovery']);
     expect(
       describeEgress({ zidDiscovery: { enabled: false } })
         .filter(d => d.on)
         .map(d => d.id),
-    ).toEqual(['custom-networks', 'nym']);
+    ).toEqual(['custom-networks']);
   });
 
   it('names the destination on a refusal, so the ui can offer to allow it', () => {
@@ -460,7 +462,7 @@ describe('send over nym: the transport is chosen per request class', () => {
 
   it("a node on the person's own network sends direct: nym's exits cannot reach it", () => {
     const zidecar = (node: string) => ({
-      ...ZCASH_ONLY,
+      ...NYM_ON,
       networkEndpoints: { zcash: node },
       zcashBackends: { [node]: 'zidecar' },
     });
@@ -485,12 +487,12 @@ describe('send over nym: the transport is chosen per request class', () => {
       ['https://zcash.rotko.net/zidecar.v1.Zidecar/GetBlockTransactions', 'direct'],
     ];
     for (const [url, expected] of rows) {
-      expect([url, nymOf(ZCASH_ONLY, url)]).toEqual([url, expected]);
+      expect([url, nymOf(NYM_ON, url)]).toEqual([url, expected]);
     }
   });
 
   it('sends testnet transactions over nym too, and syncs testnet directly', () => {
-    const on = { ...ZCASH_ONLY, enabledNetworks: ['zcash', 'zcash-testnet'] };
+    const on = { ...NYM_ON, enabledNetworks: ['zcash', 'zcash-testnet'] };
     const rows: [string, string][] = [
       ['https://tzcash.rotko.net/zidecar.v1.Zidecar/SendTransaction', 'broadcast'],
       ['https://tzcash.rotko.net/zidecar.v1.Zidecar/GetTransaction', 'own-tx'],
@@ -503,14 +505,15 @@ describe('send over nym: the transport is chosen per request class', () => {
 
   it('keeps the FlyClient proof direct: it comes from your own node and names nothing', () => {
     const url = 'https://zcash.rotko.net/zidecar.v1.Zidecar/GetFlyClientProof';
-    expect(nymOf(ZCASH_ONLY, url)).toBe('direct');
+    expect(nymOf(NYM_ON, url)).toBe('direct');
     // an explicit row, not an accident of no row matching
-    const rule = compileEgress(ZCASH_ONLY).rules.find(r => r.path.endsWith('/GetFlyClientProof'));
+    const rule = compileEgress(NYM_ON).rules.find(r => r.path.endsWith('/GetFlyClientProof'));
     expect(rule).toMatchObject({ destination: 'zcash', allow: true, nym: undefined });
   });
 
-  it('is on by default and off when the person turns it off', () => {
-    expect(compileEgress(ZCASH_ONLY).nym).toBe(true);
+  it('is off unless the person chose it, and off when they turn it off', () => {
+    expect(compileEgress(ZCASH_ONLY).nym).toBe(false);
+    expect(compileEgress(NYM_ON).nym).toBe(true);
     expect(compileEgress(NYM_OFF).nym).toBe(false);
     expect(nymOf(NYM_OFF, 'https://zcash.rotko.net/zidecar.v1.Zidecar/SendTransaction')).toBe(
       'direct',
@@ -519,7 +522,7 @@ describe('send over nym: the transport is chosen per request class', () => {
 
   it('follows the configured endpoint and its path', () => {
     const inputs = {
-      ...ZCASH_ONLY,
+      ...NYM_ON,
       networkEndpoints: { zcash: 'https://node.example/lwd' },
       // a zidecar under a path: the node said what it is
       zcashBackends: { 'https://node.example/lwd': 'zidecar' },
@@ -530,7 +533,7 @@ describe('send over nym: the transport is chosen per request class', () => {
   });
 
   it('keeps a node on a port nym cannot exit to direct, rather than unreachable', () => {
-    const inputs = { ...ZCASH_ONLY, networkEndpoints: { zcash: 'https://node.example:9067' } };
+    const inputs = { ...NYM_ON, networkEndpoints: { zcash: 'https://node.example:9067' } };
     expect(nymOf(inputs, 'https://node.example:9067/zidecar.v1.Zidecar/SendTransaction')).toBe(
       'direct',
     );
@@ -538,14 +541,14 @@ describe('send over nym: the transport is chosen per request class', () => {
 
   it("gives nym's directory and gateways to the nym worker only, and nothing else to it", () => {
     for (const url of ['https://validator.nymtech.net/api/v1/x', 'wss://gw.example.org:9001/']) {
-      expect(outcome(ZCASH_ONLY, url, 'nym')).toBe('allow');
-      expect(outcome(ZCASH_ONLY, url, 'worker')).toBe('unknown');
-      expect(outcome(ZCASH_ONLY, url, 'popup')).toBe('unknown');
+      expect(outcome(NYM_ON, url, 'nym')).toBe('allow');
+      expect(outcome(NYM_ON, url, 'worker')).toBe('unknown');
+      expect(outcome(NYM_ON, url, 'popup')).toBe('unknown');
     }
     // its hardcoded fallbacks, and every other destination, are refused there
-    expect(outcome(ZCASH_ONLY, 'https://nymvpn.com/api/x', 'nym')).toBe('unknown');
-    expect(outcome(ZCASH_ONLY, 'wss://gw.example.org:9000/', 'nym')).toBe('unknown');
-    expect(outcome(ZCASH_ONLY, 'https://zcash.rotko.net/zidecar.v1.Zidecar/GetTip', 'nym')).toBe(
+    expect(outcome(NYM_ON, 'https://nymvpn.com/api/x', 'nym')).toBe('unknown');
+    expect(outcome(NYM_ON, 'wss://gw.example.org:9000/', 'nym')).toBe('unknown');
+    expect(outcome(NYM_ON, 'https://zcash.rotko.net/zidecar.v1.Zidecar/GetTip', 'nym')).toBe(
       'unknown',
     );
     // turned off, the nym worker reaches nothing
@@ -558,6 +561,7 @@ describe('send over nym: everything that ties you to a transaction or an address
     enabledNetworks: ['zcash', 'penumbra', 'noble'],
     netEgress: {
       optIns: {
+        nym: 'allowed',
         thorchain: 'allowed',
         midgard: 'allowed',
         'near-swap': 'allowed',
@@ -635,7 +639,7 @@ describe('send over nym: the choice per network', () => {
     const d = decide(
       {
         enabledNetworks: ['zcash', 'penumbra', 'noble'],
-        netEgress: { optIns: { thorchain: 'allowed', ...optIns } },
+        netEgress: { optIns: { nym: 'allowed', thorchain: 'allowed', ...optIns } },
       },
       url,
       'worker',
@@ -665,12 +669,16 @@ describe('send over nym: the choice per network', () => {
   });
 
   it('says which networks send over nym, and whether to keep it ready', () => {
-    const base = { enabledNetworks: ['zcash', 'penumbra', 'noble'] };
+    const base = {
+      enabledNetworks: ['zcash', 'penumbra', 'noble'],
+      netEgress: { optIns: { nym: 'allowed' as const } },
+    };
     expect(compileEgress(base)).toMatchObject({
       nymVia: ['zcash', 'penumbra', 'noble', 'contact-discovery'],
       nymKeepReady: true,
     });
     const optIns = {
+      nym: 'allowed',
       'nym:zcash': 'blocked',
       'nym:penumbra': 'allowed',
       'nym-ready': 'blocked',
@@ -681,14 +689,17 @@ describe('send over nym: the choice per network', () => {
     });
     // the relays go over nym with every other network, and can go direct on their own
     const relays = {
+      nym: 'allowed',
       'nym:messages': 'blocked',
       [PEOPLE_RELAY]: 'allowed',
       'multisig-relay': 'allowed',
     } as const;
     expect(compileEgress(base).nymVia).not.toContain(PEOPLE_RELAY);
     expect(
-      compileEgress({ ...base, netEgress: { optIns: { ...relays, 'nym:messages': 'allowed' } } })
-        .nymVia,
+      compileEgress({
+        ...base,
+        netEgress: { optIns: { nym: 'allowed', ...relays, 'nym:messages': 'allowed' } },
+      }).nymVia,
     ).toEqual(expect.arrayContaining([PEOPLE_RELAY, 'multisig-relay', 'contact-discovery']));
     expect(compileEgress({ ...base, netEgress: { optIns: relays } }).nymVia).toEqual([
       'zcash',
@@ -701,8 +712,8 @@ describe('send over nym: the choice per network', () => {
   });
 
   it('a network turned off does not stop nym itself, the master does', () => {
-    const optIns = { 'nym:zcash': 'blocked' as const };
-    expect(compileEgress({ ...ZCASH_ONLY, netEgress: { optIns } }).nym).toBe(true);
+    const optIns = { nym: 'allowed' as const, 'nym:zcash': 'blocked' as const };
+    expect(compileEgress({ ...NYM_ON, netEgress: { optIns } }).nym).toBe(true);
   });
 });
 
@@ -715,8 +726,8 @@ describe("the nym row says what nym can carry for the person's own node", () => 
   });
 
   it('the shipped zidecar goes over nym', () => {
-    expect(nymGroupView(ZCASH_ONLY, zcash)).toBe('nym');
-    expect(compileEgress(ZCASH_ONLY).nymVia).toContain('zcash');
+    expect(nymGroupView(NYM_ON, zcash)).toBe('nym');
+    expect(compileEgress(NYM_ON).nymVia).toContain('zcash');
   });
 
   it("a node on a port nym's exits do not open is direct, and says so", () => {
@@ -747,7 +758,10 @@ describe("the nym row says what nym can carry for the person's own node", () => 
 
   it("the person's own choice of direct reads direct", () => {
     expect(
-      nymGroupView({ ...ZCASH_ONLY, netEgress: { optIns: { 'nym:zcash': 'blocked' } } }, zcash),
+      nymGroupView(
+        { ...NYM_ON, netEgress: { optIns: { nym: 'allowed', 'nym:zcash': 'blocked' } } },
+        zcash,
+      ),
     ).toBe('direct');
   });
 });
@@ -756,12 +770,19 @@ describe('the injective gas sponsor', () => {
   const sponsor = (i: EgressInputs) => describeEgress(i).find(d => d.id === 'sponsor');
   const INJ: EgressInputs = { enabledNetworks: ['zcash', 'injective'] };
 
-  it('needs no ask while cosmos requests go over nym, as they do by default', () => {
-    expect(sponsor(INJ)).toMatchObject({ on: true, why: 'setting' });
+  it('needs no ask while cosmos requests go over nym, once the person chose nym', () => {
+    expect(sponsor({ ...INJ, netEgress: { optIns: { nym: 'allowed' } } })).toMatchObject({
+      on: true,
+      why: 'setting',
+    });
+    // nym is never on by default: without it the sponsor asks first
+    expect(sponsor(INJ)?.on).toBe(false);
   });
 
   it('asks first when cosmos goes direct, or nym is off', () => {
-    expect(sponsor({ ...INJ, netEgress: { optIns: { 'nym:cosmos': 'blocked' } } })?.on).toBe(false);
+    expect(
+      sponsor({ ...INJ, netEgress: { optIns: { nym: 'allowed', 'nym:cosmos': 'blocked' } } })?.on,
+    ).toBe(false);
     expect(sponsor({ ...INJ, netEgress: { optIns: { nym: 'blocked' } } })?.on).toBe(false);
   });
 

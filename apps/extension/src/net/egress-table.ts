@@ -8,7 +8,7 @@
  * into every worker.
  */
 
-import { hostOf, isLocalDeviceHost } from './destination';
+import { hostOf, isLocalDeviceHost, isPrivateNetworkHost } from './destination';
 
 /** Where the request is being made from. */
 export type EgressRealm =
@@ -84,6 +84,12 @@ export interface EgressTable {
   nym?: boolean;
   /** the destinations that send over nym right now */
   nymVia?: string[];
+  /**
+   * the person's proxy is on but Chrome isn't applying zafu's PAC (the
+   * permission was taken back, or another extension controls the proxy):
+   * zafu's traffic is refused rather than sent direct
+   */
+  proxyDown?: boolean;
   /** keep the tunnel up while unlocked, rather than on demand */
   nymKeepReady?: boolean;
 }
@@ -96,7 +102,15 @@ export type EgressDecision =
       nym?: RequestClass;
       nymBody?: EgressRule['nymBody'];
     }
-  | { allow: false; host: string; destination?: string; reason: EgressReason; nym?: RequestClass };
+  | {
+      allow: false;
+      host: string;
+      destination?: string;
+      reason: EgressReason;
+      nym?: RequestClass;
+      /** the person's proxy, not nym, is what is down */
+      proxy?: true;
+    };
 
 const pathOf = (url: string): string => {
   try {
@@ -184,6 +198,10 @@ export const decideEgress = (
     return { allow: false, host, destination, reason: 'blocked' };
   }
   if (override === 'allowed' || rule?.allow) {
+    // fail closed: with the proxy chosen but not applied, nothing goes direct
+    if (table.proxyDown && !isPrivateNetworkHost(host)) {
+      return { allow: false, host, destination, reason: 'transport-down', proxy: true };
+    }
     const { nym, nymBody } = rule ?? {};
     return { allow: true, host, destination, ...(nym && { nym }), ...(nymBody && { nymBody }) };
   }

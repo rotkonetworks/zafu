@@ -19,7 +19,13 @@ vi.mock('@repo/storage-chrome/local', () => ({
 }));
 
 import { DEFAULT_PRIVACY_SETTINGS } from './privacy';
-import { exportSettings, importBirthdays, importPrefs, restoredPrivacy } from './settings-backup';
+import {
+  exportSettings,
+  importBirthdays,
+  importPrefs,
+  importTIndices,
+  restoredPrivacy,
+} from './settings-backup';
 
 describe('settings backup', () => {
   it('carries privacy without retired keys, and the stored preferences', async () => {
@@ -200,5 +206,35 @@ describe('settings backup', () => {
     expect(await chrome.storage.local.get(['zcashBirthday_other', 'zcashBirthday_new2'])).toEqual(
       {},
     );
+  });
+
+  it("keeps each pocket's fresh-address counter, and a restore never lowers one", async () => {
+    await chrome.storage.local.set({
+      zcashTransparentIndex: 23,
+      'zcashTransparentIndex#2': 41,
+      zcashTransparentIndexJunk: 9,
+    });
+    const out = await exportSettings(DEFAULT_PRIVACY_SETTINGS);
+    expect(out.tIndices).toEqual({ zcashTransparentIndex: 23, 'zcashTransparentIndex#2': 41 });
+    await chrome.storage.local.remove(['zcashTransparentIndex', 'zcashTransparentIndex#2']);
+    await chrome.storage.local.set({ 'zcashTransparentIndex#2': 50 });
+    await importTIndices({
+      ...(JSON.parse(JSON.stringify(out.tIndices)) as Record<string, number>),
+      'zcashTransparentIndex#3': -1,
+      other: 7,
+    });
+    expect(
+      await chrome.storage.local.get([
+        'zcashTransparentIndex',
+        'zcashTransparentIndex#2',
+        'zcashTransparentIndex#3',
+        'other',
+      ]),
+    ).toEqual({ zcashTransparentIndex: 23, 'zcashTransparentIndex#2': 50 });
+    await chrome.storage.local.remove([
+      'zcashTransparentIndex',
+      'zcashTransparentIndex#2',
+      'zcashTransparentIndexJunk',
+    ]);
   });
 });

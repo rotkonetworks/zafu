@@ -204,6 +204,8 @@ module.exports = {
       await c.shot(pg, 'lwd-node');
       const t = L.flat(await L.text(pg));
       const nym = await z.open('/settings/network/connections', 'popup.html', 1500);
+      // nym is opt-in: the per-network rows open once it is chosen
+      await L.toggle(nym, 'send over nym', true);
       await nym
         .getByRole('button', { name: /^nym, per network/ })
         .first()

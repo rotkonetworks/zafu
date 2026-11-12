@@ -66,7 +66,8 @@ export function Row(props: RowProps) {
                 onExplain(label);
               }}
               aria-label={`explain ${label}`}
-              className='inline-flex size-4 shrink-0 items-center justify-center border border-surface-border text-[10px] text-fg-dim'
+              // a row that is off still explains itself
+              className='pointer-events-auto inline-flex size-4 shrink-0 items-center justify-center border border-surface-border text-[10px] text-fg-dim'
             >
               ?
             </button>
@@ -110,10 +111,14 @@ export function Row(props: RowProps) {
   // also be a <button> (no nested interactive elements) - a div with
   // button semantics carries the row's own press instead.
   if (onExplain) {
+    // a row that is off is not a button, so its "?" stays one
+    if (disabled) {
+      return <div className={rowClass}>{content}</div>;
+    }
     return (
       <div
         role='button'
-        tabIndex={disabled ? undefined : 0}
+        tabIndex={0}
         onClick={props.onPress}
         onKeyDown={e => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -121,7 +126,6 @@ export function Row(props: RowProps) {
             props.onPress();
           }
         }}
-        aria-disabled={disabled}
         data-preload={preload}
         className={rowClass}
       >

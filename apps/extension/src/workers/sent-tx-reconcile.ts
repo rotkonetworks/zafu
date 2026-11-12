@@ -62,6 +62,12 @@ export interface SentTxRecord {
    * payment, which `recipient` / `amount` / `memo` describe. Zatoshi strings.
    */
   payments?: SentPayment[];
+  /**
+   * The move that funded this payment's fresh transparent address (a tex
+   * paid from the shielded pool, a thorchain deposit): one payment in two
+   * transactions, shown as one row with both fees.
+   */
+  moveTxid?: string;
 }
 
 /**
@@ -111,6 +117,8 @@ export interface HistoryTx {
   expiryHeight?: number;
   /** every payment, when the transaction paid several recipients */
   payments?: SentPayment[];
+  /** the move this payment went through first, folded into this row */
+  moveTxid?: string;
 }
 
 /**
@@ -215,8 +223,22 @@ export function reconcileSentTxs({
     }
   }
 
+  // a payment that went through a fresh address carries its move: the move is
+  // its first step, not a payment of its own, so it is folded into that row
+  const moveOf = new Map<string, SentTxRecord>();
+  for (const rec of byTxid.values()) {
+    const move = rec.moveTxid ? byTxid.get(rec.moveTxid) : undefined;
+    if (move) {
+      moveOf.set(rec.txid, move);
+    }
+  }
+  const folded = new Set([...moveOf.values()].map(m => m.txid));
+
   for (const rec of byTxid.values()) {
     claimed.add(rec.txid);
+    if (folded.has(rec.txid)) {
+      continue;
+    }
     const chain = chainById.get(rec.txid);
 
     // the chain's word first, then what we already wrote down about it
@@ -227,6 +249,8 @@ export function reconcileSentTxs({
         : undefined;
 
     const type = rec.kind === 'shield' ? 'shield' : 'send';
+    const move = moveOf.get(rec.txid);
+    const fee = move ? (toZat(rec.fee) + toZat(move.fee)).toString() : rec.fee;
     const base = {
       id: rec.txid,
       type,
@@ -234,14 +258,15 @@ export function reconcileSentTxs({
       // not part of it - it never left. We know both numbers exactly because
       // we wrote them down at broadcast, which is why the local record beats
       // the scan-derived figure outright rather than merely filling gaps.
-      amount: (toZat(rec.amount) + toZat(rec.fee)).toString(),
+      amount: (toZat(rec.amount) + toZat(fee)).toString(),
       recipientAmount: rec.amount,
       asset: chain?.asset ?? asset,
       kind: rec.kind,
       recipient: rec.recipient,
       memo: rec.memo,
       ...(rec.payments && rec.payments.length > 1 ? { payments: rec.payments } : {}),
-      fee: rec.fee,
+      fee,
+      ...(move ? { moveTxid: move.txid } : {}),
       sentAt: rec.sentAt,
       expiryHeight: rec.expiryHeight,
     };
@@ -267,7 +292,9 @@ export function reconcileSentTxs({
     }
 
     txs.push({ ...base, height: 0, status: 'failed' });
-    if (scannedHeight > expiry + EXPIRY_GRACE_BLOCKS) {
+    // a send only transparent coins paid is never seen by the scan: its record
+    // is the one place the payment is told, so the scan's word never deletes it
+    if (scannedHeight > expiry + EXPIRY_GRACE_BLOCKS && rec.pool !== 'transparent') {
       prune.push(rec.txid);
     }
   }

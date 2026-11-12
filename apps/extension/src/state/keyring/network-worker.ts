@@ -1225,6 +1225,8 @@ export interface HistoryEntry {
   memo?: string;
   fee?: string;
   sentAt?: number;
+  /** the unshield that funded a fresh-address payment, folded into this row */
+  moveTxid?: string;
   expiryHeight?: number;
 }
 
@@ -1819,6 +1821,8 @@ export const buildUnsignedShieldInWorker = async (
   cancelKey?: string,
   /** zigner signs it: also return the PCZT as a `ur:zigner-module` request */
   zigner = false,
+  /** shield only the coins on these addresses; position in `tAddresses` still signs */
+  only?: string[],
 ): Promise<ShieldUnsignedResult> => {
   return callWorker(
     network,
@@ -1831,6 +1835,7 @@ export const buildUnsignedShieldInWorker = async (
       ...(ledger && { ...ledger, ledgerOvk: true }),
       cancelKey,
       zigner,
+      only,
     },
     walletId,
   );

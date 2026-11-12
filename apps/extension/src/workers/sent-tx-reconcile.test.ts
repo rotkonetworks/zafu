@@ -344,3 +344,56 @@ describe('a pending shield', () => {
     expect(pendingShieldZat(rec(), none, 100)).toBe(0n);
   });
 });
+
+describe('a payment through a fresh address', () => {
+  // mainnet, 2026-11-08: the move (shielded -> fresh t1) and the tex payment it funded
+  const MOVE = '0efd9b9d13d563c7aaeea68e7b5170f29b7bcc7d2e2cae2de3c59e26e2c6bf61';
+  const PAY = 'e62da7a4281993326214d49a26523288acda9c7d412110ae71b18d5d51e4cf34';
+  const base = { walletId: 'w', memo: '', sentAt: 1 };
+  const move: SentTxRecord = {
+    ...base,
+    txid: MOVE,
+    amount: '110010000',
+    fee: '10000',
+    recipient: 't1WRSJmdFreshxxxxxxxxxxxxxxxxxHayW',
+    pool: 'ironwood',
+    kind: 'send',
+  };
+  const pay: SentTxRecord = {
+    ...base,
+    txid: PAY,
+    amount: '110000000',
+    fee: '10000',
+    recipient: 'tex1glfs7yuku4mx57vxs9qerv0307lazcpef8s6h3',
+    pool: 'transparent',
+    kind: 'send',
+    moveTxid: MOVE,
+    sentAt: 2,
+  };
+
+  it('shows one row: what the recipient got, both fees, nothing counted twice', () => {
+    const { txs } = reconcileSentTxs({
+      chainTxs: [
+        { id: MOVE, height: 3_549_950, type: 'send', amount: '0', asset: 'ZEC' },
+        { id: PAY, height: 3_549_956, type: 'send', amount: '0', asset: 'ZEC' },
+      ],
+      sent: [move, pay],
+      scannedHeight: 3_550_000,
+    });
+    expect(txs).toHaveLength(1);
+    expect(txs[0]).toMatchObject({
+      id: PAY,
+      status: 'confirmed',
+      recipient: pay.recipient,
+      recipientAmount: '110000000',
+      fee: '20000',
+      amount: '110020000',
+      moveTxid: MOVE,
+    });
+  });
+
+  it('before the payment is recorded, the move still shows on its own', () => {
+    const { txs } = reconcileSentTxs({ chainTxs: [], sent: [move], scannedHeight: 0 });
+    expect(txs.map(t => t.id)).toEqual([MOVE]);
+  });
+});
