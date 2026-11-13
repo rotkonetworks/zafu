@@ -9,11 +9,7 @@ import { NETWORK_BLURB } from '../../../components/network-sheet';
 import { getNetwork, getSubnetworks, getTopLevelNetworks } from '../../../config/networks';
 import { DEFAULT_RELAY_URL } from '../../../config/multisig-relay';
 import { relayHost } from '../../../config/people-relay';
-import {
-  HARDWARE_WALLET_ENABLED,
-  IS_BETA_BUILD,
-  LEDGER_TRANSPARENT_ENABLED,
-} from '../../../config/feature-flags';
+import { IS_BETA_BUILD, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
 import { openPageInTab } from '../../../utils/popup-detection';
 import { PagePath } from '../../page/paths';
 import { usePopupNav } from '../../../utils/navigate';
@@ -150,7 +146,7 @@ export const SettingsDevicesHome = () => {
             preload={PopupPath.SETTINGS_CONNECT_DEVICE}
             onPress={() => navigate(PopupPath.SETTINGS_CONNECT_DEVICE)}
           />
-          {zcashOn && (HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED) && (
+          {zcashOn && LEDGER_TRANSPARENT_ENABLED && (
             <Row
               type='screen'
               label='ledger'

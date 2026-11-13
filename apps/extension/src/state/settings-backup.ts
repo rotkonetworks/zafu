@@ -71,6 +71,7 @@ const PREFS = {
     return known?.length ? known : undefined;
   },
   keplrCompat: bool,
+  betaFeatures: bool,
 } satisfies Record<string, Parse>;
 
 type PrefKey = keyof typeof PREFS;

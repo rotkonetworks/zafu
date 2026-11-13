@@ -117,13 +117,11 @@ export const nu63ActivationHeight = (mainnet: boolean): number =>
 export const PASSWORD_GENERATOR = false;
 
 /**
- * Ledger SHIELDED support through the Ledger Zcash app (3.9.4+): connect
- * exports the account's UFVK, sends and shielding are signed on the device
- * (src/ledger/zcash-app). On in the BETA build only, until a physical device
- * has signed a real send and a multi-round shield. The beta build differs from
- * prod only by its manifest, so this reads the manifest name once.
+ * The beta build, by its manifest name (it differs from prod only there). It
+ * is the default for the beta features switch (config/beta), which turns on
+ * Ledger shielded signing and the in-wallet buy in either build.
  */
-export const HARDWARE_WALLET_ENABLED = (() => {
+export const IS_BETA_BUILD = (() => {
   try {
     return /\bbeta\b/i.test(chrome.runtime.getManifest().name);
   } catch {
@@ -131,12 +129,9 @@ export const HARDWARE_WALLET_ENABLED = (() => {
   }
 })();
 
-/** the beta build, by its manifest name, as HARDWARE_WALLET_ENABLED reads it */
-export const IS_BETA_BUILD = HARDWARE_WALLET_ENABLED;
-
 /**
  * Ledger TRANSPARENT support via the legacy Bitcoin-app path (@ledgerhq/hw-app-btc),
- * separate from HARDWARE_WALLET_ENABLED above. The Bitcoin-app path signs
+ * separate from the beta Ledger shielded path (config/beta). The Bitcoin-app path signs
  * transparent Zcash on mainnet TODAY - it is how a Ledger holder can send/receive
  * t-address ZEC in zafu and migrate over.
  *

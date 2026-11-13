@@ -3,7 +3,7 @@
 import { Button } from '@repo/ui/components/ui/button';
 import { usePageNav } from '../../../utils/navigate';
 import { PagePath } from '../paths';
-import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import { LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
 
 const BRING = [
   {
@@ -25,7 +25,7 @@ const BRING = [
     label: 'ledger',
     hint: 'plug in over usb',
     to: PagePath.CONNECT_LEDGER,
-    shown: HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED,
+    shown: LEDGER_TRANSPARENT_ENABLED,
   },
   {
     icon: 'i-lucide-eye text-fg-muted',

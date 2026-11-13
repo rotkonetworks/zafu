@@ -39,7 +39,7 @@ import { ZignerRoundAction, ZignerRoundView } from '../zigner-round-view';
 import { createZignerRound, isZignerDeclined } from '../../signing/zigner-round';
 import { Sensitive } from '../sensitive';
 import { HOME_LOOK } from '../../routes/popup/home/look';
-import { HARDWARE_WALLET_ENABLED } from '../../config/feature-flags';
+import { useBetaFeatures } from '../../config/beta';
 import { walletKind } from '../../signing/wallet-kind';
 import { isPopup } from '../../utils/popup-detection';
 import type { LedgerSigningPhase, LedgerZcashDevice } from '../../ledger/zcash-app/contract';
@@ -336,8 +336,9 @@ export const ShieldTransparent = ({
     isMainnet,
     zidecarUrl,
   });
+  const beta = useBetaFeatures();
   const method =
-    HARDWARE_WALLET_ENABLED &&
+    beta &&
     selectedKeyInfo &&
     walletKind(selectedKeyInfo, {
       transparentAddress: selectedKeyInfo.insensitive['transparentAddress'] as string | undefined,

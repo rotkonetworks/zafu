@@ -259,6 +259,12 @@ export const SETTINGS_EXPLAIN = {
     on: 'those sites can connect to zafu; takes effect on the next page load',
     off: 'those sites see no wallet from zafu; a real keplr extension, if installed, is left untouched',
   },
+  'about.betaFeatures': {
+    blurb:
+      'what is built and tested here but not yet proven on real devices or with real sellers: ledger shielded signing and the in-wallet buy.',
+    on: 'they show where they belong; on by default in the beta build',
+    off: 'ledger signs transparent only, and buy opens peer in a tab',
+  },
 } as const satisfies Record<string, Explain>;
 
 /** a table key - a typo here fails tsc instead of silently dropping the "?" */
