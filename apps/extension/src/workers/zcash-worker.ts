@@ -122,6 +122,7 @@ import { DEPOSIT_OUTLIVES_MOVE } from '../signing/move-and-deposit';
 import { assertProveRequest, type ProveRequest } from '../shared/prove-guard';
 import { issueWorkerKey, openCall, type SealedCall, type SealedVault } from '../shared/vault-seal';
 import {
+  heldByExpired,
   parseExpiryHeight,
   pendingShieldZat,
   reconcileSentTxs,
@@ -1991,9 +1992,24 @@ const applyReconciliation = async (
     return;
   }
   try {
+    // the notes a pruned send held back are spendable again (heldByExpired)
+    const freed = prune.length
+      ? heldByExpired(
+          await idbGetAllByIndex<DecryptedNote & { walletId: string }>(
+            'notes',
+            'byWallet',
+            walletId,
+          ),
+          prune,
+        )
+      : [];
     const db = await getDb();
-    const tx = db.transaction('sent', 'readwrite');
+    const tx = db.transaction(['sent', 'notes', 'spent'], 'readwrite');
     const store = tx.objectStore('sent');
+    for (const note of freed) {
+      tx.objectStore('notes').put({ ...note, spent_by_txid: undefined });
+      tx.objectStore('spent').delete([walletId, note.nullifier]);
+    }
     for (const { txid, height } of confirm) {
       const req = store.get([walletId, txid]);
       req.onsuccess = () => {
@@ -2007,6 +2023,19 @@ const applyReconciliation = async (
       store.delete([walletId, txid]);
     }
     await txComplete(tx);
+    if (freed.length) {
+      const state = walletStates.get(walletId);
+      const nfs = new Set(freed.map(n => n.nullifier));
+      for (const n of state?.notes ?? []) {
+        if (nfs.has(n.nullifier)) {
+          n.spent_by_txid = undefined;
+        }
+      }
+      nfs.forEach(nf => state?.spentNullifiers.delete(nf));
+      console.log(
+        `[zcash-worker] ${freed.length} note(s) an expired send held back are spendable again`,
+      );
+    }
   } catch (e) {
     console.warn(`[zcash-worker] could not persist sent-tx reconciliation: ${errText(e)}`);
   }
