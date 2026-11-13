@@ -257,6 +257,14 @@ export const SignApproval = () => {
             {statement && (
               <div className='border border-border-soft p-3 text-xs text-fg'>{statement}</div>
             )}
+            {challengeHex && (
+              <div className='border border-border-soft p-3'>
+                <p className='kicker mb-1'>challenge</p>
+                <Clipped head={16} tail={8} label='challenge' className='tabular text-xs text-fg'>
+                  {challengeHex}
+                </Clipped>
+              </div>
+            )}
             {previewAddress && (
               <div className='border border-border-soft p-3'>
                 <p className='kicker mb-1'>
