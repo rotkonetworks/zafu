@@ -73,7 +73,7 @@ export const applyProxy = async (): Promise<void> => {
   // a login with no hook to give it: the proxy would refuse everything, unexplained
   const loginUnanswerable =
     p.kind !== 'socks5' &&
-    !chrome.webRequest?.onAuthRequired &&
+    !listenForLogin() &&
     (await chrome.storage.local.get(PROXY_LOGIN_KEY))[PROXY_LOGIN_KEY] !== undefined;
   await noteApplied(!held ? 'other-extension' : loginUnanswerable ? 'no-permission' : 'ok');
   if (held) {
@@ -133,10 +133,24 @@ const answerLogin = (
   })();
 };
 
-const listenForLogin = () => {
+/**
+ * Listen for the proxy's login, and say whether zafu is listening. `webRequest`
+ * alone (a Peer buy grants it) exposes the event, but a blocking listener also
+ * needs `webRequestAuthProvider`, and Chrome throws without it. That throw ran
+ * at the worker's top level and stopped everything after it, passkeys included.
+ */
+const listenForLogin = (): boolean => {
   const ev = chrome.webRequest?.onAuthRequired;
-  if (ev && !ev.hasListener(answerLogin)) {
-    ev.addListener(answerLogin, { urls: ['<all_urls>'] }, ['asyncBlocking']);
+  if (!ev) {
+    return false;
+  }
+  try {
+    if (!ev.hasListener(answerLogin)) {
+      ev.addListener(answerLogin, { urls: ['<all_urls>'] }, ['asyncBlocking']);
+    }
+    return ev.hasListener(answerLogin);
+  } catch {
+    return false;
   }
 };
 
