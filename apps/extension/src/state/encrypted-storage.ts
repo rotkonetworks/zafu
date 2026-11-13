@@ -197,6 +197,8 @@ const ENCRYPTED_KEYS = new Set<string>([
   'netContacted',
   // the person's own notes on transactions ("rent from alice")
   'txNotes',
+  // the person's own zcash.me api key (the rest of its config stays plain for the egress policy)
+  'zcashMeApiKey',
   // the person's own proxy login (the address stays plain so the pac holds while locked)
   'netProxyLogin',
 ]);
