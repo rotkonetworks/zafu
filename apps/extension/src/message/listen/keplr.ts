@@ -55,7 +55,8 @@ interface Decision {
  */
 async function openApproval(req: KeplrApprovalRequest): Promise<Decision> {
   const { throwIfNeedsLogin } = await import('../../needs-login');
-  await throwIfNeedsLogin();
+  // the site waits after a dismissed unlock, as for every other prompt
+  await throwIfNeedsLogin(req.origin);
   await chrome.storage.session.set({ [keplrApprovalKey(req.requestId)]: req });
   // the closed-window sweep answers { cancelled: true }, which is no approval
   const decision = new Promise<Decision>(resolve =>
