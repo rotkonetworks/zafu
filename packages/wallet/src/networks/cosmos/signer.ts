@@ -20,6 +20,7 @@ import {
   SigningStargateClient,
   StargateClient,
   GasPrice,
+  TimeoutError,
   type DeliverTxResponse,
 } from '@cosmjs/stargate';
 import { stringToPath } from '@cosmjs/crypto';
@@ -198,7 +199,32 @@ export async function createSigningClient(
   return { client, address: account.address };
 }
 
-/** sign and broadcast a transaction */
+/**
+ * cosmjs throws `TimeoutError` when the node took the transaction but no block
+ * showed it in time: it was sent, and may still land. Read as an error the
+ * screen offered "try again", which signs a second payment with the next
+ * sequence. It is a submitted transaction instead (height 0: not in a block
+ * yet), followed up by its hash like any other.
+ */
+export const submittedOnTimeout = (e: unknown): DeliverTxResponse => {
+  // cosmjs leaves `name` as "Error": the class is what says it was submitted
+  if (!(e instanceof TimeoutError) || !e.txId) {
+    throw e;
+  }
+  const txId = e.txId;
+  return {
+    code: 0,
+    height: 0,
+    txIndex: 0,
+    events: [],
+    msgResponses: [],
+    gasUsed: 0n,
+    gasWanted: 0n,
+    transactionHash: txId,
+  };
+};
+
+/** sign and broadcast a transaction; a timeout after submitting is `height: 0`, not an error */
 export async function signAndBroadcast(
   chainId: CosmosChainId,
   mnemonic: string,
@@ -210,7 +236,7 @@ export async function signAndBroadcast(
   const { client, address } = await createSigningClient(chainId, mnemonic, accountIndex);
 
   try {
-    return await client.signAndBroadcast(address, messages, fee, memo);
+    return await client.signAndBroadcast(address, messages, fee, memo).catch(submittedOnTimeout);
   } finally {
     client.disconnect();
   }
