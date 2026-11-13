@@ -126,38 +126,54 @@ describe('installEgress', () => {
     expect(await (await fetch('https://zcash.rotko.net/x')).text()).toBe('secret');
   });
 
-  it('follows a redirect within a chosen node host, never to another host', async () => {
+  it('never follows a redirect from a destination that carries your addresses', async () => {
     const { isEgressBlocked } = await install({
       rules: [
-        // a node the person entered with a path: the rule owns only that prefix
-        {
-          host: 'node.example',
-          path: '/penumbra/',
-          destination: 'penumbra',
-          allow: true,
-          node: true,
-        },
-        { host: 'feed.example', path: '/a/', destination: 'prices', allow: true },
+        { host: 'node.example', path: '', destination: 'zcash', allow: true, noRedirect: true },
+        { host: 'feed.example', path: '', destination: 'registry', allow: true },
       ],
       hosts: {},
       adhoc: false,
     });
-    const redirected = (url: string) => {
-      const r = new Response('ok');
-      Object.defineProperty(r, 'redirected', { value: true });
-      Object.defineProperty(r, 'url', { value: url });
+    const opaque = () => {
+      const r = new Response(null);
+      Object.defineProperty(r, 'type', { value: 'opaqueredirect' });
       return r;
     };
-    nativeFetch.mockResolvedValueOnce(redirected('https://node.example/v2/penumbra/'));
-    expect(await (await fetch('https://node.example/penumbra/x')).text()).toBe('ok');
-    // another host is still decided as itself
-    nativeFetch.mockResolvedValueOnce(redirected('https://www.node.example/penumbra/x'));
-    const err = await fetch('https://node.example/penumbra/x').catch((e: unknown) => e);
+    // a utxo lookup the node answers with a 307: its body goes nowhere else
+    nativeFetch.mockResolvedValueOnce(opaque());
+    const body = new Uint8Array([0, 0, 0, 0, 1, 7]);
+    const err = await fetch(
+      'https://node.example/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetAddressUtxos',
+      {
+        method: 'POST',
+        body,
+      },
+    ).catch((e: unknown) => e);
     expect(isEgressBlocked(err)).toBe(true);
-    // a service that is not a chain node gets no such leeway
-    nativeFetch.mockResolvedValueOnce(redirected('https://feed.example/b/'));
-    const feed = await fetch('https://feed.example/a/x').catch((e: unknown) => e);
-    expect(isEgressBlocked(feed)).toBe(true);
+    expect((err as Error).message).toBe(
+      'zafu would not let node.example redirect this · nothing went elsewhere',
+    );
+    expect((err as { refusal: unknown }).refusal).toEqual({
+      allow: false,
+      host: 'node.example',
+      destination: 'zcash',
+      reason: 'redirect',
+    });
+    expect(nativeFetch.mock.calls[0]![1]).toEqual({ method: 'POST', body, redirect: 'manual' });
+
+    // an ordinary answer passes as before, grpc-web included
+    nativeFetch.mockResolvedValueOnce(new Response('frames'));
+    expect(await (await fetch('https://node.example/x', { method: 'POST' })).text()).toBe('frames');
+
+    // a destination that names no one keeps following, judged where it lands
+    nativeFetch.mockResolvedValueOnce(new Response('meta'));
+    await fetch('https://feed.example/a');
+    expect(nativeFetch.mock.calls[2]![1]).toBeUndefined();
+
+    // an xhr cannot refuse a redirect, so it never goes to such a destination
+    const xhr = new XMLHttpRequest();
+    expect(() => xhr.open('POST', 'https://node.example/x')).toThrow(/would not let node.example/);
   });
 
   it('refuses a socket, an event stream and an xhr in their constructors', async () => {
