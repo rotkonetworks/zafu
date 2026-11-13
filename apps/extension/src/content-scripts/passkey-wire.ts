@@ -112,7 +112,7 @@ export const passkeyMessage = (
 };
 
 /** the refusal codes a page may see; anything else becomes a bare refusal */
-const PAGE_CODES = new Set(['failed', 'cancelled', 'denied', 'exists']);
+const PAGE_CODES = new Set(['failed', 'cancelled', 'denied', 'exists', 'busy']);
 
 /**
  * What the page gets back: on success only the credential fields, on refusal
@@ -169,12 +169,16 @@ export const recentHand = (window_ = PASSKEY_ASK_WINDOW_MS) => {
   };
 };
 
+/** the longest a page waits after repeated "not now" */
+export const PASSKEY_COOLDOWN_MAX_MS = 5 * 60_000;
+
 /**
  * After "not now" or a closed window a page waits before zafu shows it another
- * passkey screen: 30 s, then twice as long each time, back to 30 s after a
- * sign-in goes through. Kept in memory by the bridge, per page.
+ * passkey screen: 30 s, then twice as long each time up to five minutes, back
+ * to 30 s after a sign-in goes through. Kept in memory by the bridge, per page.
+ * A click the browser still counts as live overrides it (see the bridge).
  */
-export const promptCooldown = (base = 30_000) => {
+export const promptCooldown = (base = 30_000, max = PASSKEY_COOLDOWN_MAX_MS) => {
   let until = 0;
   let wait = base;
   return {
@@ -183,7 +187,7 @@ export const promptCooldown = (base = 30_000) => {
       const r = res as { success?: unknown; code?: unknown } | undefined;
       if (r?.code === 'denied' || r?.code === 'cancelled') {
         until = now + wait;
-        wait *= 2;
+        wait = Math.min(wait * 2, max);
       } else if (r?.success === true) {
         until = 0;
         wait = base;

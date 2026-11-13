@@ -68,7 +68,9 @@ window.addEventListener('message', (ev: MessageEvent) => {
   // is waiting out a "not now"; activation is per frame, so this world sees
   // the page's own click
   const now = Date.now();
-  const asked = hand.asked(now, navigator.userActivation?.isActive) && !cooldown.quiet(now);
+  // a click the browser still counts as live is a fresh ask, even right after "not now"
+  const live = !!navigator.userActivation?.isActive;
+  const asked = hand.asked(now, live) && (live || !cooldown.quiet(now));
   // orphaned content script (extension reloaded in an open tab) - fail cleanly
   if (!message || !asked || !chrome.runtime?.id || chrome.runtime.id === 'invalid') {
     respond(undefined);
