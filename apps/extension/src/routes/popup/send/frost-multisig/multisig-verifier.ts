@@ -32,7 +32,6 @@ export type Verdict =
       reasons: string[];
       sendZat: bigint;
       changeZat: bigint;
-      sighashLie?: boolean;
     }
   | { kind: 'pending' }
   /** cannot verify - hard block, not overridable. */
@@ -100,11 +99,9 @@ export function computeVerdict(args: {
     const expected = parsed.computed_sighash_hex.toLowerCase();
     const claimed = claimedSighashHex.toLowerCase();
     if (expected !== claimed) {
+      // a share over bytes nobody here inspected: never overridable
       return {
-        kind: 'mismatch',
-        sighashLie: true,
-        sendZat,
-        changeZat,
+        kind: 'refuse',
         reasons: [
           'claimed sighash does not match the unsigned tx bytes - host is asking you to sign a different tx than the one shown',
           `claimed ${claimed.slice(0, 12)}…, derived ${expected.slice(0, 12)}…`,
