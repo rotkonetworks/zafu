@@ -33,6 +33,7 @@ import {
 } from '../../../message/keplr';
 import { Clipped } from '@repo/ui/components/ui/clipped';
 import { Button } from '@repo/ui/components/ui/button';
+import { ApproveDeny } from './approve-deny';
 import { isCosmosSignatureQR, parseCosmosSignatureQR } from '@repo/wallet/networks/cosmos/airgap';
 import { verifyAdr036 } from '@repo/wallet/networks/cosmos/adr036';
 import {
@@ -415,24 +416,12 @@ export const KeplrApproval = () => {
         </div>
       </div>
 
-      <div className='flex gap-2 border-t border-border-soft p-4'>
-        <button
-          type='button'
-          onClick={deny}
-          disabled={busy}
-          className='flex-1 bg-elev-2 px-3 py-2.5 text-sm text-fg-muted transition-colors hover:bg-elev-1 disabled:opacity-50'
-        >
-          not now
-        </button>
-        <button
-          type='button'
-          onClick={() => void approve()}
-          disabled={busy || !keyInfo || !!unreadable}
-          className='flex-1 bg-zigner-gold px-3 py-2.5 text-sm text-zigner-gold-foreground transition-colors disabled:opacity-50'
-        >
-          {busy ? 'working…' : isSign ? 'approve' : 'connect'}
-        </button>
-      </div>
+      <ApproveDeny
+        deny={deny}
+        approve={busy || !keyInfo || unreadable ? undefined : () => void approve()}
+        approveLabel={isSign ? 'approve' : 'connect'}
+        denyLabel='not now'
+      />
     </div>
   );
 };
