@@ -58,6 +58,10 @@ if (!extensionOrigin) {
     }
 
     private presentState: PenumbraState = PenumbraState.Disconnected;
+    // Kept on every page by the Penumbra provider convention (Prax does the
+    // same): dapps fetch this to confirm and name the wallet, which is why
+    // manifest.json and favicon/* are web-accessible. Together with the key of
+    // this global, it tells any page that zafu is installed and which version.
     private manifestUrl = `${extensionOrigin}/manifest.json`;
     private stateEvents = new EventTarget();
 

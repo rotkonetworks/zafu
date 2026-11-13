@@ -73,7 +73,7 @@
   "web_accessible_resources": [
     {
       "resources": ["manifest.json", "favicon/*"],
-      "matches": ["<all_urls>"]
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"]
     }
   ],
   "permissions": [
