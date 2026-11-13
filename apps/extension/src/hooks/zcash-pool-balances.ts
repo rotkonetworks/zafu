@@ -27,6 +27,7 @@ import {
   type PoolBalances,
   type PoolNotes,
 } from '../state/keyring/network-worker';
+import { openSentRows } from '../state/sent-seal';
 
 /** Zeroed balances - the value before the first fetch resolves. */
 export const EMPTY_POOL_BALANCES: PoolBalances = {
@@ -63,7 +64,9 @@ export const zcashWorkerQuery = {
   balance: workerQuery('balance', async id => BigInt(await getBalanceInWorker('zcash', id))),
   pools: workerQuery('pools', id => getPoolBalancesInWorker('zcash', id)),
   notes: workerQuery('notes', id => getPoolNotesInWorker('zcash', id)),
-  pending: workerQuery('pending', id => getPendingSendsInWorker('zcash', id)),
+  pending: workerQuery('pending', async id =>
+    openSentRows(await getPendingSendsInWorker('zcash', id)),
+  ),
 };
 
 /** a wallet's stored birthday height (0 when it has none); shown from cache, re-read on mount */

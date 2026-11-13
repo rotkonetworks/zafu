@@ -195,6 +195,8 @@ const ENCRYPTED_KEYS = new Set<string>([
   'zecLp',
   // what zafu contacted lately: destinations and when, kept on this computer only
   'netContacted',
+  // the key that seals the zcash worker's send records (state/sent-seal)
+  'sentKey',
   // the person's own notes on transactions ("rent from alice")
   'txNotes',
   // the person's own zcash.me api key (the rest of its config stays plain for the egress policy)

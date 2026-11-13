@@ -1,7 +1,8 @@
 /**
  * Personal data = the local-only, chain-irreplaceable data the wallet holds:
  *   - send history ('sent' store: recipient, amount, fee, memo the chain can
- *     never give back, because an outgoing note is encrypted to the recipient),
+ *     never give back, because an outgoing note is encrypted to the recipient;
+ *     recipient and memo sealed, see ./sent-seal),
  *   - per-tx "from" notes (chrome.storage 'txNotes', sealed),
  *   - contacts (their own slice).
  *
@@ -14,116 +15,60 @@ import { localExtStorage, type LocalStorageState } from '@repo/storage-chrome/lo
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import type { SentTxRecord } from '../workers/sent-tx-reconcile';
 import { readEncryptedWithMigration, writeEncryptedDirect } from './encrypted-storage';
+import { openSent, openZcashDb, sealSentRecords, sentKey } from './sent-seal';
 
-const ZCASH_DB = 'zafu-zcash';
 export const TX_NOTES_KEY = 'txNotes';
 const NOTES = TX_NOTES_KEY as keyof LocalStorageState;
 
-const openZcashDb = (): Promise<IDBDatabase | null> =>
-  new Promise(resolve => {
-    try {
-      const req = indexedDB.open(ZCASH_DB);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(null);
-      req.onblocked = () => resolve(null);
-    } catch {
-      resolve(null);
-    }
-  });
-
-/** All local send records across wallets (for backup/export). */
-export const readSentRecords = async (): Promise<SentTxRecord[]> => {
+/** one request on the 'sent' store, answered with `fallback` when anything fails */
+const onSent = async <T>(
+  mode: IDBTransactionMode,
+  run: (store: IDBObjectStore) => IDBRequest | void,
+  fallback: T,
+): Promise<T> => {
   const db = await openZcashDb();
-  if (!db || !db.objectStoreNames.contains('sent')) {
-    db?.close();
-    return [];
+  if (!db) {
+    return fallback;
   }
-  return new Promise(resolve => {
-    try {
-      const req = db.transaction('sent', 'readonly').objectStore('sent').getAll();
-      req.onsuccess = () => {
-        db.close();
-        resolve((req.result as SentTxRecord[] | undefined) ?? []);
-      };
-      req.onerror = () => {
-        db.close();
-        resolve([]);
-      };
-    } catch {
-      db.close();
-      resolve([]);
-    }
-  });
+  try {
+    const tx = db.transaction('sent', mode);
+    const req = run(tx.objectStore('sent'));
+    return await new Promise<T>(resolve => {
+      tx.oncomplete = () => resolve(req ? (req.result as T) : fallback);
+      tx.onerror = () => resolve(fallback);
+      tx.onabort = () => resolve(fallback);
+    });
+  } catch {
+    return fallback;
+  } finally {
+    db.close();
+  }
 };
 
-/** Restore send records (import). Each carries its own [walletId, txid] key. */
+/** All local send records across wallets, opened (for backup/export). */
+export const readSentRecords = async (): Promise<SentTxRecord[]> => {
+  const records = (await onSent<SentTxRecord[] | undefined>('readonly', s => s.getAll(), [])) ?? [];
+  const key = records.some(r => r.sealed) ? await sentKey(false) : null;
+  // one that does not open still carries its txid, amount and fee
+  return Promise.all(
+    records.map(async r => {
+      const { sealed: _, ...rest } = await openSent(r, key);
+      return rest;
+    }),
+  );
+};
+
+/** Restore send records (import), sealed once written. Each carries its own [walletId, txid] key. */
 export const writeSentRecords = async (records: readonly SentTxRecord[]): Promise<void> => {
   if (records.length === 0) {
     return;
   }
-  const db = await openZcashDb();
-  if (!db || !db.objectStoreNames.contains('sent')) {
-    db?.close();
-    return;
-  }
-  return new Promise(resolve => {
-    try {
-      const tx = db.transaction('sent', 'readwrite');
-      const store = tx.objectStore('sent');
-      for (const r of records) {
-        store.put(r);
-      }
-      tx.oncomplete = () => {
-        db.close();
-        resolve();
-      };
-      tx.onerror = () => {
-        db.close();
-        resolve();
-      };
-    } catch {
-      db.close();
-      resolve();
-    }
-  });
+  await onSent('readwrite', s => records.forEach(r => s.put(r)), undefined);
+  await sealSentRecords();
 };
 
 /** Clear the local send history ('sent' object store), keeping the DB + cache. */
-const clearSentStore = (): Promise<void> =>
-  new Promise(resolve => {
-    let req: IDBOpenDBRequest;
-    try {
-      req = indexedDB.open(ZCASH_DB);
-    } catch {
-      resolve();
-      return;
-    }
-    req.onsuccess = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains('sent')) {
-        db.close();
-        resolve();
-        return;
-      }
-      try {
-        const tx = db.transaction('sent', 'readwrite');
-        tx.objectStore('sent').clear();
-        tx.oncomplete = () => {
-          db.close();
-          resolve();
-        };
-        tx.onerror = () => {
-          db.close();
-          resolve();
-        };
-      } catch {
-        db.close();
-        resolve();
-      }
-    };
-    req.onerror = () => resolve();
-    req.onblocked = () => resolve();
-  });
+const clearSentStore = () => onSent('readwrite', s => void s.clear(), undefined);
 
 export interface ClearPersonalDataOptions {
   /** wipe per-tx "from" notes */
