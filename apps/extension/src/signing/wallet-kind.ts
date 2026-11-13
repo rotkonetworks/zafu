@@ -81,7 +81,7 @@ export interface Refusal {
 }
 
 export interface SendFlags {
-  /** HARDWARE_WALLET_ENABLED: ledger shielded (PCZT over WebHID) */
+  /** beta features on: ledger shielded (PCZT over WebHID) */
   readonly hardwareWallet: boolean;
   /** LEDGER_TRANSPARENT_ENABLED: ledger t->t through the bitcoin app */
   readonly ledgerTransparent: boolean;

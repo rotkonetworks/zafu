@@ -2,8 +2,13 @@ import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 import { Watermark } from '@repo/ui/components/ui/watermark';
 import { Mark } from '@repo/ui/components/ui/mark';
+import { Row, RowGroup } from '@repo/ui/components/ui/row';
+import { setBetaFeatures, useBetaFeatures } from '../../../config/beta';
+import { useExplain } from './settings-explain';
 
 export const SettingsAbout = () => {
+  const beta = useBetaFeatures();
+  const { explainProps, sheet } = useExplain();
   return (
     <SettingsScreen title='about' backPath={PopupPath.SETTINGS_DEVICES}>
       <div className='relative isolate flex flex-col gap-4'>
@@ -21,6 +26,17 @@ export const SettingsAbout = () => {
             <span className='font-mono text-fg'>{chrome.runtime.getManifest().version}</span>
           </p>
         </div>
+
+        <RowGroup>
+          <Row
+            type='toggle'
+            label='beta features'
+            description={beta ? 'ledger shielded signing · in-wallet buy' : 'off'}
+            checked={beta}
+            onChange={v => void setBetaFeatures(v)}
+            {...explainProps('about.betaFeatures')}
+          />
+        </RowGroup>
 
         <div>
           <h3 className='kicker mb-1'>networks</h3>
@@ -77,6 +93,7 @@ export const SettingsAbout = () => {
           </p>
         </div>
       </div>
+      {sheet}
     </SettingsScreen>
   );
 };

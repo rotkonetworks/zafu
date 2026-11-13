@@ -53,7 +53,8 @@ import { parseZcashMeHandle, type ZcashMeProfile } from '../../../services/zcash
 import { zcashMeLabel } from '../../../services/zcashme/label';
 import { directoryProfileByAddress } from '../../../services/zcashme/directory';
 import { usePasswordGate } from '../../../hooks/password-gate';
-import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import { LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import { useBetaFeatures } from '../../../config/beta';
 import {
   CAPS,
   PENUMBRA_ONLY,
@@ -127,11 +128,6 @@ import { useCatchUp } from '../../../state/witness-rebuild';
 import { signedPcztOfAnswer } from '../../../signing/zigner-answer';
 import { selectZcashEndpoint } from '../../../state/networks';
 
-const SEND_FLAGS = {
-  hardwareWallet: HARDWARE_WALLET_ENABLED,
-  ledgerTransparent: LEDGER_TRANSPARENT_ENABLED,
-};
-
 interface ZcashSendProps {
   onClose: () => void;
   accountIndex: number;
@@ -177,6 +173,10 @@ const DEVICE: Partial<Record<WalletKind, string>> = {
 };
 
 export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSendProps) {
+  const SEND_FLAGS = {
+    hardwareWallet: useBetaFeatures(),
+    ledgerTransparent: LEDGER_TRANSPARENT_ENABLED,
+  };
   const UNIT = getNetworkConfig(zcashNetworkOf(mainnet)).symbol;
   const unit = UNIT.toLowerCase();
   const {

@@ -52,7 +52,7 @@ describe('walletKind', () => {
 });
 
 describe('zcashSendRefusal', () => {
-  // the bug: with HARDWARE_WALLET_ENABLED off, a shielded ledger fell through
+  // the bug: with beta features off, a shielded ledger fell through
   // to the zigner arm of handleSign and was shown a zigner QR.
   it.each([{ type: 'ledger' }, cold('ledger')])(
     'refuses a shielded ledger when hardware signing is off (%o)',
