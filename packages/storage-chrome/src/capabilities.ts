@@ -29,8 +29,9 @@ export const CAPABILITY_META: Record<
   },
   sign_identity: {
     label: 'Identity signing',
-    description: 'Sign challenges with your ZID identity key',
-    risk: 'low',
+    // a grant signs this site's sign-ins without a prompt while zafu is unlocked
+    description: 'Sign in with your identity for this site without asking, while zafu is unlocked',
+    risk: 'medium',
   },
   send_tx: {
     label: 'Transaction requests',
@@ -95,7 +96,8 @@ export interface OriginPermissions {
 
 /**
  * Capabilities whose grant lets a site act SILENTLY, with no per-call
- * confirmation, once approved once: `zafu_decrypt`/`zafu_encrypt` (encrypt).
+ * confirmation, once approved once: `zafu_decrypt`/`zafu_encrypt` (encrypt),
+ * and `zafu_sign` with the site's own identity key (sign_identity).
  * An interactive capability like `send_tx` or `passkey` (every sign-in takes
  * a tap) still shows a popup on every call, so a standing grant there is not
  * a standing silent-access grant - only these need a TTL.
@@ -108,7 +110,10 @@ export interface OriginPermissions {
  * nothing reads (and `trading-mode.ts` is slated for removal on another
  * branch), so it is left out rather than wired to a dead reader.
  */
-export const TIME_LIMITED_CAPABILITIES: ReadonlySet<Capability> = new Set(['encrypt']);
+export const TIME_LIMITED_CAPABILITIES: ReadonlySet<Capability> = new Set([
+  'encrypt',
+  'sign_identity',
+]);
 
 /** default lifetime of a time-limited grant before the site must be asked again. */
 export const GRANT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
