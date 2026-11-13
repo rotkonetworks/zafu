@@ -6,11 +6,21 @@ const popup = vi.hoisted(() => vi.fn());
 vi.mock('../../popup', () => ({ popup }));
 const openPanelOnGesture = vi.hoisted(() => vi.fn());
 vi.mock('../../side-panel-pref', () => ({ openPanelOnGesture }));
+const unlockedMnemonic = vi.hoisted(() => vi.fn());
+vi.mock('./unlocked-mnemonic', () => ({ unlockedMnemonic }));
 
 import { isReservedChallenge, signRequestListener, type SignResponse } from './sign-request';
 import { pqKeyAuthMessage } from '@zafu/pq';
 import { bytesToHex } from '@noble/hashes/utils';
 import { SIGN_REQUEST_TYPE } from './zafu-method-names';
+import {
+  denyCapability,
+  getOriginPermissions,
+  grantCapability,
+  removeOriginRecord,
+} from '@repo/storage-chrome/origin';
+import { hasCapability } from '@repo/storage-chrome/capabilities';
+import { ed25519 } from '@noble/curves/ed25519';
 
 const ORIGIN = 'https://login.example';
 const sender: chrome.runtime.MessageSender = {
@@ -41,7 +51,9 @@ const selectVault = async (type: string, insensitive: Record<string, unknown> = 
   await localExtStorage.set('selectedVaultId', 'v1');
 };
 
-beforeEach(() => {
+beforeEach(async () => {
+  await removeOriginRecord(ORIGIN);
+  unlockedMnemonic.mockReset();
   openPanelOnGesture.mockReset();
   popup.mockReset();
   popup.mockResolvedValue({ choice: UserChoice.Denied });
@@ -109,5 +121,53 @@ describe('zafu_sign: the side panel opens while the click still counts', () => {
   it('opens nothing for a malformed challenge', () => {
     signRequestListener({ type: SIGN_REQUEST_TYPE, challengeHex: 'xyz' }, sender, () => undefined);
     expect(openPanelOnGesture).not.toHaveBeenCalled();
+  });
+});
+
+describe('zafu_sign: a remembered site signs in without a popup', () => {
+  const MNEMONIC =
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+
+  it('signs with the site key and no popup while unlocked', async () => {
+    await selectVault('mnemonic');
+    await grantCapability(ORIGIN, 'sign_identity');
+    unlockedMnemonic.mockResolvedValue(MNEMONIC);
+    const res = await ask();
+    expect(popup).not.toHaveBeenCalled();
+    expect(res.success).toBe(true);
+    expect(ed25519.verify(res.signature!, 'abcd', res.publicKey!)).toBe(true);
+  });
+
+  it('answers locked, not a popup, when the unlock is closed', async () => {
+    await selectVault('mnemonic');
+    await grantCapability(ORIGIN, 'sign_identity');
+    unlockedMnemonic.mockResolvedValue(null);
+    expect(await ask()).toMatchObject({ success: false, code: 'locked' });
+    expect(popup).not.toHaveBeenCalled();
+  });
+
+  it('still asks a zigner every time', async () => {
+    await selectVault('zigner-zafu', { coldSignerType: 'zigner', zid: 'pk' });
+    await grantCapability(ORIGIN, 'sign_identity');
+    await ask();
+    expect(popup).toHaveBeenCalledTimes(1);
+    expect(unlockedMnemonic).not.toHaveBeenCalled();
+  });
+
+  it('remembers a site once its sign-in is approved', async () => {
+    await selectVault('mnemonic');
+    popup.mockResolvedValue({ choice: UserChoice.Approved, signature: 'aa', publicKey: 'bb' });
+    await ask();
+    expect(hasCapability(await getOriginPermissions(ORIGIN), 'sign_identity')).toBe(true);
+  });
+
+  it('keeps asking a site the person turned it off for', async () => {
+    await selectVault('mnemonic');
+    await denyCapability(ORIGIN, 'sign_identity');
+    popup.mockResolvedValue({ choice: UserChoice.Approved, signature: 'aa', publicKey: 'bb' });
+    await ask();
+    await ask();
+    expect(popup).toHaveBeenCalledTimes(2);
+    expect(hasCapability(await getOriginPermissions(ORIGIN), 'sign_identity')).toBe(false);
   });
 });

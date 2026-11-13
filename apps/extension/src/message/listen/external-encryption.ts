@@ -34,6 +34,7 @@ import { ENCRYPTION_PUBLIC_METHODS } from './zafu-method-names';
 import { sealXWing, openXWing, XWING_LENGTHS, pqKeyAuthMessage } from '@zafu/pq';
 import { isValidExternalSender } from '../../senders/external';
 import { requestCapabilityApprovalPopup } from './external-easteregg';
+import { unlockedMnemonic } from './unlocked-mnemonic';
 
 // PQ prekey rotation epoch: a coarse 1-week time bucket that indexes the site's
 // X-Wing seed (P2 - epoch compartmentalization). Advertised alongside the key
@@ -260,32 +261,6 @@ const handleEncrypt = async (msg: ZafuEncryptRequest): Promise<ZafuEncryptRespon
     };
   } catch (e) {
     return { error: 'encryption failed: ' + String(e), code: 'internal_error' };
-  }
-};
-
-/**
- * The selected wallet's mnemonic, unlocking zafu first when its session has
- * lapsed: the unlock screen opens (side panel or a login window) and this waits,
- * as signing and connect requests already do. Null when there is no wallet or the
- * user closes the unlock without unlocking - the caller answers `locked` then,
- * rather than failing inside the keyring with "keyring locked".
- */
-const unlockedMnemonic = async (): Promise<string | null> => {
-  try {
-    const { throwIfNeedsLogin } = await import('../../needs-login');
-    await throwIfNeedsLogin();
-  } catch {
-    return null;
-  }
-  const { useStore } = await import('../../state');
-  const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
-  if (!keyInfo) {
-    return null;
-  }
-  try {
-    return await useStore.getState().keyRing.getMnemonic(keyInfo.id);
-  } catch {
-    return null;
   }
 };
 

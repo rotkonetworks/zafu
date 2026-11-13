@@ -70,6 +70,12 @@ export interface ZafuPingResponse {
    * it. Reserved now so a future major negotiates without a breaking change.
    */
   protocolVersions?: number[];
+  /**
+   * Optional request shapes this wallet build understands beyond the protocol
+   * major, told only to a site the person connected (empty otherwise), e.g.
+   * 'dkg_join_deposit'. Additive: absent means none.
+   */
+  features?: string[];
 }
 
 // -- identity ----------------------------------------------------------------

@@ -11,9 +11,13 @@
  * - { type: 'zafu_frost_create' } → create FROST DKG, returns approval popup
  * - { type: 'zafu_frost_join', roomCode } → join existing FROST DKG
  * - { type: 'zafu_frost_sign', roomCode, sighashHex, ... } → FROST signing session
- * - { type: 'zafu_dkg_join', relayUrl, roomCode, threshold, maxSigners, labelPrefix? }
+ * - { type: 'zafu_dkg_join', relayUrl, roomCode, threshold, maxSigners, labelPrefix?,
+ *     deposit?: { vaultIndex, amountZat, memo? } }
  *     → join an existing DKG room with the current zafu protocol (R1:T:N:SK + FVK echo);
- *       persists multisig labeled "<labelPrefix>-YYYY-MM-DD-HHMM" (defaults to origin host)
+ *       persists multisig labeled "<labelPrefix>-YYYY-MM-DD-HHMM" (defaults to origin host).
+ *       With `deposit`, the same approval then pays amountZat into the joined vault's
+ *       address #vaultIndex (dkg-deposit.ts); the answer carries `deposit: {txid, address,
+ *       fee} | {error}` next to the join's own fields. Pings list 'dkg_join_deposit'.
  * - { type: 'zafu_frost_sign_orchard', relayUrl, roomCode, plan, feeZat, multisigLabel? }
  *     → join an Orchard PCZT signing room as a peer (INIT-MULTI/COMMITS/SHARE wire tags);
  *       popup shows the plan (outputs + fee), runs round-1/round-2 over the relay,
@@ -63,6 +67,7 @@ import { isSidePanelOpen } from '../../side-panel-presence';
 import { SIDE_PANEL_NAVIGATE } from '../side-panel-delivery';
 import { popupWindowGeometry } from '../../utils/popup-window';
 import { PopupPath } from '../../routes/popup/paths';
+import { parseDkgDeposit } from './dkg-deposit';
 import {
   CONNECT_METHODS,
   CONTACT_DISCOVERY_METHODS,
@@ -94,6 +99,9 @@ export const openWalletRoute = async (origin: string, route: string): Promise<bo
   url.hash = route;
   return openApprovalPopup(origin, url.href);
 };
+
+/** optional request shapes this build understands, named in a connected site's ping */
+const ZAFU_FEATURES = ['dkg_join_deposit'] as const;
 
 /** what the other external listeners own: never answered here, or they never run */
 const DELEGATED_TYPES = new Set<string>([
@@ -687,6 +695,8 @@ export const externalMessageListener = (
           version: connected ? chrome.runtime.getManifest().version : '',
           protocolVersion: ZAFU_PROTOCOL_VERSION,
           protocolVersions: [...ZAFU_SUPPORTED_PROTOCOL_VERSIONS],
+          // what this build adds over the protocol, for a site to pick one approval over several
+          features: connected ? [...ZAFU_FEATURES] : [],
         });
       })().catch(() => sendResponse({ error: 'ping failed' }));
       return true;
@@ -875,6 +885,11 @@ export const externalMessageListener = (
           sendResponse({ error: 'roomCode or rendezvousCode required' });
           return;
         }
+        const deposit = parseDkgDeposit(msg['deposit']);
+        if (deposit === 'invalid') {
+          sendResponse({ error: 'deposit needs a vaultIndex, a whole amountZat and a short memo' });
+          return;
+        }
         const network = msg['network'] === 'test' ? 'test' : 'main';
         const threshold = Number(msg['threshold']) || 2;
         const maxSigners = Number(msg['maxSigners']) || 3;
@@ -908,6 +923,9 @@ export const externalMessageListener = (
         }
         if (hide) {
           params.set('hide', '1');
+        }
+        if (deposit) {
+          params.set('depositJson', JSON.stringify(deposit));
         }
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
         pendingPicks.set(requestId, sendResponse);

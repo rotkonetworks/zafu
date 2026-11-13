@@ -136,6 +136,7 @@ import { hkdf } from '@noble/hashes/hkdf';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { xwingPublicKeyFromSeed, XWING_LENGTHS } from '@zafu/pq';
 import { isPasswordSuffix } from './password-suffixes';
+import { localExtStorage } from '@repo/storage-chrome/local';
 
 /**
  * ZID domain separator - v2 uses two-stage KDF.
@@ -756,6 +757,21 @@ export const resolveZid = (
     return deriveZidCrossSite(mnemonic, identity);
   }
   return deriveZidForSite(mnemonic, identity, origin, pref?.rotation ?? 0);
+};
+
+/** how this origin signs (site or cross-site, which rotation), as the person set it; undefined is the default */
+export const readZidSitePreference = async (
+  origin: string,
+): Promise<ZidSitePreference | undefined> => {
+  const prefs = await localExtStorage.get('zidPreferences');
+  const raw = prefs?.[origin] as Partial<ZidSitePreference> | undefined;
+  return raw
+    ? {
+        mode: raw.mode === 'cross-site' ? 'cross-site' : 'site',
+        rotation: raw.rotation ?? 0,
+        identity: raw.identity ?? 'default',
+      }
+    : undefined;
 };
 
 /**

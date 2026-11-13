@@ -7,8 +7,13 @@
  * 3. open the SignRequest popup for explicit per-request user confirmation
  *    (the popup shows the calling origin + the challenge / statement)
  * 4. on approval the popup signs with the SITE-SCOPED ZID ed25519 key and
- *    returns { signature, publicKey }; sign_identity is auto-granted afterwards
- *    so the site shows up on the identity page
+ *    returns { signature, publicKey }; sign_identity is granted afterwards
+ *    (unless the person turned it off for this site), so the site shows up on
+ *    the identity page and its next sign-ins are remembered
+ * 5. a site holding sign_identity (time-limited, see TIME_LIMITED_CAPABILITIES)
+ *    is signed for without a popup while a phrase wallet is unlocked: the key
+ *    is the site's own, so the grant is "this site may know it is me", never
+ *    a key another site or zafu's own messages answer to
  *
  * Gate: requests must come from a valid top-level page (isValidExternalSender
  * rejects sub-frames and malformed senders), but there is NO connect-first
@@ -22,7 +27,7 @@
  */
 
 import { getOriginPermissions, grantCapability } from '@repo/storage-chrome/origin';
-import { hasCapability } from '@repo/storage-chrome/capabilities';
+import { hasCapability, isDenied } from '@repo/storage-chrome/capabilities';
 import { UserChoice } from '@repo/storage-chrome/records';
 import { PopupType } from '../popup';
 import { popup } from '../../popup';
@@ -34,6 +39,8 @@ import type { ZidShareRecord } from '../../state/identity';
 import type { ZafuSignRequest, ZafuSignResponse } from '@zafu/protocol';
 import { SIGN_REQUEST_TYPE } from './zafu-method-names';
 import { CAPS, walletKind } from '../../signing/wallet-kind';
+import { unlockedMnemonic } from './unlocked-mnemonic';
+import { hexToBytes } from '@noble/hashes/utils';
 
 // request/response shapes come from the shared @zafu/protocol contract, so any
 // drift from the wallet<->dapp wire (and from the @zafu/zid SDK that builds
@@ -86,6 +93,9 @@ export const isReservedChallenge = (challengeHex: string): boolean => {
   return head.slice(8) === '7a6166752d' && len >= 5 && len <= challengeHex.length / 2 - 4;
 };
 
+/** origins whose last sign-in went through without a popup (this worker's lifetime) */
+const silentOrigins = new Set<string>();
+
 const handleSignRequest = async (
   req: SignRequestMessage,
   sender: { origin: string; tab: chrome.tabs.Tab },
@@ -115,8 +125,11 @@ const handleSignRequest = async (
     };
   }
 
-  // before the first await, so the sign-in click still counts
-  openPanelOnGesture(sender);
+  // before the first await, so the sign-in click still counts. A site that
+  // signed in silently last time most likely does again: no panel for it.
+  if (!silentOrigins.has(sender.origin)) {
+    openPanelOnGesture(sender);
+  }
 
   try {
     // who holds the key: a phrase signs here, a zigner answers a QR, and a
@@ -134,6 +147,18 @@ const handleSignRequest = async (
       ? (selectedVault?.insensitive?.['zid'] as string | undefined)
       : undefined;
 
+    const perms = await getOriginPermissions(sender.origin);
+    if (kind === 'hot' && hasCapability(perms, 'sign_identity')) {
+      const signed = await signRemembered(sender.origin, req.challengeHex);
+      if (signed) {
+        silentOrigins.add(sender.origin);
+        await logShare(sender.origin, signed.publicKey);
+        return { success: true, ...signed };
+      }
+      return { success: false, error: 'wallet locked', code: 'locked' };
+    }
+    silentOrigins.delete(sender.origin);
+
     const popupResponse = await popup(PopupType.SignRequest, {
       origin: sender.origin,
       favIconUrl: sender.tab?.favIconUrl,
@@ -150,29 +175,13 @@ const handleSignRequest = async (
 
     const { signature, publicKey } = popupResponse;
 
-    // auto-grant sign_identity capability so the site appears in the identity page
-    const perms = await getOriginPermissions(sender.origin);
-    if (!hasCapability(perms, 'sign_identity')) {
+    // remember this site's sign-ins from now on, unless the person said no for it
+    if (!isDenied(perms, 'sign_identity')) {
       await grantCapability(sender.origin, 'sign_identity');
     }
 
-    // log the shared zid (done in service worker so it persists even if popup closes)
     if (publicKey) {
-      const log = ((await localExtStorage.get('zidShareLog')) ?? []) as ZidShareRecord[];
-      // a log another build wrote in a shape this one cannot read is left
-      // alone: rewriting it as a fresh list would drop its entries
-      const alreadyLogged =
-        !Array.isArray(log) ||
-        log.some(r => r.publicKey === publicKey && r.sharedWith === sender.origin);
-      if (!alreadyLogged) {
-        log.push({
-          publicKey,
-          sharedWith: sender.origin,
-          sharedAt: Date.now(),
-          identity: 'default',
-        });
-        await localExtStorage.set('zidShareLog', log);
-      }
+      await logShare(sender.origin, publicKey);
     }
 
     return {
@@ -183,5 +192,40 @@ const handleSignRequest = async (
   } catch (e) {
     console.error('sign request failed:', e);
     return { success: false, error: 'signing failed', code: 'internal_error' };
+  }
+};
+
+/**
+ * Sign for a remembered site with its own identity key, unlocking zafu first if
+ * its session lapsed (the unlock is the only prompt). Null when it stays locked.
+ */
+const signRemembered = async (
+  origin: string,
+  challengeHex: string,
+): Promise<{ signature: string; publicKey: string } | null> => {
+  const mnemonic = await unlockedMnemonic();
+  if (!mnemonic) {
+    return null;
+  }
+  const { signZid, getZidIndex, readZidSitePreference } = await import('../../state/identity');
+  return signZid(
+    mnemonic,
+    origin,
+    hexToBytes(challengeHex),
+    await readZidSitePreference(origin),
+    await getZidIndex(),
+  );
+};
+
+/** log the shared zid (done in service worker so it persists even if popup closes) */
+const logShare = async (origin: string, publicKey: string): Promise<void> => {
+  const log = ((await localExtStorage.get('zidShareLog')) ?? []) as ZidShareRecord[];
+  // a log another build wrote in a shape this one cannot read is left
+  // alone: rewriting it as a fresh list would drop its entries
+  const alreadyLogged =
+    !Array.isArray(log) || log.some(r => r.publicKey === publicKey && r.sharedWith === origin);
+  if (!alreadyLogged) {
+    log.push({ publicKey, sharedWith: origin, sharedAt: Date.now(), identity: 'default' });
+    await localExtStorage.set('zidShareLog', log);
   }
 };
