@@ -271,6 +271,11 @@ async function handleMethod(
       if (!cosmosId) {
         throw new Error(`unsupported chain ${chainId}`);
       }
+      // only a site the person connected to this chain: otherwise any page
+      // could have zafu reach a chain node on its behalf, unasked
+      if (!(await getCachedKey(origin, chainId))) {
+        throw new Error(`this site isn't connected to ${chainId} · please connect first`);
+      }
       // Raw Tendermint RPC broadcast_tx_sync - avoids bundling the stargate
       // client into the service worker. params.tx is base64, which is exactly
       // the txB64 we already carry.

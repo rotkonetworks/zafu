@@ -8,7 +8,7 @@
  * of a refused request.
  */
 
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { keplrMessageListener } from './keplr';
 
 const sender = (origin: string): chrome.runtime.MessageSender => ({
@@ -297,5 +297,46 @@ describe('ZafuKeplr signed chain', () => {
     );
     expect(res).toMatchObject({ ok: false });
     expect(createMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('ZafuKeplr sendTx', () => {
+  const origin = 'https://dapp.example';
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+  const send = () =>
+    call(
+      {
+        type: 'ZafuKeplr',
+        method: 'sendTx',
+        // a page-written flag is not a grant
+        params: { chainId: 'noble-1', txB64: btoa('tx'), mode: 'sync', native: true },
+        native: true,
+      },
+      sender(origin),
+    );
+
+  it('refuses a site that is not connected to the chain, without reaching any node', async () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const res = await send();
+    expect(res).toMatchObject({ ok: false });
+    expect((res as { error: string }).error).toMatch(/isn't connected to noble-1/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('broadcasts for a site connected to the chain', async () => {
+    await chrome.storage.session.set({
+      [`keplrKey:${origin}:noble-1`]: { name: 'zafu', bech32Address: 'noble1x' },
+    });
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ json: () => Promise.resolve({ result: { code: 0, hash: '0A0B' } }) }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    expect(await send()).toEqual({ ok: true, result: { hashB64: btoa('\x0a\x0b') } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await chrome.storage.session.remove(`keplrKey:${origin}:noble-1`);
   });
 });
