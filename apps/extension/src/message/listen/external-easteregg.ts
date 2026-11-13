@@ -470,10 +470,12 @@ async function requireCapability(
     return null;
   };
 
-  const origin = sender.origin || sender.url || '';
-  if (!origin) {
+  // a frost-granted site embedded as an iframe elsewhere must not raise its
+  // approvals from inside another page
+  if (!isValidExternalSender(sender)) {
     return reject();
   }
+  const origin = sender.origin;
   try {
     // Global participation first: a capability the user turned off (or is
     // still undecided about, which prompts once) collapses into the same
@@ -748,8 +750,9 @@ export const externalMessageListener = (
     // Public methods that open a popup or act on the user's behalf require a
     // valid top-frame https sender. Without this a third-party IFRAME could raise
     // a picker/approval/send popup wearing the host tab's identity (provenance
-    // spoof). The frost/passkey entries already gate via requireCapability /
-    // isValidExternalSender; ping is a harmless discovery response.
+    // spoof). The frost entries check the same inside requireCapability, so
+    // their refusal keeps its uniform shape; ping is a harmless discovery
+    // response.
     (type === 'send' ||
       type === 'zafu_pick_contacts' ||
       type === 'zafu_request_capability' ||

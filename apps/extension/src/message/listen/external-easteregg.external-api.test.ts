@@ -345,6 +345,21 @@ describe('contact discovery is left to its own listeners', () => {
   );
 });
 
+describe('frost entries - top frame only', () => {
+  it.each([
+    { type: 'zafu_frost_create' },
+    { type: 'zafu_frost_join', roomCode: 'r1' },
+    { type: 'zafu_dkg_join', roomCode: 'r1' },
+    { type: 'zafu_delete_multisig', multisigLabel: 'poker-table' },
+  ])('$type from a granted site inside an iframe is refused, no window', async req => {
+    const origin = `https://frost-iframe-${req.type}.example`;
+    await grantCapability(origin, 'frost');
+    const res = await call(req, { ...validSender(origin), frameId: 3 });
+    expect(res).toEqual({ success: false, error: 'denied' });
+    expect(createMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('gh #18 - zafu_delete_multisig uniform rejection', () => {
   it('rejects a too-short label with the uniform denied shape (granted origin)', async () => {
     const origin = 'https://del-short.example';
