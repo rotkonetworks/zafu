@@ -19,6 +19,8 @@ import {
   deriveKeplrWireKey,
   signKeplrAmino,
   signKeplrDirect,
+  readKeplrDirect,
+  type KeplrDirectView,
   type KeplrDirectWireDoc,
 } from '@repo/wallet/networks/cosmos/signer';
 import { adr036SignDoc, describeArbitraryData } from '@repo/wallet/networks/cosmos/adr036';
@@ -57,6 +59,15 @@ const prefixFor = (chainId: string, signerAddress?: string): string => {
     }
   }
   return chainId.split('-')[0] ?? 'cosmos';
+};
+
+/** a direct doc as a person reads it; bytes that aren't a transaction read as nothing at all */
+const readDirect = (doc: unknown): KeplrDirectView | undefined => {
+  try {
+    return readKeplrDirect(doc as KeplrDirectWireDoc);
+  } catch {
+    return undefined;
+  }
 };
 
 export const KeplrApproval = () => {
@@ -236,7 +247,10 @@ export const KeplrApproval = () => {
         return;
       }
 
-      // signDirect
+      // signDirect: only what the person could read
+      if (readDirect(req.signDoc)?.unread.length !== 0) {
+        throw new Error("zafu can't read this transaction · nothing was signed");
+      }
       const payload = await signKeplrDirect(
         mnemonic,
         prefix,
@@ -322,6 +336,12 @@ export const KeplrApproval = () => {
           ),
         )
       : undefined;
+  const direct = req.method === 'signDirect' ? readDirect(req.signDoc) : undefined;
+  // a direct doc zafu can't read in full is never signed blind: there is no approve
+  const unreadable =
+    req.method === 'signDirect' && (!direct || direct.unread.length > 0)
+      ? (direct?.unread ?? ['this transaction'])
+      : undefined;
   // A stored request missing origin (partial/forward-incompatible write) would
   // otherwise throw on .replace during render.
   const originHost = (req.origin ?? '').replace(/^https?:\/\//, '');
@@ -371,9 +391,15 @@ export const KeplrApproval = () => {
                   {req.signerAddress}
                 </p>
               )}
+              {unreadable && (
+                <p role='alert' className='mt-2 text-fg'>
+                  zafu can't read {[...new Set(unreadable)].join(', ')} yet, so it won't sign it
+                  blind · nothing was signed
+                </p>
+              )}
               <pre className='mt-2 max-h-48 overflow-auto bg-elev-1 p-2 text-label text-fg-muted'>
                 {JSON.stringify(
-                  req.signDoc,
+                  direct?.doc ?? req.signDoc,
                   (_k, v) => (typeof v === 'bigint' ? v.toString() : v),
                   1,
                 )}
@@ -401,7 +427,7 @@ export const KeplrApproval = () => {
         <button
           type='button'
           onClick={() => void approve()}
-          disabled={busy || !keyInfo}
+          disabled={busy || !keyInfo || !!unreadable}
           className='flex-1 bg-zigner-gold px-3 py-2.5 text-sm text-zigner-gold-foreground transition-colors disabled:opacity-50'
         >
           {busy ? 'working…' : isSign ? 'approve' : 'connect'}
