@@ -129,7 +129,11 @@ function hexToBuf(hex: string): ArrayBuffer {
  * shape (no answer at all, denied, cancelled, no wallet) keeps the historical
  * fallback, because there zafu genuinely has nothing to offer.
  */
-const isWalletFailure = (r: WalletResponse | undefined): boolean => r?.code === 'failed';
+const isWalletFailure = (r: WalletResponse | undefined): boolean =>
+  r?.code === 'failed' ||
+  // zafu's window for this site is already open: the browser's prompt beside it
+  // would be a second, competing answer to the same sign-in
+  r?.code === 'busy';
 
 /** marks a wallet failure from `askWallet` so the catch below can tell it from an unreachable wallet */
 class WalletFailedError extends Error {}

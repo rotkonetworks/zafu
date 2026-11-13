@@ -198,3 +198,29 @@ describe('recentHand', () => {
     expect(h.asked(5_000, true)).toBe(true);
   });
 });
+
+describe('when zafu is already asking', () => {
+  it('a second request learns zafu is busy, so the page never opens the browser prompt', () => {
+    expect(passkeyPageResult({ success: false, error: 'busy', code: 'busy' })).toEqual({
+      success: false,
+      code: 'busy',
+    });
+  });
+
+  it('busy starts no wait: the person declined nothing', () => {
+    const c = promptCooldown();
+    c.after({ success: false, code: 'busy' }, 0);
+    expect(c.quiet(1)).toBe(false);
+  });
+
+  it('repeated not now waits at most five minutes', () => {
+    const c = promptCooldown(30_000, 300_000);
+    let now = 0;
+    for (let i = 0; i < 10; i++) {
+      c.after({ success: false, code: 'denied' }, now);
+      now += 1;
+    }
+    expect(c.quiet(now + 299_000)).toBe(true);
+    expect(c.quiet(now + 300_000)).toBe(false);
+  });
+});

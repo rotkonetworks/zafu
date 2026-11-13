@@ -684,7 +684,7 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
     await waitForPopup(origin);
     const second = call(getReq('dedup.example'), validSender(origin));
     // no code: the person declined nothing, so the page does not back off
-    expect(await second).toEqual({ success: false, error: 'denied' });
+    expect(await second).toEqual({ success: false, error: 'busy', code: 'busy' });
     expect(popupUrlsFor(origin)).toHaveLength(1);
 
     await tap(origin, { approved: true });

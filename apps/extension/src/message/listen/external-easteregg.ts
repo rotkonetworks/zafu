@@ -535,13 +535,15 @@ const passkeySender = (sender: chrome.runtime.MessageSender): sender is ValidExt
 
 /**
  * a tap the person did not give: `denied` said not now, `cancelled` never
- * answered. `busy` (this site's window is already open) carries no code: the
- * person declined nothing, so the page must not back off for it.
+ * answered, `busy` means this site's window is already open. The page must not
+ * back off for `busy` (the person declined nothing), nor hand the request to
+ * the browser, whose phone QR would open beside zafu's own window.
  */
-const declined = (outcome: 'denied' | 'cancelled' | 'busy'): PasskeyRefusal =>
-  outcome === 'busy'
-    ? { success: false, error: 'denied' }
-    : { success: false, error: outcome, code: outcome };
+const declined = (outcome: 'denied' | 'cancelled' | 'busy'): PasskeyRefusal => ({
+  success: false,
+  error: outcome,
+  code: outcome,
+});
 
 /**
  * The passkey switch is on and the wallet is unlocked, both asked for before

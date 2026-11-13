@@ -36,7 +36,8 @@
       "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"],
       "js": ["passkey-bridge.js"],
       "run_at": "document_start",
-      "world": "ISOLATED"
+      "world": "ISOLATED",
+      "all_frames": true
     },
     {
       "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"],
@@ -54,7 +55,8 @@
       "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"],
       "js": ["passkey-intercept.js"],
       "run_at": "document_start",
-      "world": "MAIN"
+      "world": "MAIN",
+      "all_frames": true
     },
     {
       "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"],
