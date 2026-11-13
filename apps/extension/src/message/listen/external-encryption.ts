@@ -324,15 +324,14 @@ const handleDecrypt = async (
     if (!mnemonic) {
       return { error: 'wallet locked', code: 'locked' };
     }
-    const { currentIdentityName } = await import('../../state/identity');
-    const identityName = await currentIdentityName();
+    const { zidSiteKeys, zidKeypairFor, deriveZidPqSeed } = await import('../../state/identity');
+    const site = await zidSiteKeys(origin);
 
     // hybrid: open the X-Wing sealed box with the site's post-quantum secret seed
     if (hybrid) {
-      const { deriveZidPqSeed } = await import('../../state/identity');
       // Use the rotation epoch the ciphertext was sealed at (P2). Absent =>
       // epoch 0, so legacy boxes (sealed before rotation existed) still open.
-      const seed = deriveZidPqSeed(mnemonic, identityName, origin, msg.pq_epoch ?? 0);
+      const seed = deriveZidPqSeed(mnemonic, site.identityName, site.scope, msg.pq_epoch ?? 0);
       try {
         const plaintext = openXWing(seed, base64ToBytes(msg.ciphertext));
         return { plaintext: bytesToBase64(plaintext) };
@@ -341,12 +340,12 @@ const handleDecrypt = async (
       }
     }
 
-    // classical: derive user's ed25519 keypair for this origin
-    const { deriveZidKeypairForSite } = await import('../../state/identity');
-    const { privateKey: ed25519Priv, publicKey: ed25519Pub } = deriveZidKeypairForSite(
+    // classical: the site's ed25519 keypair, the one zafu_sign signs with
+    const { privateKey: ed25519Priv, publicKey: ed25519Pub } = zidKeypairFor(
       mnemonic,
-      identityName,
       origin,
+      site.pref,
+      site.zidIndex,
     );
 
     // convert our ed25519 private key to x25519
@@ -386,30 +385,24 @@ const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> =
       return { error: 'wallet locked', code: 'locked' };
     }
 
-    const {
-      deriveZidForSite,
-      deriveZidPqPublicKey,
-      deriveZidKeypairForSite,
-      deriveZidKaForSite,
-      ZID_PQ_SUITE,
-      currentIdentityName,
-    } = await import('../../state/identity');
-    const identityName = await currentIdentityName();
-    const zid = deriveZidForSite(mnemonic, identityName, origin);
+    const { zidSiteKeys, zidKeypairFor, deriveZidPqPublicKey, deriveZidKaForSite, ZID_PQ_SUITE } =
+      await import('../../state/identity');
+    const site = await zidSiteKeys(origin);
+    const { privateKey, publicKey } = zidKeypairFor(mnemonic, origin, site.pref, site.zidIndex);
 
     // advertise the hybrid post-quantum sealed-box key too, so dapps can seal
     // messages that stay confidential against a future quantum attacker. Derive
     // it at the CURRENT rotation epoch (P2 epoch compartmentalization; not
     // forward secrecy - the mnemonic re-derives every epoch).
     const pq_epoch = pqEpoch();
-    const pq_pubkey = deriveZidPqPublicKey(mnemonic, identityName, origin, pq_epoch);
+    const pq_pubkey = deriveZidPqPublicKey(mnemonic, site.identityName, site.scope, pq_epoch);
 
     // AUTHENTICATE the prekey (P1): sign (suite || origin || epoch || pq_pubkey)
     // with the SAME site ed25519 identity that `pubkey` is, so a dapp can verify
     // the pq_pubkey genuinely came from this ZID and REFUSE a substituted key
-    // rather than silently seal to an attacker's key. The signing key is the
-    // stable site identity (rotation 0, == `pubkey`); only the PQ prekey rotates.
-    const { privateKey } = deriveZidKeypairForSite(mnemonic, identityName, origin);
+    // rather than silently seal to an attacker's key. The signing key is
+    // `pubkey`, the site's key as the person chose it; the PQ prekey also
+    // rotates by epoch.
     const pq_sig = bytesToHex(
       ed25519.sign(
         pqKeyAuthMessage(ZID_PQ_SUITE, origin, pq_epoch, hexToBytes(pq_pubkey)),
@@ -417,7 +410,7 @@ const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> =
       ),
     );
     // the key an app introduces two people by (zafu_connect), signed the same way
-    const ka = deriveZidKaForSite(mnemonic, identityName, origin);
+    const ka = deriveZidKaForSite(mnemonic, site.identityName, site.scope);
     ka.seed.fill(0);
     const ka_sig = bytesToHex(
       ed25519.sign(
@@ -428,7 +421,7 @@ const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> =
     privateKey.fill(0);
 
     return {
-      pubkey: zid.publicKey,
+      pubkey: bytesToHex(publicKey),
       pq_pubkey,
       pq_suite: ZID_PQ_SUITE,
       pq_sig,

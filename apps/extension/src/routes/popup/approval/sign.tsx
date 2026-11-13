@@ -16,6 +16,7 @@ import {
   signP256,
   resolveZid,
   getZidIndex,
+  zidPreferenceFor,
   type ZidSitePreference,
 } from '../../../state/identity';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
@@ -69,15 +70,7 @@ export const SignApproval = () => {
       return;
     }
     void (async () => {
-      const prefs = await localExtStorage.get('zidPreferences');
-      const raw = prefs?.[origin] as Partial<ZidSitePreference> | undefined;
-      const resolved: ZidSitePreference | undefined = raw
-        ? {
-            mode: raw.mode === 'cross-site' ? 'cross-site' : 'site',
-            rotation: raw.rotation ?? 0,
-            identity: raw.identity ?? 'default',
-          }
-        : undefined;
+      const resolved = await zidPreferenceFor(origin);
       setPref(resolved);
       const isSite = !resolved || resolved.mode === 'site';
       setSigningMode(isSite ? `site #${resolved?.rotation ?? 0}` : 'cross-site');
