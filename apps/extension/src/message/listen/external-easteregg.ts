@@ -722,8 +722,8 @@ export const externalMessageListener = (
           }
         }
         const url = chrome.runtime.getURL(`popup.html#/send?${params.toString()}`);
-        void chrome.windows.create({ url, type: 'popup', width: 400, height: 628 });
-        sendResponse({ ok: true });
+        // one window per site, as every other prompt: a page cannot stack them
+        sendResponse({ ok: await openApprovalPopup(origin, url) });
       })().catch(() => sendResponse({ ok: false }));
       return true;
     }
@@ -745,25 +745,13 @@ export const externalMessageListener = (
         requestId,
       });
       const url = chrome.runtime.getURL(`popup.html#/pick-contacts?${params.toString()}`);
-      // Track windowId -> requestId so the onRemoved sweep can fire the
-      // pending callback if the user closes the popup; on create-failure /
-      // untrackable id, respond with the denied shape rather than hang.
-      chrome.windows
-        .create({ url, type: 'popup', width: 400, height: 520 })
-        .then(win => {
-          if (win?.id !== undefined) {
-            popupWindowToRequestId.set(win.id, requestId);
-            return;
-          }
-          if (pendingPicks.delete(requestId)) {
-            sendResponse({ success: false, error: 'denied' });
-          }
-        })
-        .catch(() => {
-          if (pendingPicks.delete(requestId)) {
-            sendResponse({ success: false, error: 'denied' });
-          }
-        });
+      // one window per site, as every other prompt; the onRemoved sweep answers
+      // a picker closed without a choice, and a refused open answers denied
+      void openApprovalPopup(appOrigin, url, requestId).then(opened => {
+        if (!opened && pendingPicks.delete(requestId)) {
+          sendResponse({ success: false, error: 'denied' });
+        }
+      });
 
       // return true = async response (sendResponse called later from picker)
       return true;

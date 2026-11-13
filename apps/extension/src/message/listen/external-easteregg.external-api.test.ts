@@ -289,6 +289,25 @@ describe('gh #19 - same-origin approval-popup dedup', () => {
   });
 });
 
+describe('send and the contact picker - one window per site, like every prompt', () => {
+  it('a page asking again while its send window is open opens nothing', async () => {
+    const origin = 'https://loop-send.example';
+    const req = { type: 'send', address: 'u1someone', amount_zat: 10_000 };
+    expect(await call(req, validSender(origin))).toEqual({ ok: true });
+    expect(await call(req, validSender(origin))).toEqual({ ok: false });
+    expect(createMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a page asking again while its picker is open is told denied, with no second window', async () => {
+    const origin = 'https://loop-pick.example';
+    void call({ type: 'zafu_pick_contacts', purpose: 'invite' }, validSender(origin));
+    await flush();
+    const second = await call({ type: 'zafu_pick_contacts' }, validSender(origin));
+    expect(second).toEqual({ success: false, error: 'denied' });
+    expect(createMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('zafu_frost_sign_disabled_unreachable - arm removed, no popup', () => {
   it('does not open a popup and responds inertly for the disabled type', async () => {
     // Even with the frost capability granted and a well-formed payload, the
