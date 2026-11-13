@@ -186,7 +186,7 @@ const panelRequestToOrigin = new Map<string, string>();
  * still the ONLY cleanup for a window closed without ever answering (no
  * result message ever arrives in that case).
  */
-function releasePopupGuardForRequest(requestId: string): void {
+export function releasePopupGuardForRequest(requestId: string): void {
   const inPanel = panelRequestToOrigin.get(requestId);
   if (inPanel !== undefined) {
     panelRequestToOrigin.delete(requestId);

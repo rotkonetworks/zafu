@@ -9,6 +9,18 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+
+// external-easteregg registers its closed-window sweep at import: catch it
+const removed = vi.hoisted(() => {
+  const listeners: ((windowId: number) => void)[] = [];
+  (globalThis.chrome as unknown as { windows: unknown }).windows = {
+    onRemoved: { addListener: (l: (id: number) => void) => listeners.push(l) },
+  };
+  return listeners;
+});
+const needsLogin = vi.hoisted(() => ({ throwIfNeedsLogin: vi.fn(() => Promise.resolve()) }));
+vi.mock('../../needs-login', () => needsLogin);
+
 import { keplrMessageListener } from './keplr';
 
 const sender = (origin: string): chrome.runtime.MessageSender => ({
@@ -30,8 +42,11 @@ const call = (req: unknown, s: chrome.runtime.MessageSender): Promise<unknown> =
     expect(asyncResponse).toBe(true);
   });
 
+let nextWindow = 1;
+
 beforeEach(() => {
-  createMock = vi.fn(() => Promise.resolve({ id: 1 }));
+  needsLogin.throwIfNeedsLogin.mockReset().mockResolvedValue(undefined);
+  createMock = vi.fn(() => Promise.resolve({ id: nextWindow++ }));
   (globalThis.chrome as unknown as { windows: unknown }).windows = {
     create: createMock,
     getLastFocused: vi.fn(() => Promise.resolve({ id: 7, top: 0, left: 0, width: 800 })),
@@ -338,5 +353,100 @@ describe('ZafuKeplr sendTx', () => {
     expect(await send()).toEqual({ ok: true, result: { hashB64: btoa('\x0a\x0b') } });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await chrome.storage.session.remove(`keplrKey:${origin}:noble-1`);
+  });
+});
+
+describe('ZafuKeplr approval windows', () => {
+  const origin = 'https://window.example';
+  const page: chrome.runtime.MessageSender = {
+    id: chrome.runtime.id,
+    origin: `chrome-extension://${chrome.runtime.id}`,
+    url: `chrome-extension://${chrome.runtime.id}/popup.html`,
+  };
+  const sign = () =>
+    call(
+      {
+        type: 'ZafuKeplr',
+        method: 'signAmino',
+        params: {
+          chainId: 'noble-1',
+          signerAddress: 'noble1x',
+          signDoc: { chain_id: 'noble-1', msgs: [] },
+        },
+      },
+      sender(origin),
+    );
+  const openRequests = async () =>
+    Object.keys(await chrome.storage.session.get(null)).filter(k => k.startsWith('keplrApproval:'));
+  beforeEach(() => {
+    (chrome.runtime as { getURL?: (p: string) => string }).getURL = p =>
+      `chrome-extension://${chrome.runtime.id}/${p}`;
+  });
+
+  it('asks to unlock before it opens a window, and a declined unlock opens none', async () => {
+    needsLogin.throwIfNeedsLogin.mockRejectedValueOnce(new Error('Login cancelled'));
+    expect(await sign()).toEqual({ ok: false, error: 'Login cancelled' });
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('answers a window closed without deciding as rejected', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const signing = sign();
+    await vi.waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
+    const windowId = ((await createMock.mock.results[0]!.value) as { id: number }).id;
+    removed.forEach(l => l(windowId));
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(await signing).toEqual({ ok: false, error: 'request rejected' });
+    expect(await openRequests()).toEqual([]);
+    vi.useRealTimers();
+    // the site may ask again
+    const again = sign();
+    await vi.waitFor(() => expect(createMock).toHaveBeenCalledTimes(2));
+    const [key] = await openRequests();
+    keplrMessageListener(
+      {
+        type: 'zafu_keplr_result',
+        requestId: key!.slice('keplrApproval:'.length),
+        result: { approved: false, error: 'rejected' },
+      },
+      page,
+      vi.fn(),
+    );
+    expect(await again).toEqual({ ok: false, error: 'rejected' });
+  });
+
+  it('opens one window per site, and frees it once the person decides', async () => {
+    const first = sign();
+    await vi.waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
+    expect(await sign()).toEqual({
+      ok: false,
+      error: "zafu couldn't open this request · another from this site may still be open",
+    });
+    expect(createMock).toHaveBeenCalledTimes(1);
+    const [key] = await openRequests();
+    keplrMessageListener(
+      {
+        type: 'zafu_keplr_result',
+        requestId: key!.slice('keplrApproval:'.length),
+        result: { approved: true, payload: { signed: 'doc' } },
+      },
+      page,
+      vi.fn(),
+    );
+    expect(await first).toEqual({ ok: true, result: { signed: 'doc' } });
+    // decided, but the window has not closed yet: a follow-up still gets its own
+    const second = sign();
+    await vi.waitFor(() => expect(createMock).toHaveBeenCalledTimes(2));
+    const [key2] = await openRequests();
+    keplrMessageListener(
+      {
+        type: 'zafu_keplr_result',
+        requestId: key2!.slice('keplrApproval:'.length),
+        result: { approved: false },
+      },
+      page,
+      vi.fn(),
+    );
+    expect(await second).toMatchObject({ ok: false });
   });
 });
