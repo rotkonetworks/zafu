@@ -34,12 +34,7 @@ import {
   isOptinPending,
   modeFromOptin,
 } from '../../utils/capability-decision';
-import {
-  hasCapability,
-  isDenied,
-  type Capability,
-  CAPABILITY_META,
-} from '@repo/storage-chrome/capabilities';
+import { hasCapability, isDenied, type Capability } from '@repo/storage-chrome/capabilities';
 import {
   nextHdIndex,
   checkAndBumpFreshAddressRateLimit,
@@ -447,6 +442,19 @@ async function seedWalletReceiveAddress(
   );
   return fixOrchardAddress(raw, mainnet);
 }
+
+/**
+ * What a site may ask for: the capabilities something checks today. The rest
+ * (send_tx, export_fvk, view_*, auto_sign) gate nothing yet, and a grant banked
+ * now would quietly arm whatever a later build hangs on them.
+ */
+const REQUESTABLE: ReadonlySet<Capability> = new Set([
+  'connect',
+  'sign_identity',
+  'frost',
+  'passkey',
+  'encrypt',
+]);
 
 const REJECT_FLOOR_MS = 30;
 async function requireCapability(
@@ -1144,12 +1152,11 @@ export const externalMessageListener = (
     }
 
     case 'zafu_request_capability': {
-      const capability = msg['capability'] as string;
-      if (!capability || !(capability in CAPABILITY_META)) {
+      const cap = msg['capability'] as Capability;
+      if (!REQUESTABLE.has(cap)) {
         sendResponse({ error: 'invalid capability' });
         return true;
       }
-      const cap = capability as Capability;
       const origin = sender.origin || sender.url;
       if (!origin) {
         sendResponse({ error: 'unknown origin' });
