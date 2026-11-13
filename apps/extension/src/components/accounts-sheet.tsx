@@ -23,11 +23,14 @@ import {
   MAX_POCKETS,
   activeAccountIndex,
   activePockets,
+  penumbraAccountRows,
+  type PenumbraAccountRow,
   pocketOwner,
   visiblePockets,
 } from '../state/pockets';
 import { pocketStoreId } from '../state/pocket-id';
 import { zcashWorkerQuery } from '../hooks/zcash-pool-balances';
+import { penumbraAccountsQuery } from '../hooks/penumbra-accounts';
 import { navTimingOn, Painted } from '../routes/popup/preload';
 import { PopupPath } from '../routes/popup/paths';
 import { isSidePanel } from '../utils/popup-detection';
@@ -123,7 +126,8 @@ const PocketRow = ({
   active: boolean;
   balanceZat: bigint | undefined;
   onPick: () => void;
-  onRename: () => void;
+  /** absent for a penumbra account that is not a pocket: it has no name to change */
+  onRename?: () => void;
 }) => (
   <div className='flex items-center'>
     <button
@@ -142,7 +146,9 @@ const PocketRow = ({
       </span>
       <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
         <Clipped className='text-sm text-fg-high lowercase'>{name}</Clipped>
-        <Clipped className='text-[11px] text-fg-muted lowercase'>account {account}</Clipped>
+        <Clipped className='text-[11px] text-fg-muted lowercase'>
+          {onRename || account === 0 ? `account ${account}` : 'penumbra only'}
+        </Clipped>
       </span>
       {active && balanceZat !== undefined && (
         <Sensitive className='shrink-0 tabular-nums text-sm text-fg-high'>
@@ -150,14 +156,18 @@ const PocketRow = ({
         </Sensitive>
       )}
     </button>
-    <button
-      type='button'
-      onClick={onRename}
-      aria-label={`rename ${name}`}
-      className='flex size-11 shrink-0 items-center justify-center text-fg-muted transition-colors hover:text-fg-high'
-    >
-      <span className='i-ph-pencil-simple size-4' aria-hidden='true' />
-    </button>
+    {onRename ? (
+      <button
+        type='button'
+        onClick={onRename}
+        aria-label={`rename ${name}`}
+        className='flex size-11 shrink-0 items-center justify-center text-fg-muted transition-colors hover:text-fg-high'
+      >
+        <span className='i-ph-pencil-simple size-4' aria-hidden='true' />
+      </button>
+    ) : (
+      <span className='size-11 shrink-0' aria-hidden='true' />
+    )}
   </div>
 );
 
@@ -198,8 +208,17 @@ export const AccountsSheet = ({
   const pockets = useStore(useShallow(activePockets));
   const shown = visiblePockets(pockets);
   const hiddenCount = pockets.length - shown.length;
-  const target = pocketTarget(useStore(selectActiveNetwork));
+  const network = useStore(selectActiveNetwork);
+  const target = pocketTarget(network);
   const activeAccount = useStore(target.active);
+  const onPenumbra = network === 'penumbra';
+  const { data: funded = [] } = useQuery({
+    ...penumbraAccountsQuery(selectedKeyInfo?.id),
+    enabled: open && onPenumbra,
+  });
+  const rows = onPenumbra
+    ? penumbraAccountRows(pockets, funded, activeAccount)
+    : shown.map(p => ({ account: p.account, name: p.name, pocket: true }));
   const renamePocket = useStore(s => s.pockets.rename);
   const hidePocket = useStore(s => s.pockets.hide);
   const renameKeyRing = useStore(selectRenameKeyRing);
@@ -229,6 +248,37 @@ export const AccountsSheet = ({
     void target.pick(useStore.getState(), owner, account);
     onOpenChange(false);
   };
+
+  const renderRow = (p: PenumbraAccountRow) => (
+    <PocketRow
+      key={p.account}
+      name={p.name}
+      account={p.account}
+      active={p.account === activeAccount}
+      balanceZat={target.store && activeBalanceZat}
+      onPick={() => pickPocket(p.account)}
+      onRename={
+        p.pocket
+          ? () =>
+              owner &&
+              onNewPocket({
+                name: p.name,
+                save: n => renamePocket(owner, p.account, n),
+                pocket:
+                  p.account === 0
+                    ? undefined
+                    : {
+                        account: p.account,
+                        hide: async () => {
+                          await releaseActive(useStore.getState(), owner, p.account);
+                          await hidePocket(owner, p.account);
+                        },
+                      },
+              })
+          : undefined
+      }
+    />
+  );
 
   const handleLock = () => {
     lock();
@@ -279,33 +329,7 @@ export const AccountsSheet = ({
             </button>
             <span className='shrink-0 text-[11px] text-fg-muted'>{CUSTODY_META.hot}</span>
           </div>
-          {shown.map(p => (
-            <PocketRow
-              key={p.account}
-              name={p.name}
-              account={p.account}
-              active={p.account === activeAccount}
-              balanceZat={target.store && activeBalanceZat}
-              onPick={() => pickPocket(p.account)}
-              onRename={() =>
-                owner &&
-                onNewPocket({
-                  name: p.name,
-                  save: n => renamePocket(owner, p.account, n),
-                  pocket:
-                    p.account === 0
-                      ? undefined
-                      : {
-                          account: p.account,
-                          hide: async () => {
-                            await releaseActive(useStore.getState(), owner, p.account);
-                            await hidePocket(owner, p.account);
-                          },
-                        },
-                })
-              }
-            />
-          ))}
+          {rows.map(renderRow)}
           <Plus
             label={
               pockets.length >= MAX_POCKETS
@@ -326,6 +350,10 @@ export const AccountsSheet = ({
             </button>
           )}
         </div>
+      )}
+
+      {!isHotWallet && onPenumbra && (
+        <div className='-mx-4 flex flex-col px-3 pb-2'>{rows.map(renderRow)}</div>
       )}
 
       <div className='-mx-4 flex flex-col border-t border-border-soft px-3 pb-3.5 pt-2.5'>
