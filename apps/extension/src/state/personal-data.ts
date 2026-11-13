@@ -2,7 +2,7 @@
  * Personal data = the local-only, chain-irreplaceable data the wallet holds:
  *   - send history ('sent' store: recipient, amount, fee, memo the chain can
  *     never give back, because an outgoing note is encrypted to the recipient),
- *   - per-tx "from" notes (chrome.storage 'txNotes'),
+ *   - per-tx "from" notes (chrome.storage 'txNotes', sealed),
  *   - contacts (their own slice).
  *
  * It is deliberately separate from the SYNC CACHE (notes/witnesses/meta), which
@@ -10,10 +10,14 @@
  * are cleared by the caller via the contacts slice (it owns its own storage).
  */
 
+import { localExtStorage, type LocalStorageState } from '@repo/storage-chrome/local';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
 import type { SentTxRecord } from '../workers/sent-tx-reconcile';
+import { readEncryptedWithMigration, writeEncryptedDirect } from './encrypted-storage';
 
 const ZCASH_DB = 'zafu-zcash';
-const TX_NOTES_KEY = 'txNotes';
+export const TX_NOTES_KEY = 'txNotes';
+const NOTES = TX_NOTES_KEY as keyof LocalStorageState;
 
 const openZcashDb = (): Promise<IDBDatabase | null> =>
   new Promise(resolve => {
@@ -153,17 +157,25 @@ export const clearPersonalData = async (opts: ClearPersonalDataOptions): Promise
   }
 };
 
-/** Read all per-tx notes (for backup/export). */
-export const readTxNotes = async (): Promise<Record<string, string>> => {
-  const r = await chrome.storage.local.get(TX_NOTES_KEY);
-  return (r[TX_NOTES_KEY] as Record<string, string> | undefined) ?? {};
-};
+/**
+ * All per-tx notes, sealed at rest; a legacy plaintext map is sealed on the
+ * way. Throws while locked, so a merge can never write back an empty map.
+ */
+export const readTxNotes = async (): Promise<Record<string, string>> =>
+  (await readEncryptedWithMigration<Record<string, string>>(
+    localExtStorage,
+    sessionExtStorage,
+    NOTES,
+  )) ?? {};
 
-/** Write per-tx notes (for import/restore); merges over existing by default. */
+/** Write per-tx notes, merging over existing by default; false while locked. */
 export const writeTxNotes = async (
   notes: Record<string, string>,
   mode: 'merge' | 'replace' = 'merge',
-): Promise<void> => {
+): Promise<boolean> => {
   const existing = mode === 'merge' ? await readTxNotes() : {};
-  await chrome.storage.local.set({ [TX_NOTES_KEY]: { ...existing, ...notes } });
+  return writeEncryptedDirect(localExtStorage, sessionExtStorage, NOTES, {
+    ...existing,
+    ...notes,
+  });
 };
