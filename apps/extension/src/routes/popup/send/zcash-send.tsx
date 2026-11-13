@@ -886,7 +886,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     try {
       const walletId = selectedKeyInfo.id;
       const amountZat = Math.round(Number(amount) * 1e8).toString();
-      const coldDeps = { walletId: storeId ?? walletId, zidecarUrl, mainnet };
+      const coldDeps = { walletId: storeId ?? walletId, zidecarUrl, mainnet, ufvk };
       const finish = (txid: string) => {
         run.broadcasting();
         run.finish();
@@ -1450,7 +1450,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       const finalResult = await signAndBroadcast(
         frostAirgapSigner(orchardSigs, result),
         result,
-        { walletId: storeId ?? selectedKeyInfo!.id, zidecarUrl, mainnet },
+        { walletId: storeId ?? selectedKeyInfo!.id, zidecarUrl, mainnet, ufvk },
         {
           onSigned: () => {
             runRef.current?.broadcasting();

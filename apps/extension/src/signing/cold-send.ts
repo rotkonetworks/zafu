@@ -61,6 +61,8 @@ export interface ColdSendDeps {
   readonly walletId: string;
   readonly zidecarUrl: string;
   readonly mainnet: boolean;
+  /** the viewing key a whole signed PCZT is checked with before broadcast */
+  readonly ufvk?: string;
 }
 
 /**
@@ -97,12 +99,16 @@ export async function signAndBroadcast(
       );
     case 'signedPczt':
       // Already-signed PCZT -> pool-agnostic extract + broadcast.
+      if (!deps.ufvk) {
+        throw new Error('no viewing key to check the signed transaction with · nothing was sent');
+      }
       return completeSendTxPcztInWorker(
         'zcash',
         deps.walletId,
         deps.zidecarUrl,
         result.pcztHex,
         unsigned.coldSendId,
+        { unsignedPcztHex: unsigned.pcztHex, ufvk: deps.ufvk },
       );
   }
 }

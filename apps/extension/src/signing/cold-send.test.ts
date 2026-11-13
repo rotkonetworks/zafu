@@ -93,3 +93,26 @@ describe('airgap FROST completion', () => {
     expect(worker.spent.size).toBe(0);
   });
 });
+
+describe('a signer that answers with a whole signed PCZT', () => {
+  const wholePczt = async () => ({ kind: 'signedPczt' as const, pcztHex: 'signed-pczt' });
+
+  it('is completed against what was reviewed: the unsigned PCZT and the viewing key', async () => {
+    worker.completeSendTxPcztInWorker.mockResolvedValue({ txid: 'cd'.repeat(32) });
+    await signAndBroadcast(wholePczt, unsigned, { ...deps, ufvk: 'uview1test' });
+    expect(worker.completeSendTxPcztInWorker).toHaveBeenCalledWith(
+      'zcash',
+      STORE,
+      'https://z',
+      'signed-pczt',
+      'send-7',
+      { unsignedPcztHex: 'pczt', ufvk: 'uview1test' },
+    );
+  });
+
+  it('is never broadcast unchecked when there is no viewing key to check it with', async () => {
+    worker.completeSendTxPcztInWorker.mockClear();
+    await expect(signAndBroadcast(wholePczt, unsigned, deps)).rejects.toThrow(/nothing was sent/);
+    expect(worker.completeSendTxPcztInWorker).not.toHaveBeenCalled();
+  });
+});

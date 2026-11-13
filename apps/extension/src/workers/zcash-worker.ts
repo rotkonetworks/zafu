@@ -5948,7 +5948,31 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           signedPcztHex: string;
           /** id returned by the send-tx-pczt build; see ColdSendContext */
           coldSendId?: string;
+          /** the PCZT zafu built and showed for review, and the wallet's viewing key */
+          unsignedPcztHex?: string;
+          ufvk?: string;
         };
+
+        // The signer hands back a whole PCZT here, so it could be any
+        // transaction its key can sign; zafu is its only way online. Only the
+        // one that was reviewed goes out: same ZIP-244 sighash as the unsigned
+        // build (signatures do not change it, every effect does).
+        if (!completePayload.unsignedPcztHex || !completePayload.ufvk) {
+          throw new Error('nothing to check the signed transaction against · nothing was sent');
+        }
+        const sighashOf = (pcztHex: string) =>
+          (
+            JSON.parse(wasmModule!.frost_inspect_pczt_outputs(pcztHex, completePayload.ufvk!)) as {
+              computed_sighash_hex: string;
+            }
+          ).computed_sighash_hex.toLowerCase();
+        if (
+          sighashOf(completePayload.signedPcztHex) !== sighashOf(completePayload.unsignedPcztHex)
+        ) {
+          throw new Error(
+            'the signer answered with a different transaction than the one you reviewed · nothing was sent',
+          );
+        }
 
         // TransactionExtractor reconstructs the canonical v5 tx - collects all
         // spend auth sigs from the signed PCZT, validates the proof, and emits
