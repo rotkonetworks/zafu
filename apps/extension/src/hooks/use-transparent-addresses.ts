@@ -23,6 +23,8 @@ import { activeZcashStoreId, activeAccountIndex } from '../state/pockets';
 import {
   pocketTransparentIndices,
   RESTORE_T_INDEX,
+  T_SWEEP_BEFORE,
+  tSweptKey,
   zcashTransparentIndexKey,
 } from '../state/pocket-id';
 import { highestFunded } from '../transparent/zcash-check';
@@ -248,6 +250,23 @@ export const lookBackTAddresses = async (
   if (found > 0) {
     await moveTIndex(indexKeyOf(source), h => Math.max(h, found), client);
   }
+  await chrome.storage.local.set({ [sweptKey(source)]: true });
+  void client?.invalidateQueries({ queryKey: ['zcashTSweepDue'] });
+};
+
+const sweptKey = (source: TSource) => tSweptKey(source.storeId ?? source.keyInfo?.id ?? '');
+
+/**
+ * A pocket of a wallet made before this install asked only handed-out
+ * addresses, that has not looked back yet: its first check looks back once.
+ */
+export const sweepDue = async (source: TSource): Promise<boolean> => {
+  const key = sweptKey(source);
+  const got = await chrome.storage.local.get([key, T_SWEEP_BEFORE]);
+  const before: unknown = got[T_SWEEP_BEFORE];
+  return (
+    !got[key] && typeof before === 'number' && !!source.keyInfo && source.keyInfo.createdAt < before
+  );
 };
 
 /** the transparent-address query for the active pocket, built from the store as it is now */
@@ -257,7 +276,14 @@ export const activeTransparentAddressesQuery = (s: AllSlices, isMainnet: boolean
 export function useTransparentAddresses(isMainnet: boolean) {
   const source = useStore(useShallow(tAddrSource));
   const { data = NONE, isPending } = useQuery(transparentAddressesQuery(source, isMainnet));
+  const due = useQuery({
+    queryKey: ['zcashTSweepDue', source.storeId, source.keyInfo?.id],
+    queryFn: () => sweepDue(source),
+    enabled: source.isZcash,
+  }).data;
   return {
+    /** this pocket's first check looks back once (sweepDue); undefined until read */
+    due,
     tAddresses: data.tAddresses,
     isLoading: isPending,
     missing: data.missing,

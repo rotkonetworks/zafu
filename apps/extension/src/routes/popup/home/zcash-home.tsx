@@ -166,8 +166,11 @@ export const ZcashContent = ({
   const walletBirthday = useQuery(birthdayQuery).data ?? 0;
 
   // the transparent figure is the last check: asked on intent, never on a timer
-  const { tAddresses } = useTransparentAddresses(isMainnet);
-  const transparent = useTransparentBalance(tAddresses);
+  const { tAddresses, lookBack, due } = useTransparentAddresses(isMainnet);
+  const transparent = useTransparentBalance(
+    tAddresses,
+    due ? ask => lookBack(ask, queryClient) : undefined,
+  );
   const transparentZat = transparent.last?.zat ?? 0n;
   const tip = chainTip?.height ?? 0;
   const eachBlock = useStore(s => s.privacy.settings.zcashTransparentEachBlock);

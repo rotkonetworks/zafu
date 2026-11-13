@@ -6,9 +6,11 @@ vi.mock('./use-address', () => ({
   deriveZcashTransparentFromUfvk: (_u: string, i: number) => Promise.resolve(`t1-ufvk-${i}`),
 }));
 
+import { stampTSweepCutoff, T_SWEEP_BEFORE } from '../state/pocket-id';
 import {
   claimSwapTAddress,
   lookBackTAddresses,
+  sweepDue,
   nextSwapTAddressQuery,
   transparentAddressesQuery,
 } from './use-transparent-addresses';
@@ -91,5 +93,42 @@ describe('a restored seed looks back once', () => {
     expect(await chrome.storage.local.get('zcashTransparentIndex#2')).toEqual({
       'zcashTransparentIndex#2': 25,
     });
+  });
+});
+
+describe('a wallet from before the upgrade looks back once', () => {
+  beforeEach(() => chrome.storage.local.clear());
+  const made = (createdAt: number) =>
+    ({ ...(source as object), keyInfo: { id: 'w', type: 'mnemonic', createdAt } }) as never;
+  const tAddrs = async (src: never) =>
+    (await run<{ tAddresses: string[] }>(transparentAddressesQuery(src, true))).tAddresses;
+
+  it('an upgraded pocket at counter 0 finds coins at index 7, once', async () => {
+    const old = made(1);
+    // reading the cache first sets this storage up, as a real install already is
+    expect(await tAddrs(old)).toEqual(['t1-2-0']);
+    await stampTSweepCutoff('update');
+    expect(await sweepDue(old)).toBe(true);
+
+    const ask = vi.fn((older: string[]) => Promise.resolve([{ address: older[7]! }]));
+    await lookBackTAddresses(old, true, ask);
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(await tAddrs(old)).toHaveLength(8);
+
+    // the mark stops a second sweep
+    expect(await sweepDue(old)).toBe(false);
+  });
+
+  it('a wallet made after the upgrade, or on a fresh install, never sweeps', async () => {
+    await stampTSweepCutoff('update');
+    expect(await sweepDue(made(1))).toBe(true);
+    expect(await sweepDue(made(Date.now() + 1))).toBe(false);
+
+    await chrome.storage.local.clear();
+    await stampTSweepCutoff('install');
+    // a later update keeps the install's cutoff
+    await stampTSweepCutoff('update');
+    expect(await chrome.storage.local.get(T_SWEEP_BEFORE)).toEqual({ [T_SWEEP_BEFORE]: 0 });
+    expect(await sweepDue(made(1))).toBe(false);
   });
 });

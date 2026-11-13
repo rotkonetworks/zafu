@@ -95,3 +95,25 @@ export const pocketTransparentIndices = (highest: unknown): number[] => {
  * through the first twenty, and a seed alone does not say which were used.
  */
 export const RESTORE_T_INDEX = 19;
+
+/**
+ * When this install moved to asking only handed-out addresses: a wallet made
+ * before it may hold coins on an older build's rotated addresses that no
+ * counter recorded, so each of its pockets looks back once. 0 on a fresh
+ * install, so no wallet made here ever does.
+ */
+export const T_SWEEP_BEFORE = 'zcashTransparentSweepBefore';
+
+/** a pocket store's mark that it looked back (by hand or once after the upgrade) */
+export const tSweptKey = (storeId: string): string => `zcashTransparentSwept:${storeId}`;
+
+/** the service worker's half: stamp the cutoff once, 0 on install, now on the first update */
+export const stampTSweepCutoff = async (reason: string): Promise<void> => {
+  if (reason !== 'install' && reason !== 'update') {
+    return;
+  }
+  const seen: unknown = (await chrome.storage.local.get(T_SWEEP_BEFORE))[T_SWEEP_BEFORE];
+  if (typeof seen !== 'number') {
+    await chrome.storage.local.set({ [T_SWEEP_BEFORE]: reason === 'install' ? 0 : Date.now() });
+  }
+};

@@ -344,12 +344,14 @@ async function purgePockets(
   }
   // sync-height hints, t-address caches and transparent checks of the vault's stores, all accounts
   const isPocketKey = (key: string) =>
-    ['zcashSyncHeight_', 'zcashTAddrs:', 'zcashTransparentCheck:'].some(prefix => {
-      if (!key.startsWith(prefix)) {
-        return false;
-      }
-      return isStoreOfWallet(key.slice(prefix.length), vaultId);
-    });
+    ['zcashSyncHeight_', 'zcashTAddrs:', 'zcashTransparentCheck:', 'zcashTransparentSwept:'].some(
+      prefix => {
+        if (!key.startsWith(prefix)) {
+          return false;
+        }
+        return isStoreOfWallet(key.slice(prefix.length), vaultId);
+      },
+    );
   try {
     const stale = Object.keys(await chrome.storage.local.get(null)).filter(isPocketKey);
     if (stale.length) {

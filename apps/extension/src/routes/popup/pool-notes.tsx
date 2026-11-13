@@ -345,11 +345,18 @@ const TransparentSection = ({
   zidecarUrl: string;
 }) => {
   const unit = useUnit();
-  const { tAddresses, lookBack } = useTransparentAddresses(isMainnet);
-  const { last, checking, failed, check, lookBack: askOlder } = useTransparentBalance(tAddresses);
   const queryClient = useQueryClient();
-  const ready = tAddresses.length > 0;
-  // once per open, as soon as the addresses are known
+  const { tAddresses, lookBack, due } = useTransparentAddresses(isMainnet);
+  const sweep = (ask: Parameters<typeof lookBack>[0]) => lookBack(ask, queryClient);
+  const {
+    last,
+    checking,
+    failed,
+    check,
+    lookBack: askOlder,
+  } = useTransparentBalance(tAddresses, due ? sweep : undefined);
+  // once per open, as soon as the addresses and whether this check looks back are known
+  const ready = tAddresses.length > 0 && due !== undefined;
   useEffect(() => {
     if (ready) {
       check();
@@ -440,7 +447,7 @@ const TransparentSection = ({
             disabled={checking}
             onClick={() =>
               // a node that did not answer shows as the failed check above
-              void lookBack(askOlder, queryClient).catch(() => undefined)
+              void sweep(askOlder).catch(() => undefined)
             }
           >
             look back
