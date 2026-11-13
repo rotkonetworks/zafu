@@ -118,6 +118,19 @@ describe('passkey intercept → bridge relay', () => {
     expect(platformCreate).toHaveBeenCalledWith(options);
   });
 
+  it('a sign-in the person declined in zafu is a cancel, never the browser saying it has no passkey', async () => {
+    for (const code of ['cancelled', 'denied']) {
+      const promise = navigator.credentials.get({
+        publicKey: { rpId: 'passkey.example', challenge: Uint8Array.from([5, 6]) },
+      } as CredentialRequestOptions);
+      await vi.waitFor(() => expect(postSpy).toHaveBeenCalled());
+      bridgeResponds(lastRequest(), { success: false, error: code, code });
+      await expect(promise).rejects.toMatchObject({ name: 'NotAllowedError' });
+      postSpy.mockClear();
+    }
+    expect(platformGet).not.toHaveBeenCalled();
+  });
+
   it('relays get with clientDataHash + prf salts and maps the signature back', async () => {
     const promise = navigator.credentials.get({
       publicKey: {

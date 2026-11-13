@@ -1515,6 +1515,7 @@ export const externalMessageListener = (
       // origin is the browser-attested sender, never a caller-supplied field -
       // otherwise any site could forge assertions for an arbitrary rpId
       if (!passkeySender(sender)) {
+        console.warn('[passkey] sign-in refused: not from the passkey bridge');
         sendResponse({ success: false, error: 'not connected' });
         return true;
       }
@@ -1524,6 +1525,7 @@ export const externalMessageListener = (
           // the full suffix list loads only when a site asks for a passkey
           const { rpIdMatchesOrigin } = await import('../../state/public-suffix');
           if (!rpIdMatchesOrigin(rpId, origin)) {
+            console.warn(`[passkey] sign-in refused: rpId ${rpId} does not match ${origin}`);
             sendResponse({ success: false, error: 'rpId does not match origin' });
             return;
           }
@@ -1543,6 +1545,7 @@ export const externalMessageListener = (
             clientDataMatches = false;
           }
           if (!clientDataMatches) {
+            console.warn(`[passkey] sign-in refused on ${origin}: client data does not match`);
             sendResponse({ success: false, error: 'client data does not match the request' });
             return;
           }
@@ -1550,11 +1553,13 @@ export const externalMessageListener = (
           // existed, lets the site ask; nothing else may even raise the tap
           const granted = (await getOriginPermissions(origin))?.granted ?? [];
           if (!granted.includes('passkey') && !granted.includes('connect')) {
+            console.warn(`[passkey] sign-in refused on ${origin}: no passkey permission`);
             sendResponse({ success: false, error: 'not connected' });
             return;
           }
           const ready = await passkeyReady(origin);
           if (!ready.ok) {
+            console.warn(`[passkey] sign-in refused on ${origin}: not ready`, ready.refusal);
             sendResponse(ready.refusal);
             return;
           }
@@ -1599,6 +1604,13 @@ export const externalMessageListener = (
             identity.fill(0);
           }
           if (!found) {
+            console.warn(
+              `[passkey] sign-in found no credential on ${origin} for ${rpId}: ` +
+                `grants ${here ? here.length : 'none recorded'}, ` +
+                `wallets ${asked.filter(a => a.wallet).length}/${asked.length} matched ` +
+                `(${asked.map(a => a.wallet?.type ?? 'missing').join(',')}), ` +
+                `listed ids ${allowIds.length}, user ids ${asked.filter(a => a.userId).length}`,
+            );
             sendResponse({ success: false, error: 'no zafu credential for this request' });
             return;
           }
@@ -1635,7 +1647,8 @@ export const externalMessageListener = (
                 }
               : undefined,
           });
-        } catch {
+        } catch (e) {
+          console.warn(`[passkey] sign-in failed on ${origin}:`, e);
           // `failed`: zafu holds this credential, so a signing error must be
           // reported rather than rerouted to the platform authenticator
           sendResponse({ success: false, code: 'failed' });

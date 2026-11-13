@@ -131,8 +131,19 @@ function hexToBuf(hex: string): ArrayBuffer {
  */
 const isWalletFailure = (r: WalletResponse | undefined): boolean => r?.code === 'failed';
 
+/**
+ * The person said no to zafu for this sign-in (closed the password or the tap
+ * window). zafu holds the passkey, so the browser's prompt after that only says
+ * it has none; the site gets a cancel, as from any authenticator, and can ask again.
+ */
+const isDeclined = (r: WalletResponse | undefined): boolean =>
+  r?.code === 'denied' || r?.code === 'cancelled';
+
 /** marks a wallet failure from `askWallet` so the catch below can tell it from an unreachable wallet */
 class WalletFailedError extends Error {}
+
+/** the person declined this sign-in in zafu */
+class DeclinedError extends Error {}
 
 /**
  * wrapped navigator.credentials.create
@@ -272,6 +283,9 @@ navigator.credentials.get = async function (
       if (isWalletFailure(response)) {
         throw new WalletFailedError();
       }
+      if (isDeclined(response)) {
+        throw new DeclinedError();
+      }
       return originalGet(options);
     }
 
@@ -311,6 +325,9 @@ navigator.credentials.get = async function (
   } catch (e) {
     if (e instanceof WalletFailedError) {
       throw new DOMException('zafu could not sign in with the passkey', 'NotAllowedError');
+    }
+    if (e instanceof DeclinedError) {
+      throw new DOMException('the sign-in was cancelled in zafu', 'NotAllowedError');
     }
     return originalGet(options);
   }

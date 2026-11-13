@@ -68,9 +68,20 @@ window.addEventListener('message', (ev: MessageEvent) => {
   // is waiting out a "not now"; activation is per frame, so this world sees
   // the page's own click
   const now = Date.now();
-  const asked = hand.asked(now, navigator.userActivation?.isActive) && !cooldown.quiet(now);
+  const asked =
+    hand.asked(now, navigator.userActivation?.isActive) && !cooldown.quiet(now, hand.last());
   // orphaned content script (extension reloaded in an open tab) - fail cleanly
   if (!message || !asked || !chrome.runtime?.id || chrome.runtime.id === 'invalid') {
+    console.info(
+      `[zafu] passkey ${kind} left to the browser:`,
+      !message
+        ? 'not a request zafu takes'
+        : !asked
+          ? cooldown.quiet(now, hand.last())
+            ? 'waiting after "not now"'
+            : 'no click on this page in the last minute'
+          : 'zafu was reloaded, reload this page',
+    );
     respond(undefined);
     return;
   }
