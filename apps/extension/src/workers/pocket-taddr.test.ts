@@ -1,6 +1,6 @@
-// A pocket shows one t-address (index 0), but older builds rotated through
-// more. Coins on those legacy indices must still be counted and shielded, by
-// the pocket they belong to and no other.
+// A pocket shows one t-address (index 0), but older builds and swaps handed
+// out more. Coins on those indices must still be counted and shielded, by the
+// pocket they belong to and no other.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, describe, expect, test } from 'vitest';
@@ -41,14 +41,12 @@ const legacy3 = deriveZcashTransparentAddress(SEED, 0, 3, true);
 const utxo = { address: legacy3, script: scriptOf(legacy3), valueZat: 50_000n };
 
 describe('pocket transparent scan indices', () => {
-  const floor = Array.from({ length: 20 }, (_, i) => i);
-
-  test('index 0 always, the twenty-address floor, and any higher index once stored', () => {
-    expect(pocketTransparentIndices(undefined)).toEqual(floor);
-    expect(pocketTransparentIndices(3)).toEqual(floor);
-    expect(pocketTransparentIndices(23)).toEqual([...floor, 20, 21, 22, 23]);
-    expect(pocketTransparentIndices('23')).toEqual(floor);
-    expect(pocketTransparentIndices(-2)).toEqual(floor);
+  test('index 0, then only indices handed out, never a gap scan', () => {
+    expect(pocketTransparentIndices(undefined)).toEqual([0]);
+    expect(pocketTransparentIndices(0)).toEqual([0]);
+    expect(pocketTransparentIndices(3)).toEqual([0, 1, 2, 3]);
+    expect(pocketTransparentIndices('23')).toEqual([0]);
+    expect(pocketTransparentIndices(-2)).toEqual([0]);
   });
 
   test('position is the derivation index', () => {
@@ -59,7 +57,7 @@ describe('pocket transparent scan indices', () => {
 
 describe('a UTXO on legacy index 3 of pocket 0', () => {
   test('is in the pocket 0 scan, so the balance counts it', () => {
-    const scanned = pocketAddresses(0, undefined);
+    const scanned = pocketAddresses(0, 3);
     expect(scanned[3]).toBe(legacy3);
     // the server answers only for the addresses asked about
     const reply = [utxo].filter(u => scanned.includes(u.address));
@@ -74,7 +72,7 @@ describe('a UTXO on legacy index 3 of pocket 0', () => {
   });
 
   test('groups under index 3 for signing', () => {
-    const groups = utxosByTIndex([utxo], pocketAddresses(0, undefined));
+    const groups = utxosByTIndex([utxo], pocketAddresses(0, 3));
     expect([...groups.keys()]).toEqual([3]);
     expect(groups.get(3)).toEqual([utxo]);
   });
@@ -97,7 +95,7 @@ describe('a UTXO on legacy index 3 of pocket 0', () => {
     };
 
     test('hot: the index 3 key of pocket 0 controls it, so the shield signs it', () => {
-      const [index] = utxosByTIndex([utxo], pocketAddresses(0, undefined)).keys();
+      const [index] = utxosByTIndex([utxo], pocketAddresses(0, 3)).keys();
       expect(
         isP2pkhOf(
           utxo.script,
@@ -121,7 +119,7 @@ describe('a UTXO on legacy index 3 of pocket 0', () => {
 
     test('cold: the ufvk shows index 0 and shields legacy index 3 with its own key', () => {
       const ufvk = withKeys(0, k => k.ufvk());
-      const cold = pocketTransparentIndices(undefined).map(i =>
+      const cold = pocketTransparentIndices(3).map(i =>
         wasm.transparent_address_from_ufvk(ufvk, i),
       );
       expect(cold[0]).toBe(deriveZcashTransparentAddress(SEED, 0, 0, true));

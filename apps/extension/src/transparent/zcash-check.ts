@@ -96,3 +96,9 @@ export const fundedFirst = (
     .map(([address, zat]) => ({ address, zat }))
     .sort((a, b) => (b.zat > a.zat ? 1 : b.zat < a.zat ? -1 : 0));
 };
+
+/** the position of the furthest address holding coins; 0 when none past the first does */
+export const highestFunded = (
+  addresses: readonly string[],
+  utxos: readonly { address: string }[],
+): number => Math.max(0, ...utxos.map(u => addresses.indexOf(u.address)));

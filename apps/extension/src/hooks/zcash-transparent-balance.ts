@@ -39,10 +39,13 @@ export const useTransparentBalance = (tAddresses: string[]) => {
   };
   const run = useMutation({
     mutationKey: key,
-    mutationFn: (tip: number) => runCheck(zcashClient(url, backend), tAddresses, tip),
+    mutationFn: ({ tip, addresses }: { tip: number; addresses: string[] }) =>
+      runCheck(zcashClient(url, backend), addresses, tip),
     onSuccess: record,
   });
   const checking = useIsMutating({ mutationKey: key }) > 0;
+  // a check asked without a tip keeps the one it knew
+  const at = (tip: number) => Math.max(tip, last?.height ?? 0);
 
   return {
     /** the last check, or null before the first */
@@ -52,10 +55,15 @@ export const useTransparentBalance = (tAddresses: string[]) => {
     /** one check of every address, each on its own; a second press while one runs does nothing */
     check: (tip = 0) => {
       if (storeId && tAddresses.length > 0 && !queryClient.isMutating({ mutationKey: key })) {
-        // a check asked without a tip keeps the one it knew
-        run.mutate(Math.max(tip, last?.height ?? 0));
+        run.mutate({ tip: at(tip), addresses: tAddresses });
       }
     },
+    /**
+     * a restored seed's older addresses, asked once (lookBackTAddresses): the
+     * result stands as the pocket's check, since the coins it finds are then covered
+     */
+    lookBack: async (older: string[]) =>
+      (await run.mutateAsync({ tip: at(0), addresses: older })).utxos ?? [],
     /** a shield went out: its coins stay off the figure until the next check */
     shielded: (spentZat: bigint) => {
       const now = queryClient.getQueryData<TransparentCheck | null>(key);
