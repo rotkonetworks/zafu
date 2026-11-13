@@ -772,8 +772,22 @@ describe('send - own address only for a connected site', () => {
 describe('ping', () => {
   it('tells an unconnected site the protocol, not the release version', async () => {
     const res = await call({ type: 'ping' }, validSender('https://ping-stranger.example'));
-    expect(res).toMatchObject({ zafu: true, version: '' });
+    expect(res).toMatchObject({ zafu: true, version: '', features: [] });
     expect(typeof res.protocolVersion).toBe('number');
+  });
+
+  it('tells a connected site what it can fold into one approval', async () => {
+    const origin = 'https://ping-features.example';
+    await grantCapability(origin, 'connect');
+    const runtime = chrome.runtime as unknown as { getManifest?: () => { version: string } };
+    const before = runtime.getManifest;
+    runtime.getManifest = () => ({ version: '9.9.9' });
+    try {
+      const res = await call({ type: 'ping' }, validSender(origin));
+      expect(res.features).toContain('dkg_join_deposit');
+    } finally {
+      runtime.getManifest = before;
+    }
   });
 
   it('tells a connected site the release version', async () => {
@@ -813,6 +827,52 @@ describe('poker escrow custody - dkg join by room code, payout co-sign with the 
     expect(q.get('rendezvousCode')).toBe('42-amber-fox');
     expect(q.get('network')).toBe('test');
     expect(q.get('roomCode')).toBe('');
+  });
+
+  it('a deposit rides along to the same popup, and only its checked fields', async () => {
+    const origin = 'https://poker-pay.example';
+    await grantCapability(origin, 'frost');
+    void call(
+      {
+        type: 'zafu_dkg_join',
+        rendezvousCode: '7-a-b',
+        network: 'test',
+        deposit: {
+          vaultIndex: 2,
+          amountZat: 50_000,
+          memo: 'zk.poker/v1/payout:u1x',
+          address: 'u1evil',
+        },
+      },
+      validSender(origin),
+    );
+    await flush();
+    const q = popupQuery(origin);
+    expect(q.get('action')).toBe('dkg-join');
+    expect(JSON.parse(q.get('depositJson')!)).toEqual({
+      vaultIndex: 2,
+      amountZat: 50_000,
+      memo: 'zk.poker/v1/payout:u1x',
+    });
+  });
+
+  it('a malformed deposit is refused before any popup', async () => {
+    const origin = 'https://poker-badpay.example';
+    await grantCapability(origin, 'frost');
+    const r = await call(
+      { type: 'zafu_dkg_join', rendezvousCode: '7-a-b', deposit: { vaultIndex: 1, amountZat: -5 } },
+      validSender(origin),
+    );
+    expect(r).toMatchObject({ error: expect.stringMatching(/deposit/) });
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('a plain join carries no deposit', async () => {
+    const origin = 'https://poker-plain.example';
+    await grantCapability(origin, 'frost');
+    void call({ type: 'zafu_dkg_join', rendezvousCode: '7-a-b' }, validSender(origin));
+    await flush();
+    expect(popupQuery(origin).has('depositJson')).toBe(false);
   });
 
   it('a dkg join with neither a session nor a room code is refused', async () => {

@@ -6,7 +6,7 @@
  * zafu_frost_result internal message.
  */
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../state';
@@ -21,7 +21,15 @@ import {
   frostSignRound1InWorker,
   frostSpendSignInWorker,
   frostInspectPcztOutputsInWorker,
+  buildSendTxInWorker,
+  stopBuildInWorker,
 } from '../../state/keyring/network-worker';
+import { selectEffectiveKeyInfo, selectGetVaultUnlock } from '../../state/keyring';
+import { activeAccountIndex, activeZcashStoreId } from '../../state/pockets';
+import { selectZcashEndpoint } from '../../state/networks';
+import { estimateMultiSendFeeZat } from '../../workers/ironwood-multi-send';
+import { parseDkgDeposit, type DkgDeposit } from '../../message/listen/dkg-deposit';
+import type { KeyInfo } from '../../state/keyring/types';
 import { computeEscrowVerdict } from './send/frost-multisig/multisig-verifier';
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { hexToBytes } from '@repo/wallet/networks';
@@ -40,6 +48,31 @@ interface PokerPayoutOutput {
 }
 
 type Phase = 'confirm' | 'running' | 'review' | 'complete' | 'error';
+
+/** the wallet a folded-in deposit pays from, fixed when the person approves */
+interface Funding {
+  key: KeyInfo;
+  store: string;
+  account: number;
+  serverUrl: string;
+}
+
+type DepositResult = { txid: string; address: string; fee: number } | { error: string };
+
+/** a vault address is shielded: one ironwood output plus change */
+const DEPOSIT_FEE_ZAT = estimateMultiSendFeeZat(['u']);
+
+const fmtZec = (zat: number) => (zat / 1e8).toFixed(8);
+
+/** the deposit the worker checked and put in the url; anything else means none */
+const depositFrom = (json: string | null): DkgDeposit | null => {
+  try {
+    const d = json ? parseDkgDeposit(JSON.parse(json)) : null;
+    return d === 'invalid' ? null : d;
+  } catch {
+    return null;
+  }
+};
 
 /** wait for condition with timeout */
 function waitFor(check: () => boolean, timeoutMs: number): Promise<void> {
@@ -118,6 +151,7 @@ export const FrostApprove = () => {
   const feeZat = Number(params.get('feeZat')) || 0;
   const multisigLabel = params.get('multisigLabel') || '';
   const hide = params.get('hide') === '1';
+  const deposit = action === 'dkg-join' ? depositFrom(params.get('depositJson')) : null;
   const plan: PokerPayoutOutput[] = planJson
     ? (() => {
         try {
@@ -140,6 +174,32 @@ export const FrostApprove = () => {
   const zcashWallets = useStore(s => s.wallets.zcashWallets);
   // find active multisig vault for signing
   const multisigVault = keyInfos.find(k => k.type === 'frost-multisig');
+
+  // a folded-in deposit pays from the wallet selected now; the join adds a
+  // hidden multisig, so this is read when the person approves, not after
+  const fundingKey = useStore(selectEffectiveKeyInfo);
+  const getVaultUnlock = useStore(selectGetVaultUnlock);
+  const zcashEndpoint = useStore(selectZcashEndpoint);
+  const fundingStore = useStore(activeZcashStoreId);
+  const fundingAccount = useStore(activeAccountIndex);
+  const depositRefusal = !deposit
+    ? ''
+    : fundingKey?.type !== 'mnemonic'
+      ? 'paying in needs a phrase wallet selected in zafu'
+      : zafuMainnet !== mainnet
+        ? `zafu is on ${zafuMainnet ? 'mainnet' : 'testnet'}, this vault is on ${mainnet ? 'mainnet' : 'testnet'}`
+        : '';
+  // the deposit build in the worker, stoppable until it broadcasts
+  const buildKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const onHide = () => {
+      if (buildKeyRef.current) {
+        void stopBuildInWorker('zcash', buildKeyRef.current);
+      }
+    };
+    window.addEventListener('pagehide', onHide);
+    return () => window.removeEventListener('pagehide', onHide);
+  }, []);
 
   // explicit password prompt before runPokerSign decrypts the FROST share
   const { requestAuth, PasswordModal } = usePasswordGate();
@@ -191,7 +251,19 @@ export const FrostApprove = () => {
       } else if (action === 'frost-join') {
         await runDkgJoin();
       } else if (action === 'dkg-join') {
-        await runDkgJoinV2();
+        if (depositRefusal) {
+          throw new Error(depositRefusal);
+        }
+        await runDkgJoinV2(
+          deposit && fundingKey
+            ? {
+                key: fundingKey,
+                store: fundingStore ?? fundingKey.id,
+                account: fundingAccount,
+                serverUrl: zcashEndpoint,
+              }
+            : null,
+        );
       } else if (action === 'frost-sign') {
         await runSign();
       } else if (action === 'poker-sign') {
@@ -461,7 +533,52 @@ export const FrostApprove = () => {
     }
   };
 
-  const runDkgJoinV2 = async () => {
+  /**
+   * Pay the folded-in deposit into the vault just saved, at its own address
+   * #vaultIndex (the escrow derives the same one from the same group key).
+   * The join stands either way: a failure here is reported next to it, so the
+   * site sends the deposit on its own instead of joining again.
+   */
+  const payIn = async (
+    d: DkgDeposit,
+    f: Funding,
+    publicKeyPackage: string,
+    fvkSk: string,
+  ): Promise<DepositResult> => {
+    try {
+      setStatus('your share is saved · paying in...');
+      const address = encodeOrchardUnifiedAddress(
+        hexToBytes(await frostDeriveAddressFromSkInWorker(publicKeyPackage, fvkSk, d.vaultIndex)),
+        mainnet,
+      );
+      const key = crypto.randomUUID();
+      buildKeyRef.current = key;
+      const sent = await buildSendTxInWorker(
+        'zcash',
+        f.store,
+        f.serverUrl,
+        address,
+        String(d.amountZat),
+        d.memo ?? '',
+        f.account,
+        mainnet,
+        await getVaultUnlock(f.key.id),
+        key,
+      );
+      if (!('txid' in sent)) {
+        throw new Error('the deposit was not signed');
+      }
+      return { txid: sent.txid, address, fee: Number(sent.fee) };
+    } catch (e) {
+      return {
+        error: `the vault is joined, the deposit did not go out · ${e instanceof Error ? e.message : String(e)}`,
+      };
+    } finally {
+      buildKeyRef.current = null;
+    }
+  };
+
+  const runDkgJoinV2 = async (funding: Funding | null) => {
     const abort = new AbortController();
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
     const { relay, session, relayPubkey, peers, ceremonyId } =
@@ -579,8 +696,19 @@ export const FrostApprove = () => {
     });
 
     abort.abort();
+    const paid =
+      deposit && funding
+        ? { deposit: await payIn(deposit, funding, round3.public_key_package, fvkSk) }
+        : {};
     // relayPubkey: what a coordinator lists to admit this wallet to a signing session
-    const res = { success: true, address: addr, orchardFvk, roomCode: session, relayPubkey };
+    const res = {
+      success: true,
+      address: addr,
+      orchardFvk,
+      roomCode: session,
+      relayPubkey,
+      ...paid,
+    };
     setResult(res);
     setPhase('complete');
     sendResult(requestId, res);
@@ -877,7 +1005,9 @@ export const FrostApprove = () => {
       : action === 'frost-join'
         ? 'join a multisig'
         : action === 'dkg-join'
-          ? 'join a multisig'
+          ? deposit
+            ? 'join and pay in'
+            : 'join a multisig'
           : action === 'frost-sign'
             ? 'sign a transaction'
             : action === 'poker-sign'
@@ -941,6 +1071,28 @@ export const FrostApprove = () => {
                 </p>
                 <p className='text-fg-muted tabular'>label: {labelPrefix}-…</p>
                 <p className='text-fg-muted'>your share stays on this device.</p>
+                {deposit && (
+                  <>
+                    <p>
+                      then pay{' '}
+                      <Sensitive className='tabular text-zigner-gold'>
+                        {fmtZec(deposit.amountZat)} ZEC
+                      </Sensitive>{' '}
+                      into it
+                    </p>
+                    <p className='text-fg-muted'>
+                      to the vault&apos;s own address #{deposit.vaultIndex}, made with the shared
+                      key · once sent, it can&apos;t be undone
+                    </p>
+                    <p className='text-fg-dim tabular'>
+                      network fee ~<Sensitive>{fmtZec(DEPOSIT_FEE_ZAT)} ZEC</Sensitive>
+                    </p>
+                    {deposit.memo && (
+                      <p className='text-fg-dim tabular break-all'>memo: {deposit.memo}</p>
+                    )}
+                    {depositRefusal && <p className='text-warn'>{depositRefusal}</p>}
+                  </>
+                )}
               </>
             )}
             {action === 'frost-sign' && (
@@ -987,7 +1139,7 @@ export const FrostApprove = () => {
             <Button variant='secondary' className='flex-1' onClick={deny}>
               not now
             </Button>
-            <Button className='flex-1' onClick={approve}>
+            <Button className='flex-1' onClick={approve} disabled={!!depositRefusal}>
               approve
             </Button>
           </div>
@@ -1081,6 +1233,7 @@ export const FrostApprove = () => {
               </Clipped>
             </p>
           )}
+          {deposit && <DepositLine result={result?.['deposit'] as DepositResult | undefined} />}
           <Button variant='secondary' onClick={() => window.close()}>
             close
           </Button>
@@ -1101,3 +1254,18 @@ export const FrostApprove = () => {
     </div>
   );
 };
+
+/** how the folded-in deposit went, under the joined vault */
+const DepositLine = ({ result }: { result: DepositResult | undefined }) =>
+  result && 'txid' in result ? (
+    <p className='text-xs tabular text-fg-muted break-all px-4'>
+      paid in ·{' '}
+      <Clipped head={12} tail={6} label='transaction'>
+        {result.txid}
+      </Clipped>
+    </p>
+  ) : (
+    <p className='text-xs text-warn text-center px-4'>
+      {result?.error ?? 'the vault is joined, the deposit did not go out'}
+    </p>
+  );
