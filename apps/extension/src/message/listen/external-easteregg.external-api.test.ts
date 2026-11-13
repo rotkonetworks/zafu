@@ -252,6 +252,7 @@ describe('gh #19 - same-origin approval-popup dedup', () => {
     // used to be dropped as a duplicate, which the site read as a refusal
     const origin = 'https://dkg-then-send.example';
     await grantCapability(origin, 'frost');
+    await grantCapability(origin, 'connect');
     const joined = call({ type: 'zafu_dkg_join', rendezvousCode: '7-a-b' }, validSender(origin));
     await flush();
     expect(createMock).toHaveBeenCalledTimes(1);
@@ -267,8 +268,7 @@ describe('gh #19 - same-origin approval-popup dedup', () => {
       { type: 'zafu_zcash_send', outputs: [{ address: 'utest1seat', amount: 1000 }] },
       validSender(origin),
     );
-    await flush();
-    expect(createMock).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(createMock).toHaveBeenCalledTimes(2));
     expect(String((createMock.mock.calls[1]![0] as { url: string }).url)).toContain(
       'approval/zcash-send',
     );
@@ -811,12 +811,29 @@ describe('zafu_zcash_send - top-frame gate and same-origin popup dedup', () => {
     expect(createMock).not.toHaveBeenCalled();
   });
 
+  it('refuses a site the person has not connected, with no window', async () => {
+    const res = await call(
+      { type: 'zafu_zcash_send', outputs },
+      validSender('https://send-unconnected.example'),
+    );
+    expect(res).toEqual({ success: false, error: 'not connected', code: 'denied' });
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("never carries the site's fee into the approval", async () => {
+    const origin = 'https://send-fee.example';
+    await grantCapability(origin, 'connect');
+    void call({ type: 'zafu_zcash_send', outputs, fee: 99_000_000 }, validSender(origin));
+    await vi.waitFor(() => expect(anyPopupUrlFor(origin)).toBeDefined());
+    expect(anyPopupUrlFor(origin)).not.toContain('fee=');
+  });
+
   it('opens one popup for two concurrent sends from the same origin', async () => {
     const origin = 'https://send-dup.example';
+    await grantCapability(origin, 'connect');
 
     void call({ type: 'zafu_zcash_send', outputs }, validSender(origin));
-    await flush();
-    expect(createMock).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
 
     const second = await call({ type: 'zafu_zcash_send', outputs }, validSender(origin));
     expect(second).toEqual({ success: false, error: 'denied' });
@@ -825,6 +842,7 @@ describe('zafu_zcash_send - top-frame gate and same-origin popup dedup', () => {
 
   it('never carries the sender favicon into the approval popup url', async () => {
     const origin = 'https://no-favicon.example';
+    await grantCapability(origin, 'connect');
     void call(
       { type: 'zafu_zcash_send', outputs },
       {
@@ -832,7 +850,7 @@ describe('zafu_zcash_send - top-frame gate and same-origin popup dedup', () => {
         tab: { id: 1, favIconUrl: 'https://evil.example/f.ico' } as chrome.tabs.Tab,
       },
     );
-    await flush();
+    await vi.waitFor(() => expect(anyPopupUrlFor(origin)).toBeDefined());
     const url = anyPopupUrlFor(origin);
     expect(url).toBeDefined();
     expect(url).not.toContain('favIconUrl');

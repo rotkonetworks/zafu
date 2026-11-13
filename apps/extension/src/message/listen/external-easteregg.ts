@@ -1433,29 +1433,20 @@ export const externalMessageListener = (
       // Used by poker.zk.bot for: rake + escrow deposit in one tx
       //
       // msg.outputs: [{address: string, amount: number, memo?: string}]
-      // msg.fee?: number (default 10000 = 0.0001 ZEC)
-      //
-      // Opens approval popup showing all outputs for user confirmation
+      // Opens approval popup showing all outputs for user confirmation. The fee
+      // is zafu's own; a site-sent fee is never shown or used.
       const outputs = msg['outputs'] as { address: string; amount: number; memo?: string }[];
       if (!outputs || !Array.isArray(outputs) || outputs.length === 0) {
         sendResponse({ success: false, error: 'outputs array required' });
         return true;
       }
 
-      const totalAmount = outputs.reduce((sum, o) => sum + (o.amount || 0), 0);
-      const fee = Number(msg['fee']) || 10_000;
       // the guard above already required a valid top-frame https sender
       const appOrigin = sender.origin ?? 'unknown';
       const requestId = crypto.randomUUID();
-
-      pendingPicks.set(requestId, sendResponse);
-
       const params = new URLSearchParams({
         app: appOrigin,
         requestId,
-        total: String(totalAmount),
-        fee: String(fee),
-        numOutputs: String(outputs.length),
         outputsJson: JSON.stringify(outputs),
       });
       const url = chrome.runtime.getURL(`popup.html#/approval/zcash-send?${params.toString()}`);
@@ -1463,12 +1454,17 @@ export const externalMessageListener = (
       // concurrent send from the same origin is dropped instead of stacking
       // another window.
       void (async () => {
+        if (!hasCapability(await getOriginPermissions(appOrigin), 'connect')) {
+          sendResponse({ success: false, error: 'not connected', code: 'denied' });
+          return;
+        }
+        pendingPicks.set(requestId, sendResponse);
         if (!(await openApprovalPopup(appOrigin, url, requestId))) {
           if (pendingPicks.delete(requestId)) {
             sendResponse({ success: false, error: 'denied' });
           }
         }
-      })();
+      })().catch(() => sendResponse({ success: false, error: 'internal error' }));
       return true;
     }
 
