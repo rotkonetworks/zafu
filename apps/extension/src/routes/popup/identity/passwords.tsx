@@ -28,6 +28,7 @@ import { getAllPermissions } from '@repo/storage-chrome/origin';
 import { useStore } from '../../../state';
 import { selectSelectedKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { derivePassword, normalizeOriginFor, PASSWORD_SCHEME } from '../../../state/identity';
+import { PASSWORD_GENERATOR } from '../../../config/feature-flags';
 import { getIdentityKey } from '../../../state/identity-keys';
 import { pocketOwner } from '../../../state/pockets';
 import {
@@ -132,7 +133,10 @@ export const PasswordsPage = () => {
       : null;
 
   return (
-    <SettingsScreen title='passkeys and passwords' backPath={PopupPath.IDENTITY}>
+    <SettingsScreen
+      title={PASSWORD_GENERATOR ? 'passkeys and passwords' : 'passkeys'}
+      backPath={PopupPath.IDENTITY}
+    >
       <div className='flex flex-col gap-4'>
         <section className='flex flex-col gap-1.5'>
           <h2 className='text-[11px] tracking-[0.06em] text-fg-muted'>passkeys</h2>
@@ -154,153 +158,158 @@ export const PasswordsPage = () => {
               : 'no passkeys yet · a site asks when it wants one'}
           </span>
         </section>
-        <h2 className='-mb-2 text-[11px] tracking-[0.06em] text-fg-muted'>make a password</h2>
-        {!canDerive && (
-          <StatusSlot tone='info' icon='i-ph-info'>
-            <span>
-              {keyInfo
-                ? "this wallet has no recovery phrase on this device, so it doesn't make passwords."
-                : 'no wallet to derive from yet.'}
-            </span>
-          </StatusSlot>
-        )}
+        {/* the generator is off (config/feature-flags): the passkeys above stay */}
+        {PASSWORD_GENERATOR && (
+          <>
+            <h2 className='-mb-2 text-[11px] tracking-[0.06em] text-fg-muted'>make a password</h2>
+            {!canDerive && (
+              <StatusSlot tone='info' icon='i-ph-info'>
+                <span>
+                  {keyInfo
+                    ? "this wallet has no recovery phrase on this device, so it doesn't make passwords."
+                    : 'no wallet to derive from yet.'}
+                </span>
+              </StatusSlot>
+            )}
 
-        <div className='flex flex-col gap-3'>
-          <div className='flex gap-2'>
-            <Input
-              aria-label='site'
-              placeholder='site (e.g. github.com)'
-              value={site}
-              onChange={e => setSite(e.target.value)}
-              disabled={!canDerive}
-              className='flex-1'
-            />
-            <Input
-              aria-label='username'
-              placeholder='username'
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              disabled={!canDerive}
-              className='w-28'
-            />
-          </div>
-          {site.trim() && here.site !== site.trim().toLowerCase() && (
-            <span className='text-label text-fg-dim'>-&gt; {here.site}</span>
-          )}
+            <div className='flex flex-col gap-3'>
+              <div className='flex gap-2'>
+                <Input
+                  aria-label='site'
+                  placeholder='site (e.g. github.com)'
+                  value={site}
+                  onChange={e => setSite(e.target.value)}
+                  disabled={!canDerive}
+                  className='flex-1'
+                />
+                <Input
+                  aria-label='username'
+                  placeholder='username'
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  disabled={!canDerive}
+                  className='w-28'
+                />
+              </div>
+              {site.trim() && here.site !== site.trim().toLowerCase() && (
+                <span className='text-label text-fg-dim'>-&gt; {here.site}</span>
+              )}
 
-          <div className='flex h-[52px] items-center gap-2.5 border border-border-hard bg-elev-1 px-3'>
-            <span className='flex-1 truncate font-mono text-sm text-zigner-gold tracking-wide'>
-              {password ? (revealed ? password : '•'.repeat(Math.min(length, 24))) : '- -'}
-            </span>
-            <Button
-              variant='secondary'
-              size='sm'
-              disabled={!password}
-              onClick={() => setRevealed(r => !r)}
-            >
-              {revealed ? 'hide' : 'show'}
-            </Button>
-            <CopyButton
-              text={password ?? ''}
-              variant='primary'
-              size='sm'
-              label='copy'
-              disabled={!password}
-            />
-          </div>
+              <div className='flex h-[52px] items-center gap-2.5 border border-border-hard bg-elev-1 px-3'>
+                <span className='flex-1 truncate font-mono text-sm text-zigner-gold tracking-wide'>
+                  {password ? (revealed ? password : '•'.repeat(Math.min(length, 24))) : '- -'}
+                </span>
+                <Button
+                  variant='secondary'
+                  size='sm'
+                  disabled={!password}
+                  onClick={() => setRevealed(r => !r)}
+                >
+                  {revealed ? 'hide' : 'show'}
+                </Button>
+                <CopyButton
+                  text={password ?? ''}
+                  variant='primary'
+                  size='sm'
+                  label='copy'
+                  disabled={!password}
+                />
+              </div>
 
-          <div className='flex items-center justify-between text-[11px] text-fg-muted'>
-            <button
-              type='button'
-              disabled={!canDerive}
-              onClick={() => setPicking(true)}
-              className='hover:text-fg-high'
-            >
-              {length} characters · version {rotation + 1}
-            </button>
-            <span className='flex items-center gap-3'>
-              {!saved && (
+              <div className='flex items-center justify-between text-[11px] text-fg-muted'>
                 <button
                   type='button'
                   disabled={!canDerive}
-                  aria-pressed={older}
-                  onClick={() => setOlder(o => !o)}
+                  onClick={() => setPicking(true)}
                   className='hover:text-fg-high'
                 >
-                  {older ? 'as an older zafu made it' : 'made by an older zafu?'}
+                  {length} characters · version {rotation + 1}
                 </button>
-              )}
-              {rotation > 0 && (
-                <button
-                  type='button'
-                  onClick={() => setRotation(r => Math.max(0, r - 1))}
-                  className='hover:text-fg-high'
-                >
-                  previous
-                </button>
-              )}
-              <button
-                type='button'
-                disabled={!canDerive}
-                onClick={() => setRotation(r => r + 1)}
-                className='text-zigner-gold hover:underline'
-              >
-                new version
-              </button>
-            </span>
-          </div>
+                <span className='flex items-center gap-3'>
+                  {!saved && (
+                    <button
+                      type='button'
+                      disabled={!canDerive}
+                      aria-pressed={older}
+                      onClick={() => setOlder(o => !o)}
+                      className='hover:text-fg-high'
+                    >
+                      {older ? 'as an older zafu made it' : 'made by an older zafu?'}
+                    </button>
+                  )}
+                  {rotation > 0 && (
+                    <button
+                      type='button'
+                      onClick={() => setRotation(r => Math.max(0, r - 1))}
+                      className='hover:text-fg-high'
+                    >
+                      previous
+                    </button>
+                  )}
+                  <button
+                    type='button'
+                    disabled={!canDerive}
+                    onClick={() => setRotation(r => r + 1)}
+                    className='text-zigner-gold hover:underline'
+                  >
+                    new version
+                  </button>
+                </span>
+              </div>
 
-          <div className='min-h-[1.25rem]'>
-            {error && (
-              <StatusSlot tone='danger' icon='i-ph-warning'>
-                {error}
-              </StatusSlot>
+              <div className='min-h-[1.25rem]'>
+                {error && (
+                  <StatusSlot tone='danger' icon='i-ph-warning'>
+                    {error}
+                  </StatusSlot>
+                )}
+              </div>
+
+              {owner && site.trim() && (
+                <Button
+                  variant='secondary'
+                  disabled={!canDerive || unchanged}
+                  onClick={() =>
+                    keep(
+                      savePasswordLogin({
+                        ...here,
+                        length,
+                        version: rotation,
+                        scheme,
+                        savedAt: Date.now(),
+                      }),
+                    )
+                  }
+                >
+                  {saved ? (unchanged ? 'saved' : 'save this version') : 'save login'}
+                </Button>
+              )}
+
+              <span className='text-label text-fg-dim'>
+                made from your recovery phrase · the same inputs always give the same password · the
+                password itself is never stored
+              </span>
+            </div>
+
+            {mine.length > 0 && (
+              <RowGroup>
+                {mine.map(l => (
+                  <Row
+                    key={`${l.site}\n${l.username}`}
+                    type='value'
+                    label={l.username ? `${l.site} · ${l.username}` : l.site}
+                    value={`${l.length} · version ${l.version + 1}`}
+                    onPress={() => fill(l)}
+                  />
+                ))}
+              </RowGroup>
             )}
-          </div>
-
-          {owner && site.trim() && (
-            <Button
-              variant='secondary'
-              disabled={!canDerive || unchanged}
-              onClick={() =>
-                keep(
-                  savePasswordLogin({
-                    ...here,
-                    length,
-                    version: rotation,
-                    scheme,
-                    savedAt: Date.now(),
-                  }),
-                )
-              }
-            >
-              {saved ? (unchanged ? 'saved' : 'save this version') : 'save login'}
-            </Button>
-          )}
-
-          <span className='text-label text-fg-dim'>
-            made from your recovery phrase · the same inputs always give the same password · the
-            password itself is never stored
-          </span>
-        </div>
-
-        {mine.length > 0 && (
-          <RowGroup>
-            {mine.map(l => (
-              <Row
-                key={`${l.site}\n${l.username}`}
-                type='value'
-                label={l.username ? `${l.site} · ${l.username}` : l.site}
-                value={`${l.length} · version ${l.version + 1}`}
-                onPress={() => fill(l)}
-              />
-            ))}
-          </RowGroup>
-        )}
-        {saved && (
-          <Button variant='quiet' onClick={() => keep(forgetPasswordLogin(here))}>
-            forget {saved.site}
-          </Button>
+            {saved && (
+              <Button variant='quiet' onClick={() => keep(forgetPasswordLogin(here))}>
+                forget {saved.site}
+              </Button>
+            )}
+          </>
         )}
       </div>
       <Sheet open={picking} onOpenChange={setPicking} title='length'>
