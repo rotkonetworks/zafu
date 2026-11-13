@@ -191,7 +191,7 @@ module.exports = {
   },
 
   i3: {
-    title: '12-word phrase is penumbra-only',
+    title: 'a 12-word phrase imports like 24 words: zcash on, birthday asked',
     run: async c => {
       const z = await L.launch(c.dist);
       try {
@@ -210,11 +210,13 @@ module.exports = {
         const home = await z.open('/', 'popup.html', 3000);
         await c.shot(home, 'home');
         const homeT = L.flat(await L.text(home));
-        const plain = /penumbra/i.test(said + ' ' + next + ' ' + ready);
-        const only = JSON.stringify(s.enabledNetworks) === '["penumbra"]';
+        // since #173 (Brave Wallet phrases): no penumbra-only limit, no warning
+        const limited = /penumbra only/i.test(said + ' ' + next + ' ' + ready);
+        const zcash = (s.enabledNetworks ?? []).includes('zcash');
+        const birthday = /exact block/.test(next);
         return {
-          status: only && plain ? 'pass' : 'fail',
-          note: `enabledNetworks ${JSON.stringify(s.enabledNetworks)}; birthday step skipped: ${!/exact block/.test(next)}; says penumbra while importing: ${plain} ("${said.slice(0, 120)}" | next "${next.slice(0, 60)}" | ready "${ready.slice(0, 60)}"); home "${homeT.slice(0, 50)}" (${c.dir}/phrase.png, home.png)`,
+          status: zcash && birthday && !limited ? 'pass' : 'fail',
+          note: `enabledNetworks ${JSON.stringify(s.enabledNetworks)}; birthday step asked: ${birthday}; says penumbra only: ${limited} ("${said.slice(0, 120)}" | next "${next.slice(0, 60)}" | ready "${ready.slice(0, 60)}"); home "${homeT.slice(0, 50)}" (${c.dir}/phrase.png, home.png)`,
         };
       } finally {
         await z.close();
