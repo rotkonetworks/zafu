@@ -8,7 +8,7 @@
 // egress guard first: nothing may capture fetch or open a socket before it
 import '../net/egress-install-lite';
 
-export {}; // module scope - keeps CHANNEL out of the shared ISOLATED-world global
+import { ZafuControl } from './message/zafu-control';
 
 const CHANNEL = 'zafu-keplr';
 
@@ -88,6 +88,19 @@ const applyKeplrCompat = (on: boolean): void => {
 };
 
 if (chrome.runtime?.id && chrome.runtime.id !== 'invalid') {
+  // zafu's own provider (window.zafu) appears only on a site the person already
+  // connected: the service worker sends Preconnect for an approved site on load,
+  // and Init when they approve one now. Elsewhere it no longer announces zafu
+  // to a page that merely looks.
+  chrome.runtime.onMessage.addListener((message, sender) => {
+    if (
+      sender.id === chrome.runtime.id &&
+      (message === ZafuControl.Preconnect || message === ZafuControl.Init)
+    ) {
+      window.postMessage({ channel: CHANNEL, direction: 'native' }, window.origin);
+    }
+  });
+
   chrome.storage.local
     .get('keplrCompat')
     .then(({ keplrCompat }) => applyKeplrCompat(keplrCompat === true))
