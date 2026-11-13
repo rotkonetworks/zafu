@@ -662,7 +662,7 @@ async function passkeyReady(
   const verified = await walletLocked();
   try {
     const { throwIfNeedsLogin } = await import('../../needs-login');
-    await throwIfNeedsLogin();
+    await throwIfNeedsLogin(origin);
   } catch {
     return { ok: false, refusal: declined('cancelled') };
   }

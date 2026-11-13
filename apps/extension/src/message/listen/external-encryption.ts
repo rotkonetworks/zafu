@@ -270,10 +270,10 @@ const handleEncrypt = async (msg: ZafuEncryptRequest): Promise<ZafuEncryptRespon
  * user closes the unlock without unlocking - the caller answers `locked` then,
  * rather than failing inside the keyring with "keyring locked".
  */
-const unlockedMnemonic = async (): Promise<string | null> => {
+const unlockedMnemonic = async (origin: string): Promise<string | null> => {
   try {
     const { throwIfNeedsLogin } = await import('../../needs-login');
-    await throwIfNeedsLogin();
+    await throwIfNeedsLogin(origin);
   } catch {
     return null;
   }
@@ -320,7 +320,7 @@ const handleDecrypt = async (
 
   try {
     // get user's ed25519 keypair for this origin
-    const mnemonic = await unlockedMnemonic();
+    const mnemonic = await unlockedMnemonic(origin);
     if (!mnemonic) {
       return { error: 'wallet locked', code: 'locked' };
     }
@@ -381,7 +381,7 @@ const handleZidPubkey = async (origin: string): Promise<ZafuZidPubkeyResponse> =
     if (!(await isIdentityEnabledFromStorage())) {
       return { error: 'identity disabled in zafu settings', code: 'not_available' };
     }
-    const mnemonic = await unlockedMnemonic();
+    const mnemonic = await unlockedMnemonic(origin);
     if (!mnemonic) {
       return { error: 'wallet locked', code: 'locked' };
     }

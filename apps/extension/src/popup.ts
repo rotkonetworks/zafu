@@ -77,7 +77,8 @@ export const popup = async <M extends PopupType>(
   popupType: M,
   request: PopupRequest<M>[M],
 ): Promise<PopupResponse<M>[M] | null> => {
-  await throwIfNeedsLogin();
+  // a site's prompt names it, so its dismissed unlocks make it wait
+  await throwIfNeedsLogin((request as { origin?: string }).origin);
 
   const lockGranted = async (lock: Lock | null): Promise<PopupResponse<M> | null> => {
     if (!lock) {
