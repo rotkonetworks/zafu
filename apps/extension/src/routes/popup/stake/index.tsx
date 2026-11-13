@@ -477,20 +477,21 @@ export const StakePage = () => {
               nothing delegated yet
             </p>
           ) : (
-            <RowGroup>
-              {delegations.map((d, i) => (
-                <Row
-                  key={i}
-                  type='screen'
-                  label={delegationName(d)}
-                  description={`${balanceOf(d)} staked · undelegate`}
-                  onPress={() => {
-                    setSelectedDelegation(d);
-                    setAction('undelegate');
-                  }}
-                />
-              ))}
-            </RowGroup>
+            <>
+              <RowGroup>
+                {delegations.map((d, i) => (
+                  <div key={i} className='flex min-h-[50px] items-center gap-3 px-3.5 py-2'>
+                    <span className='grow text-sm text-fg-high lowercase'>{delegationName(d)}</span>
+                    <span className='text-[11px] text-fg-muted'>{balanceOf(d)} staked</span>
+                  </div>
+                ))}
+              </RowGroup>
+              {/* zafu cannot claim unbonded um yet: an undelegation here would
+                  leave it out of sight until a claim exists */}
+              <span className='text-[11px] text-fg-dim'>
+                to unstake, please use prax or pcli for now · zafu can't claim the unbonded um yet
+              </span>
+            </>
           )}
         </section>
 

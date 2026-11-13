@@ -72,7 +72,7 @@ describe('computeVerdict - no unverifiable-but-signable state', () => {
     expect(v.kind).toBe('refuse');
   });
 
-  it('flags a sighash that disagrees with the bytes as a mismatch', () => {
+  it('refuses a sighash that disagrees with the bytes, with no approve-anyway', () => {
     const v = computeVerdict({
       parsed: parsedWith(),
       claimedRecipient: 'x',
@@ -80,10 +80,8 @@ describe('computeVerdict - no unverifiable-but-signable state', () => {
       claimedSighashHex: '22'.repeat(32),
       mainnet: true,
     });
-    expect(v.kind).toBe('mismatch');
-    if (v.kind === 'mismatch') {
-      expect(v.sighashLie).toBe(true);
-    }
+    expect(v.kind).toBe('refuse');
+    expect(verdictAllowsSigning(v, true)).toBe(false);
   });
 
   it('flags a split-spend (extra recipient output) as a mismatch', () => {

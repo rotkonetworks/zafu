@@ -112,7 +112,7 @@ async function broadcastWithMnemonic(
       expectedAddress?: string;
       feeGranter?: string;
     },
-  ) => Promise<{ txHash: string; code: number; rawLog: string }>,
+  ) => Promise<{ txHash: string; code: number; rawLog: string; pending?: boolean }>,
 ): Promise<CosmosTxResult> {
   const conduit = conduitFor(chainId);
   let feeGranter: string | undefined;
@@ -127,7 +127,9 @@ async function broadcastWithMnemonic(
   if (res.code !== 0) {
     throw new Error(res.rawLog || `broadcast failed (code ${res.code})`);
   }
-  const syncBroadcast = getCosmosChain(chainId).keyAlgo === 'eth_secp256k1';
+  // not in a block yet (a sync broadcast, or one that timed out after
+  // submitting): home follows it up from the chain by its hash
+  const syncBroadcast = getCosmosChain(chainId).keyAlgo === 'eth_secp256k1' || !!res.pending;
   return {
     type: 'broadcast',
     txHash: res.txHash,

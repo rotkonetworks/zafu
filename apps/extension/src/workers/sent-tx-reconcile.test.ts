@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  heldByExpired,
   EXPIRY_GRACE_BLOCKS,
   parseExpiryHeight,
   pendingShieldZat,
@@ -395,5 +396,23 @@ describe('a payment through a fresh address', () => {
   it('before the payment is recorded, the move still shows on its own', () => {
     const { txs } = reconcileSentTxs({ chainTxs: [], sent: [move], scannedHeight: 0 });
     expect(txs.map(t => t.id)).toEqual([MOVE]);
+  });
+});
+
+describe('heldByExpired', () => {
+  const note = (nullifier: string, spent_by_txid?: string, spent_at_height?: number) => ({
+    nullifier,
+    spent_by_txid,
+    spent_at_height,
+  });
+  it('frees the notes a pruned send held back, never one the chain saw spent', () => {
+    const notes = [
+      note('a', 'gone'),
+      note('b', 'gone', 3_500_000), // the scan saw it spent: the chain's word stands
+      note('c', 'still-pending'),
+      note('d'),
+    ];
+    expect(heldByExpired(notes, ['gone']).map(n => n.nullifier)).toEqual(['a']);
+    expect(heldByExpired(notes, [])).toEqual([]);
   });
 });
