@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { askExtensionId } from './message/extension-id';
 import { ZafuControl } from './message/zafu-control';
 
 /**
@@ -97,29 +98,25 @@ describe('injected-session page teardown', () => {
 /**
  * This script is the only bridge between the ISOLATED world (which owns
  * `chrome.runtime.id`) and the MAIN-world script (which has no chrome access).
- * The id crosses as a plain DOM attribute rather than through `dataset`, because
- * `dataset` only exists on HTMLElement/SVGElement: on a non-HTML document (a
- * top-level `.xml`/`.svg` response) writing `documentElement.dataset` throws an
- * uncaught TypeError that kills the script before it can do anything else.
+ * The id crosses as a same-stack event answer, never as a DOM attribute any
+ * page script, CSS selector or session-replay snapshot could read.
  */
-describe('injected-session bridge attribute', () => {
-  const stubDocument = (documentElement: unknown) => {
-    vi.stubGlobal('document', { documentElement: documentElement ?? null });
-  };
-
-  test('publishes the extension id as a plain attribute on a root without dataset', async () => {
-    const root = { setAttribute: vi.fn() };
-    expect('dataset' in root).toBe(false);
-    stubDocument(root);
-
+describe('injected-session extension id handoff', () => {
+  test('answers the MAIN-world ask without touching the DOM', async () => {
     await import('./injected-session');
 
-    expect(root.setAttribute).toHaveBeenCalledWith('data-zafu-extension-id', 'test-extension-id');
+    expect(askExtensionId()).toBe('test-extension-id');
+    expect(document.documentElement.attributes).toHaveLength(0);
   });
 
-  test('survives a document with no documentElement', async () => {
-    stubDocument(null);
-
-    await expect(import('./injected-session')).resolves.toBeDefined();
+  test('does not answer from an orphaned script', async () => {
+    const runtime = (chrome as unknown as { runtime: { id: string } }).runtime;
+    runtime.id = 'invalid';
+    try {
+      await import('./injected-session');
+      expect(askExtensionId()).toBe('');
+    } finally {
+      runtime.id = 'test-extension-id';
+    }
   });
 });
