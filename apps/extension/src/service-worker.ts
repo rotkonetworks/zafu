@@ -122,6 +122,47 @@ import { stampSeenVersion } from './state/moved-notice';
 import { idleFor } from './state/idle-activity';
 import { keptCaptureAccess } from './buy/capture/kept';
 
+// Registered first, before any other top-level setup: passkey requests and
+// approval results must reach their handlers even if something below throws
+// (a throw there once left passkey sites on the browser's phone QR).
+// bridge: popup → SW result messages are sent via INTERNAL chrome.runtime.sendMessage
+// (onMessage), but their handlers live in the external listeners (onMessageExternal).
+const INTERNAL_RESULT_TYPES = new Set([
+  'zafu_pick_contacts_result',
+  'zafu_frost_result',
+  'zafu_capability_result',
+  'zafu_zcash_send_result',
+  'zafu_passkey_result',
+]);
+chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
+  const t = (req as { type?: unknown } | null)?.type;
+  if (typeof t === 'string' && INTERNAL_RESULT_TYPES.has(t)) {
+    return externalMessageListener(req, sender, sendResponse);
+  }
+  // passkey requests arrive from the ISOLATED content-script bridge
+  // (passkey-bridge.ts) over onMessage, but their handlers live in the external
+  // listener so the externally_connectable path and the injected intercept
+  // share one implementation. Delegating is safe: both handlers take the origin
+  // from the browser-attested sender and match the rpId against it, so a page
+  // cannot act for another origin through the bridge.
+  if (t === 'zafu_passkey_create' || t === 'zafu_passkey_get') {
+    return externalMessageListener(req, sender, sendResponse);
+  }
+  if (t === 'zafu_encryption_approval_result') {
+    return encryptionMessageListener(req, sender, sendResponse);
+  }
+  if (t === 'zafu_contact_discovery_approval_result') {
+    return contactDiscoveryRequestResultListener(req, sender, sendResponse);
+  }
+  if (CONNECT_INTERNAL_METHODS[0] === t) {
+    return connectResultListener(req, sender, sendResponse);
+  }
+  if (NET_EGRESS_INTERNAL_METHODS[0] === t) {
+    return destinationConsentResultListener(req, sender, sendResponse);
+  }
+  return false;
+});
+
 // performance.now() counts from the worker's start, so this is wake to here:
 // the wasm-backed imports above are what the entry body waits on
 penumbraTiming('sw modules and wasm loaded');
@@ -671,44 +712,6 @@ chrome.runtime.onMessageExternal.addListener(
     }),
   ),
 );
-
-// bridge: popup → SW result messages are sent via INTERNAL chrome.runtime.sendMessage
-// (onMessage), but their handlers live in the external listeners (onMessageExternal).
-const INTERNAL_RESULT_TYPES = new Set([
-  'zafu_pick_contacts_result',
-  'zafu_frost_result',
-  'zafu_capability_result',
-  'zafu_zcash_send_result',
-  'zafu_passkey_result',
-]);
-chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
-  const t = (req as { type?: unknown } | null)?.type;
-  if (typeof t === 'string' && INTERNAL_RESULT_TYPES.has(t)) {
-    return externalMessageListener(req, sender, sendResponse);
-  }
-  // passkey requests arrive from the ISOLATED content-script bridge
-  // (passkey-bridge.ts) over onMessage, but their handlers live in the external
-  // listener so the externally_connectable path and the injected intercept
-  // share one implementation. Delegating is safe: both handlers take the origin
-  // from the browser-attested sender and match the rpId against it, so a page
-  // cannot act for another origin through the bridge.
-  if (t === 'zafu_passkey_create' || t === 'zafu_passkey_get') {
-    return externalMessageListener(req, sender, sendResponse);
-  }
-  if (t === 'zafu_encryption_approval_result') {
-    return encryptionMessageListener(req, sender, sendResponse);
-  }
-  if (t === 'zafu_contact_discovery_approval_result') {
-    return contactDiscoveryRequestResultListener(req, sender, sendResponse);
-  }
-  if (CONNECT_INTERNAL_METHODS[0] === t) {
-    return connectResultListener(req, sender, sendResponse);
-  }
-  if (NET_EGRESS_INTERNAL_METHODS[0] === t) {
-    return destinationConsentResultListener(req, sender, sendResponse);
-  }
-  return false;
-});
 
 // ── idle auto-lock ──
 // The clock lives in chrome.storage.session (state/idle-activity.ts), written
