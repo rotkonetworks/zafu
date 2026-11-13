@@ -14,6 +14,7 @@ import {
   cosmosChainIdFromKeplr,
   keplrApprovalKey,
   keplrKeyCacheKey,
+  signedChainId,
   type KeplrApprovalRequest,
   type KeplrWireKey,
 } from '../keplr';
@@ -161,6 +162,15 @@ async function handleMethod(
       throw new Error(
         `unsupported chain ${cid}: Ethermint chains are not served over Keplr; use the in-wallet flow`,
       );
+    }
+  }
+
+  // the chain that gets signed is the one inside the doc; a site that names
+  // another in params would have the person approve one chain and sign on another
+  if (method === 'signAmino' || method === 'signDirect') {
+    const signed = signedChainId(method, params['signDoc']);
+    if (signed === undefined || signed !== String(params['chainId'] ?? '')) {
+      throw new Error("this request names one chain and signs on another · zafu won't sign it");
     }
   }
 

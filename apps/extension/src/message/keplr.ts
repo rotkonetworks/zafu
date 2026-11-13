@@ -49,6 +49,18 @@ export interface KeplrApprovalRequest {
   title?: string;
 }
 
+/** the chain id a sign doc commits to: amino `chain_id`, direct `chainId` */
+export const signedChainId = (
+  method: 'signAmino' | 'signDirect',
+  doc: unknown,
+): string | undefined => {
+  if (typeof doc !== 'object' || doc === null) {
+    return undefined;
+  }
+  const id = (doc as Record<string, unknown>)[method === 'signAmino' ? 'chain_id' : 'chainId'];
+  return typeof id === 'string' ? id : undefined;
+};
+
 export const keplrApprovalKey = (requestId: string): string => `keplrApproval:${requestId}`;
 export const keplrKeyCacheKey = (origin: string, chainId: string): string =>
   `keplrKey:${origin}:${chainId}`;

@@ -25,6 +25,7 @@ import { adr036SignDoc, describeArbitraryData } from '@repo/wallet/networks/cosm
 import {
   cosmosChainIdFromKeplr,
   keplrApprovalKey,
+  signedChainId,
   type KeplrApprovalRequest,
   type KeplrWireKey,
 } from '../../../message/keplr';
@@ -307,6 +308,11 @@ export const KeplrApproval = () => {
   }
 
   const isSign = req.method !== 'enable';
+  // the chain inside the doc is the one signed; the worker refuses a doc that disagrees with the site's label
+  const signedChain =
+    req.method === 'signAmino' || req.method === 'signDirect'
+      ? signedChainId(req.method, req.signDoc)
+      : req.chainId;
   const message =
     req.method === 'signArbitrary'
       ? describeArbitraryData(
@@ -358,7 +364,7 @@ export const KeplrApproval = () => {
               <p className='text-fg'>
                 {originHost} wants you to sign a{' '}
                 {req.method === 'signDirect' ? 'transaction (direct)' : 'transaction (amino)'} on{' '}
-                <span className='font-mono'>{req.chainId}</span>.
+                <span className='font-mono'>{signedChain}</span>.
               </p>
               {req.signerAddress && (
                 <p className='mt-1 break-all font-mono text-label text-fg-muted'>

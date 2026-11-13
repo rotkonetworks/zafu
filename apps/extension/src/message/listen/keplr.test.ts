@@ -249,3 +249,53 @@ describe('ZafuKeplr ADR-036', () => {
     expect(createMock).not.toHaveBeenCalled();
   });
 });
+
+describe('ZafuKeplr signed chain', () => {
+  const origin = 'https://dapp.example';
+  const amino = (chain_id: string) => ({
+    chain_id,
+    account_number: '1',
+    sequence: '0',
+    fee: { amount: [], gas: '200000' },
+    msgs: [],
+    memo: '',
+  });
+  const direct = (chainId: string) => ({
+    bodyBytesB64: '',
+    authInfoBytesB64: '',
+    chainId,
+    accountNumber: '1',
+  });
+
+  it.each([
+    ['signAmino', amino('osmosis-1')],
+    ['signDirect', direct('osmosis-1')],
+    ['signAmino', undefined],
+    ['signDirect', 'not a doc'],
+  ])('refuses %s when the doc signs another chain than the site names', async (method, doc) => {
+    const res = await call(
+      {
+        type: 'ZafuKeplr',
+        method,
+        params: { chainId: 'noble-1', signerAddress: 'noble1x', signDoc: doc },
+      },
+      sender(origin),
+    );
+    expect(res).toMatchObject({ ok: false });
+    expect((res as { error: string }).error).toMatch(/one chain and signs on another/);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses an Ethermint chain hidden in the doc under a harmless label', async () => {
+    const res = await call(
+      {
+        type: 'ZafuKeplr',
+        method: 'signDirect',
+        params: { chainId: 'noble-1', signDoc: direct('injective-1') },
+      },
+      sender(origin),
+    );
+    expect(res).toMatchObject({ ok: false });
+    expect(createMock).not.toHaveBeenCalled();
+  });
+});
