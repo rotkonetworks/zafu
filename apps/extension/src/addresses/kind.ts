@@ -54,6 +54,7 @@ const COSMOS_PREFIXES: Record<string, string> = {
   stars: 'stargaze',
   secret: 'secret',
   terra: 'terra',
+  terp: 'terp network',
 };
 
 /** a swap route's chain code (state/swap/tokens.ts) to the chain an address field is for */
