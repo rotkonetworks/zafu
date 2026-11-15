@@ -16,7 +16,7 @@
  * tab), and we additionally guard below with isPopup() so a stray popup entry
  * bails out with instructions rather than silently failing.
  *
- * Two paths: with HARDWARE_WALLET_ENABLED (beta) the Ledger Zcash app exports
+ * Two paths: with beta features on the Ledger Zcash app exports
  * the account's UFVK and the wallet is shielded (ledger/zcash-app); otherwise,
  * and one tap away in beta, the Bitcoin app reads a transparent address only.
  */
@@ -40,7 +40,7 @@ import {
   isLedgerBtcSupported,
   zcashTransparentPath,
 } from '../../../ledger/hw-btc-signer';
-import { HARDWARE_WALLET_ENABLED } from '../../../config/feature-flags';
+import { useBetaFeatures } from '../../../config/beta';
 import { ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
 import { deriveZcashAddressFromUfvk } from '../../../hooks/use-address';
 import { pickLedger } from '../../../ledger/zcash-app/connect';
@@ -497,7 +497,10 @@ const ConnectLedgerShielded = ({ onTransparent }: { onTransparent: () => void })
 
 /** shielded with the zcash app in beta, the bitcoin app one tap away; transparent otherwise */
 export const ConnectLedger = () => {
-  const [transparent, setTransparent] = useState(!HARDWARE_WALLET_ENABLED);
+  const beta = useBetaFeatures();
+  // until the person picks a path, the setting's (its first read may land after the first paint)
+  const [picked, setTransparent] = useState<boolean>();
+  const transparent = picked ?? !beta;
   return transparent ? (
     <ConnectLedgerTransparent />
   ) : (

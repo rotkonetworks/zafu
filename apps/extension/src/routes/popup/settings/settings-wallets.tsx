@@ -23,7 +23,7 @@ import { walletsSelector, type ZcashWalletJson } from '../../../state/wallets';
 import { Section, SettingsScreen } from './settings-screen';
 import { openPageInTab } from '../../../utils/popup-detection';
 import { PagePath } from '../../page/paths';
-import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import { LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
@@ -99,7 +99,7 @@ export const SettingsWallets = () => {
                 description='zigner, keystone'
                 onPress={() => navigate(PopupPath.SETTINGS_CONNECT_DEVICE)}
               />
-              {zcashOn && (HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED) && (
+              {zcashOn && LEDGER_TRANSPARENT_ENABLED && (
                 <Row
                   type='screen'
                   icon='i-ph-usb'
