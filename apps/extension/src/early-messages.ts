@@ -13,6 +13,13 @@
  * This module has no async import, so it runs in that first turn. It keeps a
  * message's channel open until the entry body has registered its listeners
  * (`releaseHeldMessages`), then hands it to them as Chrome would have.
+ *
+ * Only a site's or a content script's message is kept: only the worker
+ * answers those. A message from one of zafu's own pages may be for another
+ * page (the popup asking the offscreen document to sync), and keeping its
+ * channel here, then closing it with nothing at the release, answered it
+ * before the page it was for could: sync requests on a cold start came back
+ * empty. Those pass through untouched, as before this module existed.
  */
 
 type Listener = (
@@ -21,11 +28,17 @@ type Listener = (
   respond: (response?: unknown) => void,
 ) => boolean | undefined | void;
 
+/** from one of zafu's own pages (popup, side panel, offscreen), not a site or a content script */
+const fromOwnPage = (sender: chrome.runtime.MessageSender): boolean => {
+  const own = `chrome-extension://${chrome.runtime.id}`;
+  return sender.origin === own || !!sender.url?.startsWith(`${own}/`);
+};
+
 const channel = (event: { addListener: (l: never) => void } | undefined) => {
   const listeners: Listener[] = [];
   let held: Parameters<Listener>[] | undefined = [];
   const hold: Listener = (req, sender, respond) => {
-    if (!held) {
+    if (!held || fromOwnPage(sender)) {
       return false;
     }
     held.push([req, sender, respond]);

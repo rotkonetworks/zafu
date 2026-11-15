@@ -8,15 +8,16 @@ const load = async () => {
   const registered: L[] = [];
   vi.stubGlobal('chrome', {
     runtime: {
+      id: 'zafu',
       onMessage: { addListener: (l: L) => registered.push(l) },
       onMessageExternal: { addListener: vi.fn() },
     },
   });
   const early = await import('./early-messages');
   /** deliver as Chrome does: every listener is called; true keeps the channel open */
-  const deliver = (req: unknown) => {
+  const deliver = (req: unknown, origin = 'https://site.example') => {
     const respond = vi.fn();
-    const kept = registered.map(l => l(req, {}, respond) === true).includes(true);
+    const kept = registered.map(l => l(req, { origin }, respond) === true).includes(true);
     return { respond, kept };
   };
   return { early, deliver };
@@ -50,6 +51,16 @@ describe('messages that arrive before the listeners', () => {
     early.releaseHeldMessages();
     expect(stray.respond).toHaveBeenCalledTimes(1);
     expect(stray.respond).toHaveBeenCalledWith(undefined);
+  });
+
+  it("a message from zafu's own page is never kept: another page may be the one to answer it", async () => {
+    const { early, deliver } = await load();
+    // the popup asking the offscreen document to sync, while the worker is still starting
+    const sync = deliver({ type: 'NW_CALL' }, 'chrome-extension://zafu');
+    expect(sync.kept).toBe(false);
+    early.listen(() => false);
+    early.releaseHeldMessages();
+    expect(sync.respond).not.toHaveBeenCalled();
   });
 
   it('after the release it steps aside: listeners get messages straight from chrome', async () => {
