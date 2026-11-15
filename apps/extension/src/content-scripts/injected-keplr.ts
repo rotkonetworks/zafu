@@ -109,6 +109,14 @@ const decodeKey = (w: WireKey): KeplrKey => ({
   isKeystone: false,
 });
 
+interface StdSignature {
+  pub_key: { type: string; value: string };
+  signature: string;
+}
+
+const toBytes = (data: string | Uint8Array): Uint8Array =>
+  typeof data === 'string' ? new TextEncoder().encode(data) : data;
+
 interface AccountData {
   address: string;
   algo: string;
@@ -227,6 +235,25 @@ const makeProvider = (native: boolean) => ({
       accountNumber: bigint;
     },
   ) => makeOfflineSigner(chainId, native).signDirect(signer, signDoc),
+
+  // ADR-036, as Keplr: a string is signed as its utf-8 bytes
+  signArbitrary: async (chainId: string, signer: string, data: string | Uint8Array) =>
+    request<StdSignature>(
+      'signArbitrary',
+      { chainId, signerAddress: signer, dataB64: bytesToB64(toBytes(data)) },
+      native,
+    ),
+  verifyArbitrary: async (
+    chainId: string,
+    signer: string,
+    data: string | Uint8Array,
+    signature: StdSignature,
+  ): Promise<boolean> =>
+    request<boolean>(
+      'verifyArbitrary',
+      { chainId, signerAddress: signer, dataB64: bytesToB64(toBytes(data)), signature },
+      native,
+    ),
 
   sendTx: async (chainId: string, tx: Uint8Array, mode: string): Promise<Uint8Array> => {
     const res = await request<{ hashB64: string }>(

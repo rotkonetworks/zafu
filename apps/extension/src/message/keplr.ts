@@ -38,12 +38,12 @@ export const isKeplrApprovalResult = (m: unknown): m is KeplrApprovalResult =>
 /** the request stashed in session storage for the approval popup to read */
 export interface KeplrApprovalRequest {
   requestId: string;
-  method: 'enable' | 'signAmino' | 'signDirect';
+  method: 'enable' | 'signAmino' | 'signDirect' | 'signArbitrary';
   origin: string;
   chainId: string;
   /** signer bech32 address (sign methods) */
   signerAddress?: string;
-  /** amino StdSignDoc, or the base64 direct signDoc fields */
+  /** amino StdSignDoc (an ADR-036 one for signArbitrary), or the base64 direct signDoc fields */
   signDoc?: unknown;
   favIconUrl?: string;
   title?: string;

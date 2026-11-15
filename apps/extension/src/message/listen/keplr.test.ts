@@ -47,6 +47,8 @@ describe('ZafuKeplr Ethermint guard', () => {
     ['signDirect', { chainId: 'injective-1' }],
     ['signAmino', { chainId: 'injective-1' }],
     ['sendTx', { chainId: 'injective-1' }],
+    ['signArbitrary', { chainId: 'injective-1' }],
+    ['verifyArbitrary', { chainId: 'injective-1' }],
   ])('refuses %s on injective-1 as a handled failure', async (method, params) => {
     const res = await call({ type: 'ZafuKeplr', method, params, origin }, sender(origin));
 
@@ -162,5 +164,88 @@ describe('ZafuKeplr origin and result senders', () => {
       ),
     ).toMatchObject({ ok: true });
     expect(createMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ZafuKeplr ADR-036', () => {
+  const origin = 'https://dapp.example';
+  // keplr's signature over 'hello from zafu' (see packages/wallet adr036.test.ts)
+  const signer = 'cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0auqdal4';
+  const dataB64 = btoa('hello from zafu');
+  const signature = {
+    pub_key: {
+      type: 'tendermint/PubKeySecp256k1',
+      value: 'Ak9OKtmcNNYLm6YoPJQxqEGK+GcyEpYfl6d7Y3f80Fti',
+    },
+    signature:
+      'INXJIBwvKgWVWGvXWPfeiu4xfuvi5HJ6qErH8LpwszQZMdkXGZDHLj8LHFdikiXIbhNAKe3NhZGdMh+etdxz3w==',
+  };
+  const page: chrome.runtime.MessageSender = {
+    id: chrome.runtime.id,
+    origin: `chrome-extension://${chrome.runtime.id}`,
+    url: `chrome-extension://${chrome.runtime.id}/popup.html`,
+  };
+
+  it('asks with the ADR-036 sign doc and answers with what the person approved', async () => {
+    (chrome.runtime as { getURL?: (p: string) => string }).getURL = p =>
+      `chrome-extension://${chrome.runtime.id}/${p}`;
+    const signing = call(
+      {
+        type: 'ZafuKeplr',
+        method: 'signArbitrary',
+        params: { chainId: 'cosmoshub-4', signerAddress: signer, dataB64 },
+      },
+      sender(origin),
+    );
+    let key = '';
+    await vi.waitFor(async () => {
+      [key = ''] = Object.keys(await chrome.storage.session.get(null)).filter(k =>
+        k.startsWith('keplrApproval:'),
+      );
+      expect(key).not.toBe('');
+    });
+    const req = (await chrome.storage.session.get(key))[key];
+    expect(req).toMatchObject({
+      method: 'signArbitrary',
+      origin,
+      signerAddress: signer,
+      signDoc: {
+        chain_id: '',
+        account_number: '0',
+        sequence: '0',
+        memo: '',
+        fee: { amount: [], gas: '0' },
+        msgs: [{ type: 'sign/MsgSignData', value: { signer, data: dataB64 } }],
+      },
+    });
+    keplrMessageListener(
+      {
+        type: 'zafu_keplr_result',
+        requestId: key.slice('keplrApproval:'.length),
+        result: { approved: true, payload: signature },
+      },
+      page,
+      vi.fn(),
+    );
+    expect(await signing).toEqual({ ok: true, result: signature });
+  });
+
+  it('verifies without a prompt', async () => {
+    const verify = (params: Record<string, unknown>) =>
+      call(
+        {
+          type: 'ZafuKeplr',
+          method: 'verifyArbitrary',
+          params: { chainId: 'cosmoshub-4', signerAddress: signer, dataB64, signature, ...params },
+        },
+        sender(origin),
+      );
+    expect(await verify({})).toEqual({ ok: true, result: true });
+    expect(await verify({ dataB64: btoa('hello from zafu.') })).toEqual({
+      ok: true,
+      result: false,
+    });
+    expect(await verify({ chainId: 'osmosis-1' })).toEqual({ ok: true, result: false });
+    expect(createMock).not.toHaveBeenCalled();
   });
 });
