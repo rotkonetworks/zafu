@@ -136,6 +136,15 @@ describe('promptCooldown', () => {
     expect(c.quiet(1_001)).toBe(false);
   });
 
+  it("the person's own click after a not now ends the wait; the page asking again alone does not", () => {
+    const c = promptCooldown();
+    // the password prompt dismissed at 10 s, after the click at 5 s that asked
+    c.after({ success: false, code: 'cancelled' }, 10_000);
+    expect(c.quiet(12_000, 5_000)).toBe(true);
+    // a new click at 15 s: the next ask is theirs, not the page looping
+    expect(c.quiet(16_000, 15_000)).toBe(false);
+  });
+
   it('does not wait after a refusal the person never saw', () => {
     const c = promptCooldown();
     c.after({ success: false }, 0);

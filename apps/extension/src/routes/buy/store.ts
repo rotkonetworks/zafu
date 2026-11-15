@@ -8,6 +8,7 @@
 import { createStore } from 'zustand/vanilla';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { useStore } from '../../state';
+import { keyringLoaded } from '../../state/loaded';
 import { activeAccountIndex } from '../../state/pockets';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { deriveAddressInWorker, spawnNetworkWorker } from '../../state/keyring/network-worker';
@@ -241,22 +242,6 @@ const stepTo = (i: number, patch?: (s: Step[]) => Step[]) => {
   })) as Step[];
   set({ steps: patch ? patch(steps) : steps });
 };
-
-/** the keyring has read the vaults from storage (persist.ts runs its init on load) */
-const keyringLoaded = () =>
-  new Promise<void>(resolve => {
-    const loaded = () => useStore.getState().keyRing.status !== 'not-loaded';
-    if (loaded()) {
-      resolve();
-      return;
-    }
-    const stop = useStore.subscribe(() => {
-      if (loaded()) {
-        stop();
-        resolve();
-      }
-    });
-  });
 
 /** the password, from the page's own unlock (keyring unlock re-hydrates sealed state) */
 export const unlock = (password: string): Promise<boolean> =>

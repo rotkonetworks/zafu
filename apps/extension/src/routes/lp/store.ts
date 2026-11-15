@@ -15,6 +15,7 @@
 import { createStore } from 'zustand/vanilla';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { useStore } from '../../state';
+import { keyringLoaded } from '../../state/loaded';
 import { zcashViewKey } from '../../state/zcash-view-key';
 import { selectEffectiveKeyInfo } from '../../state/keyring';
 import { activeAccountIndex, activePockets, activeZcashStoreId } from '../../state/pockets';
@@ -249,22 +250,6 @@ export const COLD_SHIELD_LINE =
   'zigner shields this address from zafu itself · please open zafu and shield it there';
 
 const zidecar = () => selectZcashEndpoint(useStore.getState());
-
-/** the keyring has read the vaults from storage (persist.ts runs its init on load) */
-const keyringLoaded = () =>
-  new Promise<void>(resolve => {
-    const loaded = () => useStore.getState().keyRing.status !== 'not-loaded';
-    if (loaded()) {
-      resolve();
-      return;
-    }
-    const stop = useStore.subscribe(() => {
-      if (loaded()) {
-        stop();
-        resolve();
-      }
-    });
-  });
 
 export const unlock = (password: string): Promise<boolean> =>
   useStore.getState().keyRing.unlock(password);

@@ -13,6 +13,7 @@ import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
 import { Mark } from '@repo/ui/components/ui/mark';
 import { RowGroup } from '@repo/ui/components/ui/row';
 import { useStore } from '../../../state';
+import { exitApprovalSurface, usePopupNav } from '../../../utils/navigate';
 import { Clipped } from '@repo/ui/components/ui/clipped';
 
 const COPY = {
@@ -50,6 +51,7 @@ export const PasskeyApprove = () => {
   const walletId = params.get('wallet');
   const keyInfo = useStore(s => s.keyRing.keyInfos.find(k => k.id === walletId));
 
+  const navigate = usePopupNav();
   const respond = async (approved: boolean) => {
     // Deliver the decision BEFORE closing: `window.close()` removes the window
     // synchronously, and the service worker's onRemoved sweep would then race
@@ -67,7 +69,7 @@ export const PasskeyApprove = () => {
       // the service worker is unreachable or was reloaded: closing is the only
       // way to release the window (the request is already lost either way).
     }
-    window.close();
+    exitApprovalSurface(navigate);
   };
 
   return (

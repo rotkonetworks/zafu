@@ -277,7 +277,7 @@ const unlockedMnemonic = async (): Promise<string | null> => {
   } catch {
     return null;
   }
-  const { useStore } = await import('../../state');
+  const useStore = await (await import('../../state/loaded')).loadedStore();
   const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
   if (!keyInfo) {
     return null;
