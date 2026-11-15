@@ -416,6 +416,69 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
     expect(await pending).toMatchObject({ success: false, code: 'failed' });
   });
 
+  describe('where the passkey screen shows', () => {
+    // chrome.runtime is a module here: swap it whole, with a panel and a message sink
+    const runtime = globalThis.chrome.runtime;
+    const setRuntime = (r: unknown) => {
+      (globalThis.chrome as unknown as { runtime: unknown }).runtime = r;
+    };
+    let open = false;
+    const panelOpen = (o: boolean) => {
+      open = o;
+    };
+    const navigated: { type: string; route: string }[] = [];
+    beforeEach(() => {
+      navigated.length = 0;
+      setRuntime({
+        id: runtime.id,
+        getURL: (path: string) => runtime.getURL(path),
+        getContexts: async () => (open ? [{ contextType: 'SIDE_PANEL', windowId: 7 }] : []),
+        sendMessage: async (m: { type: string; route: string }) => {
+          navigated.push(m);
+        },
+      });
+    });
+    afterEach(async () => {
+      panelOpen(false);
+      setRuntime(runtime);
+      await localExtStorage.remove('approvalSurface' as never);
+    });
+
+    it('in the side panel when it is open: no window, and the tap there signs in', async () => {
+      const origin = 'https://passkey-panel.example';
+      panelOpen(true);
+      const pending = call(create('passkey-panel.example'), validSender(origin));
+      await vi.waitFor(() => expect(navigated.length).toBeGreaterThan(0));
+      expect(createMock).not.toHaveBeenCalled();
+      const { route } = navigated.at(-1)!;
+      expect(route).toMatch(/^\/passkey-approve\?/);
+      const requestId = new URLSearchParams(route.slice(route.indexOf('?') + 1)).get('requestId');
+      await call(
+        { type: 'zafu_passkey_result', requestId, result: { approved: true } },
+        internalSender(),
+      );
+      expect(await pending).toMatchObject({ success: true });
+    });
+
+    it('a panel closed with the request unanswered is the cancel', async () => {
+      const origin = 'https://passkey-panel-closed.example';
+      panelOpen(true);
+      const pending = call(create('passkey-panel-closed.example'), validSender(origin));
+      await vi.waitFor(() => expect(navigated.length).toBeGreaterThan(0));
+      panelOpen(false);
+      expect(await pending).toMatchObject({ success: false, code: 'cancelled' });
+    });
+
+    it('in a window when the person chose windows, panel open or not', async () => {
+      const origin = 'https://passkey-window.example';
+      panelOpen(true);
+      await localExtStorage.set('approvalSurface' as never, 'popup' as never);
+      void call(create('passkey-window.example'), validSender(origin));
+      await waitForPopup(origin);
+      expect(navigated).toEqual([]);
+    });
+  });
+
   it('(a) create mints nothing until the tap, and shows the site, rpId and wallet', async () => {
     const origin = 'https://passkey-a.example';
 

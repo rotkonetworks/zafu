@@ -55,11 +55,15 @@ import { clientDataJson } from '../../content-scripts/passkey-wire';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { ZAFU_PROTOCOL_VERSION, ZAFU_SUPPORTED_PROTOCOL_VERSIONS } from '@zafu/protocol';
-import { getApprovalSurface } from '../../side-panel-pref';
+import {
+  getApprovalSurface,
+  openPanelOnGesture,
+  recentPanelOpenAccepted,
+} from '../../side-panel-pref';
 import type { VaultUnlock } from '../../state/keyring/types';
 import type { AllSlices } from '../../state';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
-import { isSidePanelOpen } from '../../side-panel-presence';
+import { isSidePanelOpen, waitForSidePanel } from '../../side-panel-presence';
 import { SIDE_PANEL_NAVIGATE } from '../side-panel-delivery';
 import { popupWindowGeometry } from '../../utils/popup-window';
 import { PopupPath } from '../../routes/popup/paths';
@@ -169,6 +173,9 @@ const popupWindowToRequestId = new Map<number, string>();
 // releasePopupGuardForRequest below.
 const requestIdToWindowId = new Map<string, number>();
 
+/** an approval showing in the side panel: its request, and the site whose slot it holds */
+const panelRequestToOrigin = new Map<string, string>();
+
 /**
  * Release the per-origin popup-open guard for `requestId`'s window as soon
  * as its result is IN, instead of waiting for the physical window-close
@@ -185,6 +192,12 @@ const requestIdToWindowId = new Map<string, number>();
  * result message ever arrives in that case).
  */
 function releasePopupGuardForRequest(requestId: string): void {
+  const inPanel = panelRequestToOrigin.get(requestId);
+  if (inPanel !== undefined) {
+    panelRequestToOrigin.delete(requestId);
+    originsWithOpenPopup.delete(inPanel);
+    return;
+  }
   const windowId = requestIdToWindowId.get(requestId);
   if (windowId === undefined) {
     return;
@@ -251,11 +264,22 @@ export async function openApprovalPopup(
   origin: string,
   url: string,
   requestId?: string,
+  /** `panel`: a plain approve-or-not screen, shown where the person chose (side-panel-pref) */
+  opts: { panel?: boolean } = {},
 ): Promise<boolean> {
   if (originsWithOpenPopup.has(origin)) {
     return false;
   }
   originsWithOpenPopup.add(origin);
+  if (opts.panel && requestId !== undefined) {
+    const shown = await showInSidePanel(origin, url, requestId);
+    if (shown !== 'window') {
+      if (!shown) {
+        originsWithOpenPopup.delete(origin);
+      }
+      return shown;
+    }
+  }
   const geometry = await popupWindowGeometry();
   try {
     const opened = await createPopupWindow(url, geometry);
@@ -277,6 +301,71 @@ export async function openApprovalPopup(
     return false;
   }
 }
+
+/** how long "sidebar only" waits for the person to open the panel, as popup.ts does */
+const SIDEBAR_ONLY_WAIT_MS = 120_000;
+
+/**
+ * Show an approval in the side panel when that is where the person wants it:
+ * the panel open in their window, or the one their click just opened
+ * (openPanelOnGesture). `window`: show a window instead (they chose windows,
+ * or "hybrid" found no panel). "sidebar only" never gets a window: the toolbar
+ * icon is badged until the panel opens. A panel has no window to close, so a
+ * panel closed with the request unanswered is the cancel.
+ */
+const showInSidePanel = async (
+  origin: string,
+  url: string,
+  requestId: string,
+): Promise<boolean | 'window'> => {
+  const surface = await getApprovalSurface();
+  if (surface === 'popup') {
+    return 'window';
+  }
+  let winId: number | undefined;
+  try {
+    winId = (await chrome.windows.getLastFocused({ windowTypes: ['normal'] })).id;
+  } catch {
+    // no window to ask about: any open panel counts
+  }
+  let open = await isSidePanelOpen(winId);
+  if (!open && (await recentPanelOpenAccepted())) {
+    open = await waitForSidePanel(winId, 15_000);
+  }
+  if (!open && surface === 'sidebar') {
+    await chrome.action?.setBadgeText({ text: '1' }).catch(() => undefined);
+    open = await waitForSidePanel(winId, SIDEBAR_ONLY_WAIT_MS);
+    await chrome.action?.setBadgeText({ text: '' }).catch(() => undefined);
+    if (!open) {
+      return false;
+    }
+  }
+  if (!open) {
+    return 'window';
+  }
+  const route = url.slice(url.indexOf('#') + 1);
+  const delivered = await chrome.runtime.sendMessage({ type: SIDE_PANEL_NAVIGATE, route }).then(
+    () => true,
+    () => false,
+  );
+  if (!delivered) {
+    return surface === 'sidebar' ? false : 'window';
+  }
+  panelRequestToOrigin.set(requestId, origin);
+  const watch = async () => {
+    if (!panelRequestToOrigin.has(requestId)) {
+      return; // answered
+    }
+    if (await isSidePanelOpen(winId)) {
+      setTimeout(() => void watch(), 500);
+      return;
+    }
+    releasePopupGuardForRequest(requestId);
+    takePendingApproval(requestId)?.({ success: false, error: 'cancelled', cancelled: true });
+  };
+  setTimeout(() => void watch(), 500);
+  return true;
+};
 
 /**
  * Create the window, retrying once without the anchor. Chrome refuses a window
@@ -436,7 +525,7 @@ async function askOptin(origin: string, cap: Capability): Promise<OptinAnswer> {
   });
   const params = new URLSearchParams({ capability: cap, requestId, scope: 'zafu' });
   const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
-  if (!(await openApprovalPopup(origin, url, requestId))) {
+  if (!(await openApprovalPopup(origin, url, requestId, { panel: true }))) {
     pendingPicks.delete(requestId);
     return { approved: false, cancelled: true };
   }
@@ -500,7 +589,7 @@ export async function requestCapabilityApprovalPopup(
     title: sender.tab?.title || '',
   });
   const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
-  if (!(await openApprovalPopup(origin, url, requestId))) {
+  if (!(await openApprovalPopup(origin, url, requestId, { panel: true }))) {
     pendingPicks.delete(requestId);
     return 'cancelled';
   }
@@ -593,7 +682,7 @@ async function askPasskeyTap(
     requestId,
   });
   const url = chrome.runtime.getURL(`popup.html#/passkey-approve?${params.toString()}`);
-  if (!(await openApprovalPopup(origin, url, requestId))) {
+  if (!(await openApprovalPopup(origin, url, requestId, { panel: true }))) {
     pendingPicks.delete(requestId);
     return 'busy';
   }
@@ -1407,6 +1496,8 @@ export const externalMessageListener = (
     // grant only means "this site may ask"; it never signs on its own.
 
     case 'zafu_passkey_create': {
+      // the click that asked rides this message: open the panel now, nothing awaited yet
+      openPanelOnGesture(sender);
       const {
         rpId,
         userId: userIdHex,
@@ -1499,6 +1590,8 @@ export const externalMessageListener = (
     }
 
     case 'zafu_passkey_get': {
+      // the click that asked rides this message: open the panel now, nothing awaited yet
+      openPanelOnGesture(sender);
       const {
         rpId,
         challenge: challengeHex,
