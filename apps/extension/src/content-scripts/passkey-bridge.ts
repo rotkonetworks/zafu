@@ -90,8 +90,15 @@ window.addEventListener('message', (ev: MessageEvent) => {
     .sendMessage(message)
     .then((res: unknown) => {
       const result = passkeyPageResult(res);
+      if ((result as { success?: unknown } | undefined)?.success !== true) {
+        // why zafu did not sign: its own words, for whoever opens this console
+        console.info(`[zafu] passkey ${kind} not answered by zafu ·`, JSON.stringify(res));
+      }
       cooldown.after(result, Date.now());
       respond(result);
     })
-    .catch(() => respond(undefined));
+    .catch((e: unknown) => {
+      console.info(`[zafu] passkey ${kind} left to the browser: zafu did not answer ·`, e);
+      respond(undefined);
+    });
 });
