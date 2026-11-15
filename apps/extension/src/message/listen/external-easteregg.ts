@@ -1252,7 +1252,7 @@ export const externalMessageListener = (
           // Wallet state: needs to be unlocked and have a selected mnemonic
           // vault. Any failure between here and derivation is opaque
           // ('internal_error') so we don't leak "locked" vs "no vault".
-          const { useStore } = await import('../../state');
+          const useStore = await (await import('../../state/loaded')).loadedStore();
           const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
           if (!keyInfo) {
             sendResponse({ error: 'wallet locked', code: 'locked' });
@@ -1312,7 +1312,7 @@ export const externalMessageListener = (
             sendResponse({ error: 'not connected', code: 'denied' });
             return;
           }
-          const { useStore } = await import('../../state');
+          const useStore = await (await import('../../state/loaded')).loadedStore();
           const state = useStore.getState();
           const key = state.keyRing.selectedKeyInfo;
           if (key?.type === 'mnemonic') {
@@ -1435,7 +1435,7 @@ export const externalMessageListener = (
             sendResponse(ready.refusal);
             return;
           }
-          const { useStore } = await import('../../state');
+          const useStore = await (await import('../../state/loaded')).loadedStore();
           const wallet = useStore.getState().keyRing.selectedKeyInfo;
           if (wallet?.type !== 'mnemonic') {
             sendResponse({ success: false, error: 'no wallet selected', code: 'no-wallet' });
@@ -1566,7 +1566,7 @@ export const externalMessageListener = (
           const { signAssertion, findCredential, discoverableCredential } =
             await import('../../state/webauthn');
           const { getIdentityKey } = await import('../../state/identity-keys');
-          const { useStore } = await import('../../state');
+          const useStore = await (await import('../../state/loaded')).loadedStore();
           const { pocketOwner } = await import('../../state/pockets');
           const keyRing = useStore.getState().keyRing;
           // only a wallet that made a passkey for this rpId from this origin
