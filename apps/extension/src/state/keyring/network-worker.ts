@@ -1693,12 +1693,17 @@ export const completeSendTxPcztInWorker = async (
   serverUrl: string,
   signedPcztHex: string,
   /** SendTxPcztUnsignedResult.coldSendId from the matching build */
-  coldSendId?: string,
+  coldSendId: string | undefined,
+  /**
+   * what was reviewed: the unsigned PCZT zafu built and the wallet's viewing
+   * key. The worker broadcasts the signed PCZT only if it is that transaction.
+   */
+  reviewed: { unsignedPcztHex: string; ufvk: string },
 ): Promise<{ txid: string }> => {
   return callWorker(
     network,
     'send-tx-pczt-complete',
-    { serverUrl, signedPcztHex, coldSendId },
+    { serverUrl, signedPcztHex, coldSendId, ...reviewed },
     walletId,
   );
 };

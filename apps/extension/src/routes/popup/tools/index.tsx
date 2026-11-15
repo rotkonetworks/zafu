@@ -4,6 +4,7 @@
  * "everywhere" rows below are not.
  */
 
+import { PASSWORD_GENERATOR } from '../../../config/feature-flags';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@repo/ui/lib/utils';
 import { useStore } from '../../../state';
@@ -97,7 +98,7 @@ export const ToolsPage = () => {
   const everywhere: Tile[] = [
     identityEnabled && {
       icon: 'i-ph-password',
-      label: 'passwords',
+      label: PASSWORD_GENERATOR ? 'passwords' : 'passkeys',
       desc: '',
       path: PopupPath.PASSWORDS,
     },

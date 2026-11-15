@@ -213,17 +213,17 @@ export function CosmosSend({
 
   const { data: skipChains = [], isLoading: chainsLoading } = useSkipChains();
 
-  // Penumbra is always offered when there is a direct channel, listed or not
-  // (a resting one too, so choosing it explains the wait instead of hiding it)
+  // Penumbra is always offered when there is a direct channel (a resting one
+  // too, so choosing it explains the wait instead of hiding it). Other chains
+  // are not: their Skip routes were quoted for one asset while confirm signed
+  // a plain transfer of another over the first hop, so they wait for a send
+  // that runs the route itself.
   const destChains = useMemo(
     () =>
       penumbraChannel || penumbraResting
-        ? [
-            { chainId: PENUMBRA_CHAIN_ID, chainName: 'Penumbra (shielded)' },
-            ...skipChains.filter(c => c.chainId !== PENUMBRA_CHAIN_ID),
-          ]
-        : skipChains,
-    [skipChains, penumbraChannel, penumbraResting],
+        ? [{ chainId: PENUMBRA_CHAIN_ID, chainName: 'Penumbra (shielded)' }]
+        : [],
+    [penumbraChannel, penumbraResting],
   );
 
   // assets hook - uses accountIndex
@@ -437,7 +437,10 @@ export function CosmosSend({
       ? BigInt(parseAmountToBaseUnits(amount.trim(), selectedAsset.decimals))
       : 0n;
   const exceeds = amountBase > spendable;
+  // a recipient on another chain, not penumbra: no transfer zafu runs reaches it
+  const offChain = !isSameChain && !isPenumbraDest;
   const canSubmit =
+    !offChain &&
     !(isPenumbraDest && !penumbraChannel) &&
     recipient &&
     recipientValid &&
@@ -710,8 +713,8 @@ export function CosmosSend({
       : `that is not a ${isPenumbraDest ? 'penumbra' : 'cosmos'} address · please check it`
     : ethermintRecipient?.ok && ethermintRecipient.fromHex
       ? `sends to ${shorten(toAddress, 8, 4)}`
-      : !isSameChain && detectedChain && !destChainId
-        ? `on ${detectedChain.name}`
+      : offChain
+        ? `that address is on ${detectedChain?.name.toLowerCase() ?? 'another chain'} · zafu sends on ${sourceChain.name.toLowerCase()} and into penumbra for now`
         : toName;
   const amountHelper =
     isPenumbraDest && penumbraResting

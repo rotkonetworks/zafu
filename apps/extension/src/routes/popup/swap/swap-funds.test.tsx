@@ -57,6 +57,8 @@ describe('a swap deposit spends the chosen pocket', () => {
       'https://z',
       'signed-pczt',
       'c1',
+      // the signed answer is checked against the build it reviewed
+      { unsignedPcztHex: 'aa', ufvk: 'uview1x' },
     );
     expect(order).toEqual(['recorded']);
   });

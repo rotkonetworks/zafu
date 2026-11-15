@@ -5,6 +5,7 @@
  * stepper and the backup live under "all identity controls".
  */
 
+import { PASSWORD_GENERATOR } from '../../../config/feature-flags';
 import { Clipped } from '@repo/ui/components/ui/clipped';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -161,7 +162,7 @@ export const IdentityPage = () => {
           />
           <Row
             type='value'
-            label='passkeys and passwords'
+            label={PASSWORD_GENERATOR ? 'passkeys and passwords' : 'passkeys'}
             value={passkeys ? `${passkeys} passkey${passkeys === 1 ? '' : 's'}` : undefined}
             preload={PopupPath.PASSWORDS}
             onPress={() => navigate(PopupPath.PASSWORDS)}

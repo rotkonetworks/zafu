@@ -134,6 +134,23 @@ export interface HistoryTx {
  */
 export const EXPIRY_GRACE_BLOCKS = 100;
 
+/**
+ * The notes a pruned send held back: marked spent when it was broadcast
+ * (`spent_by_txid`), never seen spent on chain (no `spent_at_height`). Its
+ * record is pruned only well past its expiry height, when it can no longer be
+ * mined, so these are the person's again; left marked, the balance stays short
+ * by them until a full resync.
+ */
+export const heldByExpired = <N extends { spent_by_txid?: string; spent_at_height?: number }>(
+  notes: readonly N[],
+  pruned: readonly string[],
+): N[] => {
+  const gone = new Set(pruned);
+  return notes.filter(
+    n => n.spent_by_txid !== undefined && gone.has(n.spent_by_txid) && !(n.spent_at_height ?? 0),
+  );
+};
+
 export interface ReconcileInput {
   /** entries derived from scanning: notes, spends and transparent history */
   chainTxs: Omit<HistoryTx, 'status'>[];
