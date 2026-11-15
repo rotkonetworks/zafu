@@ -9,7 +9,6 @@ import { Outlet, useLocation, useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ScrollShell } from '../../../components/scroll-shell';
 import { usePageNav } from '../../../utils/navigate';
-import { useStore } from '../../../state';
 import { screenFor } from './flow';
 
 /** What a path holds in memory until its password step seals it: the create
@@ -26,8 +25,7 @@ export const useOnboarding = () => useOutletContext<OnboardingContext>();
 export const Onboarding = () => {
   const { pathname } = useLocation();
   const navigate = usePageNav();
-  const twelve = useStore(s => s.seedPhrase.import.phrase.length === 12);
-  const { art, back, step } = screenFor(pathname, twelve);
+  const { art, back, step } = screenFor(pathname);
   const [password, setPassword] = useState('');
   const [viewingKey, setViewingKey] = useState('');
 

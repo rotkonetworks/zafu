@@ -1,5 +1,6 @@
 import { PagePath } from '../paths';
 import { SEED_PHRASE_ORIGIN } from './password/types';
+import { SeedPhraseLength } from '../../../state/seed-phrase/mnemonic';
 import type { ScrollArt } from '../../../components/scroll-shell';
 
 export type OnboardingArt = ScrollArt;
@@ -33,14 +34,11 @@ const SCREENS: Partial<Record<string, OnboardingScreen>> = {
   [P.ONBOARDING_SUCCESS]: { art: 'castle' },
 };
 
-/** A 12-word import is penumbra-only and has no zcash birthday to ask. */
-const TWELVE: Partial<Record<string, OnboardingScreen>> = {
-  [P.IMPORT_SEED_PHRASE]: { art: 'bamboo', back: P.CHOOSE, step: [1, 2] },
-  [P.IMPORT_PASSWORD]: { art: 'bamboo', back: P.IMPORT_SEED_PHRASE, step: [2, 2] },
-};
+/** Zafu still generates 24 words. A 12-word phrase can be imported, on the same path. */
+export const ONBOARDING_GENERATE_LENGTH = SeedPhraseLength.TWENTY_FOUR_WORDS;
 
-export const screenFor = (pathname: string, twelve = false): OnboardingScreen =>
-  (twelve ? TWELVE[pathname] : undefined) ?? SCREENS[pathname] ?? { art: 'samurai' };
+export const screenFor = (pathname: string): OnboardingScreen =>
+  SCREENS[pathname] ?? { art: 'samurai' };
 
 /** Where each path sets its password; the password screen reads its origin back from this. */
 export const PASSWORD_PATH = {
@@ -56,11 +54,7 @@ export const BIRTHDAY_PATH = {
   [SEED_PHRASE_ORIGIN.VIEWING_KEY]: P.VIEWING_KEY_BIRTHDAY,
 } as const;
 
-/** A 12-word import: penumbra-only, so it skips the zcash birthday and never turns zcash on. */
-export const penumbraOnlyImport = (origin: SEED_PHRASE_ORIGIN, words: number) =>
-  origin === SEED_PHRASE_ORIGIN.IMPORTED && words === 12;
-
-/** The one line under the phrase box: a typo and its fix, an order that is off, or what the phrase opens. */
+/** The one line under the phrase box: a typo and its fix, an order that is off, or a valid phrase. */
 export const phraseNote = ({
   count,
   typo,
@@ -80,9 +74,7 @@ export const phraseNote = ({
     : whole && !valid
       ? "these words don't form a phrase yet · please check the order"
       : valid
-        ? count === 12
-          ? '12 words · this phrase opens penumbra only'
-          : `${count} words · valid phrase`
+        ? `${count} words · valid phrase`
         : count
           ? `${count} words`
           : '24 words';
