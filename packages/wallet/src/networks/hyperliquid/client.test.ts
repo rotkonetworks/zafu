@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { HYPERLIQUID_API } from './api';
 import {
-  HYPERLIQUID_API,
   buildHyperliquidAction,
   microToUsdc,
   postHyperliquidAction,

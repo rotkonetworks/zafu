@@ -42,6 +42,8 @@
     "./networks/transparent/conduit": "./src/networks/transparent/conduit.ts",
     "./networks/ethereum/derive": "./src/networks/ethereum/derive.ts",
     "./networks/hyperliquid/derive": "./src/networks/hyperliquid/derive.ts",
+    "./networks/hyperliquid/api": "./src/networks/hyperliquid/api.ts",
+    "./networks/hyperliquid/sign": "./src/networks/hyperliquid/sign.ts",
     "./networks/hyperliquid/client": "./src/networks/hyperliquid/client.ts",
     "./networks/thorchain/derive": "./src/networks/thorchain/derive.ts",
     "./networks/thorchain/tx": "./src/networks/thorchain/tx.ts",

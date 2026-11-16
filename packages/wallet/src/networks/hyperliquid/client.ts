@@ -7,20 +7,10 @@
  * is only ever reached from an explicit, reviewed send.
  */
 
+import { HYPERLIQUID_API } from './api';
 import { signUserAction, type HyperliquidSignature, type UserAction } from './sign';
 
 type FetchFn = typeof fetch;
-
-export const HYPERLIQUID_API = 'https://api.hyperliquid.xyz';
-
-/**
- * The bridge on Arbitrum that credits USDC sent to it, and the least it
- * credits (docs: for developers > api > bridge2). Less than this is lost.
- */
-export const HYPERLIQUID_BRIDGE = '0x2df1c51e09aecf9cacb7bc98cb1742757f163df7';
-export const HYPERLIQUID_MIN_DEPOSIT = 5_000_000n;
-/** what Hyperliquid keeps from a withdrawal (docs: exchange endpoint, withdraw3) */
-export const HYPERLIQUID_WITHDRAW_FEE = 1_000_000n;
 
 /** spot USDC as spotSend names it: name:tokenId, from the api's spotMeta */
 const SPOT_USDC = 'USDC:0x6d1e7cde53ba9467b783cb7c530ce054';
