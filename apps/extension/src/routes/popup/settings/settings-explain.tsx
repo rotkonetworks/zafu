@@ -207,6 +207,11 @@ export const SETTINGS_EXPLAIN = {
     on: 'zafu shows your penumbra balance and syncs it from your chosen node',
     off: 'penumbra is hidden everywhere in zafu; your keys are untouched and nothing is asked of any penumbra node',
   },
+  'network.hyperliquidEnable': {
+    blurb: 'hyperliquid, for usdc only: deposit, withdraw and send. no trading in zafu.',
+    on: 'zafu shows your hyperliquid address and usdc, read from api.hyperliquid.xyz when you open it. the address and its balances are public',
+    off: 'hyperliquid is hidden in zafu and api.hyperliquid.xyz is never contacted; your keys and funds are untouched',
+  },
   'appearance.theme': {
     blurb: 'the color scheme zafu draws itself in.',
     states: [
