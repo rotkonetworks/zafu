@@ -15,6 +15,7 @@ import { selectZcashIsMainnet } from '../../state/wallets';
 import type { DepositPlan } from '../../workers/transparent-deposit';
 import { legContextOf, legsFor, type LegContext } from './legs';
 import { openPayments, type OpenPayment } from './open-payments';
+import { zecMoveSent } from '../../hyperliquid/zec-moves';
 import { isRunning, startViaFresh } from './via-fresh';
 
 /** what the device's round says it signs */
@@ -28,7 +29,11 @@ export const runPayment = (p: OpenPayment, c: LegContext, reviewed?: DepositPlan
       plan: req => planTransparentDepositInWorker(c.zidecarUrl, req),
       save: patch => openPayments.patch(p.id, patch),
       // the payment's own history row takes over once it is out
-      done: () => openPayments.forget(p.id),
+      done: async txid => {
+        // a deposit to hyperliquid through unit is followed by this txid
+        await zecMoveSent(p.id, txid);
+        return openPayments.forget(p.id);
+      },
       mined: async txid => (await lookupTxInWorker(c.zidecarUrl, txid)).height,
       tip: () => chainTipInWorker(c.zidecarUrl),
       sleep: ms => new Promise(r => setTimeout(r, ms)),

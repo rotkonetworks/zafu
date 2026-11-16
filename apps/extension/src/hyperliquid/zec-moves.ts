@@ -13,8 +13,11 @@ export interface ZecMove {
   v: 1;
   id: string;
   way: 'deposit' | 'withdraw';
-  /** the hyperliquid account it credits or leaves */
+  /** the seed wallet it belongs to */
+  wallet: string;
+  /** the hyperliquid account it credits or leaves, and that account's name when it was sent */
   account: string;
+  from: string;
   zat: string;
   /** when it was sent */
   at: number;
@@ -33,7 +36,9 @@ const isZecMove = (v: unknown): v is ZecMove => {
     m.v === 1 &&
     typeof m.id === 'string' &&
     (m.way === 'deposit' || m.way === 'withdraw') &&
+    typeof m.wallet === 'string' &&
     typeof m.account === 'string' &&
+    typeof m.from === 'string' &&
     /^\d+$/.test(m.zat) &&
     typeof m.at === 'number' &&
     typeof m.tx === 'string'
@@ -91,6 +96,13 @@ const operationOf = (m: ZecMove, ops: readonly UnitOperation[]): UnitOperation |
         ? o.sourceTx.toLowerCase().startsWith(m.tx.toLowerCase())
         : o.zat === BigInt(m.zat) && Date.parse(o.createdAt) >= m.at),
   );
+
+/** the payment runner (zcash/pay/run) says a payment went out: a deposit learns its txid */
+export const zecMoveSent = async (id: string, txid: string): Promise<void> => {
+  if ((await zecMoves.read()).some(m => m.id === id)) {
+    await zecMoves.patch(id, { tx: txid });
+  }
+};
 
 export interface ZecMoveStatus {
   line: string;
