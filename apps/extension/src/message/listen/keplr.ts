@@ -14,6 +14,7 @@ import {
   cosmosChainIdFromKeplr,
   keplrApprovalKey,
   keplrKeyCacheKey,
+  signedChainId,
   type KeplrApprovalRequest,
   type KeplrWireKey,
 } from '../keplr';
@@ -26,13 +27,12 @@ import {
   verifyAdr036,
   type StdSignatureWire,
 } from '@repo/wallet/networks/cosmos/adr036';
-import { POPUP_WINDOW_WIDTH, POPUP_WINDOW_HEIGHT } from '../../utils/popup-window';
-
-/** requestId -> resolver for an in-flight approval popup */
-const pending = new Map<
-  string,
-  (payload: { approved: boolean; payload?: unknown; error?: string }) => void
->();
+import {
+  openApprovalPopup,
+  registerPendingApproval,
+  releasePopupGuardForRequest,
+  takePendingApproval,
+} from './external-easteregg';
 
 const b64ToBytes = (b64: string): Uint8Array => Uint8Array.from(atob(b64), c => c.charCodeAt(0));
 const bytesToB64 = (bytes: Uint8Array): string => {
@@ -43,29 +43,46 @@ const bytesToB64 = (bytes: Uint8Array): string => {
   return btoa(s);
 };
 
-/** open a keplr approval popup and await the user's decision */
-async function openApproval(
-  req: KeplrApprovalRequest,
-): Promise<{ approved: boolean; payload?: unknown; error?: string }> {
+interface Decision {
+  approved: boolean;
+  payload?: unknown;
+  error?: string;
+}
+
+/**
+ * Ask in an approval window: unlocked first, one window per site as every
+ * prompt, and a window closed without deciding is a rejection.
+ */
+async function openApproval(req: KeplrApprovalRequest): Promise<Decision> {
+  const { throwIfNeedsLogin } = await import('../../needs-login');
+  // the site waits after a dismissed unlock, as for every other prompt
+  await throwIfNeedsLogin(req.origin);
   await chrome.storage.session.set({ [keplrApprovalKey(req.requestId)]: req });
-  const result = new Promise<{ approved: boolean; payload?: unknown; error?: string }>(resolve => {
-    pending.set(req.requestId, resolve);
-  });
+  // the closed-window sweep answers { cancelled: true }, which is no approval
+  const decision = new Promise<Decision>(resolve =>
+    registerPendingApproval(req.requestId, r => {
+      const d = r as (Partial<Decision> & { cancelled?: boolean }) | undefined;
+      resolve(
+        d?.approved === true
+          ? { approved: true, payload: d.payload }
+          : { approved: false, error: d?.cancelled ? 'request rejected' : d?.error },
+      );
+    }),
+  );
   const params = new URLSearchParams({ requestId: req.requestId });
   const url = chrome.runtime.getURL(`popup.html#/approval/keplr?${params.toString()}`);
-  const { top = 0, left = 0, width = 0 } = await chrome.windows.getLastFocused();
-  void chrome.windows.create({
-    url,
-    type: 'popup',
-    focused: true,
-    width: POPUP_WINDOW_WIDTH,
-    height: POPUP_WINDOW_HEIGHT,
-    top: Math.max(0, top),
-    left: Math.max(0, left + width - POPUP_WINDOW_WIDTH),
-  });
-  const decision = await result;
-  void chrome.storage.session.remove(keplrApprovalKey(req.requestId));
-  return decision;
+  try {
+    if (!(await openApprovalPopup(req.origin, url, req.requestId))) {
+      takePendingApproval(req.requestId);
+      return {
+        approved: false,
+        error: "zafu couldn't open this request · another from this site may still be open",
+      };
+    }
+    return await decision;
+  } finally {
+    void chrome.storage.session.remove(keplrApprovalKey(req.requestId));
+  }
 }
 
 /** each site's enables, one after another: the second sees what the first was given */
@@ -161,6 +178,15 @@ async function handleMethod(
       throw new Error(
         `unsupported chain ${cid}: Ethermint chains are not served over Keplr; use the in-wallet flow`,
       );
+    }
+  }
+
+  // the chain that gets signed is the one inside the doc; a site that names
+  // another in params would have the person approve one chain and sign on another
+  if (method === 'signAmino' || method === 'signDirect') {
+    const signed = signedChainId(method, params['signDoc']);
+    if (signed === undefined || signed !== String(params['chainId'] ?? '')) {
+      throw new Error("this request names one chain and signs on another · zafu won't sign it");
     }
   }
 
@@ -261,6 +287,11 @@ async function handleMethod(
       if (!cosmosId) {
         throw new Error(`unsupported chain ${chainId}`);
       }
+      // only a site the person connected to this chain: otherwise any page
+      // could have zafu reach a chain node on its behalf, unasked
+      if (!(await getCachedKey(origin, chainId))) {
+        throw new Error(`this site isn't connected to ${chainId} · please connect first`);
+      }
       // Raw Tendermint RPC broadcast_tx_sync - avoids bundling the stargate
       // client into the service worker. params.tx is base64, which is exactly
       // the txB64 we already carry.
@@ -310,15 +341,9 @@ export const keplrMessageListener = (
     if (!isValidInternalSender(sender)) {
       return false;
     }
-    const resolve = pending.get(message.requestId);
-    if (resolve) {
-      pending.delete(message.requestId);
-      resolve(
-        message.result.approved
-          ? { approved: true, payload: message.result.payload }
-          : { approved: false, error: message.result.error },
-      );
-    }
+    takePendingApproval(message.requestId)?.(message.result);
+    // the decision is in: the site may ask again (enable, then sign) before the window is gone
+    releasePopupGuardForRequest(message.requestId);
     sendResponse({ ok: true });
     return false;
   }

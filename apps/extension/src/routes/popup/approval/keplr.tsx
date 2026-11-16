@@ -19,17 +19,21 @@ import {
   deriveKeplrWireKey,
   signKeplrAmino,
   signKeplrDirect,
+  readKeplrDirect,
+  type KeplrDirectView,
   type KeplrDirectWireDoc,
 } from '@repo/wallet/networks/cosmos/signer';
 import { adr036SignDoc, describeArbitraryData } from '@repo/wallet/networks/cosmos/adr036';
 import {
   cosmosChainIdFromKeplr,
   keplrApprovalKey,
+  signedChainId,
   type KeplrApprovalRequest,
   type KeplrWireKey,
 } from '../../../message/keplr';
 import { Clipped } from '@repo/ui/components/ui/clipped';
 import { Button } from '@repo/ui/components/ui/button';
+import { ApproveDeny } from './approve-deny';
 import { isCosmosSignatureQR, parseCosmosSignatureQR } from '@repo/wallet/networks/cosmos/airgap';
 import { verifyAdr036 } from '@repo/wallet/networks/cosmos/adr036';
 import {
@@ -56,6 +60,15 @@ const prefixFor = (chainId: string, signerAddress?: string): string => {
     }
   }
   return chainId.split('-')[0] ?? 'cosmos';
+};
+
+/** a direct doc as a person reads it; bytes that aren't a transaction read as nothing at all */
+const readDirect = (doc: unknown): KeplrDirectView | undefined => {
+  try {
+    return readKeplrDirect(doc as KeplrDirectWireDoc);
+  } catch {
+    return undefined;
+  }
 };
 
 export const KeplrApproval = () => {
@@ -235,7 +248,10 @@ export const KeplrApproval = () => {
         return;
       }
 
-      // signDirect
+      // signDirect: only what the person could read
+      if (readDirect(req.signDoc)?.unread.length !== 0) {
+        throw new Error("zafu can't read this transaction · nothing was signed");
+      }
       const payload = await signKeplrDirect(
         mnemonic,
         prefix,
@@ -307,6 +323,11 @@ export const KeplrApproval = () => {
   }
 
   const isSign = req.method !== 'enable';
+  // the chain inside the doc is the one signed; the worker refuses a doc that disagrees with the site's label
+  const signedChain =
+    req.method === 'signAmino' || req.method === 'signDirect'
+      ? signedChainId(req.method, req.signDoc)
+      : req.chainId;
   const message =
     req.method === 'signArbitrary'
       ? describeArbitraryData(
@@ -315,6 +336,12 @@ export const KeplrApproval = () => {
             c => c.charCodeAt(0),
           ),
         )
+      : undefined;
+  const direct = req.method === 'signDirect' ? readDirect(req.signDoc) : undefined;
+  // a direct doc zafu can't read in full is never signed blind: there is no approve
+  const unreadable =
+    req.method === 'signDirect' && (!direct || direct.unread.length > 0)
+      ? (direct?.unread ?? ['this transaction'])
       : undefined;
   // A stored request missing origin (partial/forward-incompatible write) would
   // otherwise throw on .replace during render.
@@ -358,16 +385,22 @@ export const KeplrApproval = () => {
               <p className='text-fg'>
                 {originHost} wants you to sign a{' '}
                 {req.method === 'signDirect' ? 'transaction (direct)' : 'transaction (amino)'} on{' '}
-                <span className='font-mono'>{req.chainId}</span>.
+                <span className='font-mono'>{signedChain}</span>.
               </p>
               {req.signerAddress && (
                 <p className='mt-1 break-all font-mono text-label text-fg-muted'>
                   {req.signerAddress}
                 </p>
               )}
+              {unreadable && (
+                <p role='alert' className='mt-2 text-fg'>
+                  zafu can't read {[...new Set(unreadable)].join(', ')} yet, so it won't sign it
+                  blind · nothing was signed
+                </p>
+              )}
               <pre className='mt-2 max-h-48 overflow-auto bg-elev-1 p-2 text-label text-fg-muted'>
                 {JSON.stringify(
-                  req.signDoc,
+                  direct?.doc ?? req.signDoc,
                   (_k, v) => (typeof v === 'bigint' ? v.toString() : v),
                   1,
                 )}
@@ -383,24 +416,12 @@ export const KeplrApproval = () => {
         </div>
       </div>
 
-      <div className='flex gap-2 border-t border-border-soft p-4'>
-        <button
-          type='button'
-          onClick={deny}
-          disabled={busy}
-          className='flex-1 bg-elev-2 px-3 py-2.5 text-sm text-fg-muted transition-colors hover:bg-elev-1 disabled:opacity-50'
-        >
-          not now
-        </button>
-        <button
-          type='button'
-          onClick={() => void approve()}
-          disabled={busy || !keyInfo}
-          className='flex-1 bg-zigner-gold px-3 py-2.5 text-sm text-zigner-gold-foreground transition-colors disabled:opacity-50'
-        >
-          {busy ? 'working…' : isSign ? 'approve' : 'connect'}
-        </button>
-      </div>
+      <ApproveDeny
+        deny={deny}
+        approve={busy || !keyInfo || unreadable ? undefined : () => void approve()}
+        approveLabel={isSign ? 'approve' : 'connect'}
+        denyLabel='not now'
+      />
     </div>
   );
 };
