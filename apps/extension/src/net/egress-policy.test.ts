@@ -806,6 +806,18 @@ describe('hyperliquid', () => {
     );
   });
 
+  it('reaches unit, for zec, only while hyperliquid is on', () => {
+    const GEN = 'https://api.hyperunit.xyz/gen/zcash/hyperliquid/zec/0xabc';
+    expect(outcome(ZCASH_ONLY, GEN)).toBe('network-off');
+    expect(outcome(HL, GEN)).toBe('allow');
+    expect(outcome(HL, 'https://api.hyperunit-testnet.xyz/operations/0xabc')).toBe('unknown');
+    const table = compileEgress({ ...HL, netEgress: { optIns: { nym: 'allowed' } } });
+    expect(table.rules.find(r => r.destination === 'unit')).toMatchObject({
+      host: 'api.hyperunit.xyz',
+      nym: 'names-you',
+    });
+  });
+
   it('names you on every request, so all of it goes over nym once the person chose nym', () => {
     const table = compileEgress({ ...HL, netEgress: { optIns: { nym: 'allowed' } } });
     expect(table.nymVia).toContain('hyperliquid');

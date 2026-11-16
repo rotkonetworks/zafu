@@ -40,7 +40,7 @@ import {
 } from '../config/zcash-endpoints';
 import { BUNDLED_SERVICE_CONFIG } from '../services/voting/bundled-config';
 import { BASE_RPC, PEER_HOSTS } from '../config/ramps';
-import { HYPERLIQUID_API } from '@repo/wallet/networks/hyperliquid/api';
+import { HYPERLIQUID_API, UNIT_API } from '@repo/wallet/networks/hyperliquid/api';
 import { PAY_APPS } from '../buy/apps';
 import { hostOf, isPrivateNetworkHost } from './destination';
 import { backendKey, backendOfEndpoint, isZcashBackend } from '../state/keyring/zcash-backend';
@@ -228,6 +228,7 @@ const NYM_CLASSES: {
     'midgard',
     'near-swap',
     'hyperliquid',
+    'unit',
     PEOPLE_RELAY,
     'contact-discovery',
     'multisig-relay',
@@ -283,7 +284,7 @@ export const NYM_GROUPS: {
     on: true,
     nym: 'sends, withdrawals and balance checks',
     direct: 'hyperliquid sees your ip and address',
-    members: ['hyperliquid'],
+    members: ['hyperliquid', 'unit'],
   },
   {
     id: 'swaps',
@@ -512,6 +513,15 @@ export const DESTINATIONS: DestinationSpec[] = [
     purpose: 'chain-rpc',
     gate: { kind: 'network', networks: ['hyperliquid'] },
     urls: () => [HYPERLIQUID_API],
+  },
+  // zec in and out of hyperliquid: asked for an address or an operation,
+  // each request naming the person's hyperliquid or zcash address
+  {
+    id: 'unit',
+    label: 'unit · zec on hyperliquid',
+    purpose: 'chain-rpc',
+    gate: { kind: 'network', networks: ['hyperliquid'] },
+    urls: () => [UNIT_API],
   },
   ...Object.entries(OTHER_NETWORKS).map(
     ([id, urls]): DestinationSpec => ({
