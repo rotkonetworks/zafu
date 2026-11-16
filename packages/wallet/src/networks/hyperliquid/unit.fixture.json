@@ -1,0 +1,28 @@
+{
+  "_": "real mainnet responses of GET api.hyperunit.xyz/gen/..., fetched read-only 2026-11-16 for throwaway destinations nobody holds keys for",
+  "deposit": {
+    "account": "0xee119c2cc01f4b545020a0df05cd1e63b657d8e5",
+    "base58": "t1gxHkDMNMeUtd66JVeNhurminNYrvtmWqd",
+    "response": {
+      "address": "tex1l5km43qgqjn2efn5fsn3rsjm9e0r4lg0uxj9je",
+      "signatures": {
+        "field-node": "Zb5UfHs6uVAqgwBfD3Ab41W97NGPGbhXPnQ7u9FcGIMjDrvzBWv6OJCMnYHpL8QXxIbrMnKiemEW1LfI86AaYg==",
+        "hl-node": "F1OtNO5hQrdL9UNMqLdao7rkdgXkl2A2HBjYWK/RgEcFqnrh+378YgNaGvk7ORHhSTapjLY4YrQ2c4/+NpiKDg==",
+        "unit-node": "4wBiufU+J4fstgqL4hjeYtLiLasAjvklBH2tUU93AkQqB6E2RpQCWJ5XXhm5ogpzX4hobPsAYfsqfP6L+X/9bg=="
+      },
+      "status": "OK"
+    }
+  },
+  "withdraw": {
+    "zcashT": "t1TgvGHZt7TLq5Mkt6jsQnNZEu8f9gR9hVa",
+    "response": {
+      "address": "0xDa2E5ceA79f18FaECbD6C8f3336BEC45C5b48402",
+      "signatures": {
+        "field-node": "a2lzZwGxFsXkKSKSlxxcnHtwHn26rl1uKYS+F+X16+vp//m+WxfQ/wgeTRA3zqbg7mA0JnwVHE/iBiy4xe5LIg==",
+        "hl-node": "/owLurWKqllI7BYCpp/8k5SVQ26tzjKaiF2k9SU31e4IMaD8qwECQHAYalettXMNF+8lCP3CIO12Evz00XsmqQ==",
+        "unit-node": "ov2hD/wd4nVJXX6NJjr76IN0+NMJ/eMLtlPVK9A8+HVRA+EnZYlGoCkauNGrdh3aYes3/HIdG+G+1xgoiZsYvQ=="
+      },
+      "status": "OK"
+    }
+  }
+}

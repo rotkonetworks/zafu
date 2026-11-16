@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { HYPERLIQUID_API } from './api';
 import {
   buildHyperliquidAction,
+  buildUzecSend,
   microToUsdc,
   postHyperliquidAction,
   queryHyperliquidBalances,
@@ -51,6 +52,7 @@ describe('queryHyperliquidBalances', () => {
     expect(await queryHyperliquidBalances(TO, fetchFn as never)).toEqual({
       perp: 2_319_897n,
       spot: 10_250_000n,
+      uzec: 0n,
     });
     expect(fetchFn.mock.calls.map(c => c[0])).toEqual([
       `${HYPERLIQUID_API}/info`,
@@ -63,7 +65,11 @@ describe('queryHyperliquidBalances', () => {
       (JSON.parse(init!.body as string) as { type: string }).type === 'clearinghouseState'
         ? json({ withdrawable: '0.0' })
         : json({ balances: [] });
-    expect(await queryHyperliquidBalances(TO, fetchFn as never)).toEqual({ perp: 0n, spot: 0n });
+    expect(await queryHyperliquidBalances(TO, fetchFn as never)).toEqual({
+      perp: 0n,
+      spot: 0n,
+      uzec: 0n,
+    });
   });
 
   it('throws rather than show a zero it did not read', async () => {
@@ -71,6 +77,29 @@ describe('queryHyperliquidBalances', () => {
     await expect(
       queryHyperliquidBalances(TO, (async () => json({}, 500)) as never),
     ).rejects.toThrow('500');
+  });
+});
+
+describe('uzec', () => {
+  it('reads the spot uzec that can move, in zatoshi', async () => {
+    const fetchFn = async (_url: unknown, init?: RequestInit) =>
+      (JSON.parse(init!.body as string) as { type: string }).type === 'clearinghouseState'
+        ? json({ withdrawable: '0.0' })
+        : json({ balances: [{ coin: 'UZEC', total: '1.23456789', hold: '0.2' }] });
+    expect((await queryHyperliquidBalances(TO, fetchFn as never)).uzec).toBe(103_456_789n);
+  });
+
+  it('is sent as a spot send of the uzec token, the amount in zec', () => {
+    expect(buildUzecSend(TO, 7_000_000n, 9)).toEqual({
+      type: 'spotSend',
+      token: 'UZEC:0x1c994ad3381d31c86c8c2d74ed89a365',
+      hyperliquidChain: 'Mainnet',
+      signatureChainId: '0xa4b1',
+      destination: TO.toLowerCase(),
+      amount: '0.07',
+      time: 9,
+    });
+    expect(() => buildUzecSend(TO, 0n, 9)).toThrow();
   });
 });
 

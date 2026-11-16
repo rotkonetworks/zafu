@@ -97,7 +97,7 @@ function hexToBytes(hex: string): Uint8Array {
 /**
  * EIP-55 mixed-case checksum encoding
  */
-function toChecksumAddress(address: string): string {
+export function toChecksumAddress(address: string): string {
   const lower = address.toLowerCase().replace('0x', '');
   const hash = bytesToHex(keccak_256(new TextEncoder().encode(lower)));
 
