@@ -40,13 +40,17 @@ const isZecMove = (v: unknown): v is ZecMove => {
   );
 };
 
-/** a deposit whose payment never told its txid (let go, or sent while no screen watched) is dropped after a day */
-const UNSENT_KEPT_MS = 24 * 3_600_000;
+/**
+ * Dropped unseen: a deposit whose payment never told its txid (let go, or
+ * sent while no screen watched) after a day, and any move Unit never came to
+ * know after three (a withdrawal whose answer was unclear and never landed).
+ */
+const DAY_MS = 24 * 3_600_000;
 
 export const zecMoves = sealedList(
   'hyperliquidZecMoves',
   isZecMove,
-  m => !m.tx && Date.now() - m.at > UNSENT_KEPT_MS,
+  m => Date.now() - m.at > (m.tx ? 3 : 1) * DAY_MS,
 );
 
 /** what a zec deposit through Unit means, said on its review */

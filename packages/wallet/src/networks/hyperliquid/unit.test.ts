@@ -142,9 +142,9 @@ describe('unit estimates and operations', () => {
     };
     expect(await unitZecEstimate(serve(body))).toEqual({
       depositFeeZat: 568_140n,
-      depositEta: '126m',
+      depositEta: '126 minutes',
       withdrawFeeZat: 15_000n,
-      withdrawEta: '130m',
+      withdrawEta: '130 minutes',
     });
     await expect(unitZecEstimate(serve({ bitcoin: {} }))).rejects.toThrow();
   });

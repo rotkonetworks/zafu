@@ -132,7 +132,14 @@ export async function unitZecEstimate(fetchFn: FetchFn = fetch): Promise<UnitZec
   if (depositFeeZat === undefined || withdrawFeeZat === undefined || !depositEta || !withdrawEta) {
     throw new Error('unit did not say what zec costs right now');
   }
-  return { depositFeeZat, depositEta, withdrawFeeZat, withdrawEta };
+  // Unit says "126m"; shown as "126 minutes"
+  const minutes = (e: string) => e.replace(/^(\d+)m$/, '$1 minutes');
+  return {
+    depositFeeZat,
+    depositEta: minutes(depositEta),
+    withdrawFeeZat,
+    withdrawEta: minutes(withdrawEta),
+  };
 }
 
 /** one zec deposit or withdrawal as Unit sees it */

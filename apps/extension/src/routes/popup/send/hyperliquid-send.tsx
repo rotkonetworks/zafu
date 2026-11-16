@@ -76,7 +76,7 @@ export const HyperliquidSend = ({ onClose, zec }: { onClose: () => void; zec?: b
     ? {
         unit: 'zec',
         action: 'withdraw zec through unit',
-        arrives: 'zcash · a fresh public address of yours',
+        arrives: 'a fresh zcash address of yours',
         lead: 'you withdraw',
         confirm: 'withdraw',
         available: balances.data && zatToZec(balances.data.uzec),
