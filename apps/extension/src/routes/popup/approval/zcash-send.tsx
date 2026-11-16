@@ -92,7 +92,6 @@ export function ZcashSendApproval() {
 
   const app = params.get('app') || '';
   const requestId = params.get('requestId') || '';
-  const feePerOutput = Number(params.get('fee')) || 10_000;
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getVaultUnlock = useStore(selectGetVaultUnlock);
@@ -112,7 +111,8 @@ export function ZcashSendApproval() {
             o.address &&
             typeof o.address === 'string' &&
             typeof o.amount === 'number' &&
-            o.amount > 0,
+            o.amount > 0 &&
+            (o.memo === undefined || typeof o.memo === 'string'),
         ),
       );
     } catch {
@@ -139,9 +139,9 @@ export function ZcashSendApproval() {
     return () => window.removeEventListener('zcash-send-progress', handler);
   }, [status.at]);
 
-  // several outputs are one ironwood transaction (NU6.3 on): its fee, not one per output
-  const totalFeeZat =
-    outputs.length > 1 ? estimateMultiSendFeeZat(outputs.map(o => o.address)) : feePerOutput;
+  // zafu's own estimate for one ironwood transaction (NU6.3 on), never the
+  // site's number: the worker prices the real fee when it builds
+  const totalFeeZat = estimateMultiSendFeeZat(outputs.map(o => o.address));
   const totalOutputZat = outputs.reduce((s, o) => s + o.amount, 0);
 
   const sendResult = (result: unknown) => {
@@ -330,7 +330,7 @@ export function ZcashSendApproval() {
             </Clipped>,
           ],
           ...(outputs[0]!.memo ? ([['memo', outputs[0]!.memo]] as Fact[]) : []),
-          ['network fee', <Sensitive key='fee'>{fmtZec(totalFeeZat)} zec</Sensitive>],
+          ['network fee', <Sensitive key='fee'>~{fmtZec(totalFeeZat)} zec</Sensitive>],
         ]
       : [
           ['payments', `${outputs.length}`],
@@ -379,6 +379,9 @@ export function ZcashSendApproval() {
                 <Clipped head={6} tail={5} label='address' className='text-[11px] text-fg-muted'>
                   {o.address}
                 </Clipped>
+                {o.memo && (
+                  <p className='text-[11px] text-fg break-words whitespace-pre-wrap'>{o.memo}</p>
+                )}
               </div>
             ))}
           </RowGroup>

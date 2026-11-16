@@ -49,7 +49,7 @@ const handle = (sender: ValidExternalSender) =>
         // unlock and the connection proceed. throwIfNeedsLogin dedups concurrent
         // callers internally, so many tabs reconnecting at once share one window.
         try {
-          await throwIfNeedsLogin();
+          await throwIfNeedsLogin(sender.origin);
         } catch {
           // throwIfNeedsLogin rejected: the user closed the login window without
           // unlocking (Code.Canceled), or the login window failed to open. Return

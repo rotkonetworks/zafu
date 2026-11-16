@@ -14,12 +14,7 @@ import { bytesToHex } from '@noble/hashes/utils';
 import type { ZafuConnectPeer } from '@zafu/protocol';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../state/keyring';
-import {
-  connectSecret,
-  currentIdentityName,
-  deriveZidForSite,
-  deriveZidKaForSite,
-} from '../state/identity';
+import { connectSecret, deriveZidKaForSite, resolveZid, zidSiteKeys } from '../state/identity';
 import {
   defaultPeopleRelay,
   PEOPLE_RELAY_KEY,
@@ -41,9 +36,10 @@ export const useStartConnect = () => {
       throw new Error("this wallet doesn't make cards · a phrase wallet does");
     }
     const mnemonic = await getMnemonic(keyInfo.id);
-    const id = await currentIdentityName();
-    const mine = deriveZidForSite(mnemonic, id, origin).publicKey;
-    const ka = deriveZidKaForSite(mnemonic, id, origin);
+    // the keys zafu_zid_pubkey gave this site, so the peer's secret matches
+    const site = await zidSiteKeys(origin);
+    const mine = resolveZid(mnemonic, origin, site.pref, site.zidIndex).publicKey;
+    const ka = deriveZidKaForSite(mnemonic, site.identityName, site.scope);
     const secret = bytesToHex(connectSecret(ka.seed, peer.ka, mine, peer.pubkey, origin));
     ka.seed.fill(0);
     const relay = defaultPeopleRelay(

@@ -135,6 +135,7 @@ import { hmac } from '@noble/hashes/hmac';
 import { hkdf } from '@noble/hashes/hkdf';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { xwingPublicKeyFromSeed, XWING_LENGTHS } from '@zafu/pq';
+import { localExtStorage } from '@repo/storage-chrome/local';
 import { isPasswordSuffix } from './password-suffixes';
 
 /**
@@ -688,14 +689,6 @@ export function rotatedIdentity(baseIdentity: string, zidIndex: number): string 
   return zidIndex > 0 ? `${baseIdentity}-v${zidIndex}` : baseIdentity;
 }
 
-/** current rotated identity name for the login/share paths.
- * NOTE: multisig, license, and escrow identities deliberately do NOT use
- * this - those must stay pinned to their creation generation or funds and
- * subscriptions would "rotate away". Only site login/share rotates. */
-export async function currentIdentityName(base: string = DEFAULT_IDENTITY): Promise<string> {
-  return rotatedIdentity(base, await getZidIndex());
-}
-
 /** chrome.storage.local key prefix: per wallet, a map of generation index ->
  * zid public key hex. Populated whenever a generation is actually derived, so
  * display surfaces can show the real key for the active generation without
@@ -740,6 +733,77 @@ export async function deriveAndCacheZidGeneration(
 }
 
 /**
+ * The person's choice for a site, set on the identity page: which identity,
+ * a site or cross-site key, and its rotation. Every key a site sees derives
+ * through it, so a rotated site signs, opens boxes and is introduced with the
+ * same key.
+ */
+export const zidPreferenceFor = async (origin: string): Promise<ZidSitePreference | undefined> => {
+  const raw = (await localExtStorage.get('zidPreferences'))?.[origin] as
+    | Partial<ZidSitePreference>
+    | undefined;
+  return raw
+    ? {
+        mode: raw.mode === 'cross-site' ? 'cross-site' : 'site',
+        rotation: raw.rotation ?? 0,
+        identity: raw.identity ?? DEFAULT_IDENTITY,
+      }
+    : undefined;
+};
+
+/**
+ * a site's keys, resolved once: the ed25519 key's inputs and the scope the
+ * others hang off. Multisig, license and escrow keys never come through here:
+ * they stay pinned to their generation, or funds would rotate away.
+ */
+export interface ZidSiteKeys {
+  pref?: ZidSitePreference;
+  zidIndex: number;
+  identityName: string;
+  /**
+   * what the post-quantum box and key-agreement keys are scoped to: the origin,
+   * the origin and its rotation, or one cross-site scope. An origin never holds
+   * NUL, so a rotated or cross-site scope never equals a real origin's.
+   */
+  scope: string;
+}
+
+export const zidSiteKeys = async (origin: string): Promise<ZidSiteKeys> => {
+  const pref = await zidPreferenceFor(origin);
+  const zidIndex = await getZidIndex();
+  return {
+    pref,
+    zidIndex,
+    identityName: siteIdentityName(pref, zidIndex),
+    scope:
+      pref?.mode === 'cross-site'
+        ? '\0cross-site'
+        : pref?.rotation
+          ? `${origin}\0${pref.rotation}`
+          : origin,
+  };
+};
+
+const siteIdentityName = (pref: ZidSitePreference | undefined, zidIndex: number): string =>
+  rotatedIdentity(pref?.identity ?? DEFAULT_IDENTITY, zidIndex);
+
+const siteSeed = (identity: Uint8Array, origin: string, pref?: ZidSitePreference): Uint8Array =>
+  pref?.mode === 'cross-site'
+    ? deriveSeedCrossSite(identity)
+    : deriveSeedForSite(identity, origin, pref?.rotation ?? 0);
+
+/** the ed25519 key a site sees: the one zafu_sign signs with. The caller zeroizes privateKey. */
+export const zidKeypairFor = (
+  mnemonic: string,
+  origin: string,
+  pref?: ZidSitePreference,
+  zidIndex = 0,
+): { privateKey: Uint8Array; publicKey: Uint8Array } =>
+  withIdentity(mnemonic, siteIdentityName(pref, zidIndex), id =>
+    keypairFromSeed(siteSeed(id, origin, pref)),
+  );
+
+/**
  * resolve which zid to use for a given origin based on preference.
  * default: site-specific for the "default" identity.
  *
@@ -768,18 +832,7 @@ export const signZid = (
   pref?: ZidSitePreference,
   zidIndex = 0,
 ): { signature: string; publicKey: string } => {
-  const identityName = rotatedIdentity(pref?.identity ?? DEFAULT_IDENTITY, zidIndex);
-  const root = deriveRoot(mnemonic);
-  const identity = deriveIdentity(root, identityName);
-  root.fill(0);
-
-  const seed =
-    pref?.mode === 'cross-site'
-      ? deriveSeedCrossSite(identity)
-      : deriveSeedForSite(identity, origin, pref?.rotation ?? 0);
-  identity.fill(0);
-
-  const { privateKey, publicKey } = keypairFromSeed(seed);
+  const { privateKey, publicKey } = zidKeypairFor(mnemonic, origin, pref, zidIndex);
   const signature = ed25519.sign(challenge, privateKey);
 
   privateKey.fill(0);
@@ -821,18 +874,9 @@ export const signP256 = (
   pref?: ZidSitePreference,
   zidIndex = 0,
 ): { signature: string; publicKey: string } => {
-  const identityName = rotatedIdentity(pref?.identity ?? DEFAULT_IDENTITY, zidIndex);
-  const root = deriveRoot(mnemonic);
-  const identity = deriveIdentity(root, identityName);
-  root.fill(0);
-
-  const seed =
-    pref?.mode === 'cross-site'
-      ? deriveSeedCrossSite(identity)
-      : deriveSeedForSite(identity, origin, pref?.rotation ?? 0);
-  identity.fill(0);
-
-  const { privateKey, publicKey } = p256KeypairFromSeed(seed);
+  const { privateKey, publicKey } = withIdentity(mnemonic, siteIdentityName(pref, zidIndex), id =>
+    p256KeypairFromSeed(siteSeed(id, origin, pref)),
+  );
   // prehash: noble's default treats the input as a digest and keeps only its
   // first 32 bytes, so a longer challenge was signed on its prefix alone
   const signature = p256.sign(challenge, privateKey, { prehash: true, lowS: true });
@@ -1117,23 +1161,6 @@ export const lookupSharedZid = (
   log: ZidShareRecord[],
   origin: string,
 ): ZidShareRecord | undefined => log.filter(r => r.sharedWith === origin).pop();
-
-/**
- * derive the full ed25519 keypair for a site-specific zid.
- * caller MUST zeroize the returned privateKey when done.
- *
- * used by the encryption API to derive x25519 keys for sealed boxes.
- */
-export const deriveZidKeypairForSite = (
-  mnemonic: string,
-  identity: string,
-  origin: string,
-  rotation = 0,
-): { privateKey: Uint8Array; publicKey: Uint8Array } =>
-  withIdentity(mnemonic, identity, id => {
-    const seed = deriveSeedForSite(id, origin, rotation);
-    return keypairFromSeed(seed);
-  });
 
 /** verify a zid signature */
 export const verifyZid = (

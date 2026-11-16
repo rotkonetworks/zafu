@@ -34,12 +34,7 @@ import {
   isOptinPending,
   modeFromOptin,
 } from '../../utils/capability-decision';
-import {
-  hasCapability,
-  isDenied,
-  type Capability,
-  CAPABILITY_META,
-} from '@repo/storage-chrome/capabilities';
+import { hasCapability, isDenied, type Capability } from '@repo/storage-chrome/capabilities';
 import {
   nextHdIndex,
   checkAndBumpFreshAddressRateLimit,
@@ -448,6 +443,19 @@ async function seedWalletReceiveAddress(
   return fixOrchardAddress(raw, mainnet);
 }
 
+/**
+ * What a site may ask for: the capabilities something checks today. The rest
+ * (send_tx, export_fvk, view_*, auto_sign) gate nothing yet, and a grant banked
+ * now would quietly arm whatever a later build hangs on them.
+ */
+const REQUESTABLE: ReadonlySet<Capability> = new Set([
+  'connect',
+  'sign_identity',
+  'frost',
+  'passkey',
+  'encrypt',
+]);
+
 const REJECT_FLOOR_MS = 30;
 async function requireCapability(
   sender: chrome.runtime.MessageSender,
@@ -470,10 +478,12 @@ async function requireCapability(
     return null;
   };
 
-  const origin = sender.origin || sender.url || '';
-  if (!origin) {
+  // a frost-granted site embedded as an iframe elsewhere must not raise its
+  // approvals from inside another page
+  if (!isValidExternalSender(sender)) {
     return reject();
   }
+  const origin = sender.origin;
   try {
     // Global participation first: a capability the user turned off (or is
     // still undecided about, which prompts once) collapses into the same
@@ -652,7 +662,7 @@ async function passkeyReady(
   const verified = await walletLocked();
   try {
     const { throwIfNeedsLogin } = await import('../../needs-login');
-    await throwIfNeedsLogin();
+    await throwIfNeedsLogin(origin);
   } catch {
     return { ok: false, refusal: declined('cancelled') };
   }
@@ -748,8 +758,9 @@ export const externalMessageListener = (
     // Public methods that open a popup or act on the user's behalf require a
     // valid top-frame https sender. Without this a third-party IFRAME could raise
     // a picker/approval/send popup wearing the host tab's identity (provenance
-    // spoof). The frost/passkey entries already gate via requireCapability /
-    // isValidExternalSender; ping is a harmless discovery response.
+    // spoof). The frost entries check the same inside requireCapability, so
+    // their refusal keeps its uniform shape; ping is a harmless discovery
+    // response.
     (type === 'send' ||
       type === 'zafu_pick_contacts' ||
       type === 'zafu_request_capability' ||
@@ -1141,12 +1152,11 @@ export const externalMessageListener = (
     }
 
     case 'zafu_request_capability': {
-      const capability = msg['capability'] as string;
-      if (!capability || !(capability in CAPABILITY_META)) {
+      const cap = msg['capability'] as Capability;
+      if (!REQUESTABLE.has(cap)) {
         sendResponse({ error: 'invalid capability' });
         return true;
       }
-      const cap = capability as Capability;
       const origin = sender.origin || sender.url;
       if (!origin) {
         sendResponse({ error: 'unknown origin' });
@@ -1423,29 +1433,20 @@ export const externalMessageListener = (
       // Used by poker.zk.bot for: rake + escrow deposit in one tx
       //
       // msg.outputs: [{address: string, amount: number, memo?: string}]
-      // msg.fee?: number (default 10000 = 0.0001 ZEC)
-      //
-      // Opens approval popup showing all outputs for user confirmation
+      // Opens approval popup showing all outputs for user confirmation. The fee
+      // is zafu's own; a site-sent fee is never shown or used.
       const outputs = msg['outputs'] as { address: string; amount: number; memo?: string }[];
       if (!outputs || !Array.isArray(outputs) || outputs.length === 0) {
         sendResponse({ success: false, error: 'outputs array required' });
         return true;
       }
 
-      const totalAmount = outputs.reduce((sum, o) => sum + (o.amount || 0), 0);
-      const fee = Number(msg['fee']) || 10_000;
       // the guard above already required a valid top-frame https sender
       const appOrigin = sender.origin ?? 'unknown';
       const requestId = crypto.randomUUID();
-
-      pendingPicks.set(requestId, sendResponse);
-
       const params = new URLSearchParams({
         app: appOrigin,
         requestId,
-        total: String(totalAmount),
-        fee: String(fee),
-        numOutputs: String(outputs.length),
         outputsJson: JSON.stringify(outputs),
       });
       const url = chrome.runtime.getURL(`popup.html#/approval/zcash-send?${params.toString()}`);
@@ -1453,12 +1454,17 @@ export const externalMessageListener = (
       // concurrent send from the same origin is dropped instead of stacking
       // another window.
       void (async () => {
+        if (!hasCapability(await getOriginPermissions(appOrigin), 'connect')) {
+          sendResponse({ success: false, error: 'not connected', code: 'denied' });
+          return;
+        }
+        pendingPicks.set(requestId, sendResponse);
         if (!(await openApprovalPopup(appOrigin, url, requestId))) {
           if (pendingPicks.delete(requestId)) {
             sendResponse({ success: false, error: 'denied' });
           }
         }
-      })();
+      })().catch(() => sendResponse({ success: false, error: 'internal error' }));
       return true;
     }
 

@@ -82,11 +82,27 @@ beforeEach(async () => {
   await localExtStorage.set('capabilityModes', {});
 });
 
+describe('only capabilities zafu checks can be asked for', () => {
+  it.each(['send_tx', 'export_fvk', 'view_contacts', 'view_history', 'auto_sign', 'bogus'])(
+    '%s is refused before any prompt or grant',
+    async capability => {
+      const origin = `https://bank-${capability}.example`;
+      const answer = await call(
+        { type: 'zafu_request_capability', capability },
+        validSender(origin),
+      );
+      expect(answer).toEqual({ error: 'invalid capability' });
+      expect(createMock).not.toHaveBeenCalled();
+      expect(await modes()).toEqual({});
+    },
+  );
+});
+
 describe('global opt-in - undecided capability', () => {
   it('asks the zafu-level question once, then the per-site one', async () => {
     const origin = 'https://optin.example';
     const answer = call(
-      { type: 'zafu_request_capability', capability: 'view_history' },
+      { type: 'zafu_request_capability', capability: 'sign_identity' },
       validSender(origin),
     );
     await flush();
@@ -94,7 +110,7 @@ describe('global opt-in - undecided capability', () => {
     // question 1: no site attached - the question is about zafu, not the page
     expect(createMock).toHaveBeenCalledTimes(1);
     expect(urlAt(0)).toContain('scope=zafu');
-    expect(urlAt(0)).toContain('capability=view_history');
+    expect(urlAt(0)).toContain('capability=sign_identity');
     expect(urlAt(0)).not.toContain('app=');
 
     // approve it → the mode is remembered...
@@ -103,7 +119,7 @@ describe('global opt-in - undecided capability', () => {
       internalSender(),
     );
     await flush();
-    expect((await modes())?.view_history).toBe('enabled');
+    expect((await modes())?.sign_identity).toBe('enabled');
 
     // ...and only then does the per-site question appear
     expect(createMock).toHaveBeenCalledTimes(2);
@@ -114,14 +130,14 @@ describe('global opt-in - undecided capability', () => {
       { type: 'zafu_capability_result', requestId: requestIdAt(1), result: { approved: true } },
       internalSender(),
     );
-    expect(await answer).toEqual({ granted: true, capability: 'view_history' });
-    expect((await modes())?.view_history).toBe('enabled');
+    expect(await answer).toEqual({ granted: true, capability: 'sign_identity' });
+    expect((await modes())?.sign_identity).toBe('enabled');
   });
 
   it('persists a denial as disabled and answers denied', async () => {
     const origin = 'https://optin-deny.example';
     const answer = call(
-      { type: 'zafu_request_capability', capability: 'view_contacts' },
+      { type: 'zafu_request_capability', capability: 'frost' },
       validSender(origin),
     );
     await flush();
@@ -130,8 +146,8 @@ describe('global opt-in - undecided capability', () => {
       internalSender(),
     );
 
-    expect(await answer).toEqual({ granted: false, denied: true, capability: 'view_contacts' });
-    expect((await modes())?.view_contacts).toBe('disabled');
+    expect(await answer).toEqual({ granted: false, denied: true, capability: 'frost' });
+    expect((await modes())?.frost).toBe('disabled');
     // denied globally → the site question must never have been asked
     expect(createMock).toHaveBeenCalledTimes(1);
   });
@@ -147,54 +163,54 @@ describe('global opt-in - undecided capability', () => {
     };
 
     const answer = await call(
-      { type: 'zafu_request_capability', capability: 'view_history' },
+      { type: 'zafu_request_capability', capability: 'sign_identity' },
       validSender(origin),
     );
 
     // no decision reported and no state written: the site may retry
-    expect(answer).toEqual({ granted: false, capability: 'view_history' });
+    expect(answer).toEqual({ granted: false, capability: 'sign_identity' });
     expect(await modes()).toEqual({});
   });
 });
 
 describe('global opt-in - answered capability', () => {
   it('a disabled capability refuses every site with no prompt', async () => {
-    await localExtStorage.set('capabilityModes', { export_fvk: 'disabled' });
+    await localExtStorage.set('capabilityModes', { connect: 'disabled' });
 
     const answer = await call(
-      { type: 'zafu_request_capability', capability: 'export_fvk' },
+      { type: 'zafu_request_capability', capability: 'connect' },
       validSender('https://off.example'),
     );
 
-    expect(answer).toEqual({ granted: false, denied: true, capability: 'export_fvk' });
+    expect(answer).toEqual({ granted: false, denied: true, capability: 'connect' });
     expect(createMock).not.toHaveBeenCalled();
   });
 
   it('off beats a stale per-origin grant', async () => {
     const origin = 'https://stale-grant.example';
-    await grantCapability(origin, 'view_history');
-    await localExtStorage.set('capabilityModes', { view_history: 'disabled' });
+    await grantCapability(origin, 'sign_identity');
+    await localExtStorage.set('capabilityModes', { sign_identity: 'disabled' });
 
     const answer = await call(
-      { type: 'zafu_request_capability', capability: 'view_history' },
+      { type: 'zafu_request_capability', capability: 'sign_identity' },
       validSender(origin),
     );
 
-    expect(answer).toEqual({ granted: false, denied: true, capability: 'view_history' });
+    expect(answer).toEqual({ granted: false, denied: true, capability: 'sign_identity' });
     expect(createMock).not.toHaveBeenCalled();
   });
 
   it('an enabled capability with a grant answers immediately', async () => {
     const origin = 'https://already.example';
-    await grantCapability(origin, 'view_contacts');
-    await localExtStorage.set('capabilityModes', { view_contacts: 'enabled' });
+    await grantCapability(origin, 'encrypt');
+    await localExtStorage.set('capabilityModes', { encrypt: 'enabled' });
 
     const answer = await call(
-      { type: 'zafu_request_capability', capability: 'view_contacts' },
+      { type: 'zafu_request_capability', capability: 'encrypt' },
       validSender(origin),
     );
 
-    expect(answer).toEqual({ granted: true, capability: 'view_contacts' });
+    expect(answer).toEqual({ granted: true, capability: 'encrypt' });
     expect(createMock).not.toHaveBeenCalled();
   });
 });
