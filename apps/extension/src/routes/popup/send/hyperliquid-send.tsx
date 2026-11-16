@@ -84,7 +84,8 @@ export const HyperliquidSend = ({ onClose }: { onClose: () => void }) => {
         now: Date.now(),
       });
     } catch {
-      setStep({ at: 'refused', reason: 'zafu could not sign this' });
+      // locked, or the key no longer gives this address: nothing was posted
+      setStep({ at: 'refused' });
       return;
     }
     await post(signed, false);
@@ -218,7 +219,7 @@ export const HyperliquidSend = ({ onClose }: { onClose: () => void }) => {
       <Stopped
         title='not sent'
         sending={sending}
-        error={`${'reason' in step && step.reason ? `hyperliquid says: ${step.reason}` : 'this was not sent'} · nothing moved`}
+        error={`${'reason' in step && step.reason ? `hyperliquid says: ${step.reason}` : 'zafu could not sign this'} · nothing moved`}
         onCancel={onClose}
         onRetry={() => setStep({ at: 'form' })}
       />
