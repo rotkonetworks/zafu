@@ -52,9 +52,9 @@ describe('making and naming accounts', () => {
     const two = withNew(withNew(fresh));
     expect(two).toMatchObject({ top: 2, active: 2 });
     expect(rowsOf(two, undefined).map(r => [r.id, r.name, r.sub])).toEqual([
-      [0, 'main', 'account 0'],
-      [1, 'account 1', 'account 1'],
-      [2, 'account 2', 'account 2'],
+      [0, 'main', "m/44'/60'/0'/0/0"],
+      [1, 'account 1', "m/44'/60'/0'/0/1"],
+      [2, 'account 2', "m/44'/60'/0'/0/2"],
     ]);
   });
 

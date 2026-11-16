@@ -100,7 +100,7 @@ export const rowsOf = (w: WalletAccounts, customPath: string | undefined): Accou
   ...Array.from({ length: w.top + 1 }, (_, i) => ({
     id: i,
     name: nameOf(w, i),
-    sub: `account ${i}`,
+    sub: accountPath(i),
   })),
   ...(customPath ? [{ id: 'path' as const, name: nameOf(w, 'path'), sub: customPath }] : []),
 ];
