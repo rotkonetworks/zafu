@@ -18,6 +18,19 @@ vi.mock('@repo/storage-chrome/local', () => ({
   },
 }));
 
+// the sealed api key, as the backup sees it: moved out of the plain config
+const sealedKey = vi.hoisted(() => ({ value: '' }));
+vi.mock('../services/zcashme/api-key', () => ({
+  readZcashMeApiKey: async () => sealedKey.value,
+  sealZcashMeApiKey: async () => {
+    const c = store['zcashMeConfig'] as { apiKey?: string } | undefined;
+    if (c?.apiKey) {
+      sealedKey.value = c.apiKey;
+      store['zcashMeConfig'] = { ...c, apiKey: '' };
+    }
+  },
+}));
+
 import { DEFAULT_PRIVACY_SETTINGS } from './privacy';
 import {
   exportSettings,
@@ -140,16 +153,45 @@ describe('settings backup', () => {
     keplrCompat: true,
   };
 
-  it.each(Object.entries(chosen))('carries %s through a backup and back', async (k, v) => {
-    store[k] = v;
+  it('carries the sealed zcash.me api key, and restores it sealed', async () => {
+    store['zcashMeConfig'] = { mode: 'directory', mirrorUrl: '', apiKey: '' };
+    sealedKey.value = 'own-key';
     const out = JSON.parse(JSON.stringify(await exportSettings(DEFAULT_PRIVACY_SETTINGS))) as {
       prefs: Record<string, unknown>;
     };
-    delete store[k];
+    expect(out.prefs['zcashMeConfig']).toMatchObject({ apiKey: 'own-key' });
+    sealedKey.value = '';
     await importPrefs(out.prefs);
-    expect(store[k]).toEqual(v);
-    delete store[k];
+    expect(sealedKey.value).toBe('own-key');
+    expect(store['zcashMeConfig']).toMatchObject({ mode: 'directory', apiKey: '' });
+    delete store['zcashMeConfig'];
+    sealedKey.value = '';
   });
+
+  it('carries a sealed api key set before any zcash.me config was stored', async () => {
+    sealedKey.value = 'own-key';
+    const out = await exportSettings(DEFAULT_PRIVACY_SETTINGS);
+    sealedKey.value = '';
+    await importPrefs(JSON.parse(JSON.stringify(out.prefs)) as typeof out.prefs);
+    expect(sealedKey.value).toBe('own-key');
+    expect(store['zcashMeConfig']).toMatchObject({ mode: 'off', apiKey: '' });
+    delete store['zcashMeConfig'];
+    sealedKey.value = '';
+  });
+
+  it.each(Object.entries(chosen).filter(([k]) => k !== 'zcashMeConfig'))(
+    'carries %s through a backup and back',
+    async (k, v) => {
+      store[k] = v;
+      const out = JSON.parse(JSON.stringify(await exportSettings(DEFAULT_PRIVACY_SETTINGS))) as {
+        prefs: Record<string, unknown>;
+      };
+      delete store[k];
+      await importPrefs(out.prefs);
+      expect(store[k]).toEqual(v);
+      delete store[k];
+    },
+  );
 
   it('leaves out a restored value of the wrong shape, and networks zafu no longer has', async () => {
     await importPrefs({

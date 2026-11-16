@@ -12,6 +12,7 @@ import { isProxyConfig, isProxyLogin, PROXY_KEY, PROXY_LOGIN_KEY } from '../net/
 import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { rpcPoolKey } from '../net/egress-policy';
 import { NETWORKS } from '../config/networks';
+import { readZcashMeApiKey, sealZcashMeApiKey } from '../services/zcashme/api-key';
 import { DEFAULT_PRIVACY_SETTINGS, fromStoredPrivacy, type PrivacySettings } from './privacy';
 
 type Parse = (v: unknown) => unknown;
@@ -53,8 +54,8 @@ const PREFS = {
   swapCustodyAck: strs,
   memoSyncStrategies: recordOf(oneOf('private', 'fast', 'paranoid')),
   mempoolWatchSettings: recordOf(oneOf('off', 'on')),
-  // holds the user's own zcash.me api key: theirs, and the backup is sealed
-  // (fields after mode may be absent in a config stored by an older version)
+  // carries the user's own zcash.me api key, sealed apart at home: theirs, and
+  // the backup is sealed (fields after mode may be absent in a config stored by an older version)
   zcashMeConfig: v =>
     isObj(v) &&
     oneOf('off', 'directory', 'live')(v['mode']) !== undefined &&
@@ -118,6 +119,11 @@ export const exportSettings = async (
     if (v !== undefined) {
       prefs[k] = v;
     }
+  }
+  // a key set without ever touching the mode still has a config to ride in
+  const apiKey = await readZcashMeApiKey();
+  if (apiKey) {
+    prefs.zcashMeConfig = { mode: 'off', mirrorUrl: '', ...(prefs.zcashMeConfig ?? {}), apiKey };
   }
   const stored = await chrome.storage.local.get(poolKeys().map(([, k]) => k));
   const nodePools: Record<string, string[]> = {};
@@ -185,6 +191,8 @@ export const importPrefs = async (prefs: SettingsBackup['prefs']): Promise<void>
       await localExtStorage.set(k, v as never);
     }
   }
+  // a restored api key rides in the config; it goes to its sealed place
+  await sealZcashMeApiKey();
 };
 
 /** put back each wallet's sync start; a wallet the backup does not name, or one not here, is skipped */

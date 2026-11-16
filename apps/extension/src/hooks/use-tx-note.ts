@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { readTxNotes, TX_NOTES_KEY, writeTxNotes } from '../state/personal-data';
 
 /**
  * Local, user-authored note attached to a transaction by txid.
@@ -6,13 +7,16 @@ import { useState, useEffect, useCallback } from 'react';
  * The chain cannot tell you who a shielded payment came FROM - an incoming note
  * reveals no sender. So a received tx is anonymous unless the user labels it
  * themselves ("rent from Alice"). These labels are:
- *   - purely local (never leave the wallet),
+ *   - purely local (never leave the wallet) and sealed at rest,
  *   - stored in chrome.storage.local, NOT the zcash IDB, so a resync / clear
  *     cache never erases them (same durability the 'sent' store now has), and
  *   - keyed by txid so they survive re-scans that rebuild the note set.
  */
-const STORE_KEY = 'txNotes';
-type TxNotes = Record<string, string>;
+const noteOf = (txid: string) =>
+  readTxNotes().then(
+    notes => notes[txid] ?? '',
+    () => '',
+  );
 
 export function useTxNote(txid: string | undefined): {
   note: string;
@@ -26,23 +30,22 @@ export function useTxNote(txid: string | undefined): {
       return;
     }
     let alive = true;
-    void chrome.storage.local.get(STORE_KEY).then(r => {
-      if (!alive) {
-        return;
-      }
-      const notes = (r[STORE_KEY] as TxNotes | undefined) ?? {};
-      setNote(notes[txid] ?? '');
-    });
-    // keep in sync if another surface (another popup) edits the same note
+    const load = () =>
+      void noteOf(txid).then(n => {
+        if (alive) {
+          setNote(n);
+        }
+      });
+    load();
+    // keep in sync if another surface (another popup) edits the same note;
+    // the stored value is sealed, so it is read again rather than taken from the change
     const onChange = (
       changes: Record<string, chrome.storage.StorageChange>,
       area: string,
     ): void => {
-      if (area !== 'local' || !changes[STORE_KEY]) {
-        return;
+      if (area === 'local' && changes[TX_NOTES_KEY]) {
+        load();
       }
-      const notes = (changes[STORE_KEY].newValue as TxNotes | undefined) ?? {};
-      setNote(notes[txid] ?? '');
     };
     chrome.storage.onChanged.addListener(onChange);
     return () => {
@@ -57,15 +60,15 @@ export function useTxNote(txid: string | undefined): {
         return;
       }
       const trimmed = value.trim();
-      const r = await chrome.storage.local.get(STORE_KEY);
-      const notes = (r[STORE_KEY] as TxNotes | undefined) ?? {};
+      const notes = await readTxNotes();
       if (trimmed) {
         notes[txid] = trimmed;
       } else {
         delete notes[txid];
       }
-      await chrome.storage.local.set({ [STORE_KEY]: notes });
-      setNote(trimmed);
+      if (await writeTxNotes(notes, 'replace')) {
+        setNote(trimmed);
+      }
     },
     [txid],
   );

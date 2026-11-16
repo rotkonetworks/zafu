@@ -17,6 +17,7 @@ import { useSyncProgress } from '../../../hooks/full-sync-height';
 import { getRootNetwork, getNetwork } from '../../../config/networks';
 import { viewClient, sctClient } from '../../../clients';
 import { getHistoryInWorker } from '../../../state/keyring/network-worker';
+import { openSentRows } from '../../../state/sent-seal';
 import { zatToZec } from './format';
 import { describePenumbraHistory } from '../../../history/penumbra-describe';
 import { isIncoming, penumbraRow, type ParsedTransaction } from './tx-parse';
@@ -116,12 +117,8 @@ export const zcashHistoryQuery = (
     enabled: enabled && !!storeId,
     staleTime: 10_000,
     queryFn: async (): Promise<ParsedTransaction[]> => {
-      const entries = await getHistoryInWorker(
-        'zcash',
-        storeId!,
-        zidecarUrl,
-        tAddresses,
-        tCheckedAt,
+      const entries = await openSentRows(
+        await getHistoryInWorker('zcash', storeId!, zidecarUrl, tAddresses, tCheckedAt),
       );
       return entries.map(e => ({
         id: e.id,
