@@ -23,7 +23,10 @@ const wallet = async (c, seed, o = {}) => {
   });
   await z.sw().evaluate(async b => {
     const all = await chrome.storage.local.get(null);
-    const ks = Object.keys(all).filter(k => k.startsWith('zcashBirthday_'));
+    // zafu keeps a birthday per chain: the testnet one is the wallet's key with @test
+    const ks = Object.keys(all)
+      .filter(k => k.startsWith('zcashBirthday_'))
+      .flatMap(k => [k, k.endsWith('@test') ? k : `${k}@test`]);
     await chrome.storage.local.set(Object.fromEntries(ks.map(k => [k, b])));
   }, o.birthday ?? BIRTHDAY);
   // testnet is a network the person turns on: a seed wallet's zcash then speaks it
