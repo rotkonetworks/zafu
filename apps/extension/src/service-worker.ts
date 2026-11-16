@@ -122,6 +122,7 @@ import { createChainCheck } from './penumbra/chain-check';
 import { createStorageReopen } from './penumbra/storage-reopen';
 import { requestStopAllSync } from './state/keyring/network-worker';
 import { stampSeenVersion } from './state/moved-notice';
+import { stampTSweepCutoff } from './state/pocket-id';
 import { idleFor } from './state/idle-activity';
 import { keptCaptureAccess } from './buy/capture/kept';
 
@@ -857,6 +858,7 @@ void (async () => {
 // on install: open onboarding page + create context menu
 chrome.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
   void stampSeenVersion(reason, previousVersion).catch(() => undefined);
+  void stampTSweepCutoff(reason).catch(() => undefined);
   chrome.contextMenus.create({
     id: 'open-popup-window',
     title: 'Open Zafu in Popup Window',

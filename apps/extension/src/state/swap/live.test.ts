@@ -229,6 +229,19 @@ describe('routes that cannot quote', () => {
     ).toBe('could not quote this right now');
   });
 
+  it('a refused redirect says so, never that the route is off', async () => {
+    const { EgressBlockedError } = await import('../../net/egress');
+    const e = new EgressBlockedError({
+      allow: false,
+      host: 'thornode.ninerealms.com',
+      destination: 'thorchain',
+      reason: 'redirect',
+    });
+    expect(plain('thor', e)).toBe(
+      'zafu would not let thornode.ninerealms.com redirect this · nothing went elsewhere',
+    );
+  });
+
   it('a pair a route does not trade, a route not asked yet, one turned off: each a quiet line', () => {
     expect(gates(pair, egress.views as never)).toEqual([
       { route: 'near' },

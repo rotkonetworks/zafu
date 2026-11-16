@@ -61,7 +61,7 @@ export interface Gate {
 export const plain = (route: RouteId, e: unknown): string => {
   const name = ROUTES[route].label;
   const text = isEgressBlocked(e)
-    ? e.refusal.reason === 'transport-down'
+    ? e.refusal.reason === 'transport-down' || e.refusal.reason === 'redirect'
       ? e.message
       : 'off in settings'
     : typeof e === 'string'

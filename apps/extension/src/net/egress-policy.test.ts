@@ -80,6 +80,23 @@ describe('a fresh zcash-only wallet', () => {
   });
 });
 
+describe('redirects', () => {
+  it('a request that can carry your addresses is never followed; nym and the registry are', () => {
+    const table = compileEgress(NYM_ON);
+    const send = 'https://zcash.rotko.net/cash.z.wallet.sdk.rpc.CompactTxStreamer/SendTransaction';
+    expect(decideEgress(send, 'worker', table)).toMatchObject({ allow: true, noRedirect: true });
+    expect(decideEgress('https://validator.nymtech.net/api/v1', 'nym', table)).toEqual({
+      allow: true,
+      host: 'validator.nymtech.net',
+      destination: 'nym',
+    });
+    const registry = table.rules.find(r => r.host === 'registry.penumbra.fi');
+    expect(registry).toBeDefined();
+    expect(registry?.noRedirect).toBeUndefined();
+    expect(table.rules.filter(r => r.destination === 'zcash').every(r => r.noRedirect)).toBe(true);
+  });
+});
+
 describe('the required endpoint follows settings', () => {
   it('moves with the configured zcash endpoint', () => {
     const inputs = { ...ZCASH_ONLY, networkEndpoints: { zcash: 'https://eu.zec.rocks:443' } };

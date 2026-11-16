@@ -804,7 +804,8 @@ export const compileEgress = (i: EgressInputs): EgressTable => {
           allow: on,
           reason: on ? undefined : REASON[why],
           ...(spec.gate.kind === 'optional' ? { shared: true } : {}),
-          ...(spec.purpose === 'chain-rpc' ? { node: true } : {}),
+          // asset metadata names no one, and nym's own directory is only nym
+          ...(spec.purpose !== 'registry' && !spec.realm ? { noRedirect: true as const } : {}),
           ...(spec.realm ? { realm: spec.realm } : {}),
         };
         rules.push(rule);

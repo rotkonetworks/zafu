@@ -71,25 +71,49 @@ export const hotSpendAccount = (storeId: string, requested?: number): number => 
 /**
  * chrome.storage key of the highest transparent address index ever handed
  * out: by an older build's rotation, or by a swap claiming its own fresh
- * address (hooks/use-transparent-addresses claimSwapTAddress). It widens the
- * funds scan to cover every one of them. Account 0 keeps the historic global
+ * address (hooks/use-transparent-addresses claimSwapTAddress). The funds
+ * check covers every one of them and no more. Account 0 keeps the historic global
  * key so existing addresses never shift.
  */
 export const zcashTransparentIndexKey = (account: number): string =>
   account === 0 ? 'zcashTransparentIndex' : `zcashTransparentIndex#${account}`;
 
-/** older builds rotated t-addresses; the first twenty were always scanned */
-const LEGACY_T_FLOOR = 19;
+/**
+ * Every t-branch index a pocket's checks ask about: index 0, the one it
+ * shows, up to the highest ever handed out (a swap, an lp address, an older
+ * build's rotation). Nothing past it is asked, so the node never hears of an
+ * address zafu did not give out. Array position is the derivation index:
+ * never filter or reorder it.
+ */
+export const pocketTransparentIndices = (highest: unknown): number[] => {
+  const max = Number.isInteger(highest) && (highest as number) > 0 ? (highest as number) : 0;
+  return Array.from({ length: max + 1 }, (_, i) => i);
+};
 
 /**
- * Every t-branch index scanned for a pocket's funds. A pocket shows one
- * address, index 0, but older builds and swaps handed out more and those may
- * still hold coins, so the scan covers up to the highest index ever stored.
- * Array position is the derivation index: never filter or reorder it.
+ * The highest index a restored seed looks back to: older builds rotated
+ * through the first twenty, and a seed alone does not say which were used.
  */
-export const pocketTransparentIndices = (legacyMax: unknown): number[] => {
-  const max = Number.isInteger(legacyMax)
-    ? Math.max(LEGACY_T_FLOOR, legacyMax as number)
-    : LEGACY_T_FLOOR;
-  return Array.from({ length: max + 1 }, (_, i) => i);
+export const RESTORE_T_INDEX = 19;
+
+/**
+ * When this install moved to asking only handed-out addresses: a wallet made
+ * before it may hold coins on an older build's rotated addresses that no
+ * counter recorded, so each of its pockets looks back once. 0 on a fresh
+ * install, so no wallet made here ever does.
+ */
+export const T_SWEEP_BEFORE = 'zcashTransparentSweepBefore';
+
+/** a pocket store's mark that it looked back (by hand or once after the upgrade) */
+export const tSweptKey = (storeId: string): string => `zcashTransparentSwept:${storeId}`;
+
+/** the service worker's half: stamp the cutoff once, 0 on install, now on the first update */
+export const stampTSweepCutoff = async (reason: string): Promise<void> => {
+  if (reason !== 'install' && reason !== 'update') {
+    return;
+  }
+  const seen: unknown = (await chrome.storage.local.get(T_SWEEP_BEFORE))[T_SWEEP_BEFORE];
+  if (typeof seen !== 'number') {
+    await chrome.storage.local.set({ [T_SWEEP_BEFORE]: reason === 'install' ? 0 : Date.now() });
+  }
 };

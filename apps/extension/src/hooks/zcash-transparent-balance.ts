@@ -18,7 +18,11 @@ import {
   type TransparentCheck,
 } from '../transparent/zcash-check';
 
-export const useTransparentBalance = (tAddresses: string[]) => {
+/** a pocket's one look back (lookBackTAddresses), handed the way to ask */
+type Sweep = (ask: (older: string[]) => Promise<{ address: string }[]>) => Promise<void>;
+
+/** `sweep`: given while the pocket owes its one look back; the next check is that look back */
+export const useTransparentBalance = (tAddresses: string[], sweep?: Sweep) => {
   const storeId = useStore(activeZcashStoreId);
   const url = useStore(selectZcashEndpoint);
   const backend = useStore(selectZcashBackend);
@@ -39,10 +43,16 @@ export const useTransparentBalance = (tAddresses: string[]) => {
   };
   const run = useMutation({
     mutationKey: key,
-    mutationFn: (tip: number) => runCheck(zcashClient(url, backend), tAddresses, tip),
+    mutationFn: ({ tip, addresses }: { tip: number; addresses: string[] }) =>
+      runCheck(zcashClient(url, backend), addresses, tip),
     onSuccess: record,
   });
   const checking = useIsMutating({ mutationKey: key }) > 0;
+  // a check asked without a tip keeps the one it knew
+  const at = (tip: number) => Math.max(tip, last?.height ?? 0);
+
+  const lookBack = async (older: string[]) =>
+    (await run.mutateAsync({ tip: at(0), addresses: older })).utxos ?? [];
 
   return {
     /** the last check, or null before the first */
@@ -52,10 +62,21 @@ export const useTransparentBalance = (tAddresses: string[]) => {
     /** one check of every address, each on its own; a second press while one runs does nothing */
     check: (tip = 0) => {
       if (storeId && tAddresses.length > 0 && !queryClient.isMutating({ mutationKey: key })) {
-        // a check asked without a tip keeps the one it knew
-        run.mutate(Math.max(tip, last?.height ?? 0));
+        if (sweep) {
+          // a node that did not answer shows as a failed check; the next one tries again
+          void sweep(older =>
+            run.mutateAsync({ tip: at(tip), addresses: older }).then(c => c.utxos ?? []),
+          ).catch(() => undefined);
+        } else {
+          run.mutate({ tip: at(tip), addresses: tAddresses });
+        }
       }
     },
+    /**
+     * a restored seed's older addresses, asked once (lookBackTAddresses): the
+     * result stands as the pocket's check, since the coins it finds are then covered
+     */
+    lookBack,
     /** a shield went out: its coins stay off the figure until the next check */
     shielded: (spentZat: bigint) => {
       const now = queryClient.getQueryData<TransparentCheck | null>(key);

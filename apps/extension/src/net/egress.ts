@@ -26,7 +26,6 @@
 
 import {
   decideEgress,
-  decideRedirect,
   type EgressDecision,
   type EgressRealm,
   type EgressTable,
@@ -51,7 +50,9 @@ export class EgressBlockedError extends TypeError {
         ? refusal.proxy
           ? "your proxy isn't carrying zafu right now · nothing was sent"
           : NYM_DOWN[refusal.nym ?? 'names-you']
-        : `zafu did not contact ${refusal.host}`,
+        : refusal.reason === 'redirect'
+          ? `zafu would not let ${refusal.host} redirect this · nothing went elsewhere`
+          : `zafu did not contact ${refusal.host}`,
     );
   }
 }
@@ -288,14 +289,34 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
   ready = new Promise<void>(r => (markReady = r));
 
   const nativeFetch = globalThis.fetch?.bind(globalThis);
-  const send = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+  const send = async (
+    input: string | URL | Request,
+    init: RequestInit | undefined,
+    decision: EgressDecision,
+  ): Promise<Response> => {
+    // A request that carries your addresses or transactions is never
+    // followed: a 307 would replay its body to whatever host the server
+    // names, before any answer could be judged. The redirect stays unopened
+    // and becomes a refusal. `manual` hides the target, so a hop within the
+    // same host is refused too.
+    if (decision.allow && decision.noRedirect) {
+      const response = await nativeFetch(input, { ...init, redirect: 'manual' });
+      if (response.type === 'opaqueredirect') {
+        refuse({
+          allow: false,
+          host: decision.host ?? '',
+          destination: decision.destination,
+          reason: 'redirect',
+        });
+      }
+      return response;
+    }
     const response = await nativeFetch(input, init);
-    // A followed redirect lands wherever the server says. The request itself
-    // has already gone (a CSP connect-src cannot list user-chosen and LAN
-    // nodes, so nothing stops the hop), but its answer never reaches the
-    // caller unless the final url passes the same policy.
+    // Anything else follows: the hop has gone (a CSP connect-src cannot list
+    // user-chosen and LAN hosts), but its answer never reaches the caller
+    // unless the final url passes the same policy.
     if (response.redirected) {
-      const landed = decideRedirect(urlOf(input), response.url, realm ?? 'worker', table);
+      const landed = decideEgress(response.url, realm ?? 'worker', table);
       if (!landed.allow) {
         void response.body?.cancel().catch(() => undefined);
         refuse(landed);
@@ -325,7 +346,7 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
       const sendDirect = () => {
         direct = true;
         tallyContact(id);
-        return send(input, init);
+        return send(input, init, decision);
       };
       // a request that names you goes through nym, or nowhere
       const nym =
@@ -366,6 +387,8 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
   }
 
   // Libraries that still use XHR (older cosmjs/axios paths) are refused at open().
+  // An xhr has no redirect mode, so one to a destination that may not redirect
+  // is refused before it goes; nothing in zafu reaches those over xhr.
   const xhr = globalThis.XMLHttpRequest?.prototype;
   // eslint-disable-next-line @typescript-eslint/unbound-method -- re-bound via .call below
   const nativeOpen = xhr?.open;
@@ -376,13 +399,18 @@ export const installEgress = (where: EgressRealm, host: EgressHost = {}): void =
       url: string | URL,
       ...rest: unknown[]
     ) {
+      const decision = checkEgress(url);
+      if (decision.allow && decision.noRedirect) {
+        const { host = '', destination } = decision;
+        refuse({ allow: false, host, destination, reason: 'redirect' });
+      }
       enforce(url);
-      // an xhr follows redirects too: drop the answer when it landed off-policy
+      // an xhr follows redirects: drop the answer when it landed off-policy
       this.addEventListener('readystatechange', () => {
         if (
           this.readyState === XMLHttpRequest.HEADERS_RECEIVED &&
           this.responseURL &&
-          !decideRedirect(String(url), this.responseURL, realm ?? 'worker', table).allow
+          !checkEgress(this.responseURL).allow
         ) {
           this.abort();
         }

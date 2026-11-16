@@ -30,6 +30,7 @@ export type EgressRealm =
  *  - `content-script`: a web page's context never talks to anyone
  *  - `not-ready`: this realm has no policy yet (fails closed)
  *  - `transport-down`: it goes over nym, and nym was not reachable in time
+ *  - `redirect`: a destination that may not redirect tried to (or could have)
  */
 export type EgressReason =
   | 'blocked'
@@ -38,7 +39,8 @@ export type EgressReason =
   | 'unknown'
   | 'content-script'
   | 'not-ready'
-  | 'transport-down';
+  | 'transport-down'
+  | 'redirect';
 
 /** One (host, path prefix) a destination owns, with its compiled answer. */
 export interface EgressRule {
@@ -48,7 +50,10 @@ export interface EgressRule {
   path: string;
   destination: string;
   allow: boolean;
-  reason?: Exclude<EgressReason, 'content-script' | 'not-ready' | 'unknown' | 'transport-down'>;
+  reason?: Exclude<
+    EgressReason,
+    'content-script' | 'not-ready' | 'unknown' | 'transport-down' | 'redirect'
+  >;
   /**
    * An optional service's rule. Two optional services can use one url (the
    * bucket relay serves both contact discovery and people messages): a
@@ -56,8 +61,11 @@ export interface EgressRule {
    * is on, and each feature gates itself on its own destination.
    */
   shared?: boolean;
-  /** a chain node the person chose (or a preset one): a redirect within its host is followed */
-  node?: boolean;
+  /**
+   * its requests carry addresses or transactions: a redirect is refused, never
+   * followed, since a 307 would replay the body to wherever the server says
+   */
+  noRedirect?: true;
   /** the only realm this rule serves; a realm-bound realm (nym) is served by nothing else */
   realm?: EgressRealm;
   /** this request class goes over nym, never directly */
@@ -101,6 +109,7 @@ export type EgressDecision =
       destination?: string;
       nym?: RequestClass;
       nymBody?: EgressRule['nymBody'];
+      noRedirect?: true;
     }
   | {
       allow: false;
@@ -154,10 +163,6 @@ export const matchRules = (
   return best.every(r => r.shared) ? best : best.slice(0, 1);
 };
 
-/** The rule that owns `url`: same host, longest path prefix, first in table order on a tie. */
-export const matchRule = (table: EgressTable, url: string): EgressRule | undefined =>
-  matchRules(table, url)[0];
-
 /**
  * Precedence:
  *  1. non-network urls (data:, blob:, chrome-extension:) are not egress;
@@ -202,32 +207,15 @@ export const decideEgress = (
     if (table.proxyDown && !isPrivateNetworkHost(host)) {
       return { allow: false, host, destination, reason: 'transport-down', proxy: true };
     }
-    const { nym, nymBody } = rule ?? {};
-    return { allow: true, host, destination, ...(nym && { nym }), ...(nymBody && { nymBody }) };
+    const { nym, nymBody, noRedirect } = rule ?? {};
+    return {
+      allow: true,
+      host,
+      destination,
+      ...(nym && { nym }),
+      ...(nymBody && { nymBody }),
+      ...(noRedirect && { noRedirect }),
+    };
   }
   return { allow: false, host, destination, reason: rule?.reason ?? 'unknown' };
-};
-
-/**
- * Where a followed redirect landed, decided. The landing passes on its own
- * merit, or when it stays on the host of an allowed chain node (a node that
- * moved its path, or http -> https): the person chose that host, and the hop
- * reaches no one new. A redirect to another host is decided as that host, so
- * a node can never bounce zafu's requests to a third party.
- */
-export const decideRedirect = (
-  from: string,
-  to: string,
-  realm: EgressRealm,
-  table: EgressTable | undefined,
-): EgressDecision => {
-  const landed = decideEgress(to, realm, table);
-  if (landed.allow || landed.reason === 'blocked' || !table) {
-    return landed;
-  }
-  const host = hostOf(from);
-  if (!host || host !== hostOf(to) || !matchRule(table, from)?.node) {
-    return landed;
-  }
-  return decideEgress(from, realm, table).allow ? { allow: true, host } : landed;
 };
