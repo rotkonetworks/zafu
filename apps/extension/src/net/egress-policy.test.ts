@@ -815,6 +815,7 @@ describe('hyperliquid', () => {
     expect(table.rules.find(r => r.destination === 'unit')).toMatchObject({
       host: 'api.hyperunit.xyz',
       nym: 'names-you',
+      noRedirect: true,
     });
   });
 
@@ -825,7 +826,7 @@ describe('hyperliquid', () => {
       host: 'api.hyperliquid.xyz',
       path: '',
       nym: 'names-you',
-      node: true,
+      noRedirect: true,
     });
     expect(compileEgress(HL).rules.find(r => r.destination === 'hyperliquid')?.nym).toBeUndefined();
   });
