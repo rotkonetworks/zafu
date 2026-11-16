@@ -274,9 +274,10 @@ export const ZcashContent = ({
 
   const inFlight = pendingSends.filter(t => t.status === 'pending' && !payMoves.has(t.id));
   const failedSends = pendingSends.filter(t => t.status === 'failed');
-  // a swap or lp address was handed out and never checked: keep its row and its
-  // "check now" on screen rather than calling the pocket empty
-  const tUnchecked = transparent.last === null && tAddresses.length > 1;
+  // never checked: keep the transparent row and its "check now" on screen rather
+  // than calling the pocket empty, or coins paid to its address would have no
+  // way to be found from here (nothing is asked until the person asks)
+  const tUnchecked = transparent.last === null;
   const empty = totalZat === 0n && inFlight.length === 0 && balanceState === 'ready' && !tUnchecked;
   const reading = totalZat === 0n && balanceState === 'loading';
 
