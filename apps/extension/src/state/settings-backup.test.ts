@@ -151,6 +151,7 @@ describe('settings backup', () => {
     capabilityModes: { 'zid-discovery': 'disabled' },
     enabledNetworks: ['zcash', 'zcash-testnet', 'penumbra'],
     keplrCompat: true,
+    hyperliquidPath: "m/44'/60'/2000'/1/0",
   };
 
   it('carries the sealed zcash.me api key, and restores it sealed', async () => {
@@ -200,6 +201,7 @@ describe('settings backup', () => {
       zcashMeConfig: { mode: 'loud' },
       capabilityModes: { x: true },
       keplrCompat: 'yes',
+      hyperliquidPath: "m/44'/60'/x",
       enabledNetworks: ['zcash', 'polkadot'],
     });
     for (const k of ['memoSyncStrategies', 'mempoolWatchSettings', 'zcashMeConfig']) {
@@ -207,6 +209,7 @@ describe('settings backup', () => {
     }
     expect(store).not.toHaveProperty('capabilityModes');
     expect(store).not.toHaveProperty('keplrCompat');
+    expect(store).not.toHaveProperty('hyperliquidPath');
     expect(store['enabledNetworks']).toEqual(['zcash']);
     delete store['enabledNetworks'];
     await importPrefs({ enabledNetworks: ['polkadot'] });

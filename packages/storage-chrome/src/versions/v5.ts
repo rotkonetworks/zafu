@@ -69,6 +69,8 @@ type LOCAL = {
   keplrCompat?: boolean;
   /** beta features on or off; unset: on in the beta build only (config/beta) */
   betaFeatures?: boolean;
+  /** the person's own Hyperliquid derivation path; unset: the wallet's one evm key */
+  hyperliquidPath?: string;
   /**
    * Per-capability participation switch, keyed by `Capability` (see
    * @repo/storage-chrome/capabilities). An absent capability is `unset`, which

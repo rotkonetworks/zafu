@@ -13,6 +13,7 @@ import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { rpcPoolKey } from '../net/egress-policy';
 import { NETWORKS } from '../config/networks';
 import { readZcashMeApiKey, sealZcashMeApiKey } from '../services/zcashme/api-key';
+import { isBip32Path } from '@repo/wallet/networks/hyperliquid/derive';
 import { DEFAULT_PRIVACY_SETTINGS, fromStoredPrivacy, type PrivacySettings } from './privacy';
 
 type Parse = (v: unknown) => unknown;
@@ -73,6 +74,7 @@ const PREFS = {
   },
   keplrCompat: bool,
   betaFeatures: bool,
+  hyperliquidPath: v => (typeof v === 'string' && isBip32Path(v) ? v : undefined),
 } satisfies Record<string, Parse>;
 
 type PrefKey = keyof typeof PREFS;
