@@ -126,7 +126,7 @@ export function SendPage() {
     );
   }
   if (network === 'hyperliquid') {
-    return <HyperliquidSend onClose={goBack} />;
+    return <HyperliquidSend onClose={goBack} zec={locationState?.hyperliquidZec} />;
   }
   return (
     <div className='flex h-full flex-col'>

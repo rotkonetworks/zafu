@@ -4,14 +4,15 @@ import { keccak_256 } from '@noble/hashes/sha3';
 import { bytesToHex } from '@noble/hashes/utils';
 import { userActionDigest } from '@repo/wallet/networks/hyperliquid/sign';
 import { deriveHyperliquidAddress } from '@repo/wallet/networks/hyperliquid/derive';
-import { checkMove, moveOf, signMove, stageAfter } from './hyperliquid-move';
+import { buildHyperliquidAction } from '@repo/wallet/networks/hyperliquid/client';
+import { checkMove, checkZecWithdraw, moveOf, signMove, stageAfter } from './hyperliquid-move';
 
 const PHRASE =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const PATH = "m/44'/60'/0'/0/0";
 const OWN = deriveHyperliquidAddress(PHRASE, PATH);
 const TO = '0x5e9ee1089755c3435139848e47e6635505d5a13a';
-const balances = { perp: 10_000_000n, spot: 3_500_000n };
+const balances = { perp: 10_000_000n, spot: 3_500_000n, uzec: 50_000_000n };
 
 describe('which action a choice means', () => {
   it('withdraws from perp whatever account was picked for sends', () => {
@@ -69,11 +70,30 @@ describe('checkMove', () => {
   });
 });
 
+describe('checkZecWithdraw', () => {
+  it("passes unit's minimum or more, up to the uzec there is", () => {
+    expect(checkZecWithdraw('0.07', 50_000_000n)).toEqual({ zat: 7_000_000n });
+    expect(checkZecWithdraw('0.5', 50_000_000n)).toEqual({ zat: 50_000_000n });
+  });
+
+  it('stops less than the minimum, more than the balance, and what it cannot read', () => {
+    expect(checkZecWithdraw('0.06999999', 50_000_000n).problem).toMatch(/0\.07 zec or more/);
+    expect(checkZecWithdraw('0.50000001', 50_000_000n).problem).toMatch(/has 0\.5 uzec/);
+    expect(checkZecWithdraw('0.123456789', 50_000_000n).zat).toBeUndefined();
+    expect(checkZecWithdraw('', 50_000_000n)).toEqual({});
+    // balances not read yet: nothing passes
+    expect(checkZecWithdraw('0.1', undefined)).toEqual({});
+  });
+});
+
 describe('signMove', () => {
-  const args = { mnemonic: PHRASE, path: PATH, address: OWN, to: TO, micro: 2_500_000n, now: 77 };
+  const args = { mnemonic: PHRASE, path: PATH, address: OWN };
 
   it('signs exactly what review showed, with the key of the address shown', () => {
-    const signed = signMove({ ...args, move: 'withdraw3' });
+    const signed = signMove({
+      ...args,
+      action: buildHyperliquidAction('withdraw3', TO, 2_500_000n, 77),
+    });
     expect(signed.action).toEqual({
       type: 'withdraw3',
       hyperliquidChain: 'Mainnet',
@@ -92,9 +112,13 @@ describe('signMove', () => {
   });
 
   it('refuses to sign when the path no longer gives the address the balances were read for', () => {
-    expect(() => signMove({ ...args, move: 'usdSend', path: "m/44'/60'/2000'/1/0" })).toThrow(
-      /no longer matches/,
-    );
+    expect(() =>
+      signMove({
+        ...args,
+        action: buildHyperliquidAction('usdSend', TO, 1n, 77),
+        path: "m/44'/60'/2000'/1/0",
+      }),
+    ).toThrow(/no longer matches/);
   });
 });
 

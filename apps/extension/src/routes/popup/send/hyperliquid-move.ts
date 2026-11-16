@@ -4,13 +4,15 @@
  * means for the next step. The screen (hyperliquid-send.tsx) only draws these.
  */
 
-import { HYPERLIQUID_WITHDRAW_FEE } from '@repo/wallet/networks/hyperliquid/api';
+import { HYPERLIQUID_WITHDRAW_FEE, UNIT_MIN_ZEC } from '@repo/wallet/networks/hyperliquid/api';
+import type { UserAction } from '@repo/wallet/networks/hyperliquid/sign';
 import {
-  buildHyperliquidAction,
   isHyperliquidAddress,
   microToUsdc,
   signHyperliquidAction,
   usdcToMicro,
+  zatToZec,
+  zecToZat,
   type HyperliquidBalances,
   type HyperliquidMove,
   type HyperliquidOutcome,
@@ -19,7 +21,7 @@ import {
 import { deriveHyperliquidWallet } from '@repo/wallet/networks/hyperliquid/derive';
 
 export type MoveMode = 'send' | 'withdraw';
-export type MoveFrom = keyof HyperliquidBalances;
+export type MoveFrom = 'perp' | 'spot';
 
 /** each action as review words it; the fee is Hyperliquid's own, from its docs */
 export const MOVES: Record<
@@ -98,8 +100,31 @@ export const checkMove = (m: {
   return to && micro > 0n && m.balances ? { micro } : {};
 };
 
+const ZEC_AMOUNT = /^(\d+\.?\d{0,8}|\.\d{1,8})$/;
+
+/** a zec withdrawal through Unit: uzec from the spot account, Unit's minimum or more */
+export const checkZecWithdraw = (
+  amount: string,
+  uzec: bigint | undefined,
+): { zat?: bigint; problem?: string } => {
+  if (!amount) {
+    return {};
+  }
+  if (!ZEC_AMOUNT.test(amount)) {
+    return { problem: 'a number with up to eight decimals, please' };
+  }
+  const zat = zecToZat(amount);
+  if (uzec !== undefined && zat > uzec) {
+    return { problem: `the spot account has ${zatToZec(uzec)} uzec to move` };
+  }
+  if (zat < UNIT_MIN_ZEC) {
+    return { problem: `unit takes ${zatToZec(UNIT_MIN_ZEC)} zec or more · less would not arrive` };
+  }
+  return uzec === undefined ? {} : { zat };
+};
+
 /**
- * Sign one move with the wallet's own key, zeroed before this returns. The
+ * Sign one action with the wallet's own key, zeroed before this returns. The
  * key is re-derived and must be the address the balances were read for, so a
  * changed path or wallet can never sign for another account.
  */
@@ -107,20 +132,14 @@ export const signMove = (m: {
   mnemonic: string;
   path: string;
   address: string;
-  move: HyperliquidMove;
-  to: string;
-  micro: bigint;
-  now: number;
+  action: UserAction;
 }): SignedHyperliquidAction => {
   const wallet = deriveHyperliquidWallet(m.mnemonic, m.path);
   try {
     if (wallet.address !== m.address) {
       throw new Error('the key no longer matches this address');
     }
-    return signHyperliquidAction(
-      wallet.privateKey,
-      buildHyperliquidAction(m.move, m.to.trim(), m.micro, m.now),
-    );
+    return signHyperliquidAction(wallet.privateKey, m.action);
   } finally {
     wallet.privateKey.fill(0);
   }

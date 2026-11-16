@@ -12,12 +12,17 @@ import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { useCopy } from '@repo/ui/hooks/use-copy';
-import { microToUsdc } from '@repo/wallet/networks/hyperliquid/client';
+import { microToUsdc, zatToZec } from '@repo/wallet/networks/hyperliquid/client';
 import { HYPERLIQUID_DEFAULT_PATH, isBip32Path } from '@repo/wallet/networks/hyperliquid/derive';
 import type { BalanceView } from '../../../components/wallet/balance-hero';
 import { useHyperliquidAccount, useHyperliquidPath } from '../../../hooks/hyperliquid';
 import { Facts, Helper } from '../send/send-ui';
+import { useNavigate } from 'react-router-dom';
+import { PopupPath } from '../paths';
+import type { SendLocationState } from '../send/prefill';
+import { useExplain } from '../settings/settings-explain';
 import { HomeScreen } from './home-screen';
+import { DepositZecSheet, ZecMoveLines } from './hyperliquid-zec';
 import { HOME_LOOK } from './look';
 
 /** the key path, entered by hand: only for an account that already lives on another path */
@@ -85,6 +90,9 @@ const PathSheet = ({
 export const HyperliquidHome = ({ nudge }: { nudge?: ReactNode }) => {
   const { keyId, path, address, balances } = useHyperliquidAccount();
   const [pathOpen, setPathOpen] = useState(false);
+  const [zecOpen, setZecOpen] = useState(false);
+  const navigate = useNavigate();
+  const { explainProps, sheet } = useExplain();
   const { copied, copy } = useCopy();
 
   if (!keyId) {
@@ -111,7 +119,7 @@ export const HyperliquidHome = ({ nudge }: { nudge?: ReactNode }) => {
       look={HOME_LOOK.hyperliquid}
       view={view}
       amount={b ? microToUsdc(b.perp + b.spot) : ''}
-      spendable={!!b && b.perp + b.spot > 0n}
+      spendable={!!b && b.perp + b.spot + b.uzec > 0n}
       watermark={false}
     >
       {nudge}
@@ -124,14 +132,43 @@ export const HyperliquidHome = ({ nudge }: { nudge?: ReactNode }) => {
           zafu could not reach hyperliquid just now · nothing has changed
         </StatusSlot>
       )}
+      {address && <ZecMoveLines account={address} onLanded={() => void balances.refetch()} />}
       {b && (
         <Facts
           rows={[
             ['perp account', `${microToUsdc(b.perp)} usdc`],
             ['spot account', `${microToUsdc(b.spot)} usdc`],
+            ['spot account · zec', `${zatToZec(b.uzec)} uzec`],
           ]}
         />
       )}
+      <RowGroup>
+        <Row
+          type='screen'
+          label='deposit zec'
+          description='from your zcash wallet, through unit'
+          disabled={!address}
+          onPress={() => setZecOpen(true)}
+        />
+        <Row
+          type='screen'
+          label='withdraw zec'
+          description='to a fresh public address of yours'
+          disabled={!b || b.uzec === 0n}
+          onPress={() =>
+            navigate(PopupPath.SEND, {
+              state: { hyperliquidZec: true } satisfies SendLocationState,
+            })
+          }
+        />
+        <Row
+          type='value'
+          label='who keeps what'
+          description="it moves only with your key · unit's guardians keep the zec"
+          {...explainProps('hyperliquid.custody')}
+          onPress={() => explainProps('hyperliquid.custody').onExplain?.('who keeps what')}
+        />
+      </RowGroup>
       <RowGroup>
         <Row
           type='value'
@@ -157,6 +194,8 @@ export const HyperliquidHome = ({ nudge }: { nudge?: ReactNode }) => {
         />
       </RowGroup>
       <PathSheet open={pathOpen} onOpenChange={setPathOpen} />
+      {address && <DepositZecSheet account={address} open={zecOpen} onOpenChange={setZecOpen} />}
+      {sheet}
     </HomeScreen>
   );
 };

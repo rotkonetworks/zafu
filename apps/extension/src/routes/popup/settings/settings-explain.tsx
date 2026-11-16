@@ -212,6 +212,12 @@ export const SETTINGS_EXPLAIN = {
     on: 'zafu shows your hyperliquid address and usdc, read from api.hyperliquid.xyz when you open it. the address and its balances are public',
     off: 'hyperliquid is hidden in zafu and api.hyperliquid.xyz is never contacted; your keys and funds are untouched',
   },
+  'hyperliquid.custody': {
+    blurb:
+      "your hyperliquid balance, usdc and uzec alike, moves only with your own key. uzec is unit's token for zec: for each one, real zec is kept by unit's guardians, three operators who sign together.",
+    footer:
+      'so on hyperliquid your zec is a claim on unit, not a coin in your own wallet. it is yours alone again once you withdraw it to zcash, and private again once you shield it there.',
+  },
   'appearance.theme': {
     blurb: 'the color scheme zafu draws itself in.',
     states: [
