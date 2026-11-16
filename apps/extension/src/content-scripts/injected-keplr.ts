@@ -304,11 +304,10 @@ const installKeplr = (): void => {
 
 // zafu's OWN cosmos provider. Unlike the window.keplr impersonation above, this
 // lives on its own slot (window.zafu), so it never races or clobbers a real
-// Keplr and needs no opt-in - a dapp (or our cosmos-kit adapter) that explicitly
-// picks "Zafu" always finds it. This is the reliable path; the window.keplr
-// impersonation stays only for third-party dapps that hard-code window.keplr.
-// Signing still requires explicit in-extension approval, so an always-present
-// provider grants no authority on its own.
+// Keplr - a dapp (or our cosmos-kit adapter in Veil) that explicitly picks
+// "Zafu" finds it. It is installed only when the bridge says so: on a site the
+// person already connected, or when Keplr compatibility is on. Installing it on
+// every page told any site or ad script that zafu was there.
 let zafuInstalled = false;
 const installZafu = (): void => {
   if (zafuInstalled || 'zafu' in window) {
@@ -322,17 +321,23 @@ const installZafu = (): void => {
   });
   window.dispatchEvent(new Event('zafu_keystorechange'));
 };
-// Install immediately - no gate, no slot race.
-installZafu();
 
-// the ISOLATED bridge reads the opt-in flag (it has chrome.storage access) and
-// posts this once, only when the user has enabled Keplr compatibility
+// the ISOLATED bridge posts 'native' for a connected site, and 'enable' only
+// when the user has turned on Keplr compatibility (it alone can read either).
+// A page forging 'native' only reveals what window[Symbol.for('penumbra')]
+// already shows; every signing call still needs approval in zafu.
 window.addEventListener('message', (ev: MessageEvent) => {
   if (ev.source !== window) {
     return;
   }
   const d = ev.data as { channel?: string; direction?: string } | undefined;
-  if (d?.channel === CHANNEL && d.direction === 'enable') {
+  if (d?.channel !== CHANNEL) {
+    return;
+  }
+  if (d.direction === 'native') {
+    installZafu();
+  }
+  if (d.direction === 'enable') {
     // NOTE: a page could forge this 'enable' (MAIN world can't authenticate the
     // ISOLATED-world bridge across postMessage). That only installs an INERT
     // window.keplr: enforcement of the opt-in lives on the request path in
@@ -341,5 +346,6 @@ window.addEventListener('message', (ev: MessageEvent) => {
     // everything - a minor fingerprint, not a functional bypass. install is
     // idempotent and never clobbers a real Keplr.
     installKeplr();
+    installZafu();
   }
 });

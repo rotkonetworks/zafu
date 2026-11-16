@@ -602,9 +602,9 @@ const runState = async (name, spec, runDir) => {
         await pg.goto(`http://localhost:${pageSrv.port}/`);
         await pg.waitForTimeout(5000);
         // a clean result means something only if the scripts were there
+        // window.zafu is absent on a site that never connected, by design
         const injected = await pg.evaluate(() => ({
           penumbra: !!window[Symbol.for('penumbra')],
-          zafu: !!window.zafu,
         }));
         ph.notes.push('content scripts injected ' + JSON.stringify(injected));
         await pg.close();

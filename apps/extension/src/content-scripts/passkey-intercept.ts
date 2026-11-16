@@ -14,6 +14,11 @@
  * rpId against it before anything is minted or signed.
  *
  * adapted from KeePassXC-Browser's passkeys-inject.js pattern.
+ *
+ * it runs on every page because it must wrap the API before the page's own
+ * scripts can keep a reference, and a site making its first zafu passkey has
+ * no grant to match on yet (the grants are sealed until unlock anyway). The
+ * wrapper is visible to a page that inspects navigator.credentials.
  */
 
 import { clientDataJson } from './passkey-wire';

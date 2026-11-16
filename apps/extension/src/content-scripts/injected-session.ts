@@ -7,34 +7,25 @@ import './discovery-hold';
 import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
 import { CRSessionClient } from '@penumbra-zone/transport-chrome/session-client';
 import { onContextInvalidated } from '../utils/reload-notice';
+import { answerExtensionId } from './message/extension-id';
 import { isZafuConnection } from './message/zafu-connection';
 import { isZafuControl, ZafuControl } from './message/zafu-control';
 import { ZafuMessageEvent, unwrapZafuMessageEvent } from './message/zafu-message-event';
 import { listenBackground, sendBackground } from './message/send-background';
 import { listenWindow, sendWindow } from './message/send-window';
 
-// Bridge our extension id to the MAIN-world content script
-// (injected-penumbra-global.ts), which has no chrome.runtime access.
-// Manifest order has this ISOLATED script ahead of the MAIN one, so the
-// dataset attribute is always set before MAIN reads it.
-//
-// A plain attribute, not `dataset`: `dataset` is defined on HTMLElement and
-// SVGElement only, so on a non-HTML document (a top-level .xml/.svg response,
-// or a viewer page served as XML) `documentElement.dataset` is undefined and
-// writing it throws an uncaught TypeError that kills this script. setAttribute
-// is on Element and works in every document type.
+// Hand our extension id to the MAIN-world script (injected-penumbra-global.ts),
+// which has no chrome.runtime. Manifest order runs this ISOLATED script first,
+// so the answer is in place before MAIN asks.
 //
 // `chrome.runtime.id` returns the literal string 'invalid' for orphaned
-// content scripts (i.e. when the extension was reloaded or upgraded
-// while this tab was already open). Don't bridge that - the MAIN script
-// would otherwise inject `chrome-extension://invalid/manifest.json`
-// into window[PenumbraSymbol], which fails and breaks the page's
-// wallet picker. Bail silently; the user will get a fresh injection
-// next time they navigate.
-const ID_ATTRIBUTE = 'data-zafu-extension-id';
+// content scripts (the extension was reloaded or upgraded while this tab was
+// open). Don't answer with that: MAIN would publish
+// `chrome-extension://invalid/manifest.json` in window[PenumbraSymbol] and
+// break the page's wallet picker. The next navigation gets a fresh injection.
 const runtimeId = chrome.runtime.id;
 if (runtimeId && runtimeId !== 'invalid') {
-  document.documentElement?.setAttribute(ID_ATTRIBUTE, runtimeId);
+  answerExtensionId(runtimeId);
 }
 
 const zafuDocumentListener = (ev: ZafuMessageEvent): void => {
