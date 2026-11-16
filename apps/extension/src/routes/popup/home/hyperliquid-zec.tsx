@@ -26,17 +26,19 @@ import { zecMoveStatus, zecMoves, type ZecMove } from '../../../hyperliquid/zec-
 import { PopupPath } from '../paths';
 import { AmountField } from '../send/send-fields';
 import { Facts } from '../send/send-ui';
-import type { SendLocationState } from '../send/prefill';
+import type { SendLocationState, UnitDeposit } from '../send/prefill';
+import { shorten } from '@repo/ui/lib/utils';
 
 const MIN = zatToZec(UNIT_MIN_ZEC);
 
 /** amount first; the address is asked of Unit, and verified, only on continue */
 export const DepositZecSheet = ({
-  account,
+  unit,
   open,
   onOpenChange,
 }: {
-  account: string;
+  /** the account in use: the one the deposit credits, named on every review */
+  unit: UnitDeposit;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => {
@@ -62,13 +64,15 @@ export const DepositZecSheet = ({
     setBusy(true);
     setError(undefined);
     try {
-      const to = await unitDepositAddress(account, tex => payableTransparentAddress(tex, true));
+      const to = await unitDepositAddress(unit.account, tex =>
+        payableTransparentAddress(tex, true),
+      );
       // zcash pays it: its own send, review and tracker, from the shielded pool
       await setActiveNetwork('zcash');
       const state: SendLocationState = {
         prefillRecipient: to,
         prefillAmount: amount,
-        unitAccount: account,
+        unit,
       };
       navigate(PopupPath.SEND, { state });
     } catch (e) {
@@ -103,6 +107,7 @@ export const DepositZecSheet = ({
       />
       <Facts
         rows={[
+          ['credits', `${unit.name} · ${shorten(unit.account, 6, 4)}`],
           ['paid from', 'your zcash wallet · shielded'],
           ['arrives as', 'uzec in your spot account'],
           ['minimum', `${MIN} zec`],
@@ -129,54 +134,75 @@ export const DepositZecSheet = ({
 /** while a move is in flight and this is on screen, Unit is asked again this often */
 const POLL_MS = 60_000;
 
-/** one line per zec move in flight; a move Unit calls done is forgotten */
-export const ZecMoveLines = ({ account, onLanded }: { account: string; onLanded: () => void }) => {
+/** one move's line, read from Unit for the account it was sent on */
+const ZecMoveLine = ({
+  move,
+  elsewhere,
+  onLanded,
+}: {
+  move: ZecMove;
+  /** sent on another account than the one shown: the line says which */
+  elsewhere: boolean;
+  onLanded: () => void;
+}) => {
+  const ops = useQuery({
+    queryKey: ['unitZecOperations', move.account],
+    queryFn: () => unitZecOperations(move.account),
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    refetchInterval: POLL_MS,
+    retry: false,
+    structuralSharing: false, // bigint amounts
+  });
+  const s = zecMoveStatus(move, ops.data);
+  const landed = s.over && !s.failed;
+  useEffect(() => {
+    if (landed) {
+      void zecMoves.forget(move.id).then(onLanded);
+    }
+  }, [landed]);
+  return (
+    <PendingLine
+      tone={s.failed ? 'danger' : 'gold'}
+      icon='i-zafu-enso'
+      title={`${zatToZec(BigInt(move.zat))} zec · ${move.way === 'deposit' ? 'deposit' : 'withdrawal'}${elsewhere ? ` · ${move.from}` : ''}`}
+      status={ops.isError ? 'unit did not answer just now' : s.line}
+      action={
+        s.failed
+          ? { label: 'let it go', onClick: () => void zecMoves.forget(move.id) }
+          : { label: 'refresh', onClick: () => void ops.refetch() }
+      }
+    />
+  );
+};
+
+/**
+ * One line per zec move of this wallet in flight, whichever of its accounts
+ * it was sent on; a move Unit calls done is forgotten. Unit is asked only
+ * while there is one.
+ */
+export const ZecMoveLines = ({
+  wallet,
+  account,
+  onLanded,
+}: {
+  wallet: string;
+  account: string;
+  onLanded: () => void;
+}) => {
   const [moves, setMoves] = useState<ZecMove[]>([]);
   useEffect(() => {
     const read = () => void zecMoves.read().then(setMoves);
     read();
     return zecMoves.onChange(read);
   }, []);
-  const mine = moves.filter(m => m.account === account);
-  const ops = useQuery({
-    queryKey: ['unitZecOperations', account],
-    queryFn: () => unitZecOperations(account),
-    enabled: mine.length > 0,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: false,
-    refetchInterval: mine.length > 0 ? POLL_MS : false,
-    retry: false,
-    structuralSharing: false, // bigint amounts
-  });
-  const landed = mine.filter(m => {
-    const s = zecMoveStatus(m, ops.data);
-    return s.over && !s.failed;
-  });
-  useEffect(() => {
-    if (landed.length) {
-      void Promise.all(landed.map(m => zecMoves.forget(m.id))).then(onLanded);
-    }
-  }, [landed.map(m => m.id).join()]);
-
   return (
     <>
-      {mine.map(m => {
-        const s = zecMoveStatus(m, ops.data);
-        return (
-          <PendingLine
-            key={m.id}
-            tone={s.failed ? 'danger' : 'gold'}
-            icon='i-zafu-enso'
-            title={`${zatToZec(BigInt(m.zat))} zec · ${m.way === 'deposit' ? 'deposit' : 'withdrawal'}`}
-            status={ops.isError ? 'unit did not answer just now' : s.line}
-            action={
-              s.failed
-                ? { label: 'let it go', onClick: () => void zecMoves.forget(m.id) }
-                : { label: 'refresh', onClick: () => void ops.refetch() }
-            }
-          />
-        );
-      })}
+      {moves
+        .filter(m => m.wallet === wallet)
+        .map(m => (
+          <ZecMoveLine key={m.id} move={m} elsewhere={m.account !== account} onLanded={onLanded} />
+        ))}
     </>
   );
 };

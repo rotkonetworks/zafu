@@ -15,7 +15,8 @@ import { useCopy } from '@repo/ui/hooks/use-copy';
 import { microToUsdc, zatToZec } from '@repo/wallet/networks/hyperliquid/client';
 import { HYPERLIQUID_DEFAULT_PATH, isBip32Path } from '@repo/wallet/networks/hyperliquid/derive';
 import type { BalanceView } from '../../../components/wallet/balance-hero';
-import { useHyperliquidAccount, useHyperliquidPath } from '../../../hooks/hyperliquid';
+import { useHyperliquidAccount, useHyperliquidAccounts } from '../../../hooks/hyperliquid';
+import { SCAN_GAP } from '../../../hyperliquid/accounts';
 import { Facts, Helper } from '../send/send-ui';
 import { useNavigate } from 'react-router-dom';
 import { PopupPath } from '../paths';
@@ -25,7 +26,10 @@ import { HomeScreen } from './home-screen';
 import { DepositZecSheet, ZecMoveLines } from './hyperliquid-zec';
 import { HOME_LOOK } from './look';
 
-/** the key path, entered by hand: only for an account that already lives on another path */
+/**
+ * An account made elsewhere on another key path: one extra account beside the
+ * indexed ones, never in place of them, so no indexed account is ever out of reach.
+ */
 const PathSheet = ({
   open,
   onOpenChange,
@@ -33,12 +37,12 @@ const PathSheet = ({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) => {
-  const { path, save } = useHyperliquidPath();
+  const { customPath, setCustomPath } = useHyperliquidAccounts();
   const [draft, setDraft] = useState<string>();
-  const text = (draft ?? path ?? '').trim();
+  const text = (draft ?? customPath ?? '').trim();
   const valid = isBip32Path(text);
-  const close = (next: string) => {
-    void save(next).then(() => {
+  const close = (next: string | undefined) => {
+    void setCustomPath(next).then(() => {
       setDraft(undefined);
       onOpenChange(false);
     });
@@ -47,19 +51,23 @@ const PathSheet = ({
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
-      title='key path'
+      title='imported path'
       footer={
         <div className='flex gap-2'>
           <Button
             variant='secondary'
             className='w-[130px]'
-            disabled={path === HYPERLIQUID_DEFAULT_PATH}
-            onClick={() => close(HYPERLIQUID_DEFAULT_PATH)}
+            disabled={!customPath}
+            onClick={() => close(undefined)}
           >
-            use default
+            remove it
           </Button>
-          <Button className='grow' disabled={!valid || text === path} onClick={() => close(text)}>
-            use this path
+          <Button
+            className='grow'
+            disabled={!valid || text === customPath}
+            onClick={() => close(text)}
+          >
+            add this account
           </Button>
         </div>
       }
@@ -70,7 +78,7 @@ const PathSheet = ({
         </label>
         <Input
           id='hyperliquid-path'
-          value={draft ?? path ?? ''}
+          value={draft ?? customPath ?? ''}
           onChange={e => setDraft(e.target.value)}
           placeholder={HYPERLIQUID_DEFAULT_PATH}
           variant={text && !valid ? 'warn' : 'default'}
@@ -80,15 +88,59 @@ const PathSheet = ({
         <Helper warn={!!text && !valid}>
           {text && !valid
             ? `a path looks like ${HYPERLIQUID_DEFAULT_PATH}`
-            : 'changing it shows another address · funds stay where they are'}
+            : 'it joins your accounts as one more · the others stay as they are'}
         </Helper>
       </div>
     </Sheet>
   );
 };
 
+/** find this seed's accounts again, from the seed alone: asked for, never in the background */
+const LookSheet = ({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) => {
+  const { lookForAccounts } = useHyperliquidAccounts();
+  const [state, setState] = useState<'idle' | 'looking' | 'failed' | number>('idle');
+  const look = () => {
+    setState('looking');
+    lookForAccounts().then(setState, () => setState('failed'));
+  };
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title='look for accounts'
+      footer={
+        <Button className='w-full' loading={state === 'looking'} onClick={look}>
+          look now
+        </Button>
+      }
+    >
+      <p className='text-sm leading-relaxed text-fg'>
+        zafu asks hyperliquid about this wallet&apos;s accounts in order, one at a time, and stops
+        after {SCAN_GAP} in a row that were never used.
+      </p>
+      <StatusSlot tone={state === 'failed' ? 'warn' : 'info'} icon='i-ph-info'>
+        {state === 'failed'
+          ? 'hyperliquid did not answer, so zafu stopped · nothing was changed, please try again'
+          : typeof state === 'number'
+            ? state < 1
+              ? 'no other account was ever used'
+              : `found accounts up to account ${state} · they are in your account list now`
+            : "hyperliquid's api sees these addresses asked together from this connection, which tells it they are one wallet"}
+      </StatusSlot>
+    </Sheet>
+  );
+};
+
 export const HyperliquidHome = ({ nudge }: { nudge?: ReactNode }) => {
-  const { keyId, path, address, balances } = useHyperliquidAccount();
+  const { keyId, name, address, balances } = useHyperliquidAccount();
+  const { customPath } = useHyperliquidAccounts();
+  const [lookOpen, setLookOpen] = useState(false);
   const [pathOpen, setPathOpen] = useState(false);
   const [zecOpen, setZecOpen] = useState(false);
   const navigate = useNavigate();
@@ -132,7 +184,9 @@ export const HyperliquidHome = ({ nudge }: { nudge?: ReactNode }) => {
           zafu could not reach hyperliquid just now · nothing has changed
         </StatusSlot>
       )}
-      {address && <ZecMoveLines account={address} onLanded={() => void balances.refetch()} />}
+      {address && (
+        <ZecMoveLines wallet={keyId} account={address} onLanded={() => void balances.refetch()} />
+      )}
       {b && (
         <Facts
           rows={[
@@ -172,7 +226,7 @@ export const HyperliquidHome = ({ nudge }: { nudge?: ReactNode }) => {
       <RowGroup>
         <Row
           type='value'
-          label='address'
+          label={`${name} · address`}
           description={copied ? 'copied' : 'public · tap to copy'}
           value={address ? shorten(address, 6, 4) : ''}
           disabled={!address}
@@ -186,15 +240,28 @@ export const HyperliquidHome = ({ nudge }: { nudge?: ReactNode }) => {
           onPress={() => void balances.refetch()}
         />
         <Row
+          type='screen'
+          label='look for accounts'
+          description='find accounts of this seed again'
+          onPress={() => setLookOpen(true)}
+        />
+        <Row
           type='value'
           label='advanced'
-          description='key path'
-          value={path === HYPERLIQUID_DEFAULT_PATH ? 'default' : path}
+          description='an account on another key path'
+          value={customPath ?? 'none'}
           onPress={() => setPathOpen(true)}
         />
       </RowGroup>
       <PathSheet open={pathOpen} onOpenChange={setPathOpen} />
-      {address && <DepositZecSheet account={address} open={zecOpen} onOpenChange={setZecOpen} />}
+      <LookSheet open={lookOpen} onOpenChange={setLookOpen} />
+      {address && (
+        <DepositZecSheet
+          unit={{ wallet: keyId, account: address, name }}
+          open={zecOpen}
+          onOpenChange={setZecOpen}
+        />
+      )}
       {sheet}
     </HomeScreen>
   );

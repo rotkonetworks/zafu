@@ -130,6 +130,7 @@ import { selectZcashEndpoint } from '../../../state/networks';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { UNIT_MIN_ZEC } from '@repo/wallet/networks/hyperliquid/api';
 import { UNIT_DEPOSIT_LINES, zecMoves } from '../../../hyperliquid/zec-moves';
+import type { UnitDeposit } from './prefill';
 
 interface ZcashSendProps {
   onClose: () => void;
@@ -143,7 +144,7 @@ interface ZcashSendProps {
     /** where a link in `recipient` came from (see links/land viaLine) */
     via?: string;
     /** `recipient` is Unit's verified deposit address for this hyperliquid account */
-    unitAccount?: string;
+    unit?: UnitDeposit;
   };
 }
 
@@ -631,9 +632,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       ? tPay.freshMax(maxSend.amountZat)
       : maxSend.amountZat;
   // a deposit to hyperliquid through unit, for as long as the address is the one zafu verified
-  const unitAccount = recipient === prefill?.recipient ? prefill.unitAccount : undefined;
+  const unitDeposit = recipient === prefill?.recipient ? prefill.unit : undefined;
   const belowUnitMin =
-    !!unitAccount && Number(amount) > 0 && Math.round(Number(amount) * 1e8) < Number(UNIT_MIN_ZEC);
+    !!unitDeposit && Number(amount) > 0 && Math.round(Number(amount) * 1e8) < Number(UNIT_MIN_ZEC);
   const canReview = toValid && Number(amount) > 0 && !overLimit && !belowUnitMin;
   /** what the review says the fee is; undefined while a transparent route is still planned */
   const reviewFee = !tPay.active
@@ -805,13 +806,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     setFormError(null);
     try {
       const started = await tPay.start();
-      if (unitAccount) {
+      if (unitDeposit) {
         // followed on the hyperliquid home; its txid joins it once the payment is out
         await zecMoves.save({
           v: 1,
           id: started.running.id,
           way: 'deposit',
-          account: unitAccount,
+          wallet: unitDeposit.wallet,
+          account: unitDeposit.account,
+          from: unitDeposit.name,
           zat: started.running.req.amountZat,
           at: started.running.at,
           tx: '',
@@ -1724,8 +1727,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             {linkVia && (
               <span className='text-center text-[11px] text-fg-muted'>{viaLine(linkVia)}</span>
             )}
-            {unitAccount && (
+            {unitDeposit && (
               <StatusSlot icon='i-ph-info'>
+                <span>
+                  credits your hyperliquid account {unitDeposit.name} ·{' '}
+                  {shorten(unitDeposit.account, 6, 4)}
+                </span>
                 {UNIT_DEPOSIT_LINES.map(line => (
                   <span key={line}>{line}</span>
                 ))}
@@ -1943,7 +1950,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             to={shorten(p.req.to, 6, 5)}
             words={openPay.from ? PUBLIC_WORDS : FRESH_WORDS}
             onSent={txid => {
-              void zecMoves.patch(p.id, { tx: txid });
               complete(txid);
               setStep('complete');
               void recordUsage(recipient, 'zcash');

@@ -19,7 +19,7 @@ import { AddressView } from './address-view';
 const MIN = microToUsdc(HYPERLIQUID_MIN_DEPOSIT);
 
 export const HyperliquidDeposit = () => {
-  const { keyId, address } = useHyperliquidAccount();
+  const { keyId, name, address } = useHyperliquidAccount();
   const [bridge, setBridge] = useState(false);
   const own = useCopy();
   const toBridge = useCopy();
@@ -36,7 +36,7 @@ export const HyperliquidDeposit = () => {
       <AddressView
         address={address ?? ''}
         loading={!address}
-        label='hyperliquid address · public'
+        label={`${name} · hyperliquid address · public`}
         hint='usdc from another hyperliquid account'
         tone='public'
       >
@@ -60,7 +60,7 @@ export const HyperliquidDeposit = () => {
         <Facts
           rows={[
             ['send', 'usdc on arbitrum one'],
-            ['from', address ? `your address ${shorten(address, 6, 4)}` : 'your address'],
+            ['from', address ? `${name} · ${shorten(address, 6, 4)}` : 'your address'],
             ['minimum', `${MIN} usdc`],
             ['arrives in', 'about a minute'],
           ]}

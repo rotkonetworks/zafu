@@ -6,6 +6,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { shorten } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
 import { Segmented } from '@repo/ui/components/ui/segmented';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
@@ -57,7 +58,7 @@ type Step =
 type Mode = 'send' | 'withdraw' | 'zec';
 
 export const HyperliquidSend = ({ onClose, zec }: { onClose: () => void; zec?: boolean }) => {
-  const { keyId, path, address, balances } = useHyperliquidAccount();
+  const { keyId, path, name, address, balances } = useHyperliquidAccount();
   const getMnemonic = useStore(selectGetMnemonic);
   const queryClient = useQueryClient();
   const zcashMainnet = useStore(selectZcashIsMainnet);
@@ -132,7 +133,9 @@ export const HyperliquidSend = ({ onClose, zec }: { onClose: () => void; zec?: b
         v: 1,
         id: String(signed.nonce),
         way: 'withdraw',
+        wallet: keyId!,
         account: address,
+        from: name,
         zat: String(look.units),
         at: signed.nonce,
         tx: `${address}:${signed.nonce}`,
@@ -274,6 +277,7 @@ export const HyperliquidSend = ({ onClose, zec }: { onClose: () => void; zec?: b
         amount={look.signed}
         unit={look.unit}
         rows={[
+          ['from account', `${name} · ${shorten(address ?? '', 6, 4)}`],
           ['action', look.action],
           ['arrives on', look.arrives],
           isZec

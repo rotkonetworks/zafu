@@ -29,6 +29,7 @@ import {
 } from '../state/keyring/vault-ops';
 import { getNetwork } from '../config/networks';
 import { useEnableNetwork } from '../hooks/enable-network';
+import { useHyperliquidAccounts } from '../hooks/hyperliquid';
 import {
   MAX_POCKETS,
   activeAccountIndex,
@@ -130,6 +131,7 @@ const PocketRow = ({
   balanceZat,
   onPick,
   onRename,
+  sub,
 }: {
   name: string;
   account: number;
@@ -138,6 +140,8 @@ const PocketRow = ({
   onPick: () => void;
   /** absent for a penumbra account that is not a pocket: it has no name to change */
   onRename?: () => void;
+  /** under the name, when it is not the pocket's account number */
+  sub?: string;
 }) => (
   <div className='flex items-center'>
     <button
@@ -157,7 +161,7 @@ const PocketRow = ({
       <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
         <Clipped className='text-sm text-fg-high lowercase'>{name}</Clipped>
         <Clipped className='text-[11px] text-fg-muted lowercase'>
-          {onRename || account === 0 ? `account ${account}` : 'penumbra only'}
+          {sub ?? (onRename || account === 0 ? `account ${account}` : 'penumbra only')}
         </Clipped>
       </span>
       {active && balanceZat !== undefined && (
@@ -227,6 +231,9 @@ export const AccountsSheet = ({
   const target = pocketTarget(activeNetwork);
   const activeAccount = useStore(target.active);
   const onPenumbra = activeNetwork === 'penumbra';
+  // hyperliquid lists its own accounts (the seed's evm indices), not the pockets
+  const onHyperliquid = activeNetwork === 'hyperliquid';
+  const hl = useHyperliquidAccounts();
   const { data: funded = [] } = useQuery({
     ...penumbraAccountsQuery(selectedKeyInfo?.id),
     enabled: open && onPenumbra,
@@ -351,18 +358,45 @@ export const AccountsSheet = ({
             </button>
             <span className='shrink-0 text-[11px] text-fg-muted'>{CUSTODY_META.hot}</span>
           </div>
-          {rows.map(renderRow)}
-          <Plus
-            label={
-              pockets.length >= MAX_POCKETS
-                ? `this wallet has ${MAX_POCKETS} pockets, the most it can hold`
-                : 'new pocket'
-            }
-            tone='text-zigner-gold'
-            disabled={pockets.length >= MAX_POCKETS}
-            onClick={() => onNewPocket()}
-          />
-          {hiddenCount > 0 && (
+          {onHyperliquid
+            ? hl.rows.map((r, i) => (
+                <PocketRow
+                  key={r.id}
+                  name={r.name}
+                  account={i}
+                  sub={r.sub}
+                  active={r.id === hl.active}
+                  balanceZat={undefined}
+                  onPick={() => {
+                    void hl.pick(r.id);
+                    onOpenChange(false);
+                  }}
+                  onRename={() => onNewPocket({ name: r.name, save: n => hl.rename(r.id, n) })}
+                />
+              ))
+            : rows.map(renderRow)}
+          {onHyperliquid ? (
+            <Plus
+              label='new account'
+              tone='text-zigner-gold'
+              onClick={() => {
+                void hl.add();
+                onOpenChange(false);
+              }}
+            />
+          ) : (
+            <Plus
+              label={
+                pockets.length >= MAX_POCKETS
+                  ? `this wallet has ${MAX_POCKETS} pockets, the most it can hold`
+                  : 'new pocket'
+              }
+              tone='text-zigner-gold'
+              disabled={pockets.length >= MAX_POCKETS}
+              onClick={() => onNewPocket()}
+            />
+          )}
+          {!onHyperliquid && hiddenCount > 0 && (
             <button
               type='button'
               onClick={onHiddenPockets}
