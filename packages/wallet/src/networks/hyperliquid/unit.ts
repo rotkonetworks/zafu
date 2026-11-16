@@ -7,6 +7,7 @@
 
 import { p256 } from '@noble/curves/p256';
 import { sha256 } from '@noble/hashes/sha2';
+import { hexToBytes } from '@noble/hashes/utils';
 import { toChecksumAddress } from '../ethereum/derive';
 import { UNIT_API } from './api';
 
@@ -48,7 +49,9 @@ export const guardiansSigned = (
       return (
         bytes.length === 64 &&
         // lowS off: the docs verify with WebCrypto, which takes either s
-        p256.verify(bytes, sha256(new TextEncoder().encode(message(node))), key, { lowS: false })
+        p256.verify(bytes, sha256(new TextEncoder().encode(message(node))), hexToBytes(key), {
+          lowS: false,
+        })
       );
     } catch {
       return false;
@@ -120,7 +123,10 @@ export async function unitZecEstimate(fetchFn: FetchFn = fetch): Promise<UnitZec
   const res = await fetchFn(`${UNIT_API}/v2/estimate-fees`);
   const z = res.ok ? ((await res.json()) as { zcash?: Record<string, unknown> }).zcash : undefined;
   const fee = (k: string) => (Number.isSafeInteger(z?.[k]) ? BigInt(z![k] as number) : undefined);
-  const eta = (k: string) => (typeof z?.[k] === 'string' ? (z[k] as string) : undefined);
+  const eta = (k: string) => {
+    const v = z?.[k];
+    return typeof v === 'string' ? v : undefined;
+  };
   const [depositFeeZat, withdrawFeeZat] = [fee('depositFee'), fee('withdrawalFee')];
   const [depositEta, withdrawEta] = [eta('depositEta'), eta('withdrawalEta')];
   if (depositFeeZat === undefined || withdrawFeeZat === undefined || !depositEta || !withdrawEta) {
@@ -152,22 +158,24 @@ export async function unitZecOperations(
     throw new Error(`unit did not answer: ${res.status}`);
   }
   const { operations } = (await res.json()) as { operations?: Record<string, unknown>[] };
+  const text = (v: unknown) => (typeof v === 'string' ? v : '');
   return (Array.isArray(operations) ? operations : []).flatMap(o => {
     const way =
       o['sourceChain'] === 'zcash' ? 'deposit' : o['destinationChain'] === 'zcash' ? 'withdraw' : 0;
-    if (!way || o['asset'] !== 'zec' || !/^\d+$/.test(String(o['sourceAmount']))) {
+    const amount = text(o['sourceAmount']);
+    if (!way || o['asset'] !== 'zec' || !/^\d+$/.test(amount)) {
       return [];
     }
     return [
       {
-        sourceTx: String(o['sourceTxHash'] ?? ''),
+        sourceTx: text(o['sourceTxHash']),
         way,
-        zat: BigInt(String(o['sourceAmount'])),
-        state: String(o['state'] ?? ''),
+        zat: BigInt(amount),
+        state: text(o['state']),
         ...(typeof o['sourceTxConfirmations'] === 'number'
           ? { confirmations: o['sourceTxConfirmations'] }
           : {}),
-        createdAt: String(o['opCreatedAt'] ?? ''),
+        createdAt: text(o['opCreatedAt']),
       },
     ];
   });

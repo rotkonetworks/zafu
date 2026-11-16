@@ -127,6 +127,9 @@ import { zignerCodeChain, type ZignerChain } from '../../../shared/zigner-code';
 import { useCatchUp } from '../../../state/witness-rebuild';
 import { signedPcztOfAnswer } from '../../../signing/zigner-answer';
 import { selectZcashEndpoint } from '../../../state/networks';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { UNIT_MIN_ZEC } from '@repo/wallet/networks/hyperliquid/api';
+import { UNIT_DEPOSIT_LINES, zecMoves } from '../../../hyperliquid/zec-moves';
 
 interface ZcashSendProps {
   onClose: () => void;
@@ -139,6 +142,8 @@ interface ZcashSendProps {
     memo?: string;
     /** where a link in `recipient` came from (see links/land viaLine) */
     via?: string;
+    /** `recipient` is Unit's verified deposit address for this hyperliquid account */
+    unitAccount?: string;
   };
 }
 
@@ -625,7 +630,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     : tPay.active
       ? tPay.freshMax(maxSend.amountZat)
       : maxSend.amountZat;
-  const canReview = toValid && Number(amount) > 0 && !overLimit;
+  // a deposit to hyperliquid through unit, for as long as the address is the one zafu verified
+  const unitAccount = recipient === prefill?.recipient ? prefill.unitAccount : undefined;
+  const belowUnitMin =
+    !!unitAccount && Number(amount) > 0 && Math.round(Number(amount) * 1e8) < Number(UNIT_MIN_ZEC);
+  const canReview = toValid && Number(amount) > 0 && !overLimit && !belowUnitMin;
   /** what the review says the fee is; undefined while a transparent route is still planned */
   const reviewFee = !tPay.active
     ? fee
@@ -796,6 +805,18 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     setFormError(null);
     try {
       const started = await tPay.start();
+      if (unitAccount) {
+        // followed on the hyperliquid home; its txid joins it once the payment is out
+        await zecMoves.save({
+          v: 1,
+          id: started.running.id,
+          way: 'deposit',
+          account: unitAccount,
+          zat: started.running.req.amountZat,
+          at: started.running.at,
+          tx: '',
+        });
+      }
       setFee(fmtZecShort(started.feeZat));
       setOpenPay(started);
       setStep('fresh-pay');
@@ -1564,10 +1585,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   setAmount(fmtZecShort(sendMax));
                 }}
                 canMax={sendMax > 0n}
-                warn={overLimit}
+                warn={overLimit || belowUnitMin}
                 helper={
                   tPay.fromPublic && tPay.available === null ? (
                     'reading your public balance, one address at a time'
+                  ) : belowUnitMin ? (
+                    `unit takes ${fmtZecShort(UNIT_MIN_ZEC)} ${unit} or more · less would not arrive`
                   ) : overLimit ? (
                     <>
                       a little more than you have · up to{' '}
@@ -1700,6 +1723,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             )}
             {linkVia && (
               <span className='text-center text-[11px] text-fg-muted'>{viaLine(linkVia)}</span>
+            )}
+            {unitAccount && (
+              <StatusSlot icon='i-ph-info'>
+                {UNIT_DEPOSIT_LINES.map(line => (
+                  <span key={line}>{line}</span>
+                ))}
+              </StatusSlot>
             )}
           </Review>
         );
@@ -1913,6 +1943,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             to={shorten(p.req.to, 6, 5)}
             words={openPay.from ? PUBLIC_WORDS : FRESH_WORDS}
             onSent={txid => {
+              void zecMoves.patch(p.id, { tx: txid });
               complete(txid);
               setStep('complete');
               void recordUsage(recipient, 'zcash');
