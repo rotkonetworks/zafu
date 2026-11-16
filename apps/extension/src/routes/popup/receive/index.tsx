@@ -20,6 +20,7 @@ import { rotateShieldedDiversifier } from '../../../state/shielded-receive-index
 import { routeForChain, usePenumbraRoutes } from '../../../transparent/penumbra-routes';
 import { PenumbraReceive, PlainReceive, ZcashReceive, type AddrType } from './receive-tab';
 import { TransparentReceive } from './transparent-receive';
+import { HyperliquidDeposit } from './hyperliquid-deposit';
 import { orderTransparentChains, type Privacy } from '../../../components/privacy-switch';
 import { getActiveIbcSubnetworks } from '../../../config/networks';
 import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
@@ -117,6 +118,7 @@ export function ReceivePage() {
       meta: transparentChains.length > 0 && toggle(privacy, setPrivacy, 'privacy'),
       shielded: () => <PenumbraReceive />,
     },
+    hyperliquid: { meta: undefined, shielded: () => <HyperliquidDeposit /> },
   };
   const look = looks[activeNetwork];
   const body =

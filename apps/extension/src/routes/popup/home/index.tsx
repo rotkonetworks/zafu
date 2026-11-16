@@ -19,6 +19,7 @@ import { usePreloadBalances } from '../../../hooks/use-preload';
 import { BackupNudge } from './notices';
 import { PenumbraContent } from './penumbra-home';
 import { ZcashContent } from './zcash-home';
+import { HyperliquidHome } from './hyperliquid-home';
 
 export const popupIndexLoader = async (): Promise<Response | null> =>
   (await needsOnboard()) ?? (await needsLogin()) ?? null;
@@ -40,10 +41,11 @@ const PenumbraHome = ({ nudge }: { nudge?: ReactNode }) => (
   <PenumbraContent account={useStore(selectPenumbraAccount)} nudge={nudge} />
 );
 
-/** the shielded networks share one home (home-screen.tsx), each reading its own state */
+/** every network shares one home (home-screen.tsx), each reading its own state */
 const HOME: Partial<Record<NetworkType, ComponentType<{ nudge?: ReactNode }>>> = {
   zcash: ZcashHome,
   penumbra: PenumbraHome,
+  hyperliquid: HyperliquidHome,
 };
 
 export const PopupIndex = () => {
