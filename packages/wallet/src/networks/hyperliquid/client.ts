@@ -84,6 +84,23 @@ export async function queryHyperliquidBalances(
   return { perp: usdcToMicro(perp.withdrawable), spot: free('USDC', 6), uzec: free('UZEC', 8) };
 }
 
+/**
+ * Whether Hyperliquid has ever known this address (its `userRole`): true for
+ * an account that was emptied, too. Throws when the answer cannot be read.
+ */
+export async function hyperliquidAccountExists(
+  address: string,
+  fetchFn: FetchFn = fetch,
+): Promise<boolean> {
+  const { role } = (await info(fetchFn, { type: 'userRole', user: address.toLowerCase() })) as {
+    role?: unknown;
+  };
+  if (typeof role !== 'string') {
+    throw new Error('hyperliquid sent an answer zafu could not read');
+  }
+  return role !== 'missing';
+}
+
 /** the three ways USDC leaves: to a Hyperliquid address from either account, or to Arbitrum */
 export type HyperliquidMove = 'usdSend' | 'spotSend' | 'withdraw3';
 

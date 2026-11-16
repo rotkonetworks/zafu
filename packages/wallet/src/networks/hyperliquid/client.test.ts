@@ -3,6 +3,7 @@ import { HYPERLIQUID_API } from './api';
 import {
   buildHyperliquidAction,
   buildUzecSend,
+  hyperliquidAccountExists,
   microToUsdc,
   postHyperliquidAction,
   queryHyperliquidBalances,
@@ -77,6 +78,21 @@ describe('queryHyperliquidBalances', () => {
     await expect(
       queryHyperliquidBalances(TO, (async () => json({}, 500)) as never),
     ).rejects.toThrow('500');
+  });
+});
+
+describe('hyperliquidAccountExists', () => {
+  it('reads the role: missing is an address hyperliquid never knew', async () => {
+    const bodies: unknown[] = [];
+    const role = (r: unknown) =>
+      (async (_url: unknown, init?: RequestInit) => (
+        bodies.push(JSON.parse(init!.body as string)),
+        json({ role: r })
+      )) as never;
+    expect(await hyperliquidAccountExists(TO, role('missing'))).toBe(false);
+    expect(await hyperliquidAccountExists(TO, role('user'))).toBe(true);
+    expect(bodies[0]).toEqual({ type: 'userRole', user: TO.toLowerCase() });
+    await expect(hyperliquidAccountExists(TO, role(undefined))).rejects.toThrow();
   });
 });
 
