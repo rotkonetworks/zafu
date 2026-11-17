@@ -18,9 +18,14 @@ interface PasswordGateModalProps {
   open: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /**
+   * what a right password does, when it is more than a check: a locked zafu
+   * unlocks with it. Resolves false for a wrong one. Default: check only.
+   */
+  check?: (password: string) => Promise<boolean>;
 }
 
-export const PasswordGateModal = ({ open, onConfirm, onCancel }: PasswordGateModalProps) => {
+export const PasswordGateModal = ({ open, onConfirm, onCancel, check }: PasswordGateModalProps) => {
   const { isPassword } = useStore(passwordSelector);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -50,7 +55,7 @@ export const PasswordGateModal = ({ open, onConfirm, onCancel }: PasswordGateMod
     setError('');
 
     try {
-      const valid = await isPassword(password);
+      const valid = await (check ?? isPassword)(password);
       if (valid) {
         onConfirm();
       } else {
@@ -63,7 +68,7 @@ export const PasswordGateModal = ({ open, onConfirm, onCancel }: PasswordGateMod
     } finally {
       setChecking(false);
     }
-  }, [password, isPassword, onConfirm]);
+  }, [password, isPassword, check, onConfirm]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

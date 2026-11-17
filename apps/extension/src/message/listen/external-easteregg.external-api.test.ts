@@ -416,26 +416,52 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
 
   const create = (rpId: string) => ({ type: 'zafu_passkey_create', rpId });
 
-  it('(g) a locked wallet opens the unlock surface instead of the passkey screen', async () => {
+  it('(g) a locked wallet is still offered: the passkey screen opens, and "not now" mints nothing', async () => {
     const origin = 'https://passkey-locked.example';
     await sessionExtStorage.remove('passwordKey');
 
-    const res = await call(create('passkey-locked.example'), validSender(origin));
+    const pending = call(create('passkey-locked.example'), validSender(origin));
+    expect(await waitForPopup(origin)).toContain('passkey-approve');
+    expect(createCredentialMock).not.toHaveBeenCalled();
+    await tap(origin, { approved: false });
 
-    expect(popupUrlFor(origin)).toBeUndefined();
-    expect(res).toMatchObject({ success: false, code: 'cancelled' });
+    expect(await pending).toMatchObject({ success: false, code: 'denied' });
     expect(createCredentialMock).not.toHaveBeenCalled();
   });
 
-  it('(h) a locked wallet refuses to sign rather than reroute the site', async () => {
+  it('(h) a locked wallet signs in once the password is given on the passkey screen, user verified', async () => {
     const origin = 'https://passkey-signlocked.example';
     await grantCapability(origin, 'passkey');
     await sessionExtStorage.remove('passwordKey');
 
-    const res = await call(getReq('passkey-signlocked.example'), validSender(origin));
-
-    expect(res).toMatchObject({ success: false, code: 'cancelled' });
+    const pending = call(getReq('passkey-signlocked.example'), validSender(origin));
+    const url = await waitForPopup(origin);
+    // which wallet answers is sealed while locked: the screen opens without it
+    expect(new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('wallet')).toBeNull();
     expect(signAssertionMock).not.toHaveBeenCalled();
+
+    // the password, given on that screen: it unlocks, then reports verified
+    await sessionExtStorage.set('passwordKey', 'unlocked-key');
+    await tap(origin, { approved: true, verified: true });
+
+    expect(await pending).toMatchObject({ success: true });
+    expect(signAssertionMock.mock.calls.at(-1)?.at(-1)).toBe(true);
+  });
+
+  it('(h2) the screen carries what the site asks of user verification; a bare tap is not "verified"', async () => {
+    const origin = 'https://passkey-uv.example';
+    await grantCapability(origin, 'passkey');
+
+    const pending = call(
+      { ...getReq('passkey-uv.example'), userVerification: 'discouraged' },
+      validSender(origin),
+    );
+    const url = await waitForPopup(origin);
+    expect(new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('uv')).toBe('discouraged');
+    await tap(origin, { approved: true });
+
+    expect(await pending).toMatchObject({ success: true });
+    expect(signAssertionMock.mock.calls.at(-1)?.at(-1)).toBe(false);
   });
 
   it('(i) a mint failure after the tap is reported as failed, not as a denial', async () => {
@@ -780,8 +806,8 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
     const first = call(getReq('dedup.example'), validSender(origin));
     await waitForPopup(origin);
     const second = call(getReq('dedup.example'), validSender(origin));
-    // no code: the person declined nothing, so the page does not back off
-    expect(await second).toEqual({ success: false, error: 'denied' });
+    // `busy`: the page refuses it, with no wait and no browser prompt beside zafu's window
+    expect(await second).toEqual({ success: false, error: 'busy', code: 'busy' });
     expect(popupUrlsFor(origin)).toHaveLength(1);
 
     await tap(origin, { approved: true });
