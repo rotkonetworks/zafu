@@ -22,6 +22,12 @@ const CHANNEL = 'zafu-passkey';
 
 const cooldown = promptCooldown();
 const hand = recentHand();
+// a sign-in page often asks as it loads: the click was on the page before it
+// (the app's "sign in", a redirect, then the login page calls WebAuthn itself).
+// So one sign-in per page needs no click here; after that, and for making a
+// passkey, a click on this page is asked. The worker only shows a screen for a
+// site that already holds a zafu passkey, so this gives no other page a prompt.
+let freeSignIn = true;
 // the person's own clicks and key presses on this page (never a page's synthetic ones)
 for (const type of ['pointerdown', 'keydown'] as const) {
   window.addEventListener(
@@ -64,12 +70,16 @@ window.addEventListener('message', (ev: MessageEvent) => {
 
   // only the fields this kind uses, with `type` set here - never the page's
   const message = passkeyMessage(kind, payload);
-  // a passkey screen only follows a click on the page, and not while the page
-  // is waiting out a "not now"; activation is per frame, so this world sees
-  // the page's own click
+  // a passkey screen follows a click on the page (or is this page's one free
+  // sign-in), and not while the page is waiting out a "not now"; activation
+  // is per frame, so this world sees the page's own click
   const now = Date.now();
-  const asked =
-    hand.asked(now, navigator.userActivation?.isActive) && !cooldown.quiet(now, hand.last());
+  const clicked = hand.asked(now, navigator.userActivation?.isActive);
+  const free = kind === 'get' && freeSignIn && !clicked;
+  const asked = (clicked || free) && !cooldown.quiet(now, hand.last());
+  if (free && message) {
+    freeSignIn = false;
+  }
   // orphaned content script (extension reloaded in an open tab) - fail cleanly
   if (!message || !asked || !chrome.runtime?.id || chrome.runtime.id === 'invalid') {
     console.info(
@@ -79,7 +89,7 @@ window.addEventListener('message', (ev: MessageEvent) => {
         : !asked
           ? cooldown.quiet(now, hand.last())
             ? 'waiting after "not now"'
-            : 'no click on this page in the last minute'
+            : 'no click on this page in the last minute, and its one sign-in without a click is used'
           : 'zafu was reloaded, reload this page',
     );
     respond(undefined);
