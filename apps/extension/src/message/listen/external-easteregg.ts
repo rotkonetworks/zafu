@@ -27,7 +27,12 @@
  */
 
 import { DEFAULT_RELAY_URL } from '../../config/multisig-relay';
-import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
+import {
+  getAllPermissions,
+  getOriginPermissions,
+  grantCapability,
+  denyCapability,
+} from '@repo/storage-chrome/origin';
 import { getCapabilityMode, setCapabilityMode } from '../../state/capability-modes';
 import {
   decideCapabilityUse,
@@ -1646,7 +1651,14 @@ export const externalMessageListener = (
           // `passkey`, or `connect` for a passkey made before `passkey`
           // existed, lets the site ask; nothing else may even raise the tap
           const granted = (await getOriginPermissions(origin))?.granted ?? [];
-          if (!granted.includes('passkey') && !granted.includes('connect')) {
+          // or a passkey made for this rpId on another of its pages: sites make
+          // one on a subdomain and sign in on a sibling (rpId is the scope).
+          // Read from the plaintext site list, so it holds while locked too.
+          const sibling = async () =>
+            (await getAllPermissions()).some(
+              p => p.granted.includes('passkey') && rpIdMatchesOrigin(rpId, p.origin),
+            );
+          if (!granted.includes('passkey') && !granted.includes('connect') && !(await sibling())) {
             console.warn(`[passkey] sign-in refused on ${origin}: no passkey permission`);
             sendResponse({ success: false, error: 'not connected' });
             return;
