@@ -110,12 +110,13 @@ export const PasskeyApprove = () => {
     // within the signing security the person chose: their password stands behind it
     await respond(true, true);
   };
-  const passwordGiven = () => {
+  const passwordGiven = async () => {
     setAsking(undefined);
+    // awaited: `respond` closes this window, and a write still in flight is lost with it
     if (opensGraceWindow(security)) {
-      void sessionExtStorage.set('signGraceUntil', Date.now() + SIGN_GRACE_MS);
+      await sessionExtStorage.set('signGraceUntil', Date.now() + SIGN_GRACE_MS);
     }
-    void respond(true, true);
+    await respond(true, true);
   };
 
   return (
@@ -168,7 +169,7 @@ export const PasskeyApprove = () => {
         open={!!asking}
         check={asking === 'unlock' ? unlock : undefined}
         title={copy.confirm}
-        onConfirm={passwordGiven}
+        onConfirm={() => void passwordGiven()}
         onCancel={() => setAsking(undefined)}
       />
     </ApprovalScreen>
