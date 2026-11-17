@@ -9,6 +9,10 @@ import { trackActivity } from '../state/idle-activity';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
+import { followAutoLock } from '../auto-lock';
+
+// an idle lock starts this page over, at its unlock
+followAutoLock();
 
 /**
  * buy.html: the buy page loads in its own chunk (and @zkp2p/sdk in another,
