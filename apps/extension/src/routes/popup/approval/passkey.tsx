@@ -34,11 +34,13 @@ const COPY = {
   create: {
     title: (site: string) => `create a passkey for ${site}`,
     approve: 'create passkey',
+    confirm: 'confirm this passkey',
     note: 'the key stays in zafu and comes back with your recovery phrase.',
   },
   get: {
     title: (site: string) => `sign in to ${site}?`,
     approve: 'sign in',
+    confirm: 'confirm this sign-in',
     note: undefined,
   },
 } as const;
@@ -165,6 +167,7 @@ export const PasskeyApprove = () => {
       <PasswordGateModal
         open={!!asking}
         check={asking === 'unlock' ? unlock : undefined}
+        title={copy.confirm}
         onConfirm={passwordGiven}
         onCancel={() => setAsking(undefined)}
       />
