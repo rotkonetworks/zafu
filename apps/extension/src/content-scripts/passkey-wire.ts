@@ -33,6 +33,11 @@ const prfSaltsOf = (v: unknown): { first: string; second?: string } | undefined 
   return s.second === undefined ? { first: s.first } : { first: s.first, second: s.second };
 };
 
+/** what the site asks of user verification; the spec's default when it says nothing */
+export type UserVerification = 'required' | 'preferred' | 'discouraged';
+const uvOf = (v: unknown): UserVerification =>
+  v === 'required' || v === 'discouraged' ? v : 'preferred';
+
 const allowOf = (v: unknown): { id: string; type: string }[] | undefined | null => {
   if (v === undefined) {
     return undefined;
@@ -85,6 +90,7 @@ export const passkeyMessage = (
       userId,
       prfRequested,
       excludeCredentials,
+      userVerification: uvOf(p['userVerification']),
       // last, so nothing above can name another handler
       type: PASSKEY_MESSAGE_TYPES.create,
     };
@@ -107,12 +113,13 @@ export const passkeyMessage = (
     clientDataHash: p['clientDataHash'],
     prfSalts,
     allowCredentials,
+    userVerification: uvOf(p['userVerification']),
     type: PASSKEY_MESSAGE_TYPES.get,
   };
 };
 
 /** the refusal codes a page may see; anything else becomes a bare refusal */
-const PAGE_CODES = new Set(['failed', 'cancelled', 'denied', 'exists']);
+const PAGE_CODES = new Set(['failed', 'cancelled', 'denied', 'exists', 'busy']);
 
 /**
  * What the page gets back: on success only the credential fields, on refusal

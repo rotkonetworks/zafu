@@ -182,7 +182,22 @@ describe('passkeyMessage', () => {
       clientDataHash: 'aabb',
       prfSalts: { first: '01' },
       allowCredentials: [{ id: 'cc', type: 'public-key' }],
+      // the site said nothing: the spec's default
+      userVerification: 'preferred',
     });
+  });
+
+  it('carries what the site asks of user verification, and nothing it made up', () => {
+    const get = (userVerification: unknown) =>
+      passkeyMessage('get', {
+        rpId: 'a.example',
+        challenge: 'ccdd',
+        clientDataHash: 'aabb',
+        userVerification,
+      })?.['userVerification'];
+    expect(get('required')).toBe('required');
+    expect(get('discouraged')).toBe('discouraged');
+    expect(get('always-skip')).toBe('preferred');
   });
 });
 
