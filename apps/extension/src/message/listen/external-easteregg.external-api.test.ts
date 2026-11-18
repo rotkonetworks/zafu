@@ -493,8 +493,10 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
         id: runtime.id,
         getURL: (path: string) => runtime.getURL(path),
         getContexts: async () => (open ? [{ contextType: 'SIDE_PANEL', windowId: 7 }] : []),
+        // the real panel answers true once its listener has navigated
         sendMessage: async (m: { type: string; route: string }) => {
           navigated.push(m);
+          return true;
         },
       });
     });
