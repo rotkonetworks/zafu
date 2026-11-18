@@ -64,7 +64,7 @@ import type { VaultUnlock } from '../../state/keyring/types';
 import type { AllSlices } from '../../state';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { isSidePanelOpen, waitForSidePanel } from '../../side-panel-presence';
-import { SIDE_PANEL_NAVIGATE } from '../side-panel-delivery';
+import { navigateSidePanel } from '../side-panel-delivery';
 import { popupWindowGeometry } from '../../utils/popup-window';
 import { PopupPath } from '../../routes/popup/paths';
 import {
@@ -90,8 +90,7 @@ export const openWalletRoute = async (origin: string, route: string): Promise<bo
     .getLastFocused({ windowTypes: ['normal'] })
     .catch(() => undefined);
   const inPanel = (await isSidePanelOpen(win?.id)) && (await getApprovalSurface()) !== 'popup';
-  if (inPanel) {
-    await chrome.runtime.sendMessage({ type: SIDE_PANEL_NAVIGATE, route });
+  if (inPanel && (await navigateSidePanel(route))) {
     return true;
   }
   const url = new URL(chrome.runtime.getURL('/popup.html'));
@@ -344,11 +343,7 @@ const showInSidePanel = async (
     return 'window';
   }
   const route = url.slice(url.indexOf('#') + 1);
-  const delivered = await chrome.runtime.sendMessage({ type: SIDE_PANEL_NAVIGATE, route }).then(
-    () => true,
-    () => false,
-  );
-  if (!delivered) {
+  if (!(await navigateSidePanel(route))) {
     return surface === 'sidebar' ? false : 'window';
   }
   panelRequestToOrigin.set(requestId, origin);

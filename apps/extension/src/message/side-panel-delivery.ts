@@ -43,3 +43,26 @@ export const isSidePanelNavigate = (m: unknown): m is SidePanelNavigateMessage =
   m !== null &&
   (m as { type?: unknown }).type === SIDE_PANEL_NAVIGATE &&
   typeof (m as { route?: unknown }).route === 'string';
+
+/**
+ * Navigate the open panel, re-sending every 250ms until the panel itself
+ * answers `true`. A panel the click just opened mounts its listener a beat
+ * after its document loads, so a single send lands on nobody (or on another
+ * listener) and the panel boots to home with the request left unshown.
+ */
+export const navigateSidePanel = async (route: string, ms = 5_000): Promise<boolean> => {
+  const until = Date.now() + ms;
+  for (;;) {
+    const acked = await chrome.runtime.sendMessage({ type: SIDE_PANEL_NAVIGATE, route }).then(
+      r => r === true,
+      () => false,
+    );
+    if (acked) {
+      return true;
+    }
+    if (Date.now() >= until) {
+      return false;
+    }
+    await new Promise(r => setTimeout(r, 250));
+  }
+};
