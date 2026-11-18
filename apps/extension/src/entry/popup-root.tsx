@@ -14,6 +14,7 @@ import { installPreload } from '../routes/popup/preload';
 import { isSidePanel } from '../utils/popup-detection';
 import { announceSidePanelPresence } from '../side-panel-presence';
 import { announceUiOpenPresence } from '../state/ui-open-presence';
+import { followAutoLock } from '../auto-lock';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 import { noteContextInvalidated } from '../utils/reload-notice';
@@ -91,6 +92,7 @@ const MainPopup = () => {
   // contact-discovery presence beacon) exactly while zafu is in use.
   useEffect(() => {
     announceUiOpenPresence();
+    followAutoLock();
   }, []);
 
   // check for pending side panel navigation

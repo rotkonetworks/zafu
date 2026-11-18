@@ -66,14 +66,19 @@ describe('passkey bridge', () => {
     },
   );
 
-  it('asks nothing without a click on the page', () => {
+  it("a page's first sign-in needs no click on it; the next does, and making a passkey always does", () => {
+    // the login page a redirect lands on asks as it loads: the click was on the page before
     clicked(false);
-    pagePosts(hostile('get'));
     pagePosts(hostile('create'));
     expect(sendMessage).not.toHaveBeenCalled();
+    pagePosts(hostile('get'));
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    pagePosts(hostile('get'));
+    expect(sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it("a page's own synthetic click does not count as the person's hand", () => {
+    // (this page's one sign-in without a click was used by the test above)
     clicked(false);
     window.dispatchEvent(new PointerEvent('pointerdown'));
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
@@ -182,7 +187,22 @@ describe('passkeyMessage', () => {
       clientDataHash: 'aabb',
       prfSalts: { first: '01' },
       allowCredentials: [{ id: 'cc', type: 'public-key' }],
+      // the site said nothing: the spec's default
+      userVerification: 'preferred',
     });
+  });
+
+  it('carries what the site asks of user verification, and nothing it made up', () => {
+    const get = (userVerification: unknown) =>
+      passkeyMessage('get', {
+        rpId: 'a.example',
+        challenge: 'ccdd',
+        clientDataHash: 'aabb',
+        userVerification,
+      })?.['userVerification'];
+    expect(get('required')).toBe('required');
+    expect(get('discouraged')).toBe('discouraged');
+    expect(get('always-skip')).toBe('preferred');
   });
 });
 

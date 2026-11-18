@@ -1,11 +1,18 @@
 /**
- * passkey-approve - the one tap every passkey request takes: creating one
+ * passkey-approve - the one screen every passkey request takes: creating one
  * (zafu_passkey_create) and every sign-in (zafu_passkey_get). This window only
- * reports the tap via zafu_passkey_result; the service worker mints or signs
+ * reports the answer via zafu_passkey_result; the service worker mints or signs
  * with its own copy of the request. No seed material ever reaches it.
+ *
+ * It opens whether zafu is locked or not, and asks for the password itself, at
+ * the signing: to unlock a locked zafu, or as the signing security setting says
+ * (every time, once per 15 minutes, or never while unlocked). A site that asks
+ * for no user verification (`uv=discouraged`) gets a plain tap on an unlocked zafu.
  */
 
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
@@ -15,16 +22,25 @@ import { RowGroup } from '@repo/ui/components/ui/row';
 import { useStore } from '../../../state';
 import { exitApprovalSurface, usePopupNav } from '../../../utils/navigate';
 import { Clipped } from '@repo/ui/components/ui/clipped';
+import { PasswordGateModal } from '../../../shared/components/password-gate';
+import { selectTxSigningSecurity } from '../../../state/privacy';
+import {
+  opensGraceWindow,
+  shouldPromptPassword,
+  SIGN_GRACE_MS,
+} from '../../../shared/tx-signing-security';
 
 const COPY = {
   create: {
     title: (site: string) => `create a passkey for ${site}`,
     approve: 'create passkey',
+    confirm: 'confirm this passkey',
     note: 'the key stays in zafu and comes back with your recovery phrase.',
   },
   get: {
     title: (site: string) => `sign in to ${site}?`,
     approve: 'sign in',
+    confirm: 'confirm this sign-in',
     note: undefined,
   },
 } as const;
@@ -51,8 +67,14 @@ export const PasskeyApprove = () => {
   const walletId = params.get('wallet');
   const keyInfo = useStore(s => s.keyRing.keyInfos.find(k => k.id === walletId));
 
+  const security = useStore(selectTxSigningSecurity);
+  const unlock = useStore(s => s.keyRing.unlock);
+  // the password box: `unlock` opens a locked zafu with it, `confirm` only checks it
+  const [asking, setAsking] = useState<'unlock' | 'confirm'>();
+  const uvAsked = params.get('uv') !== 'discouraged';
+
   const navigate = usePopupNav();
-  const respond = async (approved: boolean) => {
+  const respond = async (approved: boolean, verified = false) => {
     // Deliver the decision BEFORE closing: `window.close()` removes the window
     // synchronously, and the service worker's onRemoved sweep would then race
     // the message - an approve that lost the race arrived as "cancelled", so
@@ -63,13 +85,38 @@ export const PasskeyApprove = () => {
       await chrome.runtime.sendMessage({
         type: 'zafu_passkey_result',
         requestId,
-        result: { approved },
+        result: { approved, verified },
       });
     } catch {
       // the service worker is unreachable or was reloaded: closing is the only
       // way to release the window (the request is already lost either way).
     }
     exitApprovalSurface(navigate);
+  };
+
+  const approve = async () => {
+    if (!(await sessionExtStorage.get('passwordKey'))) {
+      setAsking('unlock');
+      return;
+    }
+    if (!uvAsked) {
+      await respond(true);
+      return;
+    }
+    if (shouldPromptPassword(security, Date.now(), await sessionExtStorage.get('signGraceUntil'))) {
+      setAsking('confirm');
+      return;
+    }
+    // within the signing security the person chose: their password stands behind it
+    await respond(true, true);
+  };
+  const passwordGiven = async () => {
+    setAsking(undefined);
+    // awaited: `respond` closes this window, and a write still in flight is lost with it
+    if (opensGraceWindow(security)) {
+      await sessionExtStorage.set('signGraceUntil', Date.now() + SIGN_GRACE_MS);
+    }
+    await respond(true, true);
   };
 
   return (
@@ -92,7 +139,7 @@ export const PasskeyApprove = () => {
       }
       footer={
         <ApproveDeny
-          approve={() => respond(true)}
+          approve={approve}
           deny={() => respond(false)}
           approveLabel={copy.approve}
           denyLabel='not now'
@@ -118,6 +165,13 @@ export const PasskeyApprove = () => {
         </RowGroup>
         {copy.note && <p className='text-xs text-fg-muted'>{copy.note}</p>}
       </div>
+      <PasswordGateModal
+        open={!!asking}
+        check={asking === 'unlock' ? unlock : undefined}
+        title={copy.confirm}
+        onConfirm={() => void passwordGiven()}
+        onCancel={() => setAsking(undefined)}
+      />
     </ApprovalScreen>
   );
 };

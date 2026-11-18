@@ -142,7 +142,26 @@ const isWalletFailure = (r: WalletResponse | undefined): boolean => r?.code === 
  * it has none; the site gets a cancel, as from any authenticator, and can ask again.
  */
 const isDeclined = (r: WalletResponse | undefined): boolean =>
-  r?.code === 'denied' || r?.code === 'cancelled';
+  r?.code === 'denied' ||
+  r?.code === 'cancelled' ||
+  // zafu's window for this site is already open: the browser's prompt beside
+  // it would be a second, competing answer to the same sign-in
+  r?.code === 'busy';
+
+/** base64url, as WebAuthn's JSON forms carry bytes */
+const b64url = (buf: ArrayBufferLike): string =>
+  btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+
+/**
+ * A P-256 public key as the SubjectPublicKeyInfo `getPublicKey()` returns:
+ * the fixed ES256 header, then the uncompressed point. Sites that read the key
+ * from there, not from the attestation, got the bare point and could not parse it.
+ */
+const SPKI_P256 = '3059301306072a8648ce3d020106082a8648ce3d030107034200';
+const spki = (pointHex: string): ArrayBuffer => hexToBuf(SPKI_P256 + pointHex);
 
 /** marks a wallet failure from `askWallet` so the catch below can tell it from an unreachable wallet */
 class WalletFailedError extends Error {}
@@ -177,6 +196,7 @@ navigator.credentials.create = async function (
       userId: pk.user?.id ? bufToHex(pk.user.id) : '',
       prfRequested: !!(pk.extensions as Record<string, unknown>)?.['prf'],
       excludeCredentials: pk.excludeCredentials?.map(c => ({ id: bufToHex(c.id), type: c.type })),
+      userVerification: pk.authenticatorSelection?.userVerification,
     });
 
     if (!response?.success) {
@@ -208,17 +228,14 @@ navigator.credentials.create = async function (
     const attestationObject = buildNoneAttestationObject(authenticatorData);
 
     return {
-      id: btoa(String.fromCharCode(...new Uint8Array(credentialId)))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, ''),
+      id: b64url(credentialId),
       rawId: credentialId,
       type: 'public-key',
       response: {
         clientDataJSON: clientDataJSON.buffer,
         attestationObject: attestationObject.buffer,
         getAuthenticatorData: () => authenticatorData,
-        getPublicKey: () => hexToBuf(response.publicKey!),
+        getPublicKey: () => spki(response.publicKey!),
         getPublicKeyAlgorithm: () => -7, // ES256
         getTransports: () => ['internal'],
       },
@@ -230,6 +247,22 @@ navigator.credentials.create = async function (
         }
         return results;
       },
+      // the standard JSON form: newer sites send this instead of reading the fields
+      toJSON: () => ({
+        id: b64url(credentialId),
+        rawId: b64url(credentialId),
+        type: 'public-key',
+        authenticatorAttachment: 'platform',
+        clientExtensionResults: response.prfEnabled ? { prf: { enabled: true } } : {},
+        response: {
+          clientDataJSON: b64url(clientDataJSON.buffer),
+          attestationObject: b64url(attestationObject.buffer),
+          authenticatorData: b64url(authenticatorData),
+          publicKey: b64url(spki(response.publicKey!)),
+          publicKeyAlgorithm: -7,
+          transports: ['internal'],
+        },
+      }),
     } as unknown as PublicKeyCredential;
   } catch (e) {
     if (e instanceof DOMException && e.name === 'InvalidStateError') {
@@ -282,6 +315,7 @@ navigator.credentials.get = async function (
         id: bufToHex(c.id),
         type: c.type,
       })),
+      userVerification: pk.userVerification,
     });
 
     if (!response?.success) {
@@ -299,10 +333,7 @@ navigator.credentials.get = async function (
     const signature = hexToBuf(response.signature!);
 
     return {
-      id: btoa(String.fromCharCode(...new Uint8Array(credentialId)))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, ''),
+      id: b64url(credentialId),
       rawId: credentialId,
       type: 'public-key',
       response: {
@@ -326,6 +357,30 @@ navigator.credentials.get = async function (
         }
         return results;
       },
+      toJSON: () => ({
+        id: b64url(credentialId),
+        rawId: b64url(credentialId),
+        type: 'public-key',
+        authenticatorAttachment: 'platform',
+        clientExtensionResults: response.prfResults
+          ? {
+              prf: {
+                results: {
+                  first: b64url(hexToBuf(response.prfResults.first!)),
+                  ...(response.prfResults.second
+                    ? { second: b64url(hexToBuf(response.prfResults.second)) }
+                    : {}),
+                },
+              },
+            }
+          : {},
+        response: {
+          clientDataJSON: b64url(clientDataJSON.buffer),
+          authenticatorData: b64url(authenticatorData),
+          signature: b64url(signature),
+          ...(response.userHandle ? { userHandle: b64url(hexToBuf(response.userHandle)) } : {}),
+        },
+      }),
     } as unknown as PublicKeyCredential;
   } catch (e) {
     if (e instanceof WalletFailedError) {

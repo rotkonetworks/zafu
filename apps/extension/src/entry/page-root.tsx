@@ -16,6 +16,7 @@ import { EgressAskSheet } from '../net/egress-ask-sheet';
 import { NymHeldSheet } from '../net/nym-held-sheet';
 import { installRegistryIcons } from '../shared/components/registry-icons';
 import { announceUiOpenPresence } from '../state/ui-open-presence';
+import { followAutoLock } from '../auto-lock';
 import { trackActivity } from '../state/idle-activity';
 
 import '@repo/ui/styles/globals.css';
@@ -51,6 +52,7 @@ const MainPage = () => {
   // document - see entry/popup-root.tsx.
   useEffect(() => {
     announceUiOpenPresence();
+    followAutoLock();
   }, []);
 
   useEffect(() => {
