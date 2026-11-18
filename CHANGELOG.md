@@ -6,6 +6,33 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.7.1
+
+### Passkeys
+
+- Signing in with a passkey works whether zafu is locked or unlocked. The
+  passkey screen always opens and asks for your password there: to unlock, or
+  as your signing security setting says (every time, once per 15 minutes, or
+  never while unlocked). There is no separate unlock window first.
+- Sites that require a verified passkey accept zafu's. Before, an unlocked
+  zafu signed without saying the user was verified.
+- A login page that asks for the passkey as it loads, after a redirect from
+  the app, reaches zafu. Before, zafu waited for a click on that page.
+- A passkey made on one page of a site signs in on its other pages that share
+  the same passkey scope, such as `app.` and `login.` of one domain.
+- When zafu's window for a site is already open, a second request is refused
+  quietly, with no browser prompt beside it.
+- A passkey screen reaches the side panel your click just opened. Before, the
+  panel could open on home with no screen, and the site then offered the
+  browser's own passkey prompt (a QR code for your phone).
+
+### Unlock and lock
+
+- The idle lock no longer restarts zafu. Sites left open keep their link to
+  zafu, so a passkey or connection works after the lock without reloading the
+  tab. Everything the unlock opened is still dropped.
+- The emblem behind 'welcome back' no longer shows a black box.
+
 ## 29.7.0
 
 ### Passkeys
