@@ -191,6 +191,8 @@ const ENCRYPTED_KEYS = new Set<string>([
   'openSwaps',
   // payments from a fresh t-address in flight: the recipient, the fresh address
   'openPayments',
+  // zec on its way through unit: the hyperliquid account, the amount, the transaction
+  'hyperliquidZecMoves',
   // zec liquidity: each pocket's lp address index, its last read, an add or take-out in flight
   'zecLp',
   // what zafu contacted lately: destinations and when, kept on this computer only

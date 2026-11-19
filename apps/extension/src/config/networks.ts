@@ -25,6 +25,8 @@ export interface NetworkConfig {
   transparent: boolean;
   /** whether this network is available for selection in the UI */
   launched: boolean;
+  /** offered only while beta features are on (config/beta) */
+  beta?: true;
   /**
    * If set, this network is a SUBNETWORK of `parent` rather than a top-level
    * network - it appears as a sub-selection inside the parent (e.g. the cosmos
@@ -218,6 +220,24 @@ const WRITTEN: Record<string, NetworkConfig> = {
       zcash: false,
     },
   },
+  hyperliquid: {
+    name: 'Hyperliquid',
+    color: 'bg-teal-200',
+    focusColor: 'focus:border-teal-200',
+    transparent: true,
+    // the ramp only: USDC in, out and across. No orders. Hot wallets sign.
+    launched: true,
+    beta: true,
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: false,
+      zcash: false,
+    },
+  },
   ethereum: {
     name: 'Ethereum',
     color: 'bg-blue-500',
@@ -322,9 +342,21 @@ export const hasFeature = (
   feature: keyof NetworkConfig['features'],
 ): boolean => getNetwork(network).features[feature];
 
-/** launched top-level networks (no parent) - the main network picker */
-export const getTopLevelNetworks = (): NetworkType[] =>
-  Object.keys(NETWORKS).filter(n => NETWORKS[n]?.launched && !NETWORKS[n]?.parent);
+/**
+ * launched top-level networks (no parent) - the main network picker. A beta
+ * network is listed while beta features are on, and while it is already on,
+ * so it can always be turned off.
+ */
+export const getTopLevelNetworks = (
+  beta: boolean,
+  enabled: readonly NetworkType[],
+): NetworkType[] =>
+  Object.keys(NETWORKS).filter(
+    n =>
+      NETWORKS[n]?.launched &&
+      !NETWORKS[n]?.parent &&
+      (!NETWORKS[n]?.beta || beta || enabled.includes(n)),
+  );
 
 /** launched subnetworks (IBC destinations) of a parent network */
 export const getSubnetworks = (parent: NetworkType): NetworkType[] =>

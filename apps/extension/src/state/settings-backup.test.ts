@@ -38,6 +38,7 @@ import {
   importPrefs,
   importTIndices,
   restoredPrivacy,
+  importHyperliquidAccounts,
 } from './settings-backup';
 
 describe('settings backup', () => {
@@ -151,6 +152,7 @@ describe('settings backup', () => {
     capabilityModes: { 'zid-discovery': 'disabled' },
     enabledNetworks: ['zcash', 'zcash-testnet', 'penumbra'],
     keplrCompat: true,
+    hyperliquidPath: "m/44'/60'/2000'/1/0",
   };
 
   it('carries the sealed zcash.me api key, and restores it sealed', async () => {
@@ -200,6 +202,7 @@ describe('settings backup', () => {
       zcashMeConfig: { mode: 'loud' },
       capabilityModes: { x: true },
       keplrCompat: 'yes',
+      hyperliquidPath: "m/44'/60'/x",
       enabledNetworks: ['zcash', 'polkadot'],
     });
     for (const k of ['memoSyncStrategies', 'mempoolWatchSettings', 'zcashMeConfig']) {
@@ -207,6 +210,7 @@ describe('settings backup', () => {
     }
     expect(store).not.toHaveProperty('capabilityModes');
     expect(store).not.toHaveProperty('keplrCompat');
+    expect(store).not.toHaveProperty('hyperliquidPath');
     expect(store['enabledNetworks']).toEqual(['zcash']);
     delete store['enabledNetworks'];
     await importPrefs({ enabledNetworks: ['polkadot'] });
@@ -278,5 +282,31 @@ describe('settings backup', () => {
       'zcashTransparentIndex#2',
       'zcashTransparentIndexJunk',
     ]);
+  });
+
+  it("carries each wallet's hyperliquid accounts, and a restore never lowers the highest index", async () => {
+    store['hyperliquidAccounts'] = { 'zid-a': { top: 4, names: { 2: 'burner' }, active: 2 } };
+    const out = JSON.parse(JSON.stringify(await exportSettings(DEFAULT_PRIVACY_SETTINGS))) as {
+      hyperliquidAccounts: unknown;
+    };
+    expect(out.hyperliquidAccounts).toEqual(store['hyperliquidAccounts']);
+
+    // a fresh install: the accounts come back, on account 0 until one is picked
+    delete store['hyperliquidAccounts'];
+    await importHyperliquidAccounts(out.hyperliquidAccounts);
+    expect(store['hyperliquidAccounts']).toEqual({ 'zid-a': { top: 4, names: { 2: 'burner' } } });
+
+    // more accounts were made since the backup: the older, lower count does not hide them
+    store['hyperliquidAccounts'] = { 'zid-a': { top: 7, names: {}, active: 6 } };
+    await importHyperliquidAccounts(out.hyperliquidAccounts);
+    expect(store['hyperliquidAccounts']).toEqual({
+      'zid-a': { top: 7, names: { 2: 'burner' }, active: 6 },
+    });
+
+    // an older backup has none, and a malformed one changes nothing
+    await importHyperliquidAccounts(undefined);
+    await importHyperliquidAccounts({ 'zid-a': { top: 'many' } });
+    expect((store['hyperliquidAccounts'] as { 'zid-a': { top: number } })['zid-a'].top).toBe(7);
+    delete store['hyperliquidAccounts'];
   });
 });

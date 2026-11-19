@@ -20,6 +20,7 @@ import { AccountsSheet, pocketTarget, type PocketSheetTarget } from './accounts-
 import { NetworkSheet } from './network-sheet';
 import { AddWalletSheet } from './add-wallet-sheet';
 import { NewPocketSheet } from './new-pocket-sheet';
+import { useHyperliquidAccounts } from '../hooks/hyperliquid';
 import { HiddenPocketsSheet } from './hidden-pockets-sheet';
 import { MovedSheet } from './moved-sheet';
 import { LAST_SEEN_VERSION, showMoved } from '../state/moved-notice';
@@ -74,7 +75,9 @@ export const AppHeader = () => {
   const viewOnly = isViewOnly(selectedKeyInfo);
   // pockets exist only for the hot wallet - shows which one is active; a
   // penumbra account outside them goes by its number, for any wallet kind
+  const hyperliquid = useHyperliquidAccounts();
   const subtitle =
+    (activeNetwork === 'hyperliquid' && hyperliquid.keyId ? hyperliquid.name : undefined) ??
     pockets.find(p => p.account === pocketAccount)?.name ??
     (activeNetwork === 'penumbra' && pocketAccount !== 0
       ? `account #${pocketAccount}`

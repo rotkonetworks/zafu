@@ -64,4 +64,16 @@ export const HOME_LOOK = {
     empty: 'no assets yet',
     receive: 'receive',
   },
+  // usdc only, and only what can move: no prices, nothing to swap
+  hyperliquid: {
+    unit: 'usdc',
+    label: 'usdc you can move',
+    eye: true,
+    actionIcons: true,
+    swap: false,
+    heading: 'accounts',
+    watermark: 'i-zafu-enso',
+    empty: 'no usdc yet',
+    receive: 'deposit usdc',
+  },
 } satisfies Record<string, HomeLook>;

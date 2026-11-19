@@ -5,6 +5,14 @@
 
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
+/** the hyperliquid account a zec deposit through Unit credits */
+export interface UnitDeposit {
+  wallet: string;
+  /** its address, and the name it goes by in this wallet */
+  account: string;
+  name: string;
+}
+
 export interface SendLocationState {
   prefillMemo?: string;
   prefillRecipient?: string;
@@ -31,6 +39,13 @@ export interface SendLocationState {
    * today; this lets it prefill/route differently later without changing callers.
    */
   cosmosIntent?: 'send' | 'shield';
+  /**
+   * `prefillRecipient` is Unit's verified deposit address for this
+   * hyperliquid account: the zcash send says so on review and records it
+   */
+  unit?: UnitDeposit;
+  /** hyperliquid's send opens on its zec withdrawal */
+  hyperliquidZec?: true;
   /** penumbra's send opens on this mode: 'withdraw' is a row's unshield */
   penumbraMode?: 'send' | 'withdraw';
 }
@@ -41,6 +56,8 @@ export interface SendPrefill {
   memo?: string;
   /** where a link in `recipient` came from (see links/land viaLine) */
   via?: string;
+  /** the hyperliquid account `recipient` credits through Unit */
+  unit?: UnitDeposit;
 }
 
 /** amount_zat (uint64 string, zatoshi) -> the decimal ZEC string ZcashSend expects */
@@ -67,6 +84,7 @@ export const sendPrefill = (
       recipient: state.prefillRecipient,
       amount: state.prefillAmount,
       memo: state.prefillMemo,
+      unit: state.unit,
     };
   }
   const to = query.get('to');

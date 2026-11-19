@@ -27,12 +27,14 @@ import { selectNetworkShown } from '../state/wallets';
 import { useEnableNetwork } from '../hooks/enable-network';
 import { getNetwork, getSubnetworks, getTopLevelNetworks } from '../config/networks';
 import { PopupPath } from '../routes/popup/paths';
+import { useBetaFeatures } from '../config/beta';
 
 /** one line per network, so the pools read apart at a glance */
 export const NETWORK_BLURB: Partial<Record<string, string>> = {
   zcash: 'encrypted money',
   'zcash-testnet': 'coins have no value',
   penumbra: 'private defi',
+  hyperliquid: 'beta · usdc in and out, public',
 };
 
 export const NetworkSheet = ({
@@ -58,7 +60,7 @@ export const NetworkSheet = ({
   const testnetOn = enabledNetworks.includes('zcash-testnet');
 
   /** zcash, then its testnet as an entry of its own, then the rest */
-  const entries = getTopLevelNetworks().flatMap(n =>
+  const entries = getTopLevelNetworks(useBetaFeatures(), enabledNetworks).flatMap(n =>
     n === 'zcash' ? [n, ...getSubnetworks(n)] : [n],
   );
 

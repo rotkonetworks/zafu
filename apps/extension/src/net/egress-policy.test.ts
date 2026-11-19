@@ -783,6 +783,55 @@ describe("the nym row says what nym can carry for the person's own node", () => 
   });
 });
 
+describe('hyperliquid', () => {
+  const INFO = 'https://api.hyperliquid.xyz/info';
+  const EXCHANGE = 'https://api.hyperliquid.xyz/exchange';
+  const HL: EgressInputs = { enabledNetworks: ['zcash', 'hyperliquid'] };
+
+  it('is never contacted until the network is on', () => {
+    expect(outcome(ZCASH_ONLY, INFO)).toBe('network-off');
+    expect(outcome(ZCASH_ONLY, EXCHANGE)).toBe('network-off');
+    expect(outcome(HL, INFO)).toBe('allow');
+    expect(outcome(HL, EXCHANGE)).toBe('allow');
+  });
+
+  it('reaches only its api host', () => {
+    expect(outcome(HL, 'https://app.hyperliquid.xyz/trade')).toBe('unknown');
+    expect(outcome(HL, 'https://api.hyperliquid-testnet.xyz/info')).toBe('unknown');
+  });
+
+  it('stays off when the person blocked it', () => {
+    expect(outcome({ ...HL, netEgress: { optIns: { hyperliquid: 'blocked' } } }, INFO)).toBe(
+      'blocked',
+    );
+  });
+
+  it('reaches unit, for zec, only while hyperliquid is on', () => {
+    const GEN = 'https://api.hyperunit.xyz/gen/zcash/hyperliquid/zec/0xabc';
+    expect(outcome(ZCASH_ONLY, GEN)).toBe('network-off');
+    expect(outcome(HL, GEN)).toBe('allow');
+    expect(outcome(HL, 'https://api.hyperunit-testnet.xyz/operations/0xabc')).toBe('unknown');
+    const table = compileEgress({ ...HL, netEgress: { optIns: { nym: 'allowed' } } });
+    expect(table.rules.find(r => r.destination === 'unit')).toMatchObject({
+      host: 'api.hyperunit.xyz',
+      nym: 'names-you',
+      noRedirect: true,
+    });
+  });
+
+  it('names you on every request, so all of it goes over nym once the person chose nym', () => {
+    const table = compileEgress({ ...HL, netEgress: { optIns: { nym: 'allowed' } } });
+    expect(table.nymVia).toContain('hyperliquid');
+    expect(table.rules.find(r => r.destination === 'hyperliquid')).toMatchObject({
+      host: 'api.hyperliquid.xyz',
+      path: '',
+      nym: 'names-you',
+      noRedirect: true,
+    });
+    expect(compileEgress(HL).rules.find(r => r.destination === 'hyperliquid')?.nym).toBeUndefined();
+  });
+});
+
 describe('the injective gas sponsor', () => {
   const sponsor = (i: EgressInputs) => describeEgress(i).find(d => d.id === 'sponsor');
   const INJ: EgressInputs = { enabledNetworks: ['zcash', 'injective'] };

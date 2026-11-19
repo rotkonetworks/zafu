@@ -10,6 +10,7 @@ import { getNetwork, getSubnetworks, getTopLevelNetworks } from '../../../config
 import { DEFAULT_RELAY_URL } from '../../../config/multisig-relay';
 import { relayHost } from '../../../config/people-relay';
 import { IS_BETA_BUILD, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import { useBetaFeatures } from '../../../config/beta';
 import { openPageInTab } from '../../../utils/popup-detection';
 import { PagePath } from '../../page/paths';
 import { usePopupNav } from '../../../utils/navigate';
@@ -26,6 +27,7 @@ const NetworksRow = () => {
   const disable = useDisableNetwork();
   const enable = useEnableNetwork();
   const [open, setOpen] = useState(false);
+  const beta = useBetaFeatures();
   const { explainProps, sheet } = useExplain();
   return (
     <>
@@ -41,7 +43,7 @@ const NetworksRow = () => {
         <RowGroup>
           {/* a network's own testnet sits right under it while it is on; its other
               subnetworks (penumbra's ibc chains) are destinations, not switches here */}
-          {getTopLevelNetworks().flatMap(n => [
+          {getTopLevelNetworks(beta, enabled).flatMap(n => [
             <Row
               key={n}
               type='toggle'
