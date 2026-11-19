@@ -115,6 +115,42 @@ module.exports = {
     },
   },
 
+  w6: {
+    title: 'send to a bitcoin address becomes pay, owed in btc',
+    run: async c => {
+      const z = await wallet(c);
+      const pg = await z.open('/send', 'popup.html', 2500);
+      // satoshi's genesis coinbase address: public, and nothing is ever deposited
+      await pg.locator('input').first().fill('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa');
+      await pg.waitForTimeout(2500);
+      await L.button(pg, 'allow')
+        .click({ timeout: 4000 })
+        .catch(() => undefined);
+      const landed = L.flat(await L.text(pg));
+      const owed = pg.locator('#swap-out');
+      const focused = await owed.evaluate(e => e === document.activeElement).catch(() => false);
+      await owed.pressSequentially('0.0000776', { delay: 80 });
+      let t = '';
+      let paid = '';
+      for (let i = 0; i < 40 && !(+paid > 0); i++) {
+        await pg.waitForTimeout(2000);
+        t = L.flat(await L.text(pg));
+        paid = await pg.locator('input[inputmode=decimal]').first().inputValue();
+      }
+      await c.shot(pg, 'pay');
+      const ok =
+        /^pay\b/.test(landed) &&
+        /bitcoin recipient/.test(landed) &&
+        /\bbtc\b/.test(landed) &&
+        focused &&
+        (await owed.inputValue()) === '0.0000776' &&
+        +paid > 0;
+      return {
+        status: ok ? 'pass' : 'fail',
+        note: `send > 1A1zP… landed on "${landed.slice(0, 90)}" (owed field focused: ${focused}); owed 0.0000776 btc -> you pay ${paid || 'nothing'} zec; route lines "${(t.match(/(near intents|thorchain).{0,60}/) ?? [''])[0]}" (${c.dir}/pay.png)`,
+      };
+    },
+  },
   w5: {
     title: 'buy flow to the Peer step, referral, nothing sent before acting',
     run: async c => {
