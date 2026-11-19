@@ -975,6 +975,10 @@ export const CrosschainSwap = ({
     setLinkToken(undefined);
     if (t) {
       setToken(t);
+      // a payment from send waits on what is owed, after any ask sheet has closed
+      if (linkToken.out === '') {
+        requestAnimationFrame(() => document.getElementById('swap-out')?.focus());
+      }
     } else {
       setPickerOpen(true);
       setError(`${symbol} isn't offered for swaps right now · please pick another`);
@@ -1378,8 +1382,6 @@ export const CrosschainSwap = ({
             unit={isFromZec ? (tokenQuery.isFetching ? 'reading' : unit) : 'zec'}
             onUnit={isFromZec ? () => setPickerOpen(true) : undefined}
             dim={!byOut && (stale || expiredLive)}
-            // a payment from send opens on what is owed
-            autoFocus={link?.link.out === ''}
           />
           {token && (
             <div className='flex flex-col gap-1.5'>
@@ -1488,7 +1490,7 @@ export const CrosschainSwap = ({
         </Main>
         <Footer>
           <Button className='w-full' onClick={openReview} disabled={!reviewable}>
-            review swap
+            {link?.link.out !== undefined ? 'review payment' : 'review swap'}
           </Button>
         </Footer>
         <TokenSheet

@@ -50,21 +50,22 @@ module.exports = {
       await amt.fill('');
       const steps = [];
       const t0 = Date.now();
-      const getOf = t => +((t.match(/you get ([\d.]+) zec/) ?? [])[1] ?? 0);
+      // "you get" is a field: either side can be typed, the other is the route's answer
+      const getOf = async () => +(await pg.locator('#swap-out').inputValue());
       for (const keys of ['0.2', '5']) {
         await amt.pressSequentially(keys, { delay: 150 });
         let t = '';
         for (let i = 0; i < 10; i++) {
           await pg.waitForTimeout(1500);
           t = L.flat(await L.text(pg));
-          if (getOf(t) > 0 && !/asking/.test(t)) {
+          if ((await getOf()) > 0 && !/asking/.test(t)) {
             break;
           }
         }
         steps.push({
           typed: await amt.inputValue(),
           secs: Math.round((Date.now() - t0) / 1000),
-          get: getOf(t),
+          get: await getOf(),
           screen: t,
         });
       }
@@ -126,7 +127,12 @@ module.exports = {
       await L.button(pg, 'allow')
         .click({ timeout: 4000 })
         .catch(() => undefined);
-      const landed = L.flat(await L.text(pg));
+      // the token list comes over the swap's egress: wait for btc to be picked
+      let landed = '';
+      for (let i = 0; i < 30 && !/bitcoin recipient/.test(landed); i++) {
+        await pg.waitForTimeout(1000);
+        landed = L.flat(await L.text(pg));
+      }
       const owed = pg.locator('#swap-out');
       const focused = await owed.evaluate(e => e === document.activeElement).catch(() => false);
       await owed.pressSequentially('0.0000776', { delay: 80 });
@@ -139,7 +145,7 @@ module.exports = {
       }
       await c.shot(pg, 'pay');
       const ok =
-        /^pay\b/.test(landed) &&
+        /\bpay you pay\b/.test(landed) &&
         /bitcoin recipient/.test(landed) &&
         /\bbtc\b/.test(landed) &&
         focused &&
