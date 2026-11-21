@@ -42,7 +42,7 @@ const SAY: Record<DoorView | 'no-relay' | 'failed', string> = {
   in: 'you are in',
   older: 'this code is from an older zafu. the other side needs a newer zafu.',
   'no-relay': 'a code needs the relay · nothing was read',
-  failed: 'something broke on our side, not yours. nothing was shared · please try again.',
+  failed: 'something went wrong in zafu. nothing was shared · please try again.',
 };
 
 export function GroupJoinPage() {

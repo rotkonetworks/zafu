@@ -51,7 +51,7 @@ export const ConnectApproval = () => {
       await start(origin, peer, name);
       await done();
     } catch (e) {
-      setFailed(e instanceof Error ? e.message : 'something broke on our side, not yours');
+      setFailed(e instanceof Error ? e.message : 'something went wrong in zafu');
       setBusy(false);
     }
   };

@@ -37,6 +37,7 @@ export type SyncFailureKind =
   | 'chainRecovery'
   | 'storageBusy'
   | 'storageFatal'
+  | 'engine'
   | 'unknown';
 
 /** What the offered action does. The view supplies the handler. */
@@ -108,7 +109,8 @@ const MESSAGES: Record<SyncFailureKind, string> = {
   chainRecovery: 'the chain moved while syncing · zafu keeps trying',
   storageBusy: 'wallet data is busy · zafu keeps trying',
   storageFatal: 'wallet data could not be read · please reload zafu',
-  unknown: 'sync stopped on our side, not yours · please try again',
+  engine: "zafu's sync could not start · please reload zafu",
+  unknown: 'zafu stopped syncing · nothing was lost · please try again',
 };
 
 /** shown in place of any failure while the computer itself has no network */
@@ -126,6 +128,7 @@ const ACTIONS: Partial<Record<SyncFailureKind, SyncFailureAction>> = {
   chainUnproven: { label: 'choose another node', kind: 'settings' },
   // A local problem must never make the wallet blame the node (vizor's rule).
   storageFatal: { label: 'reload', kind: 'reload' },
+  engine: { label: 'reload', kind: 'reload' },
   unknown: TRY_AGAIN,
 };
 
@@ -140,6 +143,7 @@ const AUTO_RETRIES: Record<SyncFailureKind, boolean> = {
   chainRecovery: true,
   storageBusy: true,
   storageFatal: false,
+  engine: false,
   unknown: false,
 };
 
@@ -248,6 +252,9 @@ const STORAGE_FATAL = [
   'invalidstateerror',
 ] as const;
 
+/** zafu's own background page, where sync runs, did not come up: a reload starts it again */
+const ENGINE = ['could not activate offscreen document'] as const;
+
 const NETWORK = [
   'network:',
   'networkerror',
@@ -288,6 +295,9 @@ const NETWORK = [
  * swept up by the chain-recovery patterns.
  */
 const classifyKind = (lower: string): SyncFailureKind => {
+  if (has(lower, ENGINE)) {
+    return 'engine';
+  }
   if (has(lower, CONSENSUS)) {
     return 'consensus';
   }
