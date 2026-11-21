@@ -150,7 +150,6 @@ const nearQuote = async (req: QuoteRequest, signal?: AbortSignal): Promise<Quote
   const [inDecimals, outDecimals] = fromZec ? [8, token.decimals] : [token.decimals, 8];
   const resp: SwapQuoteResponse = await requestQuote({
     // by what arrives: 1click asks a deposit of amountIn, and sends back any excess
-    // (exact output is kept for the unified swap screen; see QuoteRequest.exactOut)
     swapType: req.exactOut ? 'EXACT_OUTPUT' : 'EXACT_INPUT',
     amount: (req.exactOut
       ? toUnits(req.exactOut, outDecimals)
@@ -173,8 +172,8 @@ const nearQuote = async (req: QuoteRequest, signal?: AbortSignal): Promise<Quote
     route: 'near',
     amountOut,
     amountOutText: figure(amountOut, outDecimals),
-    // exact: on an exact-output quote, this is what must be deposited
-    amountInText: fromUnits(BigInt(q.amountIn || '0'), inDecimals),
+    // exact, every decimal: on an exact-output quote this is what must be deposited
+    amountInText: fromUnits(BigInt(q.amountIn || '0'), inDecimals, inDecimals),
     atLeastText: q.minAmountOut ? figure(BigInt(q.minAmountOut), outDecimals) : undefined,
     // 1click folds every fee into the amount out; its usd figures, or the
     // listed prices, tell how much that was

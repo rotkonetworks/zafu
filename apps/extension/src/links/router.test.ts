@@ -112,6 +112,19 @@ describe('pay (ZIP 321)', () => {
 });
 
 describe('swap', () => {
+  it('reads a payment: the amount owed, in the token that arrives', () => {
+    expect(intent('zafu:swap?from=zec&to=btc&chain=btc&get=0.0000776&dest=bc1qpayee')).toEqual({
+      kind: 'swap',
+      swap: {
+        direction: 'from_zec',
+        token: 'btc',
+        chain: 'btc',
+        out: '0.0000776',
+        address: 'bc1qpayee',
+      },
+    });
+  });
+
   it('reads into zec, with the payer refund address', () => {
     expect(intent('zafu:swap?into=zec&from=eth&amount=1&refund=0xAbC123def456')).toEqual({
       kind: 'swap',
@@ -170,6 +183,7 @@ describe('swap', () => {
     for (const uri of [
       'zafu:swap?from=eth&to=zec&amount=1&refund=0xabc123',
       'zafu:swap?from=zec&to=btc&chain=btc&amount=0.5&dest=bc1qexampleaddr',
+      'zafu:swap?from=zec&to=btc&chain=btc&get=0.0000776&dest=bc1qexampleaddr',
       'zafu:swap?from=zec&to=sol',
       'zafu:swap?from=btc&to=zec&chain=btc&amount=0.1&refund=bc1qexampleaddr&xc=thor',
       'zafu:swap?from=zec&to=usdc&xc=near',

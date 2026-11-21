@@ -27,6 +27,8 @@ export interface SwapLink {
   chain?: string;
   /** decimal, in the asset being sent */
   amount?: string;
+  /** `get=`: decimal, in the asset received; a payment, owed exactly (wins over `amount`) */
+  out?: string;
   /** into zec: the payer's refund address; from zec: where the token goes */
   address?: string;
   /** `xc=`: the one route to quote, when the link pins it */
@@ -193,6 +195,7 @@ const readSwap = (query: string): Parsed => {
     'dest',
     'chain',
     'xc',
+    'get',
     'asset',
   ]);
   if (!q.ok) {
@@ -233,7 +236,8 @@ const readSwap = (query: string): Parsed => {
     return refuse('please check the address in this link · it looks unusual');
   }
   const amount = readAmount(p.get('amount'), direction === 'from_zec');
-  if (amount === false) {
+  const out = readAmount(p.get('get'), direction === 'into_zec');
+  if (amount === false || out === false) {
     return refuse('please check the amount in this link · it looks unusual');
   }
   const route = p.get('xc')?.toLowerCase() || undefined;
@@ -247,7 +251,9 @@ const readSwap = (query: string): Parsed => {
   if (chain) {
     swap.chain = chain;
   }
-  if (amount) {
+  if (out) {
+    swap.out = out;
+  } else if (amount) {
     swap.amount = amount;
   }
   if (address) {
@@ -347,13 +353,14 @@ export const notYet = (intent: Intent): string | undefined =>
         })
       : undefined;
 
-const swapUri = ({ direction, token, chain, amount, address, route }: SwapLink): string => {
+const swapUri = ({ direction, token, chain, amount, out, address, route }: SwapLink): string => {
   const into = direction === 'into_zec';
   const params: [string, string | undefined][] = [
     ['from', into ? token : 'zec'],
     ['to', into ? 'zec' : token],
     ['chain', chain],
-    ['amount', amount],
+    ['amount', out ? undefined : amount],
+    ['get', out],
     [into ? 'refund' : 'dest', address],
     ['xc', route],
   ];
