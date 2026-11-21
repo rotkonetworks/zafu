@@ -643,7 +643,7 @@ export function IronwoodMigrate({
             </div>
             <h2 className='text-lg'>the move didn't go through</h2>
             <p className='text-sm text-red-400 text-center'>
-              {error ?? 'something broke on our side, not yours · nothing was moved'}
+              {error ?? 'something went wrong in zafu · nothing was moved'}
             </p>
             <div className='flex gap-2 w-full mt-4'>
               <Button variant='secondary' onClick={onClose} className='flex-1'>

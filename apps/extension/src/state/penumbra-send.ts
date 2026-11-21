@@ -237,7 +237,7 @@ export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, ge
       });
       return planRequest;
     } catch (err) {
-      const error = err instanceof Error ? err.message : 'something broke on our side, not yours';
+      const error = err instanceof Error ? err.message : 'something went wrong in zafu';
       set(state => {
         state.penumbraSend.loading = false;
         state.penumbraSend.error = error;

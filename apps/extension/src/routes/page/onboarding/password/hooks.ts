@@ -223,7 +223,7 @@ export const useFinalizeOnboarding = () => {
       setError(
         e instanceof PasswordMismatchError
           ? "that isn't the password zafu already uses here · please try again"
-          : 'something broke on our side, not yours · nothing was saved, please try again',
+          : 'something went wrong in zafu · nothing was saved, please try again',
       );
       // back to exactly the pre-import state, the keyprint with the vaults it
       // sealed: one write, so a new keyprint never sits over old-key vaults

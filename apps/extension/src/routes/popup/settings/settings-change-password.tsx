@@ -15,7 +15,7 @@ const NOTE: Record<Outcome | 'mismatch', [string, string]> = {
   wrong: ["that doesn't match · please try again", 'text-warning'],
   mismatch: ["these don't match yet", 'text-warning'],
   same: ['that is the password already · please choose a new one', 'text-warning'],
-  broke: ['something broke on our side, not yours. nothing was changed.', 'text-warning'],
+  broke: ['something went wrong in zafu. nothing was changed.', 'text-warning'],
   done: ['your new password is set', 'text-green'],
 };
 
