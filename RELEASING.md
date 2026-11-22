@@ -1,122 +1,89 @@
-# Releasing zafu
+# releasing zafu
 
-Three release lanes, one philosophy: **pin the SHA/artifact, verify, promote -
-and never let CI be the _sole_ signer of anything that can touch a user's seed.**
+Two release lanes, one rule: **CI builds, verifies and publishes, but never
+alone signs anything that can reach a user's seed.**
 
-| Lane               | What                                                                   | Signed by                                           | CI's role                                               |
-| ------------------ | ---------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------- |
-| Extension          | the Chrome extension (CRX)                                             | CI-held CRX key (`zafu-prod.pem` / `zafu-beta.pem`) | build + sign + publish                                  |
-| Low-stakes content | voting config, feature payloads (online-only)                          | CI key (or keyless attestation)                     | build + sign + publish                                  |
-| **Firmware OTA**   | zigner signed modules (run on the air-gapped device, **get the seed**) | **2-of-3 FROST** (CI = 1 async share)               | build + **complete** a human-presigned 2-of-3 + publish |
+| lane         | what                                                   | signed by                           |
+| ------------ | ------------------------------------------------------ | ----------------------------------- |
+| extension    | the Chrome extension (CRX)                             | CI-held CRX keys (prod, beta)       |
+| firmware OTA | zigner protocol modules (they receive the seed on-device) | 2-of-3 FROST; CI holds one share    |
 
-Why the split: a bad extension is recoverable (uninstall, re-push, CWS review).
-A bad firmware module is not - it receives the raw mnemonic
-(`module_host` writes the seed into the loaded module) and its output crosses
-the air-gap, so it can exfiltrate the seed. The signature is the _only_ thing
-protecting that, so CI must never be able to produce it alone.
+A bad extension is recoverable (uninstall, push a fix). A bad zigner module is
+not: it runs with the mnemonic and its output crosses the air gap, so its
+signature must never be something CI can produce alone.
 
----
+## extension
 
-## Lane 1: Extension (continuous beta -> manual prod)
+`.github/workflows/release-engine.yml` is the only build, sign and release
+path. It is `workflow_call` only; nothing releases on a tag push.
 
-Beta is **continuous and follows `main`**; prod is a **manual, deliberate
-promotion**. Separate CWS listings (prod `oojfeopgoeapfgcfhmlpfgabcbhkglck`,
-beta `ppgbkpjgpggkibdojjocgndbbhiempjf`) with separate signing keys. Two
-workflows share one reusable engine (`release-engine.yml`):
+### beta: follows main
 
-```
-push to main ─► Beta (follows main)  → beta CWS + rolling "beta" GH prerelease   [SOAK, every push]
-  (beta.yml)    version auto-stamped  27.3.0.<run_number>
-                smoke test: zigner send, voting cast, address derive, console clean
-                       │  bug? just push the fix to main → the next beta ships automatically
-                       ▼  (soaked, confident it is stable)
-Actions ▸ "Release (prod, manual)" ─► prod CWS + tagged vX.Y.Z GH release        [PROMOTE, by hand]
-  (release.yml)  type the version to confirm; it must match the committed manifest
-```
+Every push to `main` (docs- and CI-only pushes are skipped) runs `beta.yml`.
+The version is the committed beta manifest version plus the run number, e.g.
+`29.7.1.188`, so the store never sees a duplicate, and the rolling `beta`
+GitHub prerelease is updated in place. It can also be run by hand.
 
-Why this shape:
+### prod: by hand
 
-1. **Beta is free and constant.** Every meaningful push to `main` ships a beta,
-   auto-versioned so the CWS never sees a duplicate. No tags to remember. While
-   we soak toward a stable release, we mostly just let beta run.
-2. **Prod cannot fire by accident.** It is `workflow_dispatch` only, gated by a
-   type-the-version interlock, and it ships the committed manifest version at the
-   commit you run it from - never a newer, untested `main`.
+1. Bump the three version files with `./scripts/bump-version.sh X.Y.Z`
+   (`apps/extension/package.json`, `public/manifest.json`,
+   `public/beta-manifest.json`; see AGENTS.md).
+2. Add a `## X.Y.Z` section to the root `CHANGELOG.md`. CI
+   (`consistency.yml`) fails without it.
+3. Merge to `main`, then run **Actions › Release (prod, manual)** and type the
+   version (`vX.Y.Z`). It refuses unless that matches
+   `apps/extension/public/manifest.json`, then builds, signs and cuts the
+   tagged GitHub release. `dry_run: true` builds and signs without releasing.
 
-### How to trigger
+### the Chrome Web Store: by hand
 
-- **Beta:** merge/push to `main`. That is it. (Docs- and CI-only pushes are
-  ignored via `paths-ignore`.) Or run **Actions ▸ "Beta (follows main)"** manually.
-- **Prod:** **Actions ▸ "Release (prod, manual)"** → Run workflow, type
-  `confirm_version` (e.g. `v27.3.0`) - it must equal the version in
-  `apps/extension/public/manifest.json`. `dry_run: true` builds + signs without
-  releasing or touching the CWS.
+CI does not upload to the store: the service account is refused by both
+listings, so the step only prints a reminder. Upload the
+`zafu-<channel>-<version>.zip` from the GitHub release to the item below in
+the developer dashboard. Never upload a zip of a local `dist/`: it carries the
+manifest `key`.
 
-### Version discipline (CWS gotcha, now automated)
+| variant | store item (dashboard, upload)     | unpacked id (manifest `key`)       |
+| ------- | ---------------------------------- | ---------------------------------- |
+| prod    | `oojfeopgoeapfgcfhmlpfgabcbhkglck` | `bfdfeleokgpdladfmipfmffgpjfjibbe` |
+| beta    | `ppgbkpjgpggkibdojjocgndbbhiempjf` | `bhlogefpcebekhjpomlodifcelldoimn` |
 
-CWS rejects re-uploading the same version to a listing. Beta solves this in CI:
-the beta manifest version is stamped `<committed base>.<github.run_number>` per
-build, so betas are always monotonic and never collide - no hand-bumping. Prod
-ships the plain committed `X.Y.Z`; bump `package.json` + both manifests before
-promoting.
+The store item id is what the dashboard shows. The unpacked id is what Chrome
+derives from the manifest `key` when you load `dist/` or `beta-dist/`
+directly.
 
----
+### signing
 
-## Lane 2: Low-stakes signed content
+Each variant has its own RSA key, held as a GitHub secret: `CRX_PROD_KEY`
+and `CRX_BETA_KEY` (PEM). The engine packs the build with the manifest `key`
+stripped and signs with the secret, so the CRX is identified by the secret's
+key pair; it matches the unpacked id only if the secret is the private half
+of the manifest's public key.
 
-Voting config, feature payloads, anything that only affects the **online**
-extension and never the air-gapped device: **full CI signing is fine** (or
-keyless Sigstore/OIDC attestation for provenance). Same trust level as the CRX.
+Tags are signed with GPG key `E468EC955CD56FF9`
+(`gpg --armor --export E468EC955CD56FF9` to add it to a GitHub account).
 
----
+The store-upload secrets (`CWS_SA_JSON`, `CWS_PUBLISHER_ID`) stay defined for
+when the service account is granted access again; the disabled step in
+`release-engine.yml` shows the call.
 
-## Lane 3: Firmware OTA (2-of-3 FROST, CI = one async share)
+## firmware OTA (2-of-3 FROST)
 
-The one lane where CI must not be able to sign alone. Model is Nova's Metadata
-Portal shape (single logical signer, offline), hardened to a threshold because a
-zigner module - unlike Polkadot metadata - **holds the seed** (no consensus
-backstop like `CheckMetadataHash` to reject a malicious module).
+Zigner protocol modules are signed by a 2-of-3 FROST group; no party holds
+two shares.
 
-### Shares (2-of-3 FROST; no party holds 2)
+- **CI:** one share, used only to complete a signature a person started.
+- **release manager:** one share, presigns offline.
+- **cold backup:** one share, offline, for recovery.
 
-- **CI** - one share, used to _complete_ a human-presigned signature. Stored
-  age-encrypted; the age identity that unlocks it lives on the CI runner ONLY as
-  the completion share, never the whole key.
-- **Release manager** - one share, presigns locally/offline (YubiKey/air-gap).
-- **Cold backup** - one share, second maintainer/offline, for recovery.
+1. The build produces the module manifest (module bytes, version, trust
+   anchors), deterministically, and it is committed for review.
+2. The release manager reviews it and presigns their share offline, bound to
+   those exact bytes.
+3. On an `ota-*` tag, `ota-release.yml` adds CI's share, aggregates the
+   signature and publishes the signed module.
+4. Zigner and zafu verify it against the pinned group key.
 
-Property: **CI compromise leaks one share, useless without the release manager's
-presign.** CI cannot forge firmware alone. No live ceremony - the release manager
-presigns async, CI completes at publish.
-
-### Flow
-
-1. Build produces the firmware **manifest** (module bytes + version + trust-anchor
-   set). Deterministic; committed for review.
-2. **Release manager reviews the manifest and presigns their FROST share offline**
-   (bound to _these_ bytes - CI cannot reuse the share for a different payload).
-   This is also the human attestation to the exact firmware.
-3. CI (`ota-release.yml`, on `ota-*` tags) contributes its share -> aggregates the
-   2-of-3 -> attaches the signed module to a GitHub Release and/or the OTA endpoint.
-4. Device + `zafu` verify the aggregate signature against the **pinned group
-   public key** (unchanged verifier; the `module_host` kernel trust anchors).
-
-### Second layer (defense in depth)
-
-The **faithfulness / display<->sighash binding** (per-tx anchor attestation
-against the verifier key) stays in fixed firmware. Even a mis-signed module
-should not be able to decouple what the user confirms from what is signed.
-
----
-
-## The swarm rule (coordination)
-
-Multiple sessions/agents may be committing to `main`. **Releases pin a chosen
-SHA; they do not chase the tip.** Before cutting `-beta.N`, pick a reviewed SHA
-and make sure other sessions are on feature branches, not writing the release
-SHA out from under you. One owner per release.
-
-## The one invariant
-
-CI is a **builder / verifier / publisher / threshold-completer** - never the sole
-signer of anything that can move funds or reach the seed.
+A CI compromise leaks one share, which is useless without the release
+manager's presign. The specs are in `apps/extension/src/ota/spec/`.

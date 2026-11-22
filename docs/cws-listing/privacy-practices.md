@@ -103,5 +103,5 @@ Certify all three disclosures.
 ## Privacy policy URL
 
 ```
-https://github.com/rotkonetworks/zafu/blob/main/docs/cws-listing/privacy-policy.md
+https://zafu.pro/privacy
 ```
