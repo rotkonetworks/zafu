@@ -32,6 +32,7 @@ import {
   importPrefs,
   importBirthdays,
   importNodePools,
+  importHyperliquidAccounts,
   importTIndices,
   importProxy,
   restoredPrivacy,
@@ -914,6 +915,7 @@ export const createContactsSlice =
         await importNodePools(parsed.settings?.nodePools);
         await importBirthdays(parsed.settings?.birthdays, backupWallets());
         await importTIndices(parsed.settings?.tIndices);
+        await importHyperliquidAccounts(parsed.settings?.hyperliquidAccounts);
         await importProxy(parsed.settings?.proxy);
 
         return {

@@ -13,6 +13,8 @@ import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { rpcPoolKey } from '../net/egress-policy';
 import { NETWORKS } from '../config/networks';
 import { readZcashMeApiKey, sealZcashMeApiKey } from '../services/zcashme/api-key';
+import { isBip32Path } from '@repo/wallet/networks/hyperliquid/derive';
+import { mergeRestored, parseBook } from '../hyperliquid/accounts';
 import { DEFAULT_PRIVACY_SETTINGS, fromStoredPrivacy, type PrivacySettings } from './privacy';
 
 type Parse = (v: unknown) => unknown;
@@ -73,6 +75,7 @@ const PREFS = {
   },
   keplrCompat: bool,
   betaFeatures: bool,
+  hyperliquidPath: v => (typeof v === 'string' && isBip32Path(v) ? v : undefined),
 } satisfies Record<string, Parse>;
 
 type PrefKey = keyof typeof PREFS;
@@ -91,6 +94,12 @@ export interface SettingsBackup {
    * ones every scan covers, and the seed alone can't say how far they reach.
    */
   tIndices?: Record<string, number>;
+  /**
+   * Each seed wallet's hyperliquid accounts (hyperliquid/accounts): the
+   * highest account index handed out and the names. The seed alone can't say
+   * how many accounts were made.
+   */
+  hyperliquidAccounts?: unknown;
   /** the person's own proxy (net/proxy) and its login; the backup itself is sealed */
   proxy?: { config?: unknown; login?: unknown };
 }
@@ -152,6 +161,7 @@ export const exportSettings = async (
     nodePools,
     birthdays,
     tIndices,
+    hyperliquidAccounts: parseBook(await localExtStorage.get('hyperliquidAccounts')),
     proxy: {
       config: (await chrome.storage.local.get(PROXY_KEY))[PROXY_KEY],
       login: await readEncrypted<unknown>(
@@ -250,5 +260,18 @@ export const importProxy = async (proxy: SettingsBackup['proxy']): Promise<void>
       username: proxy.login.username,
       password: proxy.login.password,
     });
+  }
+};
+
+/**
+ * Put back each wallet's hyperliquid accounts. The highest index is never
+ * lowered: an account above it would drop out of sight while it may hold funds.
+ */
+export const importHyperliquidAccounts = async (
+  incoming: SettingsBackup['hyperliquidAccounts'],
+): Promise<void> => {
+  const next = mergeRestored(parseBook(await localExtStorage.get('hyperliquidAccounts')), incoming);
+  if (Object.keys(next).length) {
+    await localExtStorage.set('hyperliquidAccounts', next);
   }
 };

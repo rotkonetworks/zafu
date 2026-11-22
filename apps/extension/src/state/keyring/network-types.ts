@@ -25,6 +25,7 @@
  *
  * 3. other transparent networks
  *    - ethereum, bitcoin
+ *    - hyperliquid: the wallet's one evm key, or a path the person names
  */
 
 import {
@@ -37,7 +38,7 @@ import {
 export type PrivacyNetwork = 'zcash' | 'penumbra';
 /** a penumbra subnetwork: any cosmos chain in COSMOS_CHAINS, by its chain-registry name */
 export type IbcNetwork = CosmosChainId;
-export type TransparentNetwork = 'ethereum' | 'bitcoin';
+export type TransparentNetwork = 'ethereum' | 'bitcoin' | 'hyperliquid';
 export type NetworkType = PrivacyNetwork | IbcNetwork | TransparentNetwork;
 
 /**
@@ -70,6 +71,7 @@ const WRITTEN_ENCRYPTION: Record<string, EncryptionType> = {
   // others
   ethereum: 'ethereum',
   bitcoin: 'bitcoin',
+  hyperliquid: 'ethereum',
 };
 
 /** default encryption for each network type */
@@ -180,6 +182,14 @@ const WRITTEN_CONFIGS: Record<string, NetworkConfig> = {
     decimals: 18,
     type: 'transparent',
     chainId: 1,
+    derivationPath: "m/44'/60'/0'/0/0",
+  },
+  hyperliquid: {
+    id: 'hyperliquid',
+    name: 'Hyperliquid',
+    symbol: 'USDC',
+    decimals: 6,
+    type: 'transparent',
     derivationPath: "m/44'/60'/0'/0/0",
   },
   bitcoin: {

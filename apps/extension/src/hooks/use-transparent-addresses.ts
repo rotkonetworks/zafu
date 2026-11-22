@@ -229,6 +229,24 @@ export const tAddressAt = async (
   isMainnet: boolean,
 ): Promise<string | undefined> => (await deriveAt(tAddrSource(s), [index], isMainnet))[0];
 
+/**
+ * For a flow on another network's screen that pays out to zcash (a
+ * hyperliquid withdrawal): the person asked for it, so it is not gated on
+ * zcash being the network shown. `next` is a look, `claim` takes the index.
+ */
+const onPurpose = (s: AllSlices) => ({ ...tAddrSource(s), isZcash: true });
+export const nextTAddressOnPurpose = async (
+  s: AllSlices,
+  isMainnet: boolean,
+): Promise<SwapTAddress | undefined> => {
+  const source = onPurpose(s);
+  const index = (await highestIndex(indexKeyOf(source))) + 1;
+  const [address] = await deriveAt(source, [index], isMainnet);
+  return address ? { index, address } : undefined;
+};
+export const claimTAddressOnPurpose = (s: AllSlices, isMainnet: boolean, client?: QueryClient) =>
+  claimSwapTAddress(onPurpose(s), isMainnet, client);
+
 /** claim a fresh index for the active pocket, as a swap does: the pocket's one lp address */
 export const claimTAddress = (s: AllSlices, isMainnet: boolean): Promise<SwapTAddress> =>
   claimSwapTAddress(tAddrSource(s), isMainnet);

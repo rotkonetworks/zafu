@@ -26,6 +26,7 @@ import { orderTransparentChains } from '../../../components/privacy-switch';
 import { resolveNetworkCosmosChain } from './chain-identity';
 import { CosmosSend } from './cosmos-send';
 import { PenumbraSend } from './penumbra-send';
+import { HyperliquidSend } from './hyperliquid-send';
 import { PenumbraIbcSend } from './ibc-send';
 import { sendPrefill, type SendLocationState } from './prefill';
 import { PickSheet } from './send-fields';
@@ -123,6 +124,9 @@ export function SendPage() {
         prefillAmount={prefill?.amount}
       />
     );
+  }
+  if (network === 'hyperliquid') {
+    return <HyperliquidSend onClose={goBack} zec={locationState?.hyperliquidZec} />;
   }
   return (
     <div className='flex h-full flex-col'>

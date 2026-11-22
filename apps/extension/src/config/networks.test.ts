@@ -20,7 +20,7 @@ const hotState = (enabledNetworks: string[], endpoint = '') =>
 
 describe('zcash testnet', () => {
   it('is a switch under zcash, never a network of its own in the picker', () => {
-    expect(getTopLevelNetworks()).not.toContain('zcash-testnet');
+    expect(getTopLevelNetworks(true, [])).not.toContain('zcash-testnet');
     expect(getSubnetworks('zcash')).toEqual(['zcash-testnet']);
     expect(getNetwork('zcash-testnet').parent).toBe('zcash');
   });
@@ -47,5 +47,24 @@ describe('zcash testnet', () => {
     expect(selectZcashBackend(hotState(['zcash']))).toBe('lightwalletd');
     // a mainnet shared wallet keeps its node while testnet is on
     expect(zcashEndpointOf(on, true)).toBe('https://mine.example');
+  });
+});
+
+describe('hyperliquid', () => {
+  it('is offered only while beta features are on', () => {
+    expect(getTopLevelNetworks(true, [])).toContain('hyperliquid');
+    expect(getTopLevelNetworks(false, ['zcash'])).toEqual(['zcash', 'penumbra']);
+  });
+
+  it('stays listed once on, so it can be turned off with beta features off', () => {
+    expect(getTopLevelNetworks(false, ['hyperliquid'])).toContain('hyperliquid');
+  });
+
+  it('is the evm key, with nothing to trade', () => {
+    expect(getNetworkEncryption('hyperliquid')).toBe('ethereum');
+    expect(getNetworkConfig('hyperliquid')).toMatchObject({ symbol: 'USDC', decimals: 6 });
+    for (const f of ['swap', 'vote', 'stake'] as const) {
+      expect(hasFeature('hyperliquid', f)).toBe(false);
+    }
   });
 });

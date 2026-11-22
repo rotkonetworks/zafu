@@ -97,7 +97,7 @@ function hexToBytes(hex: string): Uint8Array {
 /**
  * EIP-55 mixed-case checksum encoding
  */
-function toChecksumAddress(address: string): string {
+export function toChecksumAddress(address: string): string {
   const lower = address.toLowerCase().replace('0x', '');
   const hash = bytesToHex(keccak_256(new TextEncoder().encode(lower)));
 
@@ -112,16 +112,11 @@ function toChecksumAddress(address: string): string {
   return checksummed;
 }
 
-/**
- * derive ethereum wallet from mnemonic
- *
- * BIP-44 path: m/44'/60'/0'/0/{accountIndex}
- */
-export async function deriveEthWallet(mnemonic: string, accountIndex = 0): Promise<EthWallet> {
+/** the wallet at a BIP-32 path the caller has already validated */
+export function deriveEthWalletAtPath(mnemonic: string, path: string): EthWallet {
   // bip39 returns a Buffer; @noble/hashes >=1.8 rejects it (wants a real
   // Uint8Array), so normalize before it reaches the HMAC.
   const seed = Uint8Array.from(mnemonicToSeedSync(mnemonic));
-  const path = `m/44'/60'/0'/0/${accountIndex}`;
 
   const { privateKey } = bip32DeriveSecp256k1(seed, path);
 
@@ -138,6 +133,15 @@ export async function deriveEthWallet(mnemonic: string, accountIndex = 0): Promi
     publicKey: secp256k1.getPublicKey(privateKey, true), // compressed for storage
     privateKey,
   };
+}
+
+/**
+ * derive ethereum wallet from mnemonic
+ *
+ * BIP-44 path: m/44'/60'/0'/0/{accountIndex}
+ */
+export async function deriveEthWallet(mnemonic: string, accountIndex = 0): Promise<EthWallet> {
+  return deriveEthWalletAtPath(mnemonic, `m/44'/60'/0'/0/${accountIndex}`);
 }
 
 /**
