@@ -32,6 +32,12 @@ describe('zignerPocketRecord', () => {
     ).toThrow(/another zigner seed/);
   });
 
+  it('asks to add again a wallet added before zafu kept its identity, never blaming the key', () => {
+    expect(() =>
+      zignerPocketRecord({ id: 'old', insensitive: {} }, main, key(1), [0], 'x', 'i'),
+    ).toThrow(/added before zafu kept its identity/);
+  });
+
   it('refuses an account that is already here', () => {
     expect(() => zignerPocketRecord(vault, main, key(0), [0], 'x', 'i')).toThrow(/already/);
   });

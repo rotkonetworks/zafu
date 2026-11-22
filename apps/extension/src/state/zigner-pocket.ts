@@ -36,6 +36,13 @@ export const zignerPocketRecord = (
   if (!isZignerSigner(vault.insensitive)) {
     throw new Error('pockets are for zigner wallets');
   }
+  // the ZID is what proves the key is from this wallet's seed; a wallet added
+  // before zafu kept it can't tell
+  if (typeof vault.insensitive['zid'] !== 'string' || !vault.insensitive['zid']) {
+    throw new Error(
+      'this zigner wallet was added before zafu kept its identity · please add it again from zigner',
+    );
+  }
   if (!scanned.zidPublicKey || scanned.zidPublicKey !== vault.insensitive['zid']) {
     throw new Error("that key is from another zigner seed · please show this wallet's key");
   }

@@ -43,6 +43,8 @@ export const NewPocketSheet = ({
   const zigner = useStore(s => !!zignerPockets(s));
   const addZignerPocket = useStore(s => s.wallets.addZignerPocket);
   const [scanning, setScanning] = useState(false);
+  // the camera's visible fallback, as on every signer scan
+  const [pasted, setPasted] = useState('');
 
   const owner = selectedKeyInfo ? pocketOwner(selectedKeyInfo) : undefined;
   const existing = owner ? pocketsOf(book, owner) : [];
@@ -61,6 +63,7 @@ export const NewPocketSheet = ({
       setBusy(false);
       setError(null);
       setScanning(false);
+      setPasted('');
     }
   }, [open, rename]);
 
@@ -198,12 +201,26 @@ export const NewPocketSheet = ({
             </p>
           )}
           {scanning && (
-            <QrScanner
-              inline
-              onScan={raw => void handleZignerKey(raw)}
-              onError={e => setError(e)}
-              onClose={() => setScanning(false)}
-            />
+            <>
+              <QrScanner
+                inline
+                onScan={raw => void handleZignerKey(raw)}
+                onError={e => setError(e)}
+                onClose={() => setScanning(false)}
+              />
+              <Input
+                aria-label='or paste the code'
+                placeholder='or paste the code'
+                value={pasted}
+                onChange={e => setPasted(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && pasted.trim()) {
+                    e.preventDefault();
+                    void handleZignerKey(pasted);
+                  }
+                }}
+              />
+            </>
           )}
           {error && <p className='text-label text-hanko-light lowercase'>{error}</p>}
           <Button
