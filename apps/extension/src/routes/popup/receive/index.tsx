@@ -27,9 +27,11 @@ import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos
 import { Segmented } from '@repo/ui/components/ui/segmented';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { PickSheet } from '../send/send-fields';
+import { useBackupNudge } from '../home/notices';
 
 export function ReceivePage() {
   const activeNetwork = useStore(selectActiveNetwork);
+  const backupNudge = useBackupNudge();
   const isMultisig = useStore(s => !!selectActiveZcashWallet(s)?.multisig);
   const { address, loading, shieldedIndex } = useActiveAddress();
   const isPenumbra = activeNetwork === 'penumbra';
@@ -154,7 +156,10 @@ export function ReceivePage() {
   return (
     <div className='flex h-full flex-col'>
       <ScreenHeader title='receive' backPath={PopupPath.INDEX} meta={look?.meta || undefined} />
-      <div className='flex flex-1 flex-col p-4'>{body}</div>
+      <div className='flex flex-1 flex-col p-4'>
+        {backupNudge && <div className='mb-3'>{backupNudge}</div>}
+        {body}
+      </div>
     </div>
   );
 }
