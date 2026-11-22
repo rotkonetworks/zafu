@@ -110,8 +110,68 @@ describe('ZafuKeplr origin and result senders', () => {
     );
     expect(res).toMatchObject({ ok: true });
     const stored = await chrome.storage.session.get(null);
-    expect(stored).toHaveProperty(['keplrSuggested:https://evil.example']);
-    expect(stored).not.toHaveProperty(['keplrSuggested:https://app.skip.build']);
+    expect(stored).toHaveProperty(['keplrSuggested:https://evil.example:x']);
+    expect(stored).not.toHaveProperty(['keplrSuggested:https://app.skip.build:x']);
+  });
+
+  it('enables a suggested chain with its account prefix, never a built-in one', async () => {
+    const origin = 'https://suggest.example';
+    const s = sender(origin);
+    (chrome.runtime as { getURL?: (p: string) => string }).getURL = p =>
+      `chrome-extension://${chrome.runtime.id}/${p}`;
+    const suggest = (chainId: string, bech32PrefixAccAddr: string) =>
+      call(
+        {
+          type: 'ZafuKeplr',
+          method: 'experimentalSuggestChain',
+          params: { chainInfo: { chainId, bech32Config: { bech32PrefixAccAddr } } },
+        },
+        s,
+      );
+    expect(await suggest('examplechain-1', 'example')).toMatchObject({ ok: true });
+    expect(await suggest('noble-1', 'example')).toMatchObject({ ok: true });
+    expect(await suggest('otherchain-1', 'Not A Prefix')).toMatchObject({ ok: true });
+    const enable = call(
+      {
+        type: 'ZafuKeplr',
+        method: 'enable',
+        params: { chainIds: ['examplechain-1', 'noble-1', 'otherchain-1'] },
+      },
+      s,
+    );
+    let key = '';
+    await vi.waitFor(async () => {
+      [key = ''] = Object.keys(await chrome.storage.session.get(null)).filter(k =>
+        k.startsWith('keplrApproval:'),
+      );
+      expect(key).not.toBe('');
+    });
+    // the built-in chain keeps its own prefix, and a malformed one is not used
+    expect((await chrome.storage.session.get(key))[key]).toHaveProperty('prefixes', {
+      'examplechain-1': 'example',
+    });
+    keplrMessageListener(
+      {
+        type: 'zafu_keplr_result',
+        requestId: key.slice('keplrApproval:'.length),
+        result: { approved: false },
+      },
+      {
+        id: chrome.runtime.id,
+        origin: `chrome-extension://${chrome.runtime.id}`,
+        url: `chrome-extension://${chrome.runtime.id}/popup.html`,
+      },
+      vi.fn(),
+    );
+    expect(await enable).toMatchObject({ ok: false });
+  });
+
+  it('refuses a suggested chain without a chain id', async () => {
+    const res = await call(
+      { type: 'ZafuKeplr', method: 'experimentalSuggestChain', params: { chainInfo: {} } },
+      sender('https://suggest.example'),
+    );
+    expect(res).toMatchObject({ ok: false });
   });
 
   it('drops an approval result that a content script sends', () => {
