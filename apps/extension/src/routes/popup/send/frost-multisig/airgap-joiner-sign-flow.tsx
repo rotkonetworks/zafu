@@ -178,6 +178,7 @@ export function FrostAirgapJoinerSignFlow({
                         parsed: p,
                         claimedRecipient: captured.recipient,
                         claimedAmountZat: captured.amountZat,
+                        claimedFeeZat: captured.feeZat,
                         claimedSighashHex: captured.sighash,
                         mainnet: ms.mainnet ?? true,
                       }),
@@ -401,14 +402,11 @@ export function FrostAirgapJoinerSignFlow({
               </Sensitive>
             </div>
             <div className='flex items-baseline justify-between'>
-              <span className='text-label tracking-wider text-fg-muted'>fee (host claim)</span>
+              <span className='text-label tracking-wider text-fg-muted'>fee</span>
               <Sensitive className='text-xs text-fg-muted tabular-nums'>
                 {formatZec(tx?.feeZat ?? '')} ZEC
               </Sensitive>
             </div>
-            <p className='text-label text-fg-dim'>
-              fee is reported by the host and cannot be checked against the transaction bytes
-            </p>
           </div>
 
           {/* verifier verdict */}
@@ -422,7 +420,7 @@ export function FrostAirgapJoinerSignFlow({
             <div className='border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
               <span className='i-ph-shield-check size-3.5 mt-0.5 shrink-0' />
               <span>
-                recipient, amount and sighash verified against the transaction bytes
+                recipient, amount, fee and sighash verified against the transaction bytes
                 {verdict.changeZat > 0n && (
                   <>
                     {' '}
@@ -430,7 +428,7 @@ export function FrostAirgapJoinerSignFlow({
                     self)
                   </>
                 )}
-                . the fee is not covered by this check.
+                .
               </span>
             </div>
           )}

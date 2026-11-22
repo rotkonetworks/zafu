@@ -1,8 +1,8 @@
 /**
  * The co-signer's review of a signing request, as one function: the route
  * (multisig/sign.tsx) and a payment card in a chat both call it. Truth comes
- * from the PCZT (the worker recomputes the sighash and decrypts the outputs
- * with the shared viewing key); anything that cannot be verified refuses.
+ * from the PCZT (the worker recomputes the sighash and every output's
+ * committed value and recipient, and the fee from the value balances); anything that cannot be verified refuses.
  * There is no "show it anyway" path, because the requester chooses whether
  * we can verify.
  */
@@ -56,6 +56,7 @@ export const reviewSignRequest = async (
         parsed,
         claimedRecipient: req.recipient,
         claimedAmountZat: req.amountZat,
+        claimedFeeZat: req.feeZat,
         claimedSighashHex: req.sighash,
         mainnet,
       }),
