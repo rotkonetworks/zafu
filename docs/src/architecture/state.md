@@ -252,19 +252,19 @@ the keyring state machine has four states:
 
 ### vault types
 
-| type             | contents                                       |
-| ---------------- | ---------------------------------------------- |
-| `mnemonic`       | bip39 seed phrase, can derive for all networks |
-| `zigner-zafu`    | viewing keys from zigner air-gap device        |
-| `frost-multisig` | frost dkg key package + ephemeral seed         |
-| `ledger`         | ledger hardware-wallet reference               |
-| `trezor`         | trezor hardware-wallet reference (planned)     |
-| `keystone`       | keystone hardware-wallet reference             |
+| type             | contents                                                                          |
+| ---------------- | --------------------------------------------------------------------------------- |
+| `mnemonic`       | bip39 seed phrase (24 words for every network; a 12-word phrase is penumbra-only) |
+| `zigner-zafu`    | viewing keys from a cold signer (zigner, keystone, ledger) or a bare viewing key  |
+| `frost-multisig` | frost dkg key package + ephemeral seed                                            |
 
-in practice, keystone and ledger cold-signer imports reuse the watch-only
-`zigner-zafu` machinery: the zcash wallet record carries a `coldSignerType`
-(`'zigner' | 'keystone' | 'ledger'`, defaulting to `'zigner'`) that selects the
-signing path, and a `ledgerSession` slice drives live ledger sessions.
+the `KeyType` union also names `ledger`, `trezor` and `keystone`, but no import
+creates vaults of those types: cold signers all use `zigner-zafu`.
+
+keystone and ledger imports reuse the watch-only `zigner-zafu` machinery. a
+`coldSignerType` (`'zigner' | 'keystone' | 'ledger' | 'viewing-key'`, defaulting
+to `'zigner'`) selects the signing path; `'viewing-key'` has no signer and is
+never offered a send. a `ledgerSession` slice drives live ledger sessions.
 
 each vault is stored as an `EncryptedVault`:
 

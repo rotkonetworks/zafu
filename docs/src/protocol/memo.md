@@ -167,6 +167,14 @@ information with another, privately, inside a shielded memo. The
 recipient's wallet detects the card and offers to save the sender
 as a contact.
 
+The first payload byte is the card version and selects the format:
+
+    0x01   unsigned memo card, Sections 6.2 to 6.5
+    0x02   signed card, Section 6.6 (the card zafu shows as a QR or a
+           zafu.pro/c# link, and sends in memos)
+
+A reader that does not know a version MUST ignore the card.
+
 ### 6.2. Payload Format
 
      0                   1                   2                   3
@@ -226,8 +234,14 @@ Defined tags:
 
     Tag    Length   Description
     ---    ------   -----------
-    0x01   32       ed25519 zid public key (Section 7)
+    0x01   32       ed25519 key of this relationship (its inception
+                    key; Section 7)
     0x02   var      Post-quantum public key (reserved, not yet emitted)
+    0x03   32       Identity-wide X25519 key (read for older cards; no
+                    longer emitted, as it was the same in every card)
+    0x05   32       Inception key of the card this one answers
+    0x06   32       The relationship's X25519 pair key, from which the
+                    two sides derive their pair room
 
 The presence of tag 0x01 indicates the sender supports
 zid-authenticated messaging. The specific key in the value is the
@@ -273,6 +287,45 @@ not yet emit it.
        (public keys, certificates). TLV is self-describing  -
        unknown tags can be skipped without protocol knowledge.
        Same pattern as IPv6 extension headers, DNS, TLS.
+
+### 6.6. Signed Card (version 0x02)
+
+Every field is signed by the relationship's inception key, so nothing
+can be swapped in transit and a later update provably comes from the
+same person. The same bytes travel as a QR code, a `zafu.pro/c#` link
+(base64url) and a shielded memo.
+
+    Field     Size        Description
+    -----     ----        -----------
+    ver       u8          0x02
+    kind      u8          0 card, 1 answer, 2 update, 3 close
+    flags     u8          bit0 answers, bit1 zcash, bit2 penumbra,
+                          bit3 testnet
+    revision  u16be       higher replaces lower
+    key       32          ed25519 inception key of this relationship
+    pairKa    32          X25519 key: the pair room and discovery
+    answers   16          sha256(their inception key)[0..16], when
+                          answering their card (flag bit0)
+    zcash     43          raw orchard receiver made for this person
+                          (flag bit1)
+    penumbra  80          raw penumbra address (flag bit2)
+    relay     u8 + var    host[:port][/path]; https assumed; 0 means
+                          relay.zafu.pro
+    caps      u16be       capability bits (chat, mailbox, calls, deals,
+                          discovery, sealed answers, post-quantum pair
+                          room)
+    name      u8 + var    UTF-8, at most 32 bytes; 0 means no name
+    created   u32be       unix minutes
+    ext       u8 + var    count, then tag u8, len u16be, value: fields a
+                          later version adds; skipped, but signed
+    sig       64          ed25519 over utf8("zafu-card-v2") || every
+                          byte above
+
+The card delimits itself, so memo padding after it is ignored and any
+other trailing data is refused. A card is about 185 bytes (265 with
+penumbra) and fits one memo; a card that ever grows past one memo is
+split by the fragment layer (Section 5), while a link or a QR always
+carries the whole card.
 
 ## 7. Zafu Identity (zid)
 

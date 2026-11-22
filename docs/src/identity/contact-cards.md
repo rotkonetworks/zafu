@@ -2,118 +2,110 @@
 
 ## overview
 
-a contact card is a structured zcash memo that shares your name and a
-receiving address with another zafu user. the recipient's wallet detects
-the card in their inbox and offers to save you as a contact with one tap.
+a contact card is how two zafu users find each other. it carries an
+address made for one person and the keys of that one relationship, so the
+other side can save you, write to you and later know a card really comes
+from you.
 
-contact cards ride inside zcash shielded notes, so only the sender and
-recipient can read them.
+there is one card per relationship. a card you give alice is unrelated to
+the card you give bob: different keys, different address.
 
-## what's in a card
+## the card (v2)
 
-- **name** - your display name (UTF-8, up to 255 bytes)
-- **address** - a diversified zcash address unique to this contact
-- **zid** - your per-contact identity (optional, 32-byte ed25519 pubkey)
+a v2 card is signed. every field is covered by the relationship's
+**inception key**, an ed25519 key made for this one relationship, so
+nothing can be swapped in transit and a later update provably comes from
+the same person.
 
-the address is derived per recipient, which enables transport-layer
-referral tracking (see [referral display](#referral-display)). the
-per-contact zid lets the recipient authenticate messages from you.
+it carries:
 
-## diversified addresses
+- the inception key (32 bytes) and a pair key-agreement key (X25519, 32
+  bytes) that opens the pair room you two share
+- a zcash orchard receiver made for this one person, and a penumbra
+  address while penumbra is on
+- the relay to meet on (`relay.zafu.pro` unless you chose another)
+- capability bits (chat, mailbox, calls, deals, discovery, ...), so the
+  other side only offers what you turned on
+- an optional name, at most 32 bytes; a card has no name unless you add
+  one
+- a revision and a creation time, so a newer card replaces an older one
 
-when you share a contact card, zafu derives a unique zcash receiving
-address for that relationship from a stable diversifier index:
+the same bytes travel three ways:
+
+- a **QR code** to scan in person
+- a **link**, `zafu.pro/c#...`, to send any way you like
+- a **shielded memo** (MemoType 0x05, version byte 2), inside a zcash
+  payment
+
+a card is about 185 bytes (265 with penumbra), so it fits one memo.
+
+### answering, updating, closing
+
+a card has a kind: `card`, `answer`, `update` or `close`.
+
+1. you show a card. its answer room is derived from the card alone, so
+   whoever holds the card can find it.
+2. the other person saves you and posts their own card as an `answer`,
+   sealed to your pair key so only you can read it.
+3. you choose which answer to accept; only then is your pair room made
+   from both pair keys.
+4. a later `update` (higher revision) travels in the pair room; a card you
+   cancel gets a signed `close`.
+
+an unanswered card stops being watched after a while; a card that was only
+shown on screen stops after a day.
+
+## the memo card from a saved contact
+
+sharing your card with a contact you already saved, "share via zcash"
+puts an older memo card (version byte 1) into a zcash payment. it carries
+your address for them and, as tagged extensions, the relationship's
+inception key, its pair key and, when it answers their card, their key.
+it is not signed, so zafu treats what it says as the sender's word until
+you meet; a v2 card is preferred wherever both are possible. zafu still
+reads version 1 cards it receives.
+
+## addresses made for one person
+
+the address on a card is a diversified zcash address made for that one
+contact. all of them belong to the same wallet; the diversifier index
+tells zafu which contact a payment came through.
 
 ```
 index   = 1000 + (first 6 bytes of SHA-256(contact_id) as a big-endian u48)
 address = address_from_ufvk(ufvk, index)
 ```
 
-all diversified addresses decrypt to the same wallet during sync; the
-diversifier index identifies which contact a payment came through. 48
-bits give a birthday-bound collision probability of ~50% at ~16 million
-contacts; a collision only makes referral attribution ambiguous for the
-two colliding contacts (payments still arrive).
+the address function takes a 32-bit index, so only the low 32 bits of
+that number are used: two contacts share an address with even odds around
+65 thousand contacts. a shared address only makes the "who was this from"
+signal ambiguous for those two; payments still arrive.
 
-index allocation:
+your own receive address is different: each time it is shown or copied
+zafu picks a fresh random index, so there is no fixed public address to
+link payments by.
 
-- `0` - default receiving address (your public address)
-- `1-999` - reserved for manual address rotation
-- `1000+` - per-contact diversified addresses
-
-if the wallet has no zcash unified full viewing key available, the card
-falls back to the recipient's own address (no diversification).
-
-## wire format
-
-contact cards use MemoType 0x05 in the zafu memo protocol. the payload
-is binary with length-prefixed fields and optional TLV extensions after
-the core fields:
-
-```
-version(u8=0x01) | flags(u8=0x00) | name_len(u8) | name |
-addr_len(u16be) | address | TLV extensions...
-```
-
-the only defined extension is tag `0x01` (32-byte ed25519 per-contact
-zid). tag `0x02` (post-quantum public key) is reserved and not yet
-produced. see the [memo protocol specification](../protocol/memo.md)
-section 6 for the full wire format.
-
-## sending a card
-
-1. go to contacts
-2. select a contact with a zcash address and choose "share via zcash"
-3. zafu derives a per-contact diversified address (recording it in the
-   diversified-address store for referral tracing) and a per-contact zid
-   (`deriveZidForContact` under the `default` identity)
-4. the card is encoded as a memo and prefilled into the zcash send flow
-
-the card is sent as a standard zcash shielded transaction. the memo
-carries the encoded card.
-
-> **note:** only the first encoded memo is prefilled into the send flow.
-> a card is expected to fit a single 508-byte memo (a typical UA + name
->
-> - zid is ~360 bytes). a card large enough to fragment would currently
->   be truncated on send.
+if the wallet has no zcash viewing key available, no per-contact address
+is made and the card is not sent.
 
 ## receiving a card
 
-when zafu detects a contact card during zcash sync it surfaces in the
-inbox tagged as a contact card. you can:
+a card arrives in the inbox (or opens from a link or a scan). zafu checks
+the signature of a v2 card before showing anything. you can see the name
+(if any), save the person with one tap, and, for a payment that arrived
+on an address you made for someone, see who it came through:
 
-- view the sender's name and address
-- see their per-contact zid, if included
-- save them to your contacts (creating the contact and its address) with
-  one tap
-- see "via alice" if the payment arrived on an address you shared with
-  alice (see below)
-
-### referral display
-
-referral attribution is a **transport-layer** signal: when a payment or
-card arrives on a per-contact diversified address you previously shared,
-the inbox traces the diversifier index back through your
-diversified-address records and shows who that address was shared with:
-
-> **conversation #&lt;index&gt;**
+> conversation #&lt;index&gt;
 > via alice
 
-this works even for plain payments with no memo - the diversified
-address itself is the referral signal. there is no identity-layer
-("which zid introduced them") referral: sharing a card does not record a
-per-contact-zid -> recipient mapping, so referral tracing relies solely
-on the diversified address.
+this works for plain payments too: the address itself is the signal.
 
 ## privacy properties
 
-- the card is encrypted inside the zcash shielded note; only the
-  recipient can read it
-- the receiving address is unique per recipient (transport-layer
-  referral tracking)
-- diversified addresses are unlinkable on-chain (same FVK, different
-  address)
-- the diversified-address records (the referral graph) are stored
-  encrypted at rest
-- no metadata leaks to the network
+- a card in a memo is inside the shielded note; only the recipient reads
+  it. a card link or QR is readable by whoever holds it, which is why an
+  answer is sealed to your pair key
+- every relationship has its own keys and address, so two people cannot
+  link their cards to the same person by comparing them
+- the per-contact address records are stored encrypted at rest
+- the relay sees that a room is used, not what the card says
