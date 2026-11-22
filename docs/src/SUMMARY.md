@@ -13,6 +13,7 @@
 # Identity
 
 - [zid - zafu identity](identity/zid.md)
+- [sign in with zafu](identity/sign-in.md)
 - [contact cards](identity/contact-cards.md)
 
 # Security
