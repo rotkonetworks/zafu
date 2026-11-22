@@ -197,11 +197,15 @@ see [sign in with zafu](sign-in.md) for how this compares with
 payment-per-login designs, and what changes in the next version.
 
 > **security:** the signature covers only `challengeHex`. the wallet
-> displays the calling origin but does NOT bind it into the signed
-> bytes. a relying party MUST make the challenge unforgeable and
-> non-replayable itself - sign a fresh, server-issued nonce that commits
-> to the origin/audience (SIWE-style), never a static string. a
-> signature over challenge C is valid at any site that presents C.
+> displays the calling origin but does NOT put it into the signed
+> bytes; what binds a sign-in to its origin is the key, derived per
+> origin. a page that forwards another app's challenge gets a reply from
+> its own key, which does not open the user's account at that app. with
+> cross-site mode on at both origins it would, so zafu always asks for a
+> cross-site site, but the prompt names the page that asked. a relying
+> party should still sign a fresh, server-issued nonce with an expiry:
+> that stops replay. stopping relay outright needs the wallet to write
+> the origin into the message (see [sign in with zafu](sign-in.md)).
 
 ## connections
 
