@@ -32,7 +32,12 @@ import {
 } from './pockets';
 import type { AllSlices } from '.';
 import type { KeyInfo } from './keyring/types';
-import { selectNetworkShown, selectZcashIsMainnet, type ZcashWalletJson } from './wallets';
+import {
+  selectActiveZcashWallet,
+  selectNetworkShown,
+  selectZcashIsMainnet,
+  type ZcashWalletJson,
+} from './wallets';
 
 describe('pocket store ids', () => {
   test('account 0 is the bare wallet id, so existing stores need no migration', () => {
@@ -380,6 +385,62 @@ describe('pocket selectors', () => {
       expect(activePockets(s)).toEqual([]);
       expect(activePocketBirthday(s)).toBeUndefined();
     }
+  });
+
+  describe('a zigner wallet with pockets', () => {
+    const zigner = keyInfo({
+      id: 'vault-2',
+      type: 'zigner-zafu',
+      insensitive: { zid: 'zid-cold', supportedNetworks: ['zcash'] },
+    });
+    const main = zcashWallet({ id: 'z0', accountIndex: 0, orchardFvk: 'uview1main' });
+    const pocket2 = zcashWallet({ id: 'z2', accountIndex: 2, orchardFvk: 'uview1two' });
+    const book = selectPocket(
+      addPocket(
+        addPocket({}, 'zid-cold', 'savings', 3_100_000, 2),
+        'zid-cold',
+        'gone',
+        3_200_000,
+        5,
+      ),
+      'zid-cold',
+      2,
+    );
+
+    test("reads the active pocket's own key, account and store", () => {
+      const s = stateWith(zigner, book, [main, pocket2]);
+      expect(activeAccountIndex(s)).toBe(2);
+      expect(activeZcashStoreId(s)).toBe('vault-2#2');
+      expect(selectActiveZcashWallet(s)).toBe(pocket2);
+      expect(activePocketBirthday(s)).toBe(3_100_000);
+    });
+
+    test("main is the wallet's own record and store, as before pockets", () => {
+      const s = stateWith(zigner, selectPocket(book, 'zid-cold', 0), [main, pocket2]);
+      expect(activeZcashStoreId(s)).toBe('vault-2');
+      expect(selectActiveZcashWallet(s)).toBe(main);
+    });
+
+    test("lists only pockets whose key is here: a restored one waits to be scanned, never shows main's money", () => {
+      const s = stateWith(zigner, selectPocket(book, 'zid-cold', 5), [main, pocket2]);
+      expect(activePockets(s).map(p => p.account)).toEqual([0, 2]);
+      expect(activeAccountIndex(s)).toBe(0);
+      expect(selectActiveZcashWallet(s)).toBe(main);
+      expect(activeZcashStoreId(s)).toBe('vault-2');
+    });
+
+    test('keystone and ledger wallets stay single-account', () => {
+      for (const coldSignerType of ['keystone', 'ledger', 'viewing-key']) {
+        const other = keyInfo({
+          ...zigner,
+          insensitive: { ...zigner.insensitive, coldSignerType },
+        });
+        const s = stateWith(other, book, [main, pocket2]);
+        expect(activePockets(s)).toEqual([]);
+        expect(activeZcashStoreId(s)).toBe('vault-2');
+        expect(selectActiveZcashWallet(s)).toBe(main);
+      }
+    });
   });
 
   test('zcash testnet keeps a hot wallet in stores of its own, pockets included', () => {

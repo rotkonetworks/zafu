@@ -1,3 +1,6 @@
+import { pocketOwner, pocketsOf, zignerPocketAccount } from './pockets';
+import { zignerPocketRecord, type ScannedAccount } from './zigner-pocket';
+import { assertLedgerUfvkValid } from './keyring/wallet-entries';
 import { Key } from '@repo/encryption/key';
 import { Box, type BoxJson } from '@repo/encryption/box';
 import { Wallet, type WalletJson } from '@repo/wallet';
@@ -87,6 +90,17 @@ export interface WalletsSlice {
   setActiveWallet: (index: number) => Promise<void>;
   /** Switch to a different Zcash wallet by index */
   setActiveZcashWallet: (index: number) => Promise<void>;
+  /**
+   * A zigner wallet's new pocket, from the viewing key the device showed for
+   * that account (state/zigner-pocket). Files the pocket (or brings back one
+   * a restore listed without its key) and returns its account.
+   */
+  addZignerPocket: (
+    vaultId: string,
+    scanned: ScannedAccount,
+    name: string,
+    birthday?: number,
+  ) => Promise<number>;
   getSeedPhrase: () => Promise<string[]>;
 }
 
@@ -224,6 +238,40 @@ export const createWalletsSlice =
         await local.set('activeZcashIndex', index);
       },
 
+      addZignerPocket: async (vaultId, scanned, name, birthday) => {
+        const { keyRing, pockets, wallets } = get();
+        const vault = keyRing.keyInfos.find(k => k.id === vaultId);
+        const main = wallets.zcashWallets.find(
+          w => w.vaultId === vaultId && w.accountIndex === 0 && !w.multisig,
+        );
+        if (vault?.type !== 'zigner-zafu' || !main) {
+          throw new Error('pockets are for zigner wallets');
+        }
+        const here = wallets.zcashWallets
+          .filter(w => w.vaultId === vaultId && !w.multisig)
+          .map(w => w.accountIndex);
+        const record = zignerPocketRecord(
+          vault,
+          main,
+          scanned,
+          here,
+          name.trim() || `pocket ${scanned.accountIndex}`,
+          `zcash-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        );
+        // the same decoder the signing path uses, before anything is stored
+        await assertLedgerUfvkValid(record.orchardFvk);
+        // appended: the active index keeps pointing at the same record
+        set(state => {
+          state.wallets.zcashWallets.push(record);
+        });
+        await local.set('zcashWallets', get().wallets.zcashWallets);
+        const owner = pocketOwner(vault);
+        if (!pocketsOf(pockets.book, owner).some(p => p.account === record.accountIndex)) {
+          await pockets.add(owner, record.label, birthday, record.accountIndex);
+        }
+        return record.accountIndex;
+      },
+
       removeWallet: async (index: number) => {
         const { all, activeIndex } = get().wallets;
 
@@ -317,9 +365,20 @@ export const walletsSelector = (state: AllSlices) => state.wallets;
 export const selectZcashWallets = (state: AllSlices) =>
   Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
 export const selectActiveZcashIndex = (state: AllSlices) => state.wallets.activeZcashIndex;
+/**
+ * The active zcash wallet record. A zigner wallet's pocket is its own record
+ * (same vault, that pocket's account and viewing key), so everything that
+ * reads the key, address or account follows the active pocket.
+ */
 export const selectActiveZcashWallet = (state: AllSlices) => {
   const { zcashWallets, activeZcashIndex } = state.wallets;
-  return zcashWallets[activeZcashIndex];
+  const wallet = zcashWallets[activeZcashIndex];
+  const account = wallet && zignerPocketAccount(state);
+  return account
+    ? (zcashWallets.find(
+        w => w.vaultId === wallet.vaultId && w.accountIndex === account && !w.multisig,
+      ) ?? wallet)
+    : wallet;
 };
 /**
  * Whether the active zcash wallet speaks mainnet: the one place this is
