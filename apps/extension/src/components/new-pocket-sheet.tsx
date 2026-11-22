@@ -14,7 +14,9 @@ import { Input } from '@repo/ui/components/ui/input';
 import { useStore } from '../state';
 import { selectZcashBackend, selectZcashEndpoint } from '../state/networks';
 import { selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
-import { MAX_POCKETS, pocketOwner, pocketsOf } from '../state/pockets';
+import { MAX_POCKETS, pocketOwner, pocketsOf, zignerPockets } from '../state/pockets';
+import { parseZcashUr } from '@repo/wallet/ur-parser';
+import { QrScanner } from '../shared/components/qr-scanner';
 import { zcashClient } from '../state/keyring/zcash-backend';
 import { pocketTarget, type PocketSheetTarget } from './accounts-sheet';
 import { zcashWorkerQuery } from '../hooks/zcash-pool-balances';
@@ -37,6 +39,12 @@ export const NewPocketSheet = ({
   const target = pocketTarget(useStore(selectActiveNetwork));
   const zidecarUrl = useStore(selectZcashEndpoint);
   const zcashBackend = useStore(selectZcashBackend);
+  // a zigner wallet's pocket is an account whose viewing key the device shows
+  const zigner = useStore(s => !!zignerPockets(s));
+  const addZignerPocket = useStore(s => s.wallets.addZignerPocket);
+  const [scanning, setScanning] = useState(false);
+  // the camera's visible fallback, as on every signer scan
+  const [pasted, setPasted] = useState('');
 
   const owner = selectedKeyInfo ? pocketOwner(selectedKeyInfo) : undefined;
   const existing = owner ? pocketsOf(book, owner) : [];
@@ -54,6 +62,8 @@ export const NewPocketSheet = ({
       setName(rename?.name ?? '');
       setBusy(false);
       setError(null);
+      setScanning(false);
+      setPasted('');
     }
   }, [open, rename]);
 
@@ -85,8 +95,42 @@ export const NewPocketSheet = ({
     }
   };
 
+  // the pocket's birthday: the tip, so its first sync is quick
+  const tipNow = () =>
+    zcashClient(zidecarUrl, zcashBackend)
+      .getTip()
+      .then(t => t.height)
+      .catch(() => undefined);
+
+  const handleZignerKey = async (raw: string) => {
+    if (!selectedKeyInfo || !owner || busy) {
+      return;
+    }
+    setScanning(false);
+    setBusy(true);
+    setError(null);
+    try {
+      const scanned = parseZcashUr(raw.trim());
+      const account = await addZignerPocket(selectedKeyInfo.id, scanned, name, await tipNow());
+      await target.pick(useStore.getState(), owner, account);
+      onOpenChange(false);
+    } catch (e) {
+      setError(
+        e instanceof Error && !/^expected ur:|cbor|ufvk/i.test(e.message)
+          ? e.message
+          : "that isn't a zigner viewing key · please show the zcash key on zigner",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (busy) {
+      return;
+    }
+    if (zigner && !rename) {
+      setScanning(true);
       return;
     }
     if (rename) {
@@ -116,10 +160,7 @@ export const NewPocketSheet = ({
     try {
       // best-effort: a pocket still creates fine without a tip, it just
       // scans from the wallet birthday instead of from now.
-      const tip = await zcashClient(zidecarUrl, zcashBackend)
-        .getTip()
-        .catch(() => undefined);
-      const account = await add(owner, name, tip?.height);
+      const account = await add(owner, name, await tipNow());
       await target.pick(useStore.getState(), owner, account);
       onOpenChange(false);
     } catch (e) {
@@ -154,13 +195,40 @@ export const NewPocketSheet = ({
             autoFocus
             placeholder={rename ? undefined : `pocket ${nextAccount}`}
           />
+          {zigner && !rename && (
+            <p className='text-label text-fg-muted lowercase'>
+              on zigner: zcash key · account {nextAccount} · scan its viewing key
+            </p>
+          )}
+          {scanning && (
+            <>
+              <QrScanner
+                inline
+                onScan={raw => void handleZignerKey(raw)}
+                onError={e => setError(e)}
+                onClose={() => setScanning(false)}
+              />
+              <Input
+                aria-label='or paste the code'
+                placeholder='or paste the code'
+                value={pasted}
+                onChange={e => setPasted(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && pasted.trim()) {
+                    e.preventDefault();
+                    void handleZignerKey(pasted);
+                  }
+                }}
+              />
+            </>
+          )}
           {error && <p className='text-label text-hanko-light lowercase'>{error}</p>}
           <Button
             onClick={() => void handleSubmit()}
             loading={busy}
-            disabled={rename ? busy : !owner}
+            disabled={rename ? busy : !owner || scanning}
           >
-            {rename ? 'rename' : 'create pocket'}
+            {rename ? 'rename' : zigner ? 'scan zigner' : 'create pocket'}
           </Button>
           {rename?.pocket && (
             <>
