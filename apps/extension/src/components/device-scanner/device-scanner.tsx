@@ -126,7 +126,11 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
     handlePayload(pasteValue, 'paste');
   };
 
-  const handleAdd = async () => {
+  /**
+   * add this code's wallet. "scan next" adds it too before the camera opens
+   * again, so the other network's code joins it instead of replacing it.
+   */
+  const handleAdd = async (then: 'done' | 'scan next' = 'done') => {
     if (screen.kind !== 'result') {
       return;
     }
@@ -148,6 +152,10 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
         addZignerUnencrypted,
       });
       knownNetworksRef.current.add(parsed.network);
+      if (then === 'scan next') {
+        scanAnother();
+        return;
+      }
       setScreen({ kind: 'done', outcome });
       onDone(outcome);
     } catch (cause) {
@@ -296,7 +304,12 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
               <span className='text-data text-fg-muted lowercase'>{networkLabel(companion)}</span>
               <span className='text-label text-fg-muted lowercase'>scan its code next</span>
             </div>
-            <Button variant='secondary' size='sm' onClick={scanAnother}>
+            <Button
+              variant='secondary'
+              size='sm'
+              disabled={!startBlockOk}
+              onClick={() => void handleAdd('scan next')}
+            >
               scan next
             </Button>
           </div>
