@@ -2,7 +2,7 @@
  * Shared types for the Zafu firmware-OTA wire contract.
  *
  * All wire schemas mirror the frozen field numbers in
- * docs/design/zafu-ota-wire-freeze.md.
+ * apps/extension/src/ota/spec/zafu-ota-wire-freeze.md.
  */
 
 /** Supported firmware `class` values (signed, whitelisted). */

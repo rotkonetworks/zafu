@@ -110,10 +110,13 @@ message. it does not imply the user has read it.
 
 ## 0x05 - contactcard
 
-a contact card for sharing identity and address information. see the
+a contact card for sharing identity and address information. the first
+byte is the card version: `0x01` is the unsigned memo card below, `0x02`
+is the signed card (see [signed card](#signed-card-0x02) and
+[contact cards](../identity/contact-cards.md)). see the
 [memo protocol spec](memo.md) section 6 for the full wire format.
 
-### payload format
+### payload format (version 0x01)
 
     offset  size    field
     0       1       version (0x01)
@@ -143,8 +146,11 @@ parsers must skip unknown tags by reading the length and advancing.
 
     tag    length   description
     ---    ------   -----------
-    0x01   32       ed25519 zid public key (per-contact sender identity)
+    0x01   32       ed25519 key of this relationship (its inception key)
     0x02   var      post-quantum public key (reserved, not yet emitted)
+    0x03   32       identity-wide x25519 key (read, no longer emitted)
+    0x05   32       inception key of the card this one answers
+    0x06   32       the relationship's x25519 pair key
 
 the presence of tag 0x01 carries the sender's per-contact zid, unique to
 this relationship - it authenticates the sender and can be converted to
@@ -166,6 +172,20 @@ fragmentation. it is not yet emitted.
 name length is capped at u8 (255 bytes). address length is u16be (up to
 65,535 bytes) because zcash unified addresses with multiple receiver
 types (orchard + sapling + transparent) can exceed 255 bytes.
+
+### signed card (0x02)
+
+the card zafu shows as a QR or a `zafu.pro/c#` link, and sends in memos.
+every field is signed by the relationship's ed25519 inception key:
+
+    ver(0x02) | kind | flags | revision(u16be) | key(32) | pairKa(32) |
+    [answers(16)] | [zcash receiver(43)] | [penumbra(80)] |
+    relay(u8 len + host) | caps(u16be) | name(u8 len, max 32) |
+    created(u32be minutes) | ext(u8 count + TLVs) | sig(64)
+
+kinds are card, answer, update and close; the signature covers
+`"zafu-card-v2"` followed by every byte before it. about 185 bytes, so
+one memo. the full table is in [memo.md](memo.md) section 6.6.
 
 ## 0x06 - encryptedmessage
 

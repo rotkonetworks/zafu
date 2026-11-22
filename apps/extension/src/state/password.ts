@@ -5,7 +5,7 @@ import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
 
-// Documentation in /docs/custody.md
+// Documentation in docs/src/security/encryption.md
 
 export interface PasswordSlice {
   setPassword: (password: string) => Promise<void>;

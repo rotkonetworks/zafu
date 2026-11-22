@@ -69,7 +69,7 @@ member holds the room secret and can derive it, so the DM lane is confidential
 against the relay and against non-members only - not against fellow members (or
 a past member who kept the secret). That limit, and the shape a larger or social
 group needs instead, is spelled out in
-[`docs/design/zirc-shared-secret-mailbox.md`](../../docs/design/zirc-shared-secret-mailbox.md).
+[`shared-secret-mailbox.md`](shared-secret-mailbox.md).
 
 An invite is deliberately a bearer token, so the dangerous moment is when it
 travels. `sealInvite` puts it in a zid sealed box addressed to one recipient -
@@ -310,7 +310,7 @@ log is shared, archived and replayed by everyone in it.
   shared-secret mailbox shape is needed, which needs a ratchet and rotation it does
   not have yet (issue #47). What that mailbox is, and exactly what the current
   lanes do and do not guarantee, is written up in
-  [`docs/design/zirc-shared-secret-mailbox.md`](../../docs/design/zirc-shared-secret-mailbox.md).
+  [`shared-secret-mailbox.md`](shared-secret-mailbox.md).
 - The founder's key is the channel's root of authority: lose it and the channel
   cannot add operators. A `custody` record can _name_ a k-of-n roster, so the
   multisig's parameters are reproducible from the log, but FROST itself - running

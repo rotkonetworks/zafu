@@ -12,6 +12,10 @@ or full-page tab.
 - minimum chrome 119
 - permissions: `storage`, `unlimitedStorage`, `offscreen`, `alarms`, `sidePanel`,
   `contextMenus`, `proxy` (`proxy` backs the transport-privacy proxy feature)
+- `optional_permissions`: `webRequest`, `scripting`, `webRequestAuthProvider`.
+  none is held until a feature asks for it at the moment of use: a peer buy
+  asks for `webRequest` + `scripting` and gives them back afterwards, and a
+  proxy with a login asks for `webRequest` + `webRequestAuthProvider`
 - `host_permissions: <all_urls>` - needed for grpc-web requests to arbitrary
   endpoints and content script injection
 - `externally_connectable` matches `https://*/*` plus localhost variants, allowing
@@ -119,16 +123,15 @@ the service worker listens for `chrome.storage.local` changes to react to:
   are initialized for the first time
 - **penumbra network enabled** - when penumbra appears in `enabledNetworks`,
   services are initialized
-- **custom chainspecs** - polkadot custom chainspecs are reloaded
 
 ### alarms and background sync
 
 the service worker registers three `chrome.alarms`:
 
-- `blockSync` - fires every 30 minutes to trigger background block sync. only
-  transparent networks honor the `enableBackgroundSync` privacy setting; shielded
-  (penumbra, zcash) and light-client (polkadot) networks always sync, since trial
-  decryption and p2p never leak addresses and those networks expose no toggle
+- `blockSync` - fires every 30 minutes and syncs only while a zafu window is
+  open. shielded networks (penumbra, zcash) sync, since trial decryption never
+  names an address; a transparent network's sync would name its addresses, so it
+  never runs in the background
 - `idleCheck` - fires every minute to drive the idle auto-lock
 - `ibcTransferPoll` - fires every minute to poll pending ibc transfers for arrival
   or timeout
@@ -142,10 +145,12 @@ reset the timer - background service messages (sync, alarms) deliberately do not
 
 ### offscreen document
 
-zcash halo 2 proving requires parallel wasm threads (rayon). chrome mv3 does not
-allow web workers inside service workers, so proving runs in an offscreen document.
-the service worker listens for `ZCASH_ENSURE_OFFSCREEN` messages and calls
-`chrome.offscreen.createDocument()` as needed.
+a service worker cannot start web workers, so it cannot run threaded wasm
+(rayon) either. the zcash worker, its provers and the nym tunnel therefore run in
+an offscreen document, an invisible page with the full web api. only the service
+worker can create it: other pages ask with `ZCASH_ENSURE_OFFSCREEN`, and the
+service worker calls `chrome.offscreen.createDocument()` when none is open. if it
+cannot come up, sync says "zafu's sync could not start · please reload zafu".
 
 ## content scripts
 
