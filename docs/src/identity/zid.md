@@ -87,10 +87,7 @@ hash the same bytes as `a.com` at key 7. every other origin keeps the
 plain form.
 
 for the ed25519 keys, the first 32 bytes of the derived value become the
-ed25519 private key; the public key follows from it. a site that asks
-for a P-256 key instead gets
-`HMAC-SHA256("zid-p256", first 32 bytes)` as the scalar, from the same
-per-site value. the `xwing-site`
+ed25519 private key; the public key follows from it. the `xwing-site`
 tag's first 32 bytes are the X-Wing seed (the ML-KEM-768 + X25519
 decapsulation secret). all intermediate values are zeroized (`.fill(0)`)
 after use.
