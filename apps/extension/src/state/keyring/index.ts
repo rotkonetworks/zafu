@@ -45,6 +45,7 @@ import {
   findLedgerDuplicate,
 } from './vault-ops';
 import type { FrostMultisigParams } from './vault-ops';
+import { assertWalletRoom, holdsNetwork, PHRASE_NETWORKS } from './wallet-limit';
 
 // crypto operations
 import type { CryptoCtx } from './crypto-ops';
@@ -474,6 +475,7 @@ export const createKeyRingSlice =
           return mergeTarget.id;
         }
 
+        assertWalletRoom(vaults, PHRASE_NETWORKS);
         const vaultId = generateVaultId();
         const encryptedData = await encrypt(ctx, mnemonic);
         const vault = buildMnemonicVault(vaultId, name, encryptedData);
@@ -523,6 +525,10 @@ export const createKeyRingSlice =
           data,
         );
         if (mergeTarget) {
+          assertWalletRoom(
+            existingVaults,
+            zignerSupportedNetworks(data).filter(n => !holdsNetwork(mergeTarget, n)),
+          );
           const mergedId = await mergeZignerCapabilities(mergeTarget, data, local, session);
           const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
           const selectedId = (await local.get('selectedVaultId'))!;
@@ -540,6 +546,7 @@ export const createKeyRingSlice =
           return mergedId;
         }
 
+        assertWalletRoom(existingVaults, zignerSupportedNetworks(data));
         const vaultId = generateVaultId();
         const encryptedData = await encrypt(ctx, JSON.stringify(data));
         const supportedNetworks = zignerSupportedNetworks(data);
@@ -592,6 +599,10 @@ export const createKeyRingSlice =
           data,
         );
         if (mergeTarget) {
+          assertWalletRoom(
+            existingVaults,
+            zignerSupportedNetworks(data).filter(n => !holdsNetwork(mergeTarget, n)),
+          );
           const mergedVaultId = await mergeZignerCapabilities(mergeTarget, data, local, session);
           const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
           const selectedId = (await local.get('selectedVaultId'))!;
@@ -653,6 +664,7 @@ export const createKeyRingSlice =
           }
         }
 
+        assertWalletRoom(existingVaults, zignerSupportedNetworks(data));
         const vaultId = generateVaultId();
         const existingKeyPrint = await local.get('passwordKeyPrint');
         const existingSessionKey = await session.get('passwordKey');
@@ -776,6 +788,7 @@ export const createKeyRingSlice =
         // is rejected after the vault write, the user is left with a selected
         // vault that has no wallet record behind it.
         await assertLedgerUfvkValid(data.ufvk);
+        assertWalletRoom(((await local.get('vaults')) ?? []) as EncryptedVault[], ['zcash']);
 
         const vaultId = generateVaultId();
         const existingKeyPrint = await local.get('passwordKeyPrint');

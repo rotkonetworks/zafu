@@ -97,24 +97,6 @@ export async function mergeZignerCapabilities(
   const mergedNetworks = zignerSupportedNetworks(merged);
   const newlyAddedNetworks = mergedNetworks.filter(n => !existingNetworks.has(n));
 
-  // re-encrypt merged data, rebuild vault entry
-  const encryptedBox = await key.seal(JSON.stringify(merged));
-  const rebuilt = buildZignerVault(
-    existing.id,
-    existing.name,
-    JSON.stringify(encryptedBox.toJson()),
-    merged,
-    mergedNetworks,
-    { airgapOnly: existing.insensitive['airgapOnly'] === true },
-  );
-  // preserve original createdAt
-  rebuilt.createdAt = existing.createdAt;
-
-  // write back
-  const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-  const updated = vaults.map(v => (v.id === existing.id ? rebuilt : v));
-  await local.set('vaults', updated);
-
   // A per-network wallet ENTRY can be missing even when the vault already
   // "supports" that network. Removing a wallet deletes its per-network entry
   // (zcashWallets / penumbraWallets) but does NOT strip the viewing key from
@@ -140,6 +122,30 @@ export async function mergeZignerCapabilities(
   if (mergedNetworks.includes('penumbra') && merged.fullViewingKey && !hasPenumbraEntry) {
     needsEntry.add('penumbra');
   }
+
+  // the same code again with its wallet still here adds nothing: say so,
+  // rather than report an add that changed nothing
+  if (!needsEntry.size && JSON.stringify(merged) === JSON.stringify(existingData)) {
+    throw new Error('this zigner wallet is already imported');
+  }
+
+  // re-encrypt merged data, rebuild vault entry
+  const encryptedBox = await key.seal(JSON.stringify(merged));
+  const rebuilt = buildZignerVault(
+    existing.id,
+    existing.name,
+    JSON.stringify(encryptedBox.toJson()),
+    merged,
+    mergedNetworks,
+    { airgapOnly: existing.insensitive['airgapOnly'] === true },
+  );
+  // preserve original createdAt
+  rebuilt.createdAt = existing.createdAt;
+
+  // write back
+  const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+  const updated = vaults.map(v => (v.id === existing.id ? rebuilt : v));
+  await local.set('vaults', updated);
 
   // create per-network wallet entries for the networks that need one. Source
   // the keys from `merged` (the vault's authoritative data) rather than
