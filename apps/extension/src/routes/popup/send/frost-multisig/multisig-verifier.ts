@@ -17,10 +17,13 @@
 // `refuse`, which no UI may override. This matches computeEscrowVerdict below,
 // which already worked this way.
 //
-// RESIDUAL - computeVerdict does NOT verify the fee. See assessClaimedFee().
-// verifySealedIntent (bottom of this file) does, from the value balance the
-// sighash binds, but needs inspection fields the vendored wasm does not return
-// yet; until the wasm is rebuilt it refuses everything.
+// Outputs are judged by the COMMITTED view, not by OVK decryption: each
+// action's value and recipient recomputed against the cmx the sighash binds.
+// OVK decryption is the host's to choose - an output it encrypts to a throwaway
+// OVK simply does not decrypt - so treating undecryptable actions as zero-value
+// dummies let a second, unseen payment ride along with an honest-looking one.
+// The fee is the one the value balances (bound by the sighash) imply, and must
+// be the fee the host claims; assessClaimedFee() bounds that claim.
 
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import type { FrostParsedTx } from '../../../../state/keyring/network-worker';
@@ -51,30 +54,100 @@ const hexToBytes = (h: string): Uint8Array => {
 
 const normaliseAddr = (a: string) => a.trim().toLowerCase();
 
+const isSafeZat = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
+
+interface CommittedOutput {
+  index: number;
+  valueZat: bigint;
+  recipientRawHex: string;
+  /** the inspecting UFVK's scope the recipient derives from; null = foreign */
+  scope: 'external' | 'internal' | null;
+  decrypted: boolean;
+  isChange: boolean;
+}
+
+/**
+ * Every value-carrying output, as committed, and the fee the value balances
+ * imply - or why the transaction cannot be judged that way. Anything missing
+ * refuses: a wasm too old to report the committed view must not fall back to
+ * the OVK view the host controls.
+ */
+function committedView(
+  parsed: FrostParsedTx,
+): { outputs: CommittedOutput[]; feeZat: bigint } | { refuse: string[] } {
+  const why = (...r: string[]) => ({ refuse: r });
+  if (!('committed_outputs_error' in parsed)) {
+    return why('the inspection does not report committed outputs - refusing on an older verifier');
+  }
+  if (parsed.committed_outputs_error !== null) {
+    return why(
+      `outputs could not be checked against their commitments: ${String(parsed.committed_outputs_error)}`,
+    );
+  }
+  if (parsed.sapling_present !== false) {
+    return why('the transaction has a sapling component, which a group spend never has');
+  }
+  if (parsed.transparent_input_count !== 0) {
+    return why('the transaction spends transparent inputs, which a group spend never does');
+  }
+  if (!Array.isArray(parsed.transparent_outputs) || parsed.transparent_outputs.length > 0) {
+    return why(
+      'the transaction pays a transparent output, which this review cannot match to the claim',
+    );
+  }
+  if (!isSafeZat(parsed.fee_zat)) {
+    return why('the fee could not be derived from the value balances');
+  }
+  const outputs: CommittedOutput[] = [];
+  for (const a of parsed.actions) {
+    const raw = a.committed_recipient_raw_hex;
+    const scope = a.recipient_scope;
+    if (
+      a.cmx_verified !== true ||
+      !isSafeZat(a.committed_value_zat) ||
+      typeof raw !== 'string' ||
+      !/^[0-9a-fA-F]{86}$/.test(raw) ||
+      !(scope === 'external' || scope === 'internal' || scope === null)
+    ) {
+      return why(`action ${a.index}: its output does not verify against its commitment`);
+    }
+    if (a.committed_value_zat > 0) {
+      outputs.push({
+        index: a.index,
+        valueZat: BigInt(a.committed_value_zat),
+        recipientRawHex: raw,
+        scope,
+        decrypted: a.decrypted,
+        isChange: a.is_change,
+      });
+    }
+  }
+  return { outputs, feeZat: BigInt(parsed.fee_zat) };
+}
+
 /**
  * Build verdict from host's SIGN: claim and the joiner's locally-derived parse.
  *
- * For a single-recipient spend (the only shape today):
- *   - exactly one external (non-change) action whose recipient matches
- *     `claimedRecipient` and amount matches `claimedAmountZat`
- *   - any number of internal change actions
- *   - any non-decrypted actions are treated as zero-value dummies
+ * For a single-recipient spend (the only shape today), judged on the
+ * committed view:
+ *   - exactly one value-carrying output that is not the group's own change,
+ *     whose recipient matches `claimedRecipient` and amount `claimedAmountZat`
+ *   - any number of change outputs to the group's own internal scope
+ *   - no value-carrying output the group's viewing key cannot read
+ *   - the fee the transaction pays equals `claimedFeeZat`
  */
 export function computeVerdict(args: {
   parsed: FrostParsedTx;
   claimedRecipient: string;
   claimedAmountZat: string;
+  claimedFeeZat: string;
   claimedSighashHex: string;
   mainnet: boolean;
 }): Verdict {
-  const { parsed, claimedRecipient, claimedAmountZat, claimedSighashHex, mainnet } = args;
+  const { parsed, claimedRecipient, claimedAmountZat, claimedFeeZat, claimedSighashHex, mainnet } =
+    args;
   const reasons: string[] = [];
-
-  const externals = parsed.actions.filter(a => a.decrypted && !a.is_change);
-  const changes = parsed.actions.filter(a => a.decrypted && a.is_change);
-
-  const sendZat = externals.reduce((acc, a) => acc + BigInt(a.amount_zat), 0n);
-  const changeZat = changes.reduce((acc, a) => acc + BigInt(a.amount_zat), 0n);
 
   // Sighash check first, and it is MANDATORY. If the host published an honest
   // sighash but a decoy bundle, OVK decryption can return a "matching" parse
@@ -109,6 +182,57 @@ export function computeVerdict(args: {
       };
     }
   }
+
+  const view = committedView(parsed);
+  if ('refuse' in view) {
+    return { kind: 'refuse', reasons: view.refuse };
+  }
+
+  // an output that carries value but that the group's viewing key cannot read
+  // was hidden from this review on purpose: no honest build makes one
+  const hidden = view.outputs.filter(o => !o.decrypted);
+  if (hidden.length > 0) {
+    return {
+      kind: 'refuse',
+      reasons: hidden.map(
+        o =>
+          `action ${o.index}: an output of ${o.valueZat} zat is hidden from the group's viewing key - the host is sending it somewhere unshown`,
+      ),
+    };
+  }
+  // change is a key-derivation fact (the group's internal scope), never the label
+  const foreignChange = view.outputs.filter(o => o.isChange && o.scope !== 'internal');
+  if (foreignChange.length > 0) {
+    return {
+      kind: 'refuse',
+      reasons: foreignChange.map(
+        o =>
+          `action ${o.index}: ${o.valueZat} zat presented as change goes to an address that is not the group's`,
+      ),
+    };
+  }
+
+  // the fee is what the sighash-bound value balances leave over, not a claim
+  const claimedFee = (() => {
+    try {
+      return BigInt(claimedFeeZat);
+    } catch {
+      return null;
+    }
+  })();
+  if (claimedFee === null || claimedFee !== view.feeZat) {
+    return {
+      kind: 'refuse',
+      reasons: [
+        `the transaction pays a fee of ${view.feeZat} zat, not the ${claimedFeeZat} zat the host claims - the difference would leave the group unseen`,
+      ],
+    };
+  }
+
+  const externals = view.outputs.filter(o => o.scope !== 'internal');
+  const changes = view.outputs.filter(o => o.scope === 'internal');
+  const sendZat = externals.reduce((acc, o) => acc + o.valueZat, 0n);
+  const changeZat = changes.reduce((acc, o) => acc + o.valueZat, 0n);
 
   const claimedAmount = (() => {
     try {
@@ -145,12 +269,9 @@ export function computeVerdict(args: {
   const claimedNorm = normaliseAddr(claimedRecipient);
   const matched =
     externals.length === 1 &&
-    externals.every(a => {
-      if (!a.recipient_raw_hex) {
-        return false;
-      }
+    externals.every(o => {
       try {
-        const ua = encodeOrchardUnifiedAddress(hexToBytes(a.recipient_raw_hex), mainnet);
+        const ua = encodeOrchardUnifiedAddress(hexToBytes(o.recipientRawHex), mainnet);
         return normaliseAddr(ua) === claimedNorm;
       } catch {
         return false;
@@ -265,21 +386,49 @@ export function computeEscrowVerdict(args: {
     };
   }
 
-  const externals = parsed.actions.filter(a => a.decrypted && !a.is_change);
-  const changes = parsed.actions.filter(a => a.decrypted && a.is_change);
+  // the payout is judged as committed, like a group spend (see computeVerdict):
+  // the escrow is a co-signer too, and could hide an output from the OVK view
+  const view = committedView(parsed);
+  if ('refuse' in view) {
+    return { kind: 'refuse', reasons: view.refuse };
+  }
+  const hidden = view.outputs.filter(o => !o.decrypted);
+  if (hidden.length > 0) {
+    return {
+      kind: 'refuse',
+      reasons: hidden.map(
+        o =>
+          `action ${o.index}: an output of ${o.valueZat} zat is hidden from the group's viewing key`,
+      ),
+    };
+  }
+  if (view.outputs.some(o => o.isChange && o.scope !== 'internal')) {
+    return {
+      kind: 'refuse',
+      reasons: ["an output presented as change goes to an address that is not the group's"],
+    };
+  }
+  if (view.feeZat > MAX_PLAUSIBLE_FEE_ZAT) {
+    return {
+      kind: 'refuse',
+      reasons: [
+        `the payout pays a fee of ${view.feeZat} zat, above the ${MAX_PLAUSIBLE_FEE_ZAT} zat bound`,
+      ],
+    };
+  }
+
+  const externals = view.outputs.filter(o => o.scope !== 'internal');
+  const changes = view.outputs.filter(o => o.scope === 'internal');
   if (externals.length === 0) {
-    return { kind: 'refuse', reasons: ['PCZT has no decodable recipient output'] };
+    return { kind: 'refuse', reasons: ['PCZT has no recipient output'] };
   }
 
   const outputs: { recipientUa: string; amountZat: bigint }[] = [];
-  for (const a of externals) {
-    if (!a.recipient_raw_hex) {
-      return { kind: 'refuse', reasons: ['a recipient output could not be decoded - refusing'] };
-    }
+  for (const o of externals) {
     try {
       outputs.push({
-        recipientUa: encodeOrchardUnifiedAddress(hexToBytes(a.recipient_raw_hex), mainnet),
-        amountZat: BigInt(a.amount_zat),
+        recipientUa: encodeOrchardUnifiedAddress(hexToBytes(o.recipientRawHex), mainnet),
+        amountZat: o.valueZat,
       });
     } catch {
       return { kind: 'refuse', reasons: ['a recipient output could not be decoded - refusing'] };
@@ -287,7 +436,16 @@ export function computeEscrowVerdict(args: {
   }
 
   const sendZat = outputs.reduce((acc, o) => acc + o.amountZat, 0n);
-  const changeZat = changes.reduce((acc, a) => acc + BigInt(a.amount_zat), 0n);
+  const changeZat = changes.reduce((acc, o) => acc + o.valueZat, 0n);
+  // a small payout must not be eaten as fee (the same rule as assessClaimedFee)
+  if (view.feeZat > sendZat) {
+    return {
+      kind: 'refuse',
+      reasons: [
+        `the payout pays a fee of ${view.feeZat} zat, more than the ${sendZat} zat it sends`,
+      ],
+    };
+  }
   return { kind: 'ok', outputs, sendZat, changeZat };
 }
 
@@ -297,18 +455,13 @@ export function computeEscrowVerdict(args: {
 // fresh at quorum, and a device releases its share only if the PCZT matches
 // what was sealed. `verifySealedIntent` is that check, as a pure function.
 //
-// It is built on the COMMITTED output view (value + recipient recomputed
-// against each action's sighash-bound cmx), not on OVK decryption: an output
-// the host encrypts to a throwaway OVK is invisible to OVK decryption, which is
-// why computeVerdict above has to assume undecryptable actions are zero-value.
-// With every output's committed value known, and the fee taken from the value
-// balance the sighash binds, nothing can move that the intent does not name.
-//
-// Those fields come from frost_inspect_pczt_outputs in zcli
-// (feat/pczt-explicit-expiry). The wasm vendored in packages/zcash-wasm does
-// not return them yet, so until it is rebuilt this function refuses every
-// PCZT with `missing_field` / `committed_view_unavailable`. That is the
-// intended fail-closed state, not a bug.
+// Like computeVerdict, it is built on the COMMITTED output view (value +
+// recipient recomputed against each action's sighash-bound cmx), not on OVK
+// decryption: an output the host encrypts to a throwaway OVK is invisible to
+// OVK decryption. With every output's committed value known, and the fee taken
+// from the value balance the sighash binds, nothing can move that the intent
+// does not name. An inspection without those fields refuses
+// (`missing_field` / `committed_view_unavailable`), never guesses.
 
 /** One payment the group approved. */
 export interface SealedIntentOutput {

@@ -16,9 +16,8 @@
 // is indistinguishable from "attacker who truncated the payload" on an
 // unauthenticated relay. There is no host-claim-only fallback.
 //
-// NOT covered by any of this: `feeZat`. See assessClaimedFee() in
-// multisig-verifier.ts - the fee cannot be checked without the bundle's
-// value_balance, which the wasm parser does not return.
+// `feeZat` is checked too: computeVerdict requires it to equal the fee the
+// PCZT's sighash-bound value balances imply (see multisig-verifier.ts).
 
 import { FrostdRelayClient } from '../../../../state/keyring/frostd-relay-client';
 import {

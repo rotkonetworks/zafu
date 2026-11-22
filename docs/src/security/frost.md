@@ -116,14 +116,15 @@ a
 prefix. the sighash is the transaction's binding signature hash; the alphas are
 per-action randomizers from the unsigned transaction.
 
-the trailing PCZT is syntactically optional but semantically mandatory. each
-co-signer parses it, recomputes the canonical sighash, and OVK-decrypts the
-outputs, then refuses to sign if the recipient, amount, or sighash diverge from
-the coordinator's claim. this is what binds the human-readable summary to the
+the trailing PCZT is syntactically optional but semantically mandatory. each co-signer parses it, recomputes the canonical sighash, and reads every
+output as committed: its value and recipient recomputed against the commitment
+the sighash binds, change by the group's own internal scope. it refuses to sign
+if the recipient, amount, fee or sighash diverge from the coordinator's claim,
+if any output carries value the group's viewing key cannot read, or if change
+goes outside the group. this is what binds the human-readable summary to the
 transaction being signed - on an unauthenticated relay a summary alone is
-attacker-forgeable text. there is no coordinator-claim-only fallback. (the fee
-is not independently verifiable this way; the wasm parser does not return the
-bundle's value balance.)
+attacker-forgeable text. there is no coordinator-claim-only fallback. the fee
+is the one the value balances leave over, and must equal the claim.
 
 each participant (including the coordinator) generates fresh nonces for each
 action and broadcasts their commitments as a pipe-delimited bundle
@@ -208,10 +209,10 @@ signing).
   service, drop, or reorder messages and observe session-membership metadata,
   but cannot forge signatures or learn key shares, amounts, or recipients.
 - **coordinator cannot redirect funds**: co-signers verify the coordinator's
-  PCZT (sighash, recipient, amount) before signing and refuse on any mismatch,
-  so a malicious coordinator on an unauthenticated relay cannot get a share for
-  a transaction the signer did not see. the fee is the exception - it is not
-  independently verifiable from the PCZT (see the signing protocol).
+  PCZT (sighash, recipient, amount, fee, and every output as committed) before
+  signing and refuse on any mismatch, so a coordinator cannot get a share for a
+  transaction with an output or fee the signer did not see. an escrow payout is
+  read the same way.
 - **threshold security**: fewer than t participants cannot produce a valid
   signature. compromising t - 1 participants reveals no useful information
   about the group's private key.

@@ -468,17 +468,11 @@ export const MultisigSign = () => {
               <Sensitive className='tabular text-sm'>{formatZec(amountZat)} ZEC</Sensitive>
             </div>
             <div className='flex items-baseline justify-between'>
-              <span className='text-label tracking-wider text-fg-muted'>fee (host claim)</span>
+              <span className='text-label tracking-wider text-fg-muted'>fee</span>
               <Sensitive className='tabular text-xs text-fg-muted'>
                 {formatZec(feeZat)} ZEC
               </Sensitive>
             </div>
-            {/* The fee is the one number on this screen that is NOT derived
-                from the bytes - see assessClaimedFee(). Say so rather than
-                letting it sit next to verified fields looking equally solid. */}
-            <p className='text-label text-fg-dim'>
-              fee is reported by the host and cannot be checked against the transaction bytes
-            </p>
           </div>
 
           {/* verifier verdict */}
@@ -492,7 +486,7 @@ export const MultisigSign = () => {
             <div className='border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
               <span className='i-ph-shield-check size-3.5 mt-0.5 shrink-0' />
               <span>
-                recipient, amount and sighash verified against the transaction bytes
+                recipient, amount, fee and sighash verified against the transaction bytes
                 {verdict.changeZat > 0n && (
                   <>
                     {' '}
@@ -500,7 +494,7 @@ export const MultisigSign = () => {
                     self)
                   </>
                 )}
-                . the fee is not covered by this check.
+                .
               </span>
             </div>
           )}
