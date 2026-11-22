@@ -59,6 +59,11 @@ the mnemonic string is hashed directly - the BIP39 seed
 (`PBKDF2(mnemonic, ...)`) that spending keys use is never touched, so a
 `zid_seed` can be handed over without exposing wallet spending keys.
 
+`mnemonic_string` is the phrase exactly as zafu stores it: lowercase
+english words joined by single spaces, as utf-8 bytes. there is no NFKD
+step (BIP39 normalizes, this does not), so another wallet must hash the
+same bytes to reach the same keys.
+
 ### per-identity subtree
 
 each named identity has its own derivation subtree. tags select the key:
@@ -67,14 +72,25 @@ each named identity has its own derivation subtree. tags select the key:
 identity[name]:
   per-site:     HMAC-SHA512(identity, "site:" + origin)              default
   rotated:      HMAC-SHA512(identity, "site:" + origin + ":" + N)
+  with a port:  HMAC-SHA512(identity, "site\0" + origin + "\0" + N)   N always present
   cross-site:   HMAC-SHA512(identity, "cross-site")                  opt-in
   per-contact:  HMAC-SHA512(identity, "contact:" + contact_id)
   site pq seed: HMAC-SHA512(identity, "xwing-site\0" + origin + "\0" + N)
   contact ka:   HMAC-SHA512(identity, "contact-ka-v1")
 ```
 
+`origin` is the page's origin as the browser reports it
+(`https://app.example`). an origin that ends in an explicit port
+(`http://localhost:3000`) takes the NUL-delimited tag, always with its
+key number N (0 included): with the plain form, `a.com:7` at key 0 would
+hash the same bytes as `a.com` at key 7. every other origin keeps the
+plain form.
+
 for the ed25519 keys, the first 32 bytes of the derived value become the
-ed25519 private key; the public key follows from it. the `xwing-site`
+ed25519 private key; the public key follows from it. a site that asks
+for a P-256 key instead gets
+`HMAC-SHA256("zid-p256", first 32 bytes)` as the scalar, from the same
+per-site value. the `xwing-site`
 tag's first 32 bytes are the X-Wing seed (the ML-KEM-768 + X25519
 decapsulation secret). all intermediate values are zeroized (`.fill(0)`)
 after use.
@@ -104,9 +120,10 @@ so rotating up creates a fresh identity universe and rotating back down
 (or jumping to a **pin** - a bookmarked generation with a label)
 restores an earlier one exactly. rotation is never a one-way burn.
 
-ring-VRF, multisig, license, and escrow identities deliberately do NOT
-follow this rotation - they stay pinned to their creation generation so
-funds and subscriptions cannot "rotate away".
+the keys zafu uses for the ring-VRF membership, the license, escrow, and
+a participant's own identity inside a multisig ceremony deliberately do
+NOT follow this rotation - they stay pinned to their creation generation
+so funds and subscriptions cannot "rotate away".
 
 ### per-site (default)
 
@@ -216,14 +233,32 @@ the generation-0 zid **public** key is also stored in the vault's
 insensitive metadata so pages like the chat client can read it without
 the wallet password. no private key material is ever persisted.
 
+## shared wallets and zid
+
+zid and FROST are separate. a zid is derived from one person's phrase; a
+FROST wallet's spend key is split between its members by its own
+ceremony, and no one holds a phrase for it. so a shared wallet has no zid
+of its own: each member signs in with their own zid, and members use
+their own zid to recognize each other during the ceremony.
+
+a group identity is possible, but it would be its own ceremony: a FROST
+key generation over ed25519, whose group key t-of-n members co-sign
+each login with. two costs come with it: every login is a signing round
+among the members, and per-site keys don't come for free (a per-site
+HMAC can't be taken over secret shares, and a public per-site offset of
+the group key would let anyone holding the group key link every site).
+zafu does not build this today.
+
 ## recovery
 
-because all keys derive from the seed phrase, they are recovered when
-you restore your wallet. identity labels, pins, share logs, preferences,
-and diversified-address records live only in local storage and are not
-recoverable from the seed alone. after recovery you get the same
-keypairs but must re-establish site connections and re-share contact
-cards.
+every key derives from the seed phrase plus two numbers: the generation
+(`zidIndex`) and, per site, its key number and mode (`zidPreferences`).
+the phrase alone restores generation 0 and each site's first key. the
+numbers live in the extension's storage and are not in the backup file
+yet, so after a restore you reach a rotated identity by rotating to the
+same numbers again. pins, labels, share logs and diversified-address
+records are not recoverable from the seed either; site connections and
+contact cards are made again.
 
 ## limitations
 
