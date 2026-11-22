@@ -6,7 +6,10 @@ wallet. the details of the keys are in [zid](zid.md).
 ## does signing in need a transaction?
 
 no. a site sends a challenge, zafu shows which site is asking, and on
-approval signs the challenge with that site's own key. nothing touches the
+approval signs the challenge with that site's own key. once you have
+approved a site, its next sign-ins go through without asking while zafu is
+unlocked (turn that off per site on the identity page); a site in
+cross-site mode is always asked. nothing touches the
 chain, nothing is paid, and the node never hears about it.
 
 some "sign in with zcash" designs in the community prove control by

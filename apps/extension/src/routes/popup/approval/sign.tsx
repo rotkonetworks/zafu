@@ -270,6 +270,12 @@ export const SignApproval = () => {
               {origin ? hostnameOf(origin) : 'this site'} learns nothing about your wallet or other
               sites.
             </p>
+            {!isAirgap && (
+              <p className='text-xs text-fg-muted'>
+                while zafu is unlocked, it signs in here again without asking for 30 days · turn it
+                off under identity, in this site&apos;s permissions
+              </p>
+            )}
           </div>
         </div>
       )}

@@ -38,7 +38,13 @@ vi.mock('../../state/password', () => ({ passwordSelector: () => ({ isPassword: 
 vi.mock('../../state/keyring', () => ({
   selectKeyInfos: (s: typeof state) => s.keyRing.keyInfos,
   selectEffectiveKeyInfo: (s: typeof state) => s.keyRing.selectedKeyInfo,
+  selectGetVaultUnlock: () => vi.fn(),
 }));
+vi.mock('../../state/pockets', () => ({
+  activeZcashStoreId: () => undefined,
+  activeAccountIndex: () => 0,
+}));
+vi.mock('../../state/networks', () => ({ selectZcashEndpoint: () => '' }));
 vi.mock('../../state/wallets', () => ({
   selectMultisigWallets: (s: typeof state) => s.wallets.zcashWallets,
   selectZcashUnit: () => 'zec',
