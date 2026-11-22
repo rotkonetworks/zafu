@@ -120,16 +120,16 @@ output of the same value), so later votes and spends use a fresh note.
 
 ## summary
 
-| property                              | preserved                                     |
-| ------------------------------------- | --------------------------------------------- |
-| sender, receiver, amount (shielded)   | yes, by the chain                             |
-| address comparison on zcash           | yes, a fresh random address each time         |
-| unrequested network traffic           | yes, default-deny                             |
-| query metadata vs the server          | no: your own server, proxy or nym             |
-| viewing-key leak                      | no: all shielded receipts become readable     |
-| host compromise, hot wallet           | no: pair with a signer                        |
-| host compromise, with zigner          | spending yes, viewing no                      |
-| tls against a trusted rogue ca        | partial: proofs catch tampering, reads leak   |
+| property                            | preserved                                   |
+| ----------------------------------- | ------------------------------------------- |
+| sender, receiver, amount (shielded) | yes, by the chain                           |
+| address comparison on zcash         | yes, a fresh random address each time       |
+| unrequested network traffic         | yes, default-deny                           |
+| query metadata vs the server        | no: your own server, proxy or nym           |
+| viewing-key leak                    | no: all shielded receipts become readable   |
+| host compromise, hot wallet         | no: pair with a signer                      |
+| host compromise, with zigner        | spending yes, viewing no                    |
+| tls against a trusted rogue ca      | partial: proofs catch tampering, reads leak |
 
 where each kind of data is stored, and whether it is sealed, is listed in
 [encryption at rest](encryption.md).

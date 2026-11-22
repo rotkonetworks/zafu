@@ -40,20 +40,20 @@ address, and your ip with it.
 
 ## settings
 
-| setting                         | default    | what it does                                                                    |
-| ------------------------------- | ---------- | ------------------------------------------------------------------------------- |
-| cosmos balances                 | off        | ask cosmos nodes for your balances (they learn your addresses)                  |
-| check zcash transparent each block | off     | check every transparent address of the pocket on each block while zafu is open |
-| check penumbra deposits on open | off        | check penumbra's transparent deposit addresses each time its balance opens      |
-| transaction history             | asked once | keep a history on this computer, or show only the balance                      |
-| keep penumbra syncing           | off        | keep syncing after the last zafu window closes                                  |
-| explorer links                  | off        | off, copy (a link to copy), or open (the explorer sees your ip and the lookup) |
-| open `zcash:` links             | on         | zafu opens payment links clicked on websites, for review                        |
-| open `zafu:` links              | on         | zafu opens its own links clicked on websites, for review                        |
-| identity                        | on         | the zid layer: sign-in, encryption for sites, messaging                         |
-| hide balances                   | off        | blur amounts on screen                                                          |
-| transaction signing             | grace      | foilhat (password every time), grace (once per 15 minutes), unlock only        |
-| sounds                          | off        | a bell for messages, a tap when money arrives                                   |
+| setting                            | default    | what it does                                                                   |
+| ---------------------------------- | ---------- | ------------------------------------------------------------------------------ |
+| cosmos balances                    | off        | ask cosmos nodes for your balances (they learn your addresses)                 |
+| check zcash transparent each block | off        | check every transparent address of the pocket on each block while zafu is open |
+| check penumbra deposits on open    | off        | check penumbra's transparent deposit addresses each time its balance opens     |
+| transaction history                | asked once | keep a history on this computer, or show only the balance                      |
+| keep penumbra syncing              | off        | keep syncing after the last zafu window closes                                 |
+| explorer links                     | off        | off, copy (a link to copy), or open (the explorer sees your ip and the lookup) |
+| open `zcash:` links                | on         | zafu opens payment links clicked on websites, for review                       |
+| open `zafu:` links                 | on         | zafu opens its own links clicked on websites, for review                       |
+| identity                           | on         | the zid layer: sign-in, encryption for sites, messaging                        |
+| hide balances                      | off        | blur amounts on screen                                                         |
+| transaction signing                | grace      | foilhat (password every time), grace (once per 15 minutes), unlock only        |
+| sounds                             | off        | a bell for messages, a tap when money arrives                                  |
 
 ## nym
 

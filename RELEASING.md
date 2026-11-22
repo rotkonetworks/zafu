@@ -3,10 +3,10 @@
 Two release lanes, one rule: **CI builds, verifies and publishes, but never
 alone signs anything that can reach a user's seed.**
 
-| lane         | what                                                   | signed by                           |
-| ------------ | ------------------------------------------------------ | ----------------------------------- |
-| extension    | the Chrome extension (CRX)                             | CI-held CRX keys (prod, beta)       |
-| firmware OTA | zigner protocol modules (they receive the seed on-device) | 2-of-3 FROST; CI holds one share    |
+| lane         | what                                                      | signed by                        |
+| ------------ | --------------------------------------------------------- | -------------------------------- |
+| extension    | the Chrome extension (CRX)                                | CI-held CRX keys (prod, beta)    |
+| firmware OTA | zigner protocol modules (they receive the seed on-device) | 2-of-3 FROST; CI holds one share |
 
 A bad extension is recoverable (uninstall, push a fix). A bad zigner module is
 not: it runs with the mnemonic and its output crosses the air gap, so its

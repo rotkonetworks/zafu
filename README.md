@@ -59,12 +59,12 @@ More in the [user guide](docs/src/guide/getting-started.md).
 
 ## security
 
-| property                            | protected                               |
-| ----------------------------------- | --------------------------------------- |
-| sender, receiver, amount            | yes, by the shielded pools              |
-| spending key on a browser compromise | yes with a cold signer; no for a hot wallet |
-| what the node learns                | which blocks you fetch; run your own node to avoid even that |
-| a leaked seed                       | no forward secrecy; chain history is permanent |
+| property                             | protected                                                    |
+| ------------------------------------ | ------------------------------------------------------------ |
+| sender, receiver, amount             | yes, by the shielded pools                                   |
+| spending key on a browser compromise | yes with a cold signer; no for a hot wallet                  |
+| what the node learns                 | which blocks you fetch; run your own node to avoid even that |
+| a leaked seed                        | no forward secrecy; chain history is permanent               |
 
 Details: [threat model](docs/src/security/threat-model.md),
 [encryption at rest](docs/src/security/encryption.md).

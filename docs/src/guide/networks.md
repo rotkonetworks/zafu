@@ -4,15 +4,15 @@ a new wallet starts with zcash only. more networks are turned on in
 settings > networks, and zafu contacts a network's servers only while it is
 on (see [privacy](privacy.md)).
 
-| network       | kind                  | on by default |
-| ------------- | --------------------- | ------------- |
-| zcash         | shielded              | yes           |
-| zcash testnet | shielded, no value    | no            |
-| penumbra      | shielded              | no            |
-| noble         | cosmos, via penumbra  | no            |
-| cosmos hub    | cosmos, via penumbra  | no            |
-| osmosis       | cosmos, via penumbra  | no            |
-| injective     | cosmos, via penumbra  | no            |
+| network       | kind                 | on by default |
+| ------------- | -------------------- | ------------- |
+| zcash         | shielded             | yes           |
+| zcash testnet | shielded, no value   | no            |
+| penumbra      | shielded             | no            |
+| noble         | cosmos, via penumbra | no            |
+| cosmos hub    | cosmos, via penumbra | no            |
+| osmosis       | cosmos, via penumbra | no            |
+| injective     | cosmos, via penumbra | no            |
 
 ## shielded networks
 
