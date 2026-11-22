@@ -20,11 +20,28 @@ import {
   SigningStargateClient,
   StargateClient,
   GasPrice,
+  TimeoutError,
+  defaultRegistryTypes,
   type DeliverTxResponse,
 } from '@cosmjs/stargate';
 import { stringToPath } from '@cosmjs/crypto';
 import { fromBech32, toBech32, toBase64, fromBase64 } from '@cosmjs/encoding';
-import { encodePubkey, makeAuthInfoBytes, DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
+import {
+  encodePubkey,
+  makeAuthInfoBytes,
+  DirectSecp256k1HdWallet,
+  Registry,
+} from '@cosmjs/proto-signing';
+import { AuthInfo, TxBody } from 'cosmjs-types/cosmos/tx/v1beta1/tx';
+import { GenericAuthorization } from 'cosmjs-types/cosmos/authz/v1beta1/authz';
+import { SendAuthorization } from 'cosmjs-types/cosmos/bank/v1beta1/authz';
+import { StakeAuthorization } from 'cosmjs-types/cosmos/staking/v1beta1/authz';
+import {
+  AllowedMsgAllowance,
+  BasicAllowance,
+  PeriodicAllowance,
+} from 'cosmjs-types/cosmos/feegrant/v1beta1/feegrant';
+import { MsgExecuteContract } from 'cosmjs-types/cosmwasm/wasm/v1/tx';
 import { COSMOS_CHAINS, getCosmosChain, type CosmosChainId } from './chains';
 
 /** encode object for cosmos messages */
@@ -198,7 +215,32 @@ export async function createSigningClient(
   return { client, address: account.address };
 }
 
-/** sign and broadcast a transaction */
+/**
+ * cosmjs throws `TimeoutError` when the node took the transaction but no block
+ * showed it in time: it was sent, and may still land. Read as an error the
+ * screen offered "try again", which signs a second payment with the next
+ * sequence. It is a submitted transaction instead (height 0: not in a block
+ * yet), followed up by its hash like any other.
+ */
+export const submittedOnTimeout = (e: unknown): DeliverTxResponse => {
+  // cosmjs leaves `name` as "Error": the class is what says it was submitted
+  if (!(e instanceof TimeoutError) || !e.txId) {
+    throw e;
+  }
+  const txId = e.txId;
+  return {
+    code: 0,
+    height: 0,
+    txIndex: 0,
+    events: [],
+    msgResponses: [],
+    gasUsed: 0n,
+    gasWanted: 0n,
+    transactionHash: txId,
+  };
+};
+
+/** sign and broadcast a transaction; a timeout after submitting is `height: 0`, not an error */
 export async function signAndBroadcast(
   chainId: CosmosChainId,
   mnemonic: string,
@@ -210,7 +252,7 @@ export async function signAndBroadcast(
   const { client, address } = await createSigningClient(chainId, mnemonic, accountIndex);
 
   try {
-    return await client.signAndBroadcast(address, messages, fee, memo);
+    return await client.signAndBroadcast(address, messages, fee, memo).catch(submittedOnTimeout);
   } finally {
     client.disconnect();
   }
@@ -597,5 +639,101 @@ export async function signKeplrDirect(
     chainId: res.signed.chainId,
     signatureB64: res.signature.signature,
     pubKeyB64: res.signature.pub_key.value,
+  };
+}
+
+/**
+ * The types a direct sign doc can be read in: the cosmjs defaults, what nests
+ * inside an authz or feegrant grant, and a cosmwasm execute.
+ */
+const directRegistry = new Registry([
+  ...defaultRegistryTypes,
+  ...[
+    GenericAuthorization,
+    SendAuthorization,
+    StakeAuthorization,
+    BasicAllowance,
+    PeriodicAllowance,
+    AllowedMsgAllowance,
+    MsgExecuteContract,
+  ].map(t => [t.typeUrl, t] as [string, (typeof defaultRegistryTypes)[number][1]]),
+]);
+
+/** a decoded value as plain JSON: bytes that hold JSON (a contract msg) as that JSON, other bytes base64 */
+const readable = (v: unknown, unread: string[]): unknown => {
+  if (typeof v === 'bigint') {
+    return v.toString();
+  }
+  if (v instanceof Uint8Array) {
+    try {
+      const json = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(v)) as unknown;
+      if (typeof json === 'object' && json !== null) {
+        return json;
+      }
+    } catch {
+      // not json
+    }
+    return toBase64(v);
+  }
+  if (Array.isArray(v)) {
+    return v.map(x => readable(x, unread));
+  }
+  if (typeof v !== 'object' || v === null) {
+    return v;
+  }
+  const { typeUrl, value } = v as { typeUrl?: unknown; value?: unknown };
+  if (typeof typeUrl === 'string' && value instanceof Uint8Array) {
+    return readAny(typeUrl, value, unread);
+  }
+  return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, readable(x, unread)]));
+};
+
+/** an Any, decoded all the way down; a type zafu can't read is named in `unread` */
+const readAny = (typeUrl: string, value: Uint8Array, unread: string[]) => {
+  const type = directRegistry.lookupType(typeUrl);
+  if (!type) {
+    unread.push(typeUrl);
+    return { type: typeUrl, value: toBase64(value) };
+  }
+  return { type: typeUrl, value: readable(type.decode(value), unread) };
+};
+
+export interface KeplrDirectView {
+  /** amino-shaped, so it reads like an amino request */
+  doc: {
+    chain_id: string;
+    account_number: string;
+    sequence: string;
+    fee: unknown;
+    memo: string;
+    timeout_height: string;
+    msgs: unknown[];
+    extension_options: unknown[];
+  };
+  /** type urls zafu can't decode; a doc with any can't be shown, so it isn't signed */
+  unread: string[];
+}
+
+/**
+ * Decode the exact bytes signKeplrDirect signs into something a person can
+ * read. Malformed bytes throw.
+ */
+export function readKeplrDirect(doc: KeplrDirectWireDoc): KeplrDirectView {
+  const body = TxBody.decode(fromBase64(doc.bodyBytesB64));
+  const auth = AuthInfo.decode(fromBase64(doc.authInfoBytesB64));
+  const unread: string[] = [];
+  const any = (a: { typeUrl: string; value: Uint8Array }) => readAny(a.typeUrl, a.value, unread);
+  return {
+    doc: {
+      chain_id: doc.chainId,
+      account_number: doc.accountNumber,
+      sequence: auth.signerInfos[0]?.sequence.toString() ?? '',
+      fee: readable(auth.fee, unread),
+      memo: body.memo,
+      timeout_height: body.timeoutHeight.toString(),
+      msgs: body.messages.map(any),
+      extension_options: [...body.extensionOptions, ...body.nonCriticalExtensionOptions].map(any),
+    },
+    unread,
   };
 }

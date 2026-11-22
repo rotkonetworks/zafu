@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import { create } from 'zustand';
 import { AllSlices, initializeStore, TestStore } from '..';
 import { selectEffectiveKeyInfo, selectKeyInfosForActiveNetwork, selectPenumbraOnly } from '.';
-import { keyInfoSupportsNetwork } from './vault-ops';
+import { keyInfoSupportsNetwork, vaultsToKeyInfos } from './vault-ops';
 import type { EncryptedVault, KeyInfo } from './types';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
@@ -36,11 +36,25 @@ describe('keyInfoSupportsNetwork', () => {
   });
 });
 
-describe('a 12-word phrase is penumbra-only', () => {
+describe('12-word phrases', () => {
   let useStore: TestStore;
   const kr = () => useStore.getState().keyRing;
   const vault = (id: string) =>
     ((localMock.get('vaults') ?? []) as EncryptedVault[]).find(v => v.id === id)!;
+
+  const markPenumbraOnly = (id: string) => {
+    const vaults = (localMock.get('vaults') ?? []) as EncryptedVault[];
+    const v = vaults.find(x => x.id === id)!;
+    v.insensitive = { ...v.insensitive, supportedNetworks: ['penumbra'] };
+    localMock.set('vaults', vaults);
+    useStore.setState(s => {
+      s.keyRing.keyInfos = vaultsToKeyInfos(vaults, s.keyRing.selectedKeyInfo?.id);
+      const sel = s.keyRing.keyInfos.find(k => k.id === s.keyRing.selectedKeyInfo?.id);
+      if (sel) {
+        s.keyRing.selectedKeyInfo = sel;
+      }
+    });
+  };
 
   beforeEach(async () => {
     localMock.clear();
@@ -49,14 +63,21 @@ describe('a 12-word phrase is penumbra-only', () => {
     await kr().setPassword('s0meUs3rP@ssword');
   });
 
-  test('the vault records it; a 24-word vault carries no field', async () => {
+  test('a new 12-word import serves every network, like 24 words', async () => {
     const twelve = await kr().newMnemonicKey(TWELVE, 'p');
+    expect(vault(twelve).insensitive['supportedNetworks']).toBeUndefined();
+    useStore.setState(s => {
+      s.keyRing.activeNetwork = 'zcash';
+    });
+    expect(selectEffectiveKeyInfo(useStore.getState())?.id).toBe(twelve);
+    expect(selectPenumbraOnly(useStore.getState())).toBe(false);
+
     const full = await kr().newMnemonicKey(TWENTY_FOUR, 'z');
-    expect(vault(twelve).insensitive['supportedNetworks']).toEqual(['penumbra']);
     expect(vault(full).insensitive['supportedNetworks']).toBeUndefined();
+    expect(keyInfoSupportsNetwork(kr().keyInfos.find(k => k.id === twelve)!, 'zcash')).toBe(true);
   });
 
-  test('a re-import selects the same vault and leaves its fields alone', async () => {
+  test('a re-import selects the same vault and does not duplicate it', async () => {
     const id = await kr().newMnemonicKey(TWELVE, 'p');
     const before = structuredClone(vault(id));
     await kr().newMnemonicKey(TWENTY_FOUR, 'z');
@@ -65,9 +86,30 @@ describe('a 12-word phrase is penumbra-only', () => {
     expect(kr().selectedKeyInfo?.id).toBe(id);
   });
 
-  test('zcash never selects it, penumbra does', async () => {
+  test('re-importing a penumbra-only vault lifts the limit, seed untouched', async () => {
+    const id = await kr().newMnemonicKey(TWELVE, 'p');
+    markPenumbraOnly(id);
+    expect(vault(id).insensitive['supportedNetworks']).toEqual(['penumbra']);
+    const before = structuredClone(vault(id));
+    expect(await kr().newMnemonicKey(TWELVE, 'again')).toBe(id);
+    const after = vault(id);
+    expect(after.insensitive['supportedNetworks']).toBeUndefined();
+    expect([after.encryptedData, after.salt, after.insensitive['zid']]).toEqual([
+      before.encryptedData,
+      before.salt,
+      before.insensitive['zid'],
+    ]);
+    expect(kr().keyInfos.find(k => k.id === id)?.insensitive['supportedNetworks']).toBeUndefined();
+    useStore.setState(s => {
+      s.keyRing.activeNetwork = 'zcash';
+    });
+    expect(selectEffectiveKeyInfo(useStore.getState())?.id).toBe(id);
+  });
+
+  test('a legacy penumbra-only vault is not selected on zcash until re-imported', async () => {
     const full = await kr().newMnemonicKey(TWENTY_FOUR, 'z');
     const twelve = await kr().newMnemonicKey(TWELVE, 'p');
+    markPenumbraOnly(twelve);
     await kr().setActiveNetwork('penumbra');
     expect(selectEffectiveKeyInfo(useStore.getState())?.id).toBe(twelve);
 
@@ -77,15 +119,15 @@ describe('a 12-word phrase is penumbra-only', () => {
     expect(selectEffectiveKeyInfo(useStore.getState())?.id).toBe(full);
     expect(selectKeyInfosForActiveNetwork(useStore.getState()).map(k => k.id)).toEqual([full]);
 
-    // switching to zcash moves the selection to a wallet that can hold it
     await kr().setActiveNetwork('penumbra');
     await kr().selectKeyRing(twelve);
     await kr().setActiveNetwork('zcash');
     expect(kr().selectedKeyInfo?.id).toBe(full);
   });
 
-  test('with no other wallet, zcash has none to show', async () => {
-    await kr().newMnemonicKey(TWELVE, 'p');
+  test('with only a legacy penumbra-only vault, zcash has none to show', async () => {
+    const id = await kr().newMnemonicKey(TWELVE, 'p');
+    markPenumbraOnly(id);
     useStore.setState(s => {
       s.keyRing.activeNetwork = 'zcash';
     });

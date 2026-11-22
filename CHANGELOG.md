@@ -6,6 +6,100 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.7.1
+
+### Passkeys
+
+- Signing in with a passkey works whether zafu is locked or unlocked. The
+  passkey screen always opens and asks for your password there: to unlock, or
+  as your signing security setting says (every time, once per 15 minutes, or
+  never while unlocked). There is no separate unlock window first.
+- Sites that require a verified passkey accept zafu's. Before, an unlocked
+  zafu signed without saying the user was verified.
+- A login page that asks for the passkey as it loads, after a redirect from
+  the app, reaches zafu. Before, zafu waited for a click on that page.
+- A passkey made on one page of a site signs in on its other pages that share
+  the same passkey scope, such as `app.` and `login.` of one domain.
+- When zafu's window for a site is already open, a second request is refused
+  quietly, with no browser prompt beside it.
+- A passkey screen reaches the side panel your click just opened. Before, the
+  panel could open on home with no screen, and the site then offered the
+  browser's own passkey prompt (a QR code for your phone).
+
+### Unlock and lock
+
+- The idle lock no longer restarts zafu. Sites left open keep their link to
+  zafu, so a passkey or connection works after the lock without reloading the
+  tab. Everything the unlock opened is still dropped.
+- The emblem behind 'welcome back' no longer shows a black box.
+
+## 29.7.0
+
+### Passkeys
+
+- A site's passkey sign-in reaches zafu even when zafu was idle. Before, a
+  request that woke zafu up could go unanswered, and the browser said it had
+  no passkey unless the side panel was open. The same went for a site's
+  connect, signature or keplr request.
+- Saying no to zafu's password or passkey screen is a plain cancel for the
+  site, and your next click asks again.
+- Passkey screens show where you set approvals to show: the side panel, a
+  window, or (sidebar only) a badge on the toolbar icon until the panel opens.
+- The page's console says why whenever zafu leaves a passkey request to the
+  browser.
+
+### Money
+
+- A cosmos or noble send that timed out after it was submitted shows as sent
+  and is followed up, instead of "didn't go through" with a retry that could
+  pay twice.
+- A Zigner or Keystone answer that carries a whole signed transaction is
+  broadcast only if it is the transaction you reviewed.
+- A zcash send that expired without being mined gives back the notes it kept
+  aside; the balance no longer stays short until a resync.
+- Cosmos sends go to the same chain or into penumbra. Other chains are off
+  until zafu runs the route itself: the quote and what was signed could differ.
+- Penumbra: no undelegate for now, since zafu cannot claim the unbonded um
+  yet. Delegations still show; unstake in prax or pcli.
+- Penumbra accounts beyond the first ten that hold funds are listed and usable.
+
+### Privacy
+
+- zafu no longer marks every page it loads on. `window.zafu` appears on sites
+  you connected (or everywhere with "act as keplr" on).
+- Transparent checks ask the node only about addresses zafu handed out, one
+  per request. A wallet from an older version looks back once; "look back" in
+  pool notes does it by hand after restoring a seed.
+- A redirect from a node or service is refused, never followed.
+- At rest, the recipient and memo of your sends, your transaction notes, your
+  zcash.me key and the list of contacted hosts are sealed with your password.
+
+### Sites
+
+- Keplr: the approval shows the chain that is signed and refuses a mismatch;
+  direct sign docs are shown as readable messages, and one zafu cannot read
+  is not signed. `signArbitrary` and `verifyArbitrary` are supported.
+- Multisig requests from inside an iframe are refused, and a co-signer refuses
+  a transaction hash the host made up.
+- A site waits after you dismiss its unlock prompt, opens one zafu window at a
+  time, and can ask only for permissions zafu enforces.
+- A site's zcash send needs a connection first and shows zafu's own fee and
+  every memo. The sign screen shows the challenge.
+- Encryption uses the same per-site identity as signing. If you rotated a
+  site's identity, messages sealed to the earlier key will not open.
+
+### Also
+
+- Beta features switch in settings > about: on by default in the beta build,
+  off in the release build. It turns on Ledger shielded signing and the
+  in-wallet buy.
+- A 12-word recovery phrase (Brave Wallet makes them) imports like a 24-word
+  one, with zcash on.
+- Terp Network and Juno are built-in cosmos chains.
+- The accounts sheet lists every wallet, and a network switch says when it
+  changes wallet. The networks sheet shows only zcash's testnet under zcash.
+- The password generator is off, as its setting said.
+
 ## 29.6.0
 
 ### Sending

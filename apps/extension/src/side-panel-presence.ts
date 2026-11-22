@@ -91,3 +91,17 @@ export const announceSidePanelPresence = (): void => {
     // extension context unavailable - nothing to announce
   }
 };
+
+/** wait for a side panel to show up in `winId`, asking every 150 ms for up to `ms` */
+export const waitForSidePanel = async (winId: number | undefined, ms: number): Promise<boolean> => {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    await new Promise<void>(resolve => {
+      setTimeout(resolve, 150);
+    });
+    if (await isSidePanelOpen(winId)) {
+      return true;
+    }
+  }
+  return false;
+};

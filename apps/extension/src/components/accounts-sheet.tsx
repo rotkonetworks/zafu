@@ -13,12 +13,22 @@ import { useStore, type AllSlices } from '../state';
 import {
   selectActiveNetwork,
   selectEffectiveKeyInfo,
-  selectKeyInfosForActiveNetwork,
+  selectEnabledNetworks,
+  selectSetActiveNetwork,
+  selectSwitcherKeyInfos,
   selectSelectKeyRing,
   selectRenameKeyRing,
   selectLock,
+  type KeyInfo,
   type NetworkType,
 } from '../state/keyring';
+import {
+  keyInfoNetworks,
+  keyInfoSupportsNetwork,
+  networkForWallet,
+} from '../state/keyring/vault-ops';
+import { getNetwork } from '../config/networks';
+import { useEnableNetwork } from '../hooks/enable-network';
 import {
   MAX_POCKETS,
   activeAccountIndex,
@@ -27,6 +37,7 @@ import {
   type PenumbraAccountRow,
   pocketOwner,
   visiblePockets,
+  zignerPockets,
 } from '../state/pockets';
 import { pocketStoreId } from '../state/pocket-id';
 import { zcashWorkerQuery } from '../hooks/zcash-pool-balances';
@@ -193,31 +204,40 @@ export const AccountsSheet = ({
 }) => {
   const navigate = useNavigate();
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  // every wallet, not only the active network's: one that can't serve this
+  // network is listed and marked, and picking it moves to a network it serves.
   // perf: .filter()s a new array every read - shallow-equal it so this
   // sheet's subscription doesn't re-render on unrelated state ticks.
-  const keyInfos = useStore(useShallow(selectKeyInfosForActiveNetwork));
+  const keyInfos = useStore(useShallow(selectSwitcherKeyInfos));
   const selectKeyRing = useStore(selectSelectKeyRing);
+  const activeNetwork = useStore(selectActiveNetwork);
+  const enabledNetworks = useStore(selectEnabledNetworks);
+  const setActiveNetwork = useStore(selectSetActiveNetwork);
+  const enableNetwork = useEnableNetwork();
   const lock = useStore(selectLock);
   const inSidePanel = isSidePanel();
 
   const isHotWallet = selectedKeyInfo?.type === 'mnemonic';
-  // the active hot wallet gets its own header + pockets block above; listing
-  // it again here would be the same wallet twice, and tapping it would do
-  // nothing (it is already selected).
-  const otherKeyInfos = isHotWallet ? keyInfos.filter(k => k.id !== selectedKeyInfo?.id) : keyInfos;
+  const onPenumbra = activeNetwork === 'penumbra';
+  // a zigner wallet's zcash pockets are accounts whose keys it showed
+  const zignerWithPockets = useStore(s => !!zignerPockets(s)) && !onPenumbra;
+  const withPockets = isHotWallet || zignerWithPockets;
+  // the active wallet with pockets gets its own header + pockets block above;
+  // listing it again here would be the same wallet twice, and tapping it would
+  // do nothing (it is already selected).
+  const otherKeyInfos = withPockets ? keyInfos.filter(k => k.id !== selectedKeyInfo?.id) : keyInfos;
   const pockets = useStore(useShallow(activePockets));
   const shown = visiblePockets(pockets);
   const hiddenCount = pockets.length - shown.length;
-  const network = useStore(selectActiveNetwork);
-  const target = pocketTarget(network);
+  const target = pocketTarget(activeNetwork);
   const activeAccount = useStore(target.active);
-  const onPenumbra = network === 'penumbra';
   const { data: funded = [] } = useQuery({
     ...penumbraAccountsQuery(selectedKeyInfo?.id),
     enabled: open && onPenumbra,
   });
   const rows = onPenumbra
-    ? penumbraAccountRows(pockets, funded, activeAccount)
+    ? // zigner pockets are zcash accounts: on penumbra its rows are as before
+      penumbraAccountRows(isHotWallet ? pockets : [], funded, activeAccount)
     : shown.map(p => ({ account: p.account, name: p.name, pocket: true }));
   const renamePocket = useStore(s => s.pockets.rename);
   const hidePocket = useStore(s => s.pockets.hide);
@@ -226,7 +246,7 @@ export const AccountsSheet = ({
   // the active pocket's figure is home's own cached one (same query), so the
   // panel opens with it; it re-reads only while open
   const activeStore =
-    isHotWallet && selectedKeyInfo && target.store
+    withPockets && selectedKeyInfo && target.store
       ? target.store(selectedKeyInfo.id, activeAccount)
       : undefined;
   const { data: activeBalanceZat } = useQuery({
@@ -234,11 +254,18 @@ export const AccountsSheet = ({
     enabled: open && !!activeStore,
   });
 
-  const pickWallet = (id: string) => {
-    if (id !== selectedKeyInfo?.id) {
-      void selectKeyRing(id);
-    }
+  const pickWallet = async (k: KeyInfo) => {
     onOpenChange(false);
+    const network = networkForWallet(k, activeNetwork, enabledNetworks);
+    if (k.id !== selectedKeyInfo?.id) {
+      await selectKeyRing(k.id);
+    }
+    if (network !== activeNetwork) {
+      await (enabledNetworks.includes(network)
+        ? setActiveNetwork(network)
+        : enableNetwork(network));
+      navigate(PopupPath.INDEX);
+    }
   };
 
   const pickPocket = (account: number) => {
@@ -304,10 +331,14 @@ export const AccountsSheet = ({
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title='accounts' className='gap-0 pb-0'>
       {open && navTimingOn && <Painted target='sheet:wallets' />}
-      {isHotWallet && selectedKeyInfo && (
+      {withPockets && selectedKeyInfo && (
         <div className='-mx-4 flex flex-col px-3 pb-2'>
           <div className='flex items-center gap-2 px-2'>
-            <Mark variant='seal' size={20} />
+            {isHotWallet ? (
+              <Mark variant='seal' size={20} />
+            ) : (
+              <span className={cn('size-5 shrink-0', CUSTODY_ICON.cold)} aria-hidden='true' />
+            )}
             <button
               type='button'
               onClick={() =>
@@ -327,7 +358,9 @@ export const AccountsSheet = ({
                 aria-hidden='true'
               />
             </button>
-            <span className='shrink-0 text-[11px] text-fg-muted'>{CUSTODY_META.hot}</span>
+            <span className='shrink-0 text-[11px] text-fg-muted'>
+              {CUSTODY_META[isHotWallet ? 'hot' : 'cold']}
+            </span>
           </div>
           {rows.map(renderRow)}
           <Plus
@@ -352,28 +385,47 @@ export const AccountsSheet = ({
         </div>
       )}
 
-      {!isHotWallet && onPenumbra && (
+      {!withPockets && onPenumbra && (
         <div className='-mx-4 flex flex-col px-3 pb-2'>{rows.map(renderRow)}</div>
       )}
 
       <div className='-mx-4 flex flex-col border-t border-border-soft px-3 pb-3.5 pt-2.5'>
         {otherKeyInfos.map(k => {
           const custody = custodyOf(k);
+          const networks = keyInfoNetworks(k);
+          const elsewhere = !keyInfoSupportsNetwork(k, activeNetwork);
           return (
             <button
               key={k.id}
               type='button'
-              onClick={() => pickWallet(k.id)}
+              onClick={() => void pickWallet(k)}
               className='flex h-[54px] items-center gap-3 px-2 text-left transition-colors hover:bg-surface-elev-2'
             >
               <span
-                className={cn('size-[18px] shrink-0', CUSTODY_ICON[custody])}
+                className={cn(
+                  'size-[18px] shrink-0',
+                  CUSTODY_ICON[custody],
+                  elsewhere && 'opacity-50',
+                )}
                 aria-hidden='true'
               />
               <span className='flex min-w-0 flex-1 flex-col gap-[3px]'>
-                <Clipped className='text-sm text-fg-high lowercase'>{k.name}</Clipped>
-                <Clipped className='text-[11px] text-fg-muted'>{CUSTODY_META[custody]}</Clipped>
+                <Clipped
+                  className={cn('text-sm lowercase', elsewhere ? 'text-fg-muted' : 'text-fg-high')}
+                >
+                  {k.name}
+                </Clipped>
+                <Clipped className='text-[11px] text-fg-muted'>
+                  {[CUSTODY_META[custody], ...(networks ?? []).map(n => getNetwork(n).name)]
+                    .join(' · ')
+                    .toLowerCase()}
+                </Clipped>
               </span>
+              {elsewhere && (
+                <span className='shrink-0 text-[11px] text-fg-muted lowercase'>
+                  no {getNetwork(activeNetwork).name}
+                </span>
+              )}
             </button>
           );
         })}

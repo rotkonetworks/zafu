@@ -11,6 +11,7 @@ import {
   effectiveNetwork,
   isAddressOn,
   isRealAddress,
+  payAcrossOf,
   refusalOf,
   zcashAddressOf,
   zcashPayRefusal,
@@ -142,6 +143,21 @@ describe('addressKind', () => {
     expect(chainOfSwap('arb')).toBe('arbitrum');
     expect(chainOfSwap('near')).toBe('near');
     expect(chainOfSwap('tron')).toBeUndefined();
+  });
+});
+
+describe('payAcrossOf', () => {
+  it("pays another chain's address in that chain's own coin", () => {
+    expect(payAcrossOf(BTC_BECH32)).toEqual({ token: 'btc', chain: 'btc' });
+    expect(payAcrossOf(` ${BTC_TAPROOT} `)).toEqual({ token: 'btc', chain: 'btc' });
+    expect(payAcrossOf(ETH)).toEqual({ token: 'eth', chain: 'eth' });
+    expect(payAcrossOf(SOL)).toEqual({ token: 'sol', chain: 'sol' });
+  });
+
+  it('leaves what zcash pays itself, and what is no address, to send', () => {
+    for (const s of [ZID, 'hello', '', 'u1bob', 't1PTs8DQifJxg6HmUq7AgYYFNkbyQa1zjgf']) {
+      expect(payAcrossOf(s)).toBeUndefined();
+    }
   });
 });
 

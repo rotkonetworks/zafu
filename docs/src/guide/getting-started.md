@@ -1,9 +1,7 @@
 # getting started
 
-zafu is a multi-chain privacy wallet for zcash and penumbra, distributed as a
-chrome extension (manifest v3). it supports three onboarding paths: creating a
-new wallet, importing an existing seed phrase, or connecting a zigner airgap
-device. (a ledger path also exists but stays hidden behind a feature flag.)
+zafu is a privacy wallet for zcash, with penumbra and cosmos chains on
+request, distributed as a chrome extension (manifest v3).
 
 ## building from source
 
@@ -11,9 +9,9 @@ zafu is a pnpm monorepo. the extension lives in `apps/extension/`.
 
 prerequisites:
 
-- node.js (with `--max-old-space-size=8192` - set automatically by build scripts)
+- node.js (builds set `--max-old-space-size=8192` themselves)
 - pnpm 9.4+
-- rust toolchain (for zcash wasm compilation in `packages/zcash-wasm/`)
+- rust toolchain (for the zcash wasm in `packages/zcash-wasm/`)
 
 ```sh
 git clone https://github.com/rotkonetworks/zafu
@@ -22,116 +20,86 @@ pnpm install
 pnpm build
 ```
 
-`pnpm build` runs turbo across the monorepo. it produces two extension builds:
+`pnpm build` produces two extension builds:
 
-- `apps/extension/dist/` - production build (`bundle:prod`)
-- `apps/extension/beta-dist/` - beta/testnet build (`bundle:beta`)
+- `apps/extension/dist/` - production
+- `apps/extension/beta-dist/` - beta
 
-for development with hot reload against testnet:
+`pnpm dev` in `apps/extension` rebuilds the beta in watch mode with inline
+source maps. to load an unpacked build, open `chrome://extensions`, turn on
+developer mode and load `dist/` or `beta-dist/`.
 
-```sh
-cd apps/extension
-pnpm dev
-```
-
-this runs webpack in watch mode with `NODE_ENV=testnet` and inline source maps.
-
-to load the unpacked extension in chromium, navigate to `chrome://extensions`,
-enable developer mode, and load the `dist/` or `beta-dist/` directory.
-
-other commands:
-
-- `pnpm lint` - eslint
-- `pnpm lint:strict` - typecheck + eslint with zero warnings
-- `pnpm test` - vitest
-- `pnpm clean` - remove `dist/`, `beta-dist/`, `bin/`
+other commands: `pnpm lint`, `pnpm lint:strict` (typecheck plus lint),
+`pnpm test` (vitest), `pnpm clean`.
 
 ## onboarding
 
-on first launch, zafu opens a full-page onboarding tab. there are three paths.
-onboarding is deliberately minimal - there is no network-selection screen. a
-fresh wallet defaults to zcash only; you enable more networks later in
-settings > networks.
+on first launch zafu opens a full-page onboarding tab. there is no network
+selection: a new wallet is zcash only, and more networks are turned on later
+in settings > networks. onboarding contacts no server.
 
-### create new wallet
+you start by creating a wallet or bringing one:
 
-generates a new 24-word BIP-39 seed phrase. 24 words are used for better
-entropy and zcash compatibility. the phrase is generated client-side and
-never leaves the device.
+- **create** - a new 24-word recovery phrase
+- **recovery phrase** - import 12 or 24 words
+- **zigner or keystone** - scan the connect code of an air-gapped signer
+- **ledger** - plug in over usb
+- **viewing key** - watch only
 
-the phrase is displayed as a numbered grid; you must confirm you wrote it
-down before continuing. the flow then proceeds directly to password creation.
+### create
 
-### import seed phrase
+1. choose a password
+2. zafu shows a new 24-word phrase, made on this device; write it down
+3. zafu checks a few of the words
 
-enter an existing 12 or 24-word BIP-39 recovery phrase. you can paste the
-full phrase into the first input box and the remaining fields fill
-automatically. the phrase is validated before the continue button becomes
-active.
+### import a recovery phrase
 
-after review, imported wallets go through a zcash wallet-birthday step
-(described below) and then password creation.
+1. enter the phrase (pasting the whole phrase into the first box fills the
+   rest)
+2. choose a wallet birthday (see below)
+3. choose a password
 
-### connect zigner (airgap)
+a 12-word phrase holds penumbra keys only; zcash needs 24 words.
 
-zigner is zafu's companion airgap signing device. it keeps spending keys
-offline and communicates with zafu via QR codes.
+### zigner or keystone
 
-the zigner import flow:
+zigner is zafu's air-gapped android signer; keystone works the same way. the
+signer keeps the spending keys and shows a connect code (a qr) with the
+viewing key. zafu reads the code, recognises the device and the network from
+it, and the wallet signs by qr from then on. zigner covers zcash and
+penumbra.
 
-1. open the zigner app on your phone and export the viewing key as a QR code
-2. scan the QR code with your computer's camera (a separate keystone flow
-   scans an animated `ur:zcash-accounts` QR for zcash)
-3. zafu detects the network type automatically (penumbra, zcash, cosmos, or polkadot)
-4. set an optional wallet label
-5. choose to set a password or skip it
+you can set a password or continue without one. without a password, anyone
+who opens your browser can open the wallet (it still cannot spend: the keys
+are on the signer).
 
-zigner wallets are watch-only. you can view balances and construct unsigned
-transactions, but signing requires the zigner device. the extension stores
-only the full viewing key (penumbra), unified/orchard full viewing key
-(zcash), or public address (cosmos/polkadot).
+### ledger and viewing keys
 
-zigner supports four network types:
+a ledger holds transparent zcash and signs its payments over usb. a viewing key wallet can see its
+transactions and balance but cannot spend.
 
-- penumbra - imports the full viewing key and account index
-- zcash - imports the orchard full viewing key or unified full viewing key
-- cosmos - imports watch-only addresses for cosmos chains
-- polkadot - imports the SS58 address and genesis hash
+## wallet birthday
 
-## zcash wallet birthday (imported wallets)
+an imported wallet (or a viewing key) asks when it was made. an estimate is
+enough: it only decides how far back the first sync reads. an earlier date
+costs scan time; a date too late can hide older notes until a rescan. "not
+sure" starts at orchard activation (may 2022), which is safe but slower. a
+wallet created in zafu starts at the chain tip.
 
-imported wallets pick a wallet birthday in a dedicated step before the
-password screen. an estimate is enough - it only sets how far back the first
-sync scans, not whether funds are safe. picking an earlier date only costs
-scan time; picking one too late can hide older notes until a rescan. if you
-don't remember, zafu scans from the orchard activation height (~may 2022),
-which is safe but slower. freshly generated wallets skip this step and sync
-from the chain tip.
+## make it yours
 
-## password
-
-the password encrypts your wallet data in local storage. it is required to
-unlock the extension after it locks.
-
-when connecting via zigner, you can skip password creation. this means the
-extension does not require login but is less secure - anyone with access to
-your browser can open the wallet.
-
-password requirements: the password and confirmation must match. only an
-empty password is rejected; there is no longer-length minimum enforced by the
-UI, but longer passwords are recommended.
-
-## fresh wallet optimization
-
-when creating a new wallet (not importing), zafu records the current penumbra
-block height at the time of creation and fetches the penumbra compact frontier
-snapshot from the RPC node. this bootstraps the penumbra state commitment tree
-without downloading full chain history once penumbra is enabled. a freshly
-generated zcash wallet simply syncs from the current chain tip, since there
-cannot be any transactions for a newly generated key before that height.
+one optional step before "wallet ready" offers a few settings: theme (sumi
+or washi), whether to keep a transaction history, hide balances, auto-lock,
+the zcash node, and whether to connect directly or over nym. skipping it
+changes nothing; everything there is also in settings.
 
 ## after onboarding
 
-once onboarding completes, close the setup tab. the wallet is accessible from
-the zafu icon in the browser toolbar. additional networks (penumbra, noble,
-and others) can be enabled from settings > networks.
+close the setup tab and open zafu from the toolbar.
+
+- receive shows a fresh shielded address each time you show or share one;
+  all of them reach the same wallet.
+- **pockets** are separate balances inside one wallet (zip 32 accounts),
+  each with its own addresses; add them from the accounts sheet. nothing new
+  to back up: they come from the same phrase.
+- more networks (penumbra, cosmos chains) are in settings > networks.

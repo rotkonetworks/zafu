@@ -8,6 +8,7 @@ import {
 import { cn } from '@repo/ui/lib/utils';
 import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
+import { exitApprovalSurface, usePopupNav } from '../../../utils/navigate';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
 import { Mark } from '@repo/ui/components/ui/mark';
@@ -42,6 +43,7 @@ const SafeOriginURL = ({ origin }: { origin: string }) => {
 
 export const CapabilityApproval = () => {
   const [params] = useSearchParams();
+  const navigate = usePopupNav();
   const origin = params.get('app') || '';
   const capability = params.get('capability') as Capability | null;
   const requestId = params.get('requestId') || '';
@@ -70,7 +72,7 @@ export const CapabilityApproval = () => {
     } catch {
       // service worker unreachable or reloaded - closing is all we can do
     }
-    window.close();
+    exitApprovalSurface(navigate);
   };
 
   const [verb, lead] = APPROVE_COPY[capability] ?? DEFAULT_APPROVE_COPY;

@@ -66,14 +66,19 @@ describe('passkey bridge', () => {
     },
   );
 
-  it('asks nothing without a click on the page', () => {
+  it("a page's first sign-in needs no click on it; the next does, and making a passkey always does", () => {
+    // the login page a redirect lands on asks as it loads: the click was on the page before
     clicked(false);
-    pagePosts(hostile('get'));
     pagePosts(hostile('create'));
     expect(sendMessage).not.toHaveBeenCalled();
+    pagePosts(hostile('get'));
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    pagePosts(hostile('get'));
+    expect(sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it("a page's own synthetic click does not count as the person's hand", () => {
+    // (this page's one sign-in without a click was used by the test above)
     clicked(false);
     window.dispatchEvent(new PointerEvent('pointerdown'));
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
@@ -136,6 +141,15 @@ describe('promptCooldown', () => {
     expect(c.quiet(1_001)).toBe(false);
   });
 
+  it("the person's own click after a not now ends the wait; the page asking again alone does not", () => {
+    const c = promptCooldown();
+    // the password prompt dismissed at 10 s, after the click at 5 s that asked
+    c.after({ success: false, code: 'cancelled' }, 10_000);
+    expect(c.quiet(12_000, 5_000)).toBe(true);
+    // a new click at 15 s: the next ask is theirs, not the page looping
+    expect(c.quiet(16_000, 15_000)).toBe(false);
+  });
+
   it('does not wait after a refusal the person never saw', () => {
     const c = promptCooldown();
     c.after({ success: false }, 0);
@@ -173,7 +187,22 @@ describe('passkeyMessage', () => {
       clientDataHash: 'aabb',
       prfSalts: { first: '01' },
       allowCredentials: [{ id: 'cc', type: 'public-key' }],
+      // the site said nothing: the spec's default
+      userVerification: 'preferred',
     });
+  });
+
+  it('carries what the site asks of user verification, and nothing it made up', () => {
+    const get = (userVerification: unknown) =>
+      passkeyMessage('get', {
+        rpId: 'a.example',
+        challenge: 'ccdd',
+        clientDataHash: 'aabb',
+        userVerification,
+      })?.['userVerification'];
+    expect(get('required')).toBe('required');
+    expect(get('discouraged')).toBe('discouraged');
+    expect(get('always-skip')).toBe('preferred');
   });
 });
 

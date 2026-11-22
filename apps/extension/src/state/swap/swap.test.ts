@@ -33,6 +33,7 @@ vi.mock('../near-swap', async orig => ({ ...(await orig<object>()), ...near }));
 import {
   costOf,
   fromUnits,
+  firmRequest,
   lead,
   pct,
   rank,
@@ -246,6 +247,51 @@ describe('rank', () => {
       ['near', 100n],
       ['thor', 200n],
     ]);
+  });
+
+  it('by what arrives, puts the least paid first and an "about" quote after an exact one', () => {
+    const paid = (route: Quote['route'], amountInText: string, approx?: true): Quote => ({
+      ...q(route, 7_760n),
+      amountInText,
+      approx,
+    });
+    const ranked = rank(
+      [paid('thor', '0.0200', true), paid('near', '0.0213'), paid('near', '0.0209')],
+      8,
+    );
+    expect(ranked.map(r => r.amountInText)).toEqual(['0.0209', '0.0213', '0.0200']);
+    expect(lead(ranked, 8)).toBe(40_000n);
+  });
+});
+
+describe('firmRequest', () => {
+  const req = {
+    direction: 'from_zec' as const,
+    token: { symbol: 'BTC', chain: 'btc', decimals: 8 },
+    amountIn: '0.02',
+    zcashAddress: 'u1me',
+    otherAddress: 'bc1qpayee',
+  };
+  const quoted = { ...q('near', 7_760n), amountInText: '0.02134567' };
+
+  it('deposits the zec the quote asks for, never the typed hint', () => {
+    expect(firmRequest({ ...req, exactOut: '0.0000776' }, quoted, true)).toEqual({
+      ...req,
+      amountIn: '0.02134567',
+      exactOut: '0.0000776',
+    });
+  });
+
+  it('asks a probed route again by the figure it quoted', () => {
+    expect(firmRequest({ ...req, exactOut: '0.0000776' }, quoted, false)).toEqual({
+      ...req,
+      amountIn: '0.02134567',
+      exactOut: undefined,
+    });
+  });
+
+  it('leaves a request by what is paid as it is', () => {
+    expect(firmRequest(req, quoted, true)).toBe(req);
   });
 });
 

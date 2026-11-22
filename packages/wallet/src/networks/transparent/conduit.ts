@@ -44,6 +44,8 @@ export interface TransparentTxResult {
   txHash: string;
   code: number;
   rawLog: string;
+  /** submitted, not yet seen in a block: follow it up by its hash */
+  pending?: boolean;
 }
 
 interface SignArgs {
@@ -162,6 +164,7 @@ function cosmosConduit(chainId: CosmosChainId): ChainConduit {
       txHash: res.transactionHash,
       code: res.code,
       rawLog: res.code === 0 ? '' : `tx failed (code ${res.code})`,
+      ...(res.height === 0 ? { pending: true } : {}),
     };
   };
   return {

@@ -85,7 +85,8 @@ Calm, polite and honest, like good hospitality. Politeness is tone, not length.
 - Errors own the problem and never blame the user. Say what zafu already did
   and offer the next step gently.
   - not "wrong password" but "that doesn't match · please try again, slowly"
-  - not "zafu hit a snag" but "something broke on our side, not yours. nothing was lost."
+  - not "something broke on our side, not yours" but "something went wrong in zafu · nothing was lost".
+    zafu runs on the person's own computer: there is no "us" to blame, so name zafu.
 - Declines are soft: "not now", "no, thank you", "don't sign". Never a bare "no".
 - Say plainly what others can see (the relay sees you are online; a pool move
   shows the amount). No fake progress, no fake numbers.

@@ -33,6 +33,11 @@ const prfSaltsOf = (v: unknown): { first: string; second?: string } | undefined 
   return s.second === undefined ? { first: s.first } : { first: s.first, second: s.second };
 };
 
+/** what the site asks of user verification; the spec's default when it says nothing */
+export type UserVerification = 'required' | 'preferred' | 'discouraged';
+const uvOf = (v: unknown): UserVerification =>
+  v === 'required' || v === 'discouraged' ? v : 'preferred';
+
 const allowOf = (v: unknown): { id: string; type: string }[] | undefined | null => {
   if (v === undefined) {
     return undefined;
@@ -85,6 +90,7 @@ export const passkeyMessage = (
       userId,
       prfRequested,
       excludeCredentials,
+      userVerification: uvOf(p['userVerification']),
       // last, so nothing above can name another handler
       type: PASSKEY_MESSAGE_TYPES.create,
     };
@@ -107,12 +113,13 @@ export const passkeyMessage = (
     clientDataHash: p['clientDataHash'],
     prfSalts,
     allowCredentials,
+    userVerification: uvOf(p['userVerification']),
     type: PASSKEY_MESSAGE_TYPES.get,
   };
 };
 
 /** the refusal codes a page may see; anything else becomes a bare refusal */
-const PAGE_CODES = new Set(['failed', 'cancelled', 'denied', 'exists']);
+const PAGE_CODES = new Set(['failed', 'cancelled', 'denied', 'exists', 'busy']);
 
 /**
  * What the page gets back: on success only the credential fields, on refusal
@@ -163,6 +170,8 @@ export const recentHand = (window_ = PASSKEY_ASK_WINDOW_MS) => {
     saw: (now: number) => {
       last = now;
     },
+    /** when the person last clicked or pressed a key here (0: not yet) */
+    last: () => last,
     /** the person's hand is on this request: the browser says so, or they acted within the window */
     asked: (now: number, activeNow: boolean | undefined) =>
       !!activeNow || (last > 0 && now - last <= window_),
@@ -172,17 +181,22 @@ export const recentHand = (window_ = PASSKEY_ASK_WINDOW_MS) => {
 /**
  * After "not now" or a closed window a page waits before zafu shows it another
  * passkey screen: 30 s, then twice as long each time, back to 30 s after a
- * sign-in goes through. Kept in memory by the bridge, per page.
+ * sign-in goes through. Kept in memory by the bridge, per page. The wait stops
+ * a page asking again on its own; the person's own click after the "not now"
+ * ends it, or their next try went to the browser, which says it has no passkey.
  */
 export const promptCooldown = (base = 30_000) => {
   let until = 0;
   let wait = base;
+  let since = 0;
   return {
-    quiet: (now: number) => now < until,
+    /** `lastHand`: the person's last click or key press on the page */
+    quiet: (now: number, lastHand = 0) => now < until && lastHand <= since,
     after: (res: unknown, now: number) => {
       const r = res as { success?: unknown; code?: unknown } | undefined;
       if (r?.code === 'denied' || r?.code === 'cancelled') {
         until = now + wait;
+        since = now;
         wait *= 2;
       } else if (r?.success === true) {
         until = 0;

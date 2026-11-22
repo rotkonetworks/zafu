@@ -1,8 +1,10 @@
 /**
  * Which wallet made a passkey for which relying party, and from which origin.
- * A site may only ask to sign in to an rpId it created a passkey for there,
- * so `a.example.com` cannot sign for `example.com` unless it made that passkey
- * itself. Sealed at rest and carried in the personal-data backup.
+ * As WebAuthn has it, a passkey belongs to its rpId: any page that may claim
+ * that rpId (the rpId's own host or a subdomain of it) may ask to sign in with
+ * it, and every sign-in still takes the person's answer on zafu's screen. The
+ * signed client data names the asking page, so the relying party sees who
+ * asked. Sealed at rest and carried in the personal-data backup.
  */
 
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -43,16 +45,24 @@ export const recordPasskeyGrant = async (g: Omit<PasskeyGrant, 'at'>): Promise<v
 
 /**
  * The grants that may answer a sign-in from `origin` for `rpId`, newest
- * first. `undefined` means the origin has no recorded grant at all: a passkey
- * made before grants were recorded, which the caller may still offer once.
+ * first: this origin's own, else those made for the same rpId from another
+ * origin. WebAuthn scopes a passkey to its rpId, not to the page that made it,
+ * and sites do make it on one subdomain and sign in on another; the caller has
+ * checked that `origin` may claim `rpId`. `undefined` means nothing is recorded
+ * for either: a passkey made before grants were recorded, which the caller may
+ * still offer once.
  */
 export const grantsFor = (
   grants: readonly PasskeyGrant[],
   origin: string,
   rpId: string,
 ): PasskeyGrant[] | undefined => {
-  const here = grants.filter(g => g.origin === origin);
-  return here.length ? here.filter(g => g.rpId === rpId) : undefined;
+  const forRp = grants.filter(g => g.rpId === rpId);
+  const here = forRp.filter(g => g.origin === origin);
+  if (here.length || forRp.length) {
+    return here.length ? here : forRp;
+  }
+  return grants.some(g => g.origin === origin) ? [] : undefined;
 };
 
 /** restore from a backup: merge keeps what is here and adds the rest; replace takes the backup */

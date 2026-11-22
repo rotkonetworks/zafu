@@ -12,7 +12,7 @@ dashboard changes so future re-submissions start from a reviewed copy.
 - `privacy-practices.md` — Privacy practices tab (single-purpose,
   data use, permission justifications).
 - `privacy-policy.md` — Full privacy policy text. Host this at a
-  public URL (e.g. `https://zafu.rotko.net/privacy`) and paste the URL
+  public URL (`https://zafu.pro/privacy`) and paste the URL
   into the Privacy practices tab.
 
 ## Prod vs beta

@@ -78,8 +78,6 @@ export interface InboxMessage {
 export interface Conversation {
   /** diversifier index - the conversation endpoint */
   diversifierIndex: number;
-  /** optional label set by user */
-  label?: string;
   /** messages in chronological order */
   messages: InboxMessage[];
   /** last activity height */
@@ -98,8 +96,6 @@ export interface InboxSlice {
   ingestMemos: (memos: RawMemoNote[]) => void;
   /** mark a conversation as read */
   markRead: (diversifierIndex: number) => void;
-  /** set a label for a conversation */
-  setConversationLabel: (diversifierIndex: number, label: string) => void;
   /** get conversations sorted by last activity */
   sortedConversations: () => Conversation[];
 }
@@ -262,24 +258,6 @@ export const createInboxSlice = (): SliceCreator<InboxSlice> => (set, get) => ({
     // persist read state
     const readIds = Array.from(get().inbox.readIds);
     void chrome.storage.local.set({ inboxReadIds: readIds });
-  },
-
-  setConversationLabel: (diversifierIndex: number, label: string) => {
-    set(state => {
-      const convo = state.inbox.conversations.get(diversifierIndex);
-      if (convo) {
-        convo.label = label;
-      }
-    });
-
-    // persist labels
-    const labels: Record<number, string> = {};
-    for (const [idx, convo] of get().inbox.conversations) {
-      if (convo.label) {
-        labels[idx] = convo.label;
-      }
-    }
-    void chrome.storage.local.set({ inboxLabels: labels });
   },
 
   sortedConversations: () => {

@@ -457,6 +457,14 @@ export const createKeyRingSlice =
           v => v.type === 'mnemonic' && v.insensitive['zid'] === zid.publicKey,
         );
         if (mergeTarget) {
+          // a vault already stored as penumbra-only: importing the same
+          // phrase again lifts the limit (only that field; the sealed seed
+          // stays as it is) instead of creating a duplicate
+          if (mergeTarget.insensitive['supportedNetworks']) {
+            const { supportedNetworks: _, ...rest } = mergeTarget.insensitive;
+            mergeTarget.insensitive = rest;
+            await local.set('vaults', vaults);
+          }
           await local.set('selectedVaultId', mergeTarget.id);
           const keyInfos = vaultsToKeyInfos(vaults, mergeTarget.id);
           set(state => {
@@ -468,7 +476,7 @@ export const createKeyRingSlice =
 
         const vaultId = generateVaultId();
         const encryptedData = await encrypt(ctx, mnemonic);
-        const vault = buildMnemonicVault(vaultId, name, encryptedData, mnemonic);
+        const vault = buildMnemonicVault(vaultId, name, encryptedData);
         vault.insensitive['zid'] = zid.publicKey;
 
         const newVaults = [vault, ...vaults];
@@ -1293,6 +1301,10 @@ export const selectRenameKeyRing = (state: AllSlices) => state.keyRing.renameKey
 // hidden vaults (poker tables) stay out of the header switcher; sign-time lookups
 // use selectMultisigWallets (unfiltered) so payout signing still resolves them.
 const isHidden = (k: KeyInfo) => k.insensitive?.['hidden'] === true;
+
+/** every wallet the accounts sheet lists, whichever networks it serves */
+export const selectSwitcherKeyInfos = (state: AllSlices) =>
+  state.keyRing.keyInfos.filter(k => !isHidden(k));
 
 export const selectKeyInfosForActiveNetwork = (state: AllSlices) => {
   const { keyInfos, activeNetwork } = state.keyRing;

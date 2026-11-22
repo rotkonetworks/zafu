@@ -4,8 +4,14 @@
  *
  * Storage isolation is structural: every pocket syncs into its own zcash
  * worker store, keyed by `pocketStoreId`. Account 0 keeps the bare wallet id,
- * so existing wallets need no migration. Viewing-key, zigner, ledger and
- * multisig wallets are single-account: their account comes from the key.
+ * so existing wallets need no migration.
+ *
+ * A zigner wallet has pockets too: each is a ZIP 32 account whose viewing key
+ * was scanned from the device into its own zcash wallet record (same vault),
+ * and the device signs as the account the spends belong to. A pocket whose
+ * key isn't on this device (a restore) is not listed until it is scanned
+ * again. Viewing-key, ledger and multisig wallets are single-account: their
+ * account comes from the key.
  */
 
 import type { AllSlices, SliceCreator } from '.';
@@ -15,6 +21,7 @@ import { selectEffectiveKeyInfo } from './keyring';
 import type { KeyInfo } from './keyring/types';
 import { selectActiveZcashWallet, selectZcashIsMainnet } from './wallets';
 import { chainStoreId, isAccountIndex, pocketStoreId } from './pocket-id';
+import { isZignerSigner } from './zigner-pocket';
 
 /** open question: the cap keeps scanning cost bounded (see report) */
 export const MAX_POCKETS = 10;
@@ -50,18 +57,25 @@ export const activePocketOf = (book: PocketBook, owner: string): number => {
   return entry?.pockets.some(p => p.account === entry.active) ? entry.active : 0;
 };
 
-/** indices are never reused: a new pocket takes max + 1 */
+/**
+ * Indices are never reused: a new pocket takes max + 1, or the account a
+ * zigner showed (`at`), which must be free.
+ */
 export const addPocket = (
   book: PocketBook,
   owner: string,
   name: string,
   birthday?: number,
+  at?: number,
 ): PocketBook => {
   const pockets = pocketsOf(book, owner);
   if (pockets.length >= MAX_POCKETS) {
     throw new Error(`at most ${MAX_POCKETS} pockets`);
   }
-  const account = Math.max(...pockets.map(p => p.account)) + 1;
+  if (at !== undefined && (!isAccountIndex(at) || pockets.some(p => p.account === at))) {
+    throw new Error(`account ${at} is already a pocket here`);
+  }
+  const account = at ?? Math.max(...pockets.map(p => p.account)) + 1;
   const pocket: Pocket = {
     account,
     name: name.trim() || `pocket ${account}`,
@@ -263,8 +277,8 @@ export const mergePocketBooks = (
 
 export interface PocketsSlice {
   book: PocketBook;
-  /** create a pocket on the next free account; returns its account */
-  add: (owner: string, name: string, birthday?: number) => Promise<number>;
+  /** create a pocket on the next free account, or on `at`; returns its account */
+  add: (owner: string, name: string, birthday?: number, at?: number) => Promise<number>;
   rename: (owner: string, account: number, name: string) => Promise<void>;
   select: (owner: string, account: number) => Promise<void>;
   /** hide a pocket (never deletes it); switches off it first if it was active */
@@ -289,10 +303,10 @@ export const createPocketsSlice =
     };
     return {
       book: {},
-      add: async (owner, name, birthday) => {
-        const book = addPocket(get().pockets.book, owner, name, birthday);
+      add: async (owner, name, birthday, at) => {
+        const book = addPocket(get().pockets.book, owner, name, birthday, at);
         await commit(book);
-        return Math.max(...pocketsOf(book, owner).map(p => p.account));
+        return at ?? Math.max(...pocketsOf(book, owner).map(p => p.account));
       },
       rename: (owner, account, name) =>
         commit(renamePocket(get().pockets.book, owner, account, name)),
@@ -324,26 +338,67 @@ const hotKey = (state: AllSlices) => {
 };
 
 /**
- * The ZIP 32 account to operate on. Hot wallet: the active pocket. Any other
- * key: the account the key itself carries (single-account by construction).
+ * A zigner wallet's pockets: the book's pockets whose viewing key is on this
+ * device (a zcash wallet record of the vault for that account). Undefined
+ * for any other wallet, and for a zigner wallet whose first record is not
+ * account 0 (it stays single-account, as before pockets).
+ */
+export const zignerPockets = (state: AllSlices): Pocket[] | undefined => {
+  const key = selectEffectiveKeyInfo(state);
+  if (key?.type !== 'zigner-zafu' || !isZignerSigner(key.insensitive)) {
+    return undefined;
+  }
+  const accounts = zignerAccounts(state, key.id);
+  return accounts.includes(0)
+    ? pocketsOf(state.pockets.book, pocketOwner(key)).filter(p => accounts.includes(p.account))
+    : undefined;
+};
+
+/** the ZIP 32 accounts a zigner vault has a viewing key for on this device */
+export const zignerAccounts = (state: AllSlices, vaultId: string): number[] =>
+  (Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [])
+    .filter(w => w.vaultId === vaultId && !w.multisig)
+    .map(w => w.accountIndex);
+
+/** the active pocket of a zigner wallet with pockets: one whose key is here, else main */
+export const zignerPocketAccount = (state: AllSlices): number | undefined => {
+  const pockets = zignerPockets(state);
+  const key = selectEffectiveKeyInfo(state);
+  if (!pockets || !key) {
+    return undefined;
+  }
+  const account = activePocketOf(state.pockets.book, pocketOwner(key));
+  return pockets.some(p => p.account === account) ? account : 0;
+};
+
+/**
+ * The ZIP 32 account to operate on. Hot or zigner wallet: the active pocket.
+ * Any other key: the account the key itself carries (single-account by
+ * construction).
  */
 export const activeAccountIndex = (state: AllSlices): number => {
   const key = hotKey(state);
   return key
     ? activePocketOf(state.pockets.book, pocketOwner(key))
-    : (selectActiveZcashWallet(state)?.accountIndex ?? 0);
+    : (zignerPocketAccount(state) ?? selectActiveZcashWallet(state)?.accountIndex ?? 0);
 };
 
 /**
  * The zcash worker store id for the active wallet: the active pocket's store
- * for a hot wallet, the bare vault id for everything else (their store is
- * never split, whatever account their key names).
+ * for a hot or zigner wallet, the bare vault id for everything else (their
+ * store is never split, whatever account their key names).
  */
 export const activeZcashStoreId = (state: AllSlices): string | undefined => {
   const key = hotKey(state);
-  return key
-    ? pocketStoreId(hotStoreBase(state)!, activePocketOf(state.pockets.book, pocketOwner(key)))
-    : selectEffectiveKeyInfo(state)?.id;
+  if (key) {
+    return pocketStoreId(
+      hotStoreBase(state)!,
+      activePocketOf(state.pockets.book, pocketOwner(key)),
+    );
+  }
+  const id = selectEffectiveKeyInfo(state)?.id;
+  const zigner = zignerPocketAccount(state);
+  return id && zigner !== undefined ? pocketStoreId(id, zigner) : id;
 };
 
 /** what a hot wallet's stores hang off: its vault id, apart per chain (chainStoreId) */
@@ -352,10 +407,10 @@ export const hotStoreBase = (state: AllSlices): string | undefined => {
   return key && chainStoreId(key.id, selectZcashIsMainnet(state));
 };
 
-/** the active wallet's pockets (hot wallets only; others have none to pick) */
+/** the active wallet's pockets (hot and zigner wallets; others have none to pick) */
 export const activePockets = (state: AllSlices): Pocket[] => {
   const key = hotKey(state);
-  return key ? pocketsOf(state.pockets.book, pocketOwner(key)) : [];
+  return key ? pocketsOf(state.pockets.book, pocketOwner(key)) : (zignerPockets(state) ?? []);
 };
 
 /**
@@ -363,12 +418,12 @@ export const activePockets = (state: AllSlices): Pocket[] => {
  * birthday. A pocket's birthday is a mainnet height, so testnet uses the wallet's.
  */
 export const activePocketBirthday = (state: AllSlices): number | undefined => {
-  const key = hotKey(state);
+  const key = hotKey(state) ?? (zignerPockets(state) && selectEffectiveKeyInfo(state));
   if (!key || !selectZcashIsMainnet(state)) {
     return undefined;
   }
   const owner = pocketOwner(key);
-  const account = activePocketOf(state.pockets.book, owner);
+  const account = activeAccountIndex(state);
   return account === 0
     ? undefined
     : pocketsOf(state.pockets.book, owner).find(p => p.account === account)?.birthday;

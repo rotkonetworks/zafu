@@ -38,16 +38,28 @@ export const isKeplrApprovalResult = (m: unknown): m is KeplrApprovalResult =>
 /** the request stashed in session storage for the approval popup to read */
 export interface KeplrApprovalRequest {
   requestId: string;
-  method: 'enable' | 'signAmino' | 'signDirect';
+  method: 'enable' | 'signAmino' | 'signDirect' | 'signArbitrary';
   origin: string;
   chainId: string;
   /** signer bech32 address (sign methods) */
   signerAddress?: string;
-  /** amino StdSignDoc, or the base64 direct signDoc fields */
+  /** amino StdSignDoc (an ADR-036 one for signArbitrary), or the base64 direct signDoc fields */
   signDoc?: unknown;
   favIconUrl?: string;
   title?: string;
 }
+
+/** the chain id a sign doc commits to: amino `chain_id`, direct `chainId` */
+export const signedChainId = (
+  method: 'signAmino' | 'signDirect',
+  doc: unknown,
+): string | undefined => {
+  if (typeof doc !== 'object' || doc === null) {
+    return undefined;
+  }
+  const id = (doc as Record<string, unknown>)[method === 'signAmino' ? 'chain_id' : 'chainId'];
+  return typeof id === 'string' ? id : undefined;
+};
 
 export const keplrApprovalKey = (requestId: string): string => `keplrApproval:${requestId}`;
 export const keplrKeyCacheKey = (origin: string, chainId: string): string =>

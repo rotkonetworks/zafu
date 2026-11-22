@@ -8,6 +8,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
 import { readEncrypted, writeEncrypted, markHydrated } from './encrypted-storage';
+import { sealAtRest } from './seal-at-rest';
 import { backfillMissingMultisigMirrors } from './keyring/migration';
 import { DEFAULT_PRIVACY_SETTINGS, fromStoredPrivacy } from './privacy';
 import { POCKETS_STORAGE_KEY } from './pockets';
@@ -218,6 +219,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
 
     // hydrate now (works if already unlocked or auto-unlocked)
     await hydrateEncryptedData();
+    void sealAtRest();
 
     // subscribe to status changes - re-hydrate when keyring transitions to 'unlocked'
     // dataflow: react to state change, not imperative wrapping of unlock()
@@ -225,7 +227,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     store.subscribe((state: AllSlices) => {
       const status = state.keyRing.status;
       if (status === 'unlocked' && prevStatus !== 'unlocked') {
-        void hydrateEncryptedData();
+        void hydrateEncryptedData().then(sealAtRest);
       }
       prevStatus = status;
     });

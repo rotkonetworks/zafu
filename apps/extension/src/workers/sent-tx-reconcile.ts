@@ -18,6 +18,8 @@
  * rules below can be tested directly rather than inferred from behaviour.
  */
 
+import type { BoxJson } from '@repo/encryption/box';
+
 export type SentPool = 'orchard' | 'ironwood' | 'transparent';
 
 export type SentKind = 'send' | 'shield' | 'migrate';
@@ -37,10 +39,17 @@ export interface SentTxRecord {
   /** zatoshi, as a decimal string (bigint is not structured-cloneable to IDB reliably) */
   amount: string;
   fee: string;
-  recipient: string;
+  /** absent once sealed */
+  recipient?: string;
   pool: SentPool;
   kind: SentKind;
   memo?: string;
+  /**
+   * `recipient`, `memo` and `payments`, sealed by the extension once it is
+   * unlocked (state/sent-seal). The worker never opens it; it rides along
+   * to the history rows, which the extension opens.
+   */
+  sealed?: BoxJson;
   /** wall-clock ms at broadcast; the chain supplies the height later */
   sentAt: number;
   /**
@@ -117,6 +126,8 @@ export interface HistoryTx {
   expiryHeight?: number;
   /** every payment, when the transaction paid several recipients */
   payments?: SentPayment[];
+  /** the sealed recipient, memo and payments of a send of ours (SentTxRecord.sealed) */
+  sealed?: BoxJson;
   /** the move this payment went through first, folded into this row */
   moveTxid?: string;
 }
@@ -133,6 +144,23 @@ export interface HistoryTx {
  * around expiry.
  */
 export const EXPIRY_GRACE_BLOCKS = 100;
+
+/**
+ * The notes a pruned send held back: marked spent when it was broadcast
+ * (`spent_by_txid`), never seen spent on chain (no `spent_at_height`). Its
+ * record is pruned only well past its expiry height, when it can no longer be
+ * mined, so these are the person's again; left marked, the balance stays short
+ * by them until a full resync.
+ */
+export const heldByExpired = <N extends { spent_by_txid?: string; spent_at_height?: number }>(
+  notes: readonly N[],
+  pruned: readonly string[],
+): N[] => {
+  const gone = new Set(pruned);
+  return notes.filter(
+    n => n.spent_by_txid !== undefined && gone.has(n.spent_by_txid) && !(n.spent_at_height ?? 0),
+  );
+};
 
 export interface ReconcileInput {
   /** entries derived from scanning: notes, spends and transparent history */
@@ -265,6 +293,7 @@ export function reconcileSentTxs({
       recipient: rec.recipient,
       memo: rec.memo,
       ...(rec.payments && rec.payments.length > 1 ? { payments: rec.payments } : {}),
+      ...(rec.sealed ? { sealed: rec.sealed } : {}),
       fee,
       ...(move ? { moveTxid: move.txid } : {}),
       sentAt: rec.sentAt,

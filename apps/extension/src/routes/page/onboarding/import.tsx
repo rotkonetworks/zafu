@@ -1,10 +1,10 @@
 /**
  * Enter a recovery phrase - Onb7Paste board. One box for the 24 words,
- * pasted or typed, any spacing. A 12-word phrase is accepted for people
- * coming from a penumbra wallet; once it is whole, its line says it opens
- * penumbra only. A typo gets one calm line with the nearest word, and
- * tapping it applies the fix. The board's "paste" button would
- * need clipboard-read permission, so a native paste stands in for it.
+ * pasted or typed, any spacing. A 12-word phrase is accepted too (Brave
+ * Wallet makes them) and takes the same path as 24 words. A typo gets one
+ * calm line with the nearest word, and tapping it applies the fix. The
+ * board's "paste" button would need clipboard-read permission, so a native
+ * paste stands in for it.
  */
 
 import { ClipboardEvent, FormEvent, KeyboardEvent, useState } from 'react';
@@ -21,7 +21,6 @@ import {
 } from '../../../state/seed-phrase/mnemonic';
 import { usePageNav } from '../../../utils/navigate';
 import { PagePath } from '../paths';
-import { PENDING_ZCASH_BIRTHDAY_KEY } from './constants';
 import { phraseNote } from './flow';
 
 const LENGTHS = [12, 24];
@@ -32,7 +31,6 @@ export const ImportSeedPhrase = () => {
   const update = useStore(s => s.seedPhrase.import.update);
   const setLength = useStore(s => s.seedPhrase.import.setLength);
   const [text, setText] = useState(() => stored.join(' ').trim());
-  // the shell counts the steps from the stored length: 12 words skip the birthday
   const write = (value: string) => {
     setText(value);
     const n = parsePhrase(value).length;
@@ -51,7 +49,13 @@ export const ImportSeedPhrase = () => {
 
   const whole = LENGTHS.includes(words.length);
   const tone = typo ? 'warn' : valid ? 'ok' : 'idle';
-  const note = phraseNote({ count: words.length, typo, fix, whole, valid });
+  const note = phraseNote({
+    count: words.length,
+    typo,
+    fix,
+    whole,
+    valid,
+  });
 
   const applyFix = () => fix && write(words.map(w => (w === typo ? fix : w)).join(' '));
 
@@ -61,13 +65,6 @@ export const ImportSeedPhrase = () => {
       return;
     }
     update(words.join(' '), 0);
-    // twelve words are penumbra-only: no zcash birthday to ask, and none left
-    // over from an abandoned attempt
-    if (words.length === 12) {
-      sessionStorage.removeItem(PENDING_ZCASH_BIRTHDAY_KEY);
-      navigate(PagePath.IMPORT_PASSWORD);
-      return;
-    }
     navigate(PagePath.IMPORT_BIRTHDAY);
   };
 

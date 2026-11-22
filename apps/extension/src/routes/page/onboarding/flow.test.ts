@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { PagePath } from '../paths';
 import { SEED_PHRASE_ORIGIN } from './password/types';
 import {
+  ONBOARDING_GENERATE_LENGTH,
   PASSWORD_PATH,
   originOf,
   passwordStrength,
-  penumbraOnlyImport,
   phraseNote,
   screenFor,
 } from './flow';
+import { SeedPhraseLength } from '../../../state/seed-phrase/mnemonic';
 
 describe('onboarding flow', () => {
   it('walks back along each path to the welcome screen', () => {
@@ -54,30 +55,28 @@ describe('onboarding flow', () => {
     expect(passwordStrength('inkandgoldroadxx')).toBe(3);
   });
 
-  it('a 12-word import skips the zcash birthday, and counts its steps honestly', () => {
-    expect(penumbraOnlyImport(SEED_PHRASE_ORIGIN.IMPORTED, 12)).toBe(true);
-    expect(penumbraOnlyImport(SEED_PHRASE_ORIGIN.IMPORTED, 24)).toBe(false);
-    expect(penumbraOnlyImport(SEED_PHRASE_ORIGIN.NEWLY_GENERATED, 12)).toBe(false);
-
-    expect(screenFor(PagePath.IMPORT_SEED_PHRASE, true).step).toEqual([1, 2]);
-    expect(screenFor(PagePath.IMPORT_PASSWORD, true)).toMatchObject({
-      back: PagePath.IMPORT_SEED_PHRASE,
-      step: [2, 2],
+  it('a 12-word import takes the same path as 24 words, including the birthday step', () => {
+    expect(screenFor(PagePath.IMPORT_SEED_PHRASE).step).toEqual([1, 3]);
+    expect(screenFor(PagePath.IMPORT_BIRTHDAY).step).toEqual([2, 3]);
+    expect(screenFor(PagePath.IMPORT_PASSWORD)).toMatchObject({
+      back: PagePath.IMPORT_BIRTHDAY,
+      step: [3, 3],
     });
-    // 24 words keep the birthday step
-    expect(screenFor(PagePath.IMPORT_PASSWORD).back).toBe(PagePath.IMPORT_BIRTHDAY);
-    // other paths ignore the length
-    expect(screenFor(PagePath.CREATE_PASSWORD, true).step).toEqual([1, 3]);
   });
 
-  it('says a whole 12-word phrase opens penumbra only, in its one line', () => {
-    expect(phraseNote({ count: 12, whole: true, valid: true })).toBe(
-      '12 words · this phrase opens penumbra only',
-    );
+  it('a valid 12-word phrase uses the same note as 24 words, with no warning', () => {
+    expect(phraseNote({ count: 12, whole: true, valid: true })).toBe('12 words · valid phrase');
     expect(phraseNote({ count: 24, whole: true, valid: true })).toBe('24 words · valid phrase');
-    // not yet a phrase: nothing is promised about what it opens
+    expect(phraseNote({ count: 12, whole: true, valid: true })).not.toMatch(
+      /penumbra only|weaker|128-bit/i,
+    );
     expect(phraseNote({ count: 12, whole: true, valid: false })).toBe(
       "these words don't form a phrase yet · please check the order",
     );
+  });
+
+  it('still generates 24 words', () => {
+    expect(ONBOARDING_GENERATE_LENGTH).toBe(24);
+    expect(ONBOARDING_GENERATE_LENGTH).toBe(SeedPhraseLength.TWENTY_FOUR_WORDS);
   });
 });

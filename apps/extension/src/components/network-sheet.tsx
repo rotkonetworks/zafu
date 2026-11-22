@@ -18,8 +18,11 @@ import { useStore } from '../state';
 import {
   selectEffectiveKeyInfo,
   selectEnabledNetworks,
+  selectKeyInfos,
+  selectSelectedKeyInfo,
   selectSetActiveNetwork,
 } from '../state/keyring';
+import { findCompatibleVault, keyInfoSupportsNetwork } from '../state/keyring/vault-ops';
 import { selectNetworkShown } from '../state/wallets';
 import { useEnableNetwork } from '../hooks/enable-network';
 import { getNetwork, getSubnetworks, getTopLevelNetworks } from '../config/networks';
@@ -47,6 +50,11 @@ export const NetworkSheet = ({
   /** testnet is a seed wallet's: a zigner or multisig wallet's chain is in its key */
   const seed = useStore(s => selectEffectiveKeyInfo(s)?.type === 'mnemonic');
   const enable = useEnableNetwork();
+  const selected = useStore(selectSelectedKeyInfo);
+  const keyInfos = useStore(selectKeyInfos);
+  /** the wallet setActiveNetwork moves to when the selected one can't serve `n` */
+  const switchesTo = (n: (typeof enabledNetworks)[number]) =>
+    selected && !keyInfoSupportsNetwork(selected, n) ? findCompatibleVault(keyInfos, n) : undefined;
   const testnetOn = enabledNetworks.includes('zcash-testnet');
 
   /** zcash, then its testnet as an entry of its own, then the rest */
@@ -93,10 +101,13 @@ export const NetworkSheet = ({
         // the testnet entry is always there to pick (picking turns it on), for a seed wallet
         const enabled = sub ? seed : enabledNetworks.includes(n);
         const active = shown === n;
+        const other = switchesTo(info.parent ?? n);
         const blurb =
           sub && !seed
             ? 'for seed wallets · a signer wallet keeps its own chain'
-            : NETWORK_BLURB[n];
+            : other && !active
+              ? `switches to ${other.name.toLowerCase()}`
+              : NETWORK_BLURB[n];
         return (
           <div key={n} className='flex h-[60px] items-center gap-3.5 px-2'>
             <button

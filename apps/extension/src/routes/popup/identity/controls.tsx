@@ -51,7 +51,7 @@ const BackupSheet = ({ open, onClose }: { open: boolean; onClose: () => void }) 
               download(data);
               onClose();
             },
-            () => setError('something broke on our side, not yours. nothing was lost.'),
+            () => setError('something went wrong in zafu. nothing was lost.'),
           );
         }}
       >

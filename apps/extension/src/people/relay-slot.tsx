@@ -47,7 +47,7 @@ export const RelaySlot = ({ waiting }: { waiting?: string }) => {
                   }
                 : slot === 'oversize'
                   ? {
-                      text: 'some messages could not be read. this is on our side.',
+                      text: 'zafu could not read some messages.',
                       action: ['check again', again],
                       tone: 'warn',
                     }

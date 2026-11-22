@@ -14,8 +14,34 @@ import { buildDeposit, payDepositViaZigner, RefundedSlot, STEP_FOR } from './cro
 import type { ZignerRound } from '../../../signing/zigner-round';
 import { MOVE_NEEDS_MS, tooLateToMove } from '../../../state/swap/thor-out';
 import { traceOut, u128 } from './penumbra-units';
+import { firmRequest, type Quote } from '../../../state/swap/provider';
 import { maxSendable, quoteSend } from '../send/spendable';
 import { nodeStatus } from '../../../state/swap/thornode';
+
+describe('a payment deposits what the quote asks, never what is owed', () => {
+  it('sends the zec 1click asks for 0.0000776 btc, in zatoshi', async () => {
+    worker.build.mockResolvedValue({ txid: 'tx2' });
+    const owed = {
+      direction: 'from_zec' as const,
+      token: { symbol: 'BTC', chain: 'btc', decimals: 8 },
+      amountIn: '0.02',
+      exactOut: '0.0000776',
+      zcashAddress: 'u1me',
+      otherAddress: 'bc1qpayee',
+    };
+    const quote = { amountInText: '0.02134567' } as Quote;
+    const r = firmRequest(owed, quote, true);
+    await buildDeposit({
+      walletId: 'vault',
+      pocket: 1,
+      zidecarUrl: 'https://z',
+      to: 't1dep',
+      amountIn: r.amountIn,
+      vault: {} as never,
+    });
+    expect(worker.build.mock.lastCall?.[4]).toBe('2134567');
+  });
+});
 
 describe('a swap deposit spends the chosen pocket', () => {
   const base = { walletId: 'vault', zidecarUrl: 'https://z', to: 't1dep', amountIn: '0.1' };
@@ -57,6 +83,8 @@ describe('a swap deposit spends the chosen pocket', () => {
       'https://z',
       'signed-pczt',
       'c1',
+      // the signed answer is checked against the build it reviewed
+      { unsignedPcztHex: 'aa', ufvk: 'uview1x' },
     );
     expect(order).toEqual(['recorded']);
   });

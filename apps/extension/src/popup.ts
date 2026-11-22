@@ -5,7 +5,7 @@ import { listenReady } from './message/listen-ready';
 import { throwIfNeedsLogin } from './needs-login';
 import { openApprovalPopup } from './utils/popup-window';
 import { getApprovalSurface, recentPanelOpenAccepted } from './side-panel-pref';
-import { isSidePanelOpen } from './side-panel-presence';
+import { isSidePanelOpen, waitForSidePanel } from './side-panel-presence';
 import { SIDE_PANEL_DELIVER } from './message/side-panel-delivery';
 import { rescue, detachedContext, UnavailableError, type Service } from '@zafu/service';
 
@@ -31,18 +31,6 @@ const SIDE_PANEL_ACCEPTED_WAIT = 15_000;
 const SIDEBAR_ONLY_WAIT = 120_000;
 
 /** Poll until a side panel is visible in `winId`, or `ms` elapses. */
-const waitForSidePanel = async (winId: number | undefined, ms: number): Promise<boolean> => {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    await new Promise<void>(resolve => {
-      setTimeout(resolve, 150);
-    });
-    if (await isSidePanelOpen(winId)) {
-      return true;
-    }
-  }
-  return false;
-};
 const POPUP_PATHS = {
   [PopupType.TxApproval]: PopupPath.TRANSACTION_APPROVAL,
   [PopupType.OriginApproval]: PopupPath.ORIGIN_APPROVAL,
@@ -89,7 +77,8 @@ export const popup = async <M extends PopupType>(
   popupType: M,
   request: PopupRequest<M>[M],
 ): Promise<PopupResponse<M>[M] | null> => {
-  await throwIfNeedsLogin();
+  // a site's prompt names it, so its dismissed unlocks make it wait
+  await throwIfNeedsLogin((request as { origin?: string }).origin);
 
   const lockGranted = async (lock: Lock | null): Promise<PopupResponse<M> | null> => {
     if (!lock) {

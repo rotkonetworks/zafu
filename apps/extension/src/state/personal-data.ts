@@ -1,8 +1,9 @@
 /**
  * Personal data = the local-only, chain-irreplaceable data the wallet holds:
  *   - send history ('sent' store: recipient, amount, fee, memo the chain can
- *     never give back, because an outgoing note is encrypted to the recipient),
- *   - per-tx "from" notes (chrome.storage 'txNotes'),
+ *     never give back, because an outgoing note is encrypted to the recipient;
+ *     recipient and memo sealed, see ./sent-seal),
+ *   - per-tx "from" notes (chrome.storage 'txNotes', sealed),
  *   - contacts (their own slice).
  *
  * It is deliberately separate from the SYNC CACHE (notes/witnesses/meta), which
@@ -10,116 +11,64 @@
  * are cleared by the caller via the contacts slice (it owns its own storage).
  */
 
+import { localExtStorage, type LocalStorageState } from '@repo/storage-chrome/local';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
 import type { SentTxRecord } from '../workers/sent-tx-reconcile';
+import { readEncryptedWithMigration, writeEncryptedDirect } from './encrypted-storage';
+import { openSent, openZcashDb, sealSentRecords, sentKey } from './sent-seal';
 
-const ZCASH_DB = 'zafu-zcash';
-const TX_NOTES_KEY = 'txNotes';
+export const TX_NOTES_KEY = 'txNotes';
+const NOTES = TX_NOTES_KEY as keyof LocalStorageState;
 
-const openZcashDb = (): Promise<IDBDatabase | null> =>
-  new Promise(resolve => {
-    try {
-      const req = indexedDB.open(ZCASH_DB);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(null);
-      req.onblocked = () => resolve(null);
-    } catch {
-      resolve(null);
-    }
-  });
-
-/** All local send records across wallets (for backup/export). */
-export const readSentRecords = async (): Promise<SentTxRecord[]> => {
+/** one request on the 'sent' store, answered with `fallback` when anything fails */
+const onSent = async <T>(
+  mode: IDBTransactionMode,
+  run: (store: IDBObjectStore) => IDBRequest | void,
+  fallback: T,
+): Promise<T> => {
   const db = await openZcashDb();
-  if (!db || !db.objectStoreNames.contains('sent')) {
-    db?.close();
-    return [];
+  if (!db) {
+    return fallback;
   }
-  return new Promise(resolve => {
-    try {
-      const req = db.transaction('sent', 'readonly').objectStore('sent').getAll();
-      req.onsuccess = () => {
-        db.close();
-        resolve((req.result as SentTxRecord[] | undefined) ?? []);
-      };
-      req.onerror = () => {
-        db.close();
-        resolve([]);
-      };
-    } catch {
-      db.close();
-      resolve([]);
-    }
-  });
+  try {
+    const tx = db.transaction('sent', mode);
+    const req = run(tx.objectStore('sent'));
+    return await new Promise<T>(resolve => {
+      tx.oncomplete = () => resolve(req ? (req.result as T) : fallback);
+      tx.onerror = () => resolve(fallback);
+      tx.onabort = () => resolve(fallback);
+    });
+  } catch {
+    return fallback;
+  } finally {
+    db.close();
+  }
 };
 
-/** Restore send records (import). Each carries its own [walletId, txid] key. */
+/** All local send records across wallets, opened (for backup/export). */
+export const readSentRecords = async (): Promise<SentTxRecord[]> => {
+  const records = (await onSent<SentTxRecord[] | undefined>('readonly', s => s.getAll(), [])) ?? [];
+  const key = records.some(r => r.sealed) ? await sentKey(false) : null;
+  // one that does not open still carries its txid, amount and fee
+  return Promise.all(
+    records.map(async r => {
+      const { sealed: _, ...rest } = await openSent(r, key);
+      return rest;
+    }),
+  );
+};
+
+/** Restore send records (import), sealed once written. Each carries its own [walletId, txid] key. */
 export const writeSentRecords = async (records: readonly SentTxRecord[]): Promise<void> => {
   if (records.length === 0) {
     return;
   }
-  const db = await openZcashDb();
-  if (!db || !db.objectStoreNames.contains('sent')) {
-    db?.close();
-    return;
-  }
-  return new Promise(resolve => {
-    try {
-      const tx = db.transaction('sent', 'readwrite');
-      const store = tx.objectStore('sent');
-      for (const r of records) {
-        store.put(r);
-      }
-      tx.oncomplete = () => {
-        db.close();
-        resolve();
-      };
-      tx.onerror = () => {
-        db.close();
-        resolve();
-      };
-    } catch {
-      db.close();
-      resolve();
-    }
-  });
+  await onSent('readwrite', s => records.forEach(r => s.put(r)), undefined);
+  await sealSentRecords();
 };
 
 /** Clear the local send history ('sent' object store), keeping the DB + cache. */
-const clearSentStore = (): Promise<void> =>
-  new Promise(resolve => {
-    let req: IDBOpenDBRequest;
-    try {
-      req = indexedDB.open(ZCASH_DB);
-    } catch {
-      resolve();
-      return;
-    }
-    req.onsuccess = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains('sent')) {
-        db.close();
-        resolve();
-        return;
-      }
-      try {
-        const tx = db.transaction('sent', 'readwrite');
-        tx.objectStore('sent').clear();
-        tx.oncomplete = () => {
-          db.close();
-          resolve();
-        };
-        tx.onerror = () => {
-          db.close();
-          resolve();
-        };
-      } catch {
-        db.close();
-        resolve();
-      }
-    };
-    req.onerror = () => resolve();
-    req.onblocked = () => resolve();
-  });
+const clearSentStore = () => onSent('readwrite', s => void s.clear(), undefined);
 
 export interface ClearPersonalDataOptions {
   /** wipe per-tx "from" notes */
@@ -153,17 +102,25 @@ export const clearPersonalData = async (opts: ClearPersonalDataOptions): Promise
   }
 };
 
-/** Read all per-tx notes (for backup/export). */
-export const readTxNotes = async (): Promise<Record<string, string>> => {
-  const r = await chrome.storage.local.get(TX_NOTES_KEY);
-  return (r[TX_NOTES_KEY] as Record<string, string> | undefined) ?? {};
-};
+/**
+ * All per-tx notes, sealed at rest; a legacy plaintext map is sealed on the
+ * way. Throws while locked, so a merge can never write back an empty map.
+ */
+export const readTxNotes = async (): Promise<Record<string, string>> =>
+  (await readEncryptedWithMigration<Record<string, string>>(
+    localExtStorage,
+    sessionExtStorage,
+    NOTES,
+  )) ?? {};
 
-/** Write per-tx notes (for import/restore); merges over existing by default. */
+/** Write per-tx notes, merging over existing by default; false while locked. */
 export const writeTxNotes = async (
   notes: Record<string, string>,
   mode: 'merge' | 'replace' = 'merge',
-): Promise<void> => {
+): Promise<boolean> => {
   const existing = mode === 'merge' ? await readTxNotes() : {};
-  await chrome.storage.local.set({ [TX_NOTES_KEY]: { ...existing, ...notes } });
+  return writeEncryptedDirect(localExtStorage, sessionExtStorage, NOTES, {
+    ...existing,
+    ...notes,
+  });
 };

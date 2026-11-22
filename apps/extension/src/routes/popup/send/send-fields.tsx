@@ -304,6 +304,7 @@ export const AmountField = ({
   helper,
   disabled,
   autoFocus,
+  dim,
 }: {
   id?: string;
   label?: string;
@@ -319,6 +320,8 @@ export const AmountField = ({
   helper?: ReactNode;
   disabled?: boolean;
   autoFocus?: boolean;
+  /** a figure the route answered, shown faded while the next answer is asked */
+  dim?: boolean;
 }) => (
   <div className='flex flex-col gap-1.5'>
     <div className='flex items-baseline justify-between'>
@@ -341,7 +344,11 @@ export const AmountField = ({
         variant={warn ? 'warn' : 'default'}
         disabled={disabled}
         autoFocus={autoFocus}
-        className={cn('h-14 pr-[130px] font-display text-2xl', warn && 'focus-visible:border-warn')}
+        className={cn(
+          'h-14 pr-[130px] font-display text-2xl transition-opacity duration-300',
+          warn && 'focus-visible:border-warn',
+          dim && 'opacity-50',
+        )}
       />
       <span className='absolute right-2 top-0 flex h-14 items-center gap-1'>
         {onUnit ? (

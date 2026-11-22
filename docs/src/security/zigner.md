@@ -14,15 +14,12 @@ zafu supports two wallet types:
   from a zigner device. transaction signing requires round-trip QR code
   communication with the phone. this is a cold wallet.
 
-the zigner model is the same for all supported networks: penumbra, zcash,
-polkadot, and cosmos. the `zigner-zafu` vault type is also reused for keystone
-and ledger cold signers (`coldSignerType`); this page describes the zigner QR
-flow.
-
-viewing-key import is wired for all four networks. the QR transaction-signing
-round-trip below is exercised by zcash sends (a PCZT, in the send flow) and by
-penumbra transactions (a transaction plan, in the dapp approval flow). polkadot
-and cosmos are watch-only today.
+zigner covers zcash and penumbra. zcash transactions are signed in the send
+flow (a PCZT); penumbra transactions in the dapp approval flow (a transaction
+plan). the `zigner-zafu` vault type is shared with other wallets that hold no
+seed, told apart by `coldSignerType`: `zigner`, `keystone`, `ledger`, and
+`viewing-key` (a watch-only wallet with no signer, never offered a send). this
+page describes zigner.
 
 ## what stays on the phone
 
@@ -42,9 +39,6 @@ for a zigner-zafu vault, the extension stores:
 - **penumbra**: the full viewing key (FVK), account index, device identifier
 - **zcash**: the orchard full viewing key or unified full viewing key (UFVK),
   account index, device identifier
-- **polkadot**: the SS58 address and genesis hash (watch-only)
-- **cosmos**: chain addresses and optionally a compressed secp256k1 public key
-  (watch-only)
 
 viewing keys allow the extension to:
 
@@ -63,39 +57,40 @@ viewing keys do not allow:
 
 importing a zigner wallet into the extension:
 
-1. on the zigner device, export the viewing key as a QR code
-2. in the extension, open settings > wallets > scan zigner QR
-3. the extension camera scans the QR code
-4. the extension parses the QR data and extracts the viewing key
-5. the user optionally sets a label
-6. the extension stores the viewing key in an encrypted vault entry
+1. on the zigner device, show the viewing key as a QR code
+2. in zafu, add a wallet and scan it (settings › wallets and devices). there is
+   one scanner for every signer; zafu tells a zigner from a keystone by the
+   code itself (a zigner code carries its zid), and a code can be pasted
+   instead of scanned
+3. zafu reads the viewing key, you may name the wallet, and it is stored
+   sealed at rest
 
-the extension accepts multiple QR formats:
+one code carries one network. scanning the same zigner's code for the other
+network joins the same wallet rather than making a second one.
 
-- **UR format** (preferred) - `ur:penumbra-accounts/...` or
-  `ur:zcash-accounts/...`. uses the uniform resources encoding standard.
-- **legacy binary format** - hex-encoded binary with a `0x53` prefix byte,
-  chain byte (`0x03` for penumbra, `0x04` for zcash), and operation byte
-  (`0x01` for FVK export).
-- **substrate format** - `substrate:<address>:<genesis_hash>` for
-  polkadot/kusama watch-only addresses.
-- **cosmos JSON format** - JSON with `type: "cosmos-accounts"`, containing
-  chain addresses and a public key.
+accepted formats:
+
+- **UR** (preferred) - `ur:zcash-accounts/...` or `ur:penumbra-accounts/...`
+- **legacy binary** - a `0x53` prefix byte, a chain byte (`0x03` penumbra,
+  `0x04` zcash) and `0x01` for a viewing key export, from older zigner
+  firmware
 
 ## signing flow
 
 sending a zcash transaction with a zigner wallet:
 
-1. the extension builds an unsigned PCZT (partially created zcash transaction)
-2. the extension encodes the sign request as an animated QR code and displays it
-   (the PCZT rides a `ur:zcash-pczt` CBOR wrap)
-3. the user scans the QR code with the zigner device
-4. the zigner device displays the transaction details for review
-5. the user approves on the zigner device
-6. the zigner device signs and displays a QR code containing the signed PCZT
-   (returned under the same `ur:zcash-pczt` type)
-7. the user scans the signature QR code with the extension
-8. the extension attaches the signatures to the PCZT and broadcasts it
+1. zafu builds an unsigned PCZT (partially created zcash transaction) and
+   strips what the signer can work out itself, including the viewing key, so
+   the QR carries no key that could read your history
+2. zafu shows the request as an animated QR code (`ur:zigner-module` frames)
+3. you scan it with zigner, which shows the recipient, amount and fee
+4. you approve on zigner, which signs and shows only the signatures as a QR
+5. zafu scans them, merges them into the PCZT it kept, checks the result, and
+   broadcasts it
+
+an older zigner that does not know the compact request gets the full PCZT
+(`ur:zcash-pczt`) and answers with the full signed PCZT. shielding transparent
+funds uses that full form too.
 
 the signing state machine tracks these steps:
 

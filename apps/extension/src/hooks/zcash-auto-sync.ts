@@ -281,13 +281,15 @@ export function useZcashAutoSync() {
     }
     // a wallet without a key zafu can read says so on home (zcash-home)
     const ufvkStr = zcashViewKey(watchOnly);
-    if (!ufvkStr || !walletId) {
+    // a zigner pocket syncs into its own store (account 0 is the vault id)
+    const syncId = storeId ?? walletId;
+    if (!ufvkStr || !syncId) {
       return;
     }
 
     // stop previous wallet's sync if switching
     const prevWallet = syncingWalletRef.current;
-    if (prevWallet && prevWallet !== walletId && isWalletSyncing('zcash', prevWallet)) {
+    if (prevWallet && prevWallet !== syncId && isWalletSyncing('zcash', prevWallet)) {
       console.log('[zcash-sync] stopping sync for previous wallet', prevWallet);
       void stopSyncInWorker('zcash', prevWallet).catch(() => {});
       syncingWalletRef.current = null;
@@ -295,12 +297,12 @@ export function useZcashAutoSync() {
 
     // only bail if truly syncing with no pending stop, and the endpoint/backend
     // it was started with still matches the current one.
-    if (isWalletSyncing('zcash', walletId) && !stopPromiseRef.current) {
+    if (isWalletSyncing('zcash', syncId) && !stopPromiseRef.current) {
       const started = syncEndpointRef.current;
       const endpointChanged =
         started !== null && (started.endpoint !== zidecarUrl || started.backend !== zcashBackend);
       if (!endpointChanged) {
-        syncingWalletRef.current = walletId;
+        syncingWalletRef.current = syncId;
         return;
       }
       // endpoint or backend changed mid-sync - stop the stale loop the same
@@ -308,8 +310,8 @@ export function useZcashAutoSync() {
       // against the new server. The worker treats this abort as intentional
       // (no error surfacing), and runSync waits for the old loop to drain
       // before starting the new one.
-      console.log('[zcash-sync] endpoint/backend changed, restarting sync for', walletId);
-      stopPromiseRef.current = stopSyncInWorker('zcash', walletId).catch(() => {});
+      console.log('[zcash-sync] endpoint/backend changed, restarting sync for', syncId);
+      stopPromiseRef.current = stopSyncInWorker('zcash', syncId).catch(() => {});
       syncingWalletRef.current = null;
       syncEndpointRef.current = null;
     }
@@ -332,16 +334,20 @@ export function useZcashAutoSync() {
             return;
           }
         }
-        const startHeight = await resolveBirthday(walletId, zidecarUrl, zcashBackend);
+        // a new pocket starts at its own birthday, never the wallet's
+        const startHeight =
+          syncId !== walletId && pocketBirthday !== undefined
+            ? Math.max(ZCASH_ORCHARD_ACTIVATION, pocketBirthday)
+            : await resolveBirthday(walletId!, zidecarUrl, zcashBackend);
         if (cancelled) {
           return;
         }
-        syncingWalletRef.current = walletId;
+        syncingWalletRef.current = syncId;
         syncEndpointRef.current = { endpoint: zidecarUrl, backend: zcashBackend };
-        console.log('[zcash-sync] starting watch-only sync for', walletId);
+        console.log('[zcash-sync] starting watch-only sync for', syncId);
         await startWatchOnlySyncInWorker(
           'zcash',
-          walletId,
+          syncId,
           ufvkStr,
           zidecarUrl,
           startHeight,
@@ -354,7 +360,7 @@ export function useZcashAutoSync() {
         window.dispatchEvent(
           new CustomEvent('zcash-sync-error', {
             detail: {
-              walletId,
+              walletId: syncId,
               message: err instanceof Error ? err.message : String(err),
               stalled: true,
             },
@@ -374,6 +380,8 @@ export function useZcashAutoSync() {
     watchOnly?.ufvk,
     watchOnly?.orchardFvk,
     walletId,
+    storeId,
+    pocketBirthday,
     zidecarUrl,
     zcashBackend,
     mempoolWatch,

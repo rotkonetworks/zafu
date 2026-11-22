@@ -9,11 +9,7 @@ import { NETWORK_BLURB } from '../../../components/network-sheet';
 import { getNetwork, getSubnetworks, getTopLevelNetworks } from '../../../config/networks';
 import { DEFAULT_RELAY_URL } from '../../../config/multisig-relay';
 import { relayHost } from '../../../config/people-relay';
-import {
-  HARDWARE_WALLET_ENABLED,
-  IS_BETA_BUILD,
-  LEDGER_TRANSPARENT_ENABLED,
-} from '../../../config/feature-flags';
+import { IS_BETA_BUILD, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
 import { openPageInTab } from '../../../utils/popup-detection';
 import { PagePath } from '../../page/paths';
 import { usePopupNav } from '../../../utils/navigate';
@@ -21,6 +17,8 @@ import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
 import { isZigner, networkNames } from './settings-status';
 import { useExplain, type ExplainId } from './settings-explain';
+
+const isTestnet = (n: string) => n.endsWith('-testnet');
 
 /** the one place a network turns on or off; its node and chains live on its own screen */
 const NetworksRow = () => {
@@ -41,7 +39,8 @@ const NetworksRow = () => {
       />
       <Sheet open={open} onOpenChange={setOpen} title='networks'>
         <RowGroup>
-          {/* a network's own options (zcash: testnet) sit right under it while it is on */}
+          {/* a network's own testnet sits right under it while it is on; its other
+              subnetworks (penumbra's ibc chains) are destinations, not switches here */}
           {getTopLevelNetworks().flatMap(n => [
             <Row
               key={n}
@@ -52,7 +51,7 @@ const NetworksRow = () => {
               onChange={on => void (on ? enable(n) : disable(n))}
               {...explainProps(`network.${n}Enable` as ExplainId)}
             />,
-            ...(enabled.includes(n) ? getSubnetworks(n) : []).map(sub => (
+            ...(enabled.includes(n) ? getSubnetworks(n).filter(isTestnet) : []).map(sub => (
               <Row
                 key={sub}
                 type='toggle'
@@ -150,7 +149,7 @@ export const SettingsDevicesHome = () => {
             preload={PopupPath.SETTINGS_CONNECT_DEVICE}
             onPress={() => navigate(PopupPath.SETTINGS_CONNECT_DEVICE)}
           />
-          {zcashOn && (HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED) && (
+          {zcashOn && LEDGER_TRANSPARENT_ENABLED && (
             <Row
               type='screen'
               label='ledger'

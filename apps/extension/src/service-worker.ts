@@ -16,6 +16,9 @@
 import './net/egress-install';
 import './install-global-error-handlers';
 import './sw-online';
+// holds a message that arrives before the body below has registered its
+// listeners; sync, and above the wasm-backed imports for the same reason
+import { listen, listenExternal, releaseHeldMessages } from './early-messages';
 
 // listeners
 import { contentScriptConnectListener } from './message/listen/content-script-connect';
@@ -119,7 +122,9 @@ import { createChainCheck } from './penumbra/chain-check';
 import { createStorageReopen } from './penumbra/storage-reopen';
 import { requestStopAllSync } from './state/keyring/network-worker';
 import { stampSeenVersion } from './state/moved-notice';
+import { stampTSweepCutoff } from './state/pocket-id';
 import { idleFor } from './state/idle-activity';
+import { lockInPlace } from './auto-lock';
 import { keptCaptureAccess } from './buy/capture/kept';
 
 // performance.now() counts from the worker's start, so this is wake to here:
@@ -525,11 +530,11 @@ const initHandler = async () => {
 // wallet services now wait for unlock (wallets encrypted at rest), but
 // content scripts and dapps need the connect/disconnect/load listeners
 // to be ready as soon as the service worker starts.
-chrome.runtime.onMessage.addListener(contentScriptConnectListener);
-chrome.runtime.onMessage.addListener(contentScriptDisconnectListener);
-chrome.runtime.onMessage.addListener(contentScriptLoadListener);
-chrome.runtime.onMessage.addListener(internalRevokeListener);
-chrome.runtime.onMessage.addListener(linkListener);
+listen(contentScriptConnectListener);
+listen(contentScriptDisconnectListener);
+listen(contentScriptLoadListener);
+listen(internalRevokeListener);
+listen(linkListener);
 
 // CRSessionManager must be initialized NOW - before wallet services are
 // ready - so content scripts can establish session ports right after the
@@ -572,7 +577,7 @@ const getInternalViewClient = async (): Promise<Client<typeof ViewService>> => {
   );
   return internalViewClient;
 };
-chrome.runtime.onMessage.addListener(createPenumbraSendListener(getInternalViewClient));
+listen(createPenumbraSendListener(getInternalViewClient));
 
 // IBC transfer tracker: poll destination chains for shield/unshield arrival.
 // Shield-in reads the Penumbra note via the SW's INTERNAL view client (no
@@ -593,7 +598,7 @@ const runIbcTransferSweep = (): Promise<void> =>
 
 // Keplr provider: cosmos dapps (Skip Go etc.) talk to us through the content-
 // script bridge; this handles connect, getKey, cosmos signing, and broadcast.
-chrome.runtime.onMessage.addListener(keplrMessageListener);
+listen(keplrMessageListener);
 
 // On startup, a Penumbra op still pending belonged to a service worker that has
 // since died (those ops run in the SW); the task cannot resume. Mark it unknown,
@@ -637,22 +642,22 @@ const servicesNotStarted = (): Promise<Services> => {
   return notYet;
 };
 
-chrome.runtime.onMessage.addListener((req, sender, respond) =>
+listen((req, sender, respond) =>
   internalServiceListener(walletServices ?? servicesNotStarted(), req, sender, respond),
 );
 
 // listen for identity sign requests from approved origins
-chrome.runtime.onMessageExternal.addListener(signRequestListener);
+listenExternal(signRequestListener);
 
 // listen for external messages
-chrome.runtime.onMessageExternal.addListener(externalMessageListener);
+listenExternal(externalMessageListener);
 
 // listen for external encryption API (sealed box encrypt/decrypt, ZID pubkey)
-chrome.runtime.onMessageExternal.addListener(encryptionMessageListener);
+listenExternal(encryptionMessageListener);
 
 // listen for private, app-scoped contact discovery (zafu_discover_contacts).
 // A no-op unless the user opted in and configured a relay.
-chrome.runtime.onMessageExternal.addListener(contactDiscoveryListener);
+listenExternal(contactDiscoveryListener);
 // presence for a granted site's open page, held over its content script's
 // port; nothing here runs while no granted page is open
 startDiscoveryPresence();
@@ -660,11 +665,11 @@ startDiscoveryPresence();
 // listen for the contact-discovery CONSENT request
 // (zafu_request_contact_discovery): an app asks the user to turn the
 // wallet-wide feature on. Opens the consent popup.
-chrome.runtime.onMessageExternal.addListener(contactDiscoveryRequestListener);
+listenExternal(contactDiscoveryRequestListener);
 
 // introductions (zafu_connect, zafu_friends, zafu_invite_friend): an app
 // connects two of its people; the line it sends lands in their pair room
-chrome.runtime.onMessageExternal.addListener(
+listenExternal(
   createConnectListener(
     connectDeps(async (roomId, line) => {
       await people.service.api.send(roomId, line);
@@ -681,7 +686,7 @@ const INTERNAL_RESULT_TYPES = new Set([
   'zafu_zcash_send_result',
   'zafu_passkey_result',
 ]);
-chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
+listen((req, sender, sendResponse) => {
   const t = (req as { type?: unknown } | null)?.type;
   if (typeof t === 'string' && INTERNAL_RESULT_TYPES.has(t)) {
     return externalMessageListener(req, sender, sendResponse);
@@ -751,8 +756,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
       const key = await chrome.storage.session.get('passwordKey');
       if (key?.['passwordKey']) {
         console.log(`[idle] auto-locking after ${minutes}m of inactivity`);
-        // grace must never outlive the unlock; session storage survives
-        // runtime.reload(), so remove it explicitly here too
+        // grace must never outlive the unlock
         await chrome.storage.session.remove([
           'passwordKey',
           'identityKeys',
@@ -761,7 +765,8 @@ chrome.alarms.onAlarm.addListener(async alarm => {
           'retiredPasswordKey',
           'penumbraBalancesSnapshot',
         ]);
-        chrome.runtime.reload();
+        // no runtime.reload(): it cut every open tab off from zafu (auto-lock.ts)
+        await lockInPlace();
       }
     }
     return;
@@ -823,8 +828,8 @@ chrome.alarms.onAlarm.addListener(async alarm => {
 // ── zcash offscreen proving ──
 // The zcash-worker requests offscreen activation before sending prove requests.
 // Only the service worker can call chrome.offscreen.createDocument().
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type !== 'ZCASH_ENSURE_OFFSCREEN') {
+listen((msg, _sender, sendResponse) => {
+  if ((msg as { type?: unknown } | null)?.type !== 'ZCASH_ENSURE_OFFSCREEN') {
     return false;
   }
   void ensureOffscreenDocument().then(
@@ -854,6 +859,7 @@ void (async () => {
 // on install: open onboarding page + create context menu
 chrome.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
   void stampSeenVersion(reason, previousVersion).catch(() => undefined);
+  void stampTSweepCutoff(reason).catch(() => undefined);
   chrome.contextMenus.create({
     id: 'open-popup-window',
     title: 'Open Zafu in Popup Window',
@@ -885,3 +891,6 @@ chrome.omnibox?.onInputEntered.addListener(text => {
   const route = `${PopupPath.LINK}?uri=${encodeURIComponent(omniboxUri(text))}&via=typed`;
   void openWalletRoute('omnibox', route);
 });
+
+// every listener above is registered: answer what arrived while the wasm loaded
+releaseHeldMessages();

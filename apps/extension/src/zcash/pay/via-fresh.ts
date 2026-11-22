@@ -125,8 +125,7 @@ const SHORT: Record<Step, string> = {
 };
 
 const lineOf = (e: unknown, leg: Step, short: Record<Step, string>) => {
-  const line =
-    e instanceof Error && e.message ? e.message : 'something broke on our side, not yours';
+  const line = e instanceof Error && e.message ? e.message : 'something went wrong in zafu';
   return /insufficient/i.test(line) ? short[leg] : line;
 };
 

@@ -146,6 +146,18 @@ describe('zafu_sign: a remembered site signs in without a popup', () => {
     expect(popup).not.toHaveBeenCalled();
   });
 
+  it('asks every time for a site in cross-site mode: that key is the same everywhere', async () => {
+    await selectVault('mnemonic');
+    await grantCapability(ORIGIN, 'sign_identity');
+    await localExtStorage.set('zidPreferences', {
+      [ORIGIN]: { mode: 'cross-site', rotation: 0, identity: 'default' },
+    } as never);
+    unlockedMnemonic.mockResolvedValue(MNEMONIC);
+    await ask();
+    expect(popup).toHaveBeenCalledTimes(1);
+    expect(unlockedMnemonic).not.toHaveBeenCalled();
+  });
+
   it('still asks a zigner every time', async () => {
     await selectVault('zigner-zafu', { coldSignerType: 'zigner', zid: 'pk' });
     await grantCapability(ORIGIN, 'sign_identity');

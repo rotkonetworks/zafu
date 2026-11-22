@@ -54,6 +54,7 @@ const COSMOS_PREFIXES: Record<string, string> = {
   stars: 'stargaze',
   secret: 'secret',
   terra: 'terra',
+  terp: 'terp network',
 };
 
 /** a swap route's chain code (state/swap/tokens.ts) to the chain an address field is for */
@@ -381,6 +382,25 @@ export const inferChain = (raw: string): AddressChain | undefined => {
     : k.kind === 'zid' || k.kind === 'unknown'
       ? undefined
       : k.kind;
+};
+
+/** the coin a chain's address is paid in unless the person picks another: the chain's own */
+const NATIVE: Partial<Record<AddressChain, { token: string; chain: string }>> = {
+  bitcoin: { token: 'btc', chain: 'btc' },
+  ethereum: { token: 'eth', chain: 'eth' },
+  solana: { token: 'sol', chain: 'sol' },
+  near: { token: 'near', chain: 'near' },
+};
+
+/**
+ * An address zcash can't pay directly, but a swap can: the token and swap
+ * chain it is paid in by default. Undefined for zcash, penumbra, a zid or
+ * anything that is no address. A 0x address could be any evm chain; it reads
+ * as ether on ethereum, and the unit button picks another.
+ */
+export const payAcrossOf = (raw: string): { token: string; chain: string } | undefined => {
+  const chain = inferChain(raw.trim());
+  return chain && NATIVE[chain];
 };
 
 /** why a string cannot join an address list, said calmly; undefined when it can */

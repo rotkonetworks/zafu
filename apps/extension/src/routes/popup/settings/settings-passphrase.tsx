@@ -60,7 +60,7 @@ export const SettingsPassphrase = () => {
           setWrong(true);
         }
       } catch {
-        setError('something broke on our side, not yours. nothing was lost.');
+        setError('something went wrong in zafu. nothing was lost.');
       }
     })();
   };

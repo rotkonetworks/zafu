@@ -40,6 +40,7 @@ import type { DepositPlan, DepositRequest, MoveCoin } from '../../workers/transp
 import type { StopOutcome } from '../../workers/build-abort';
 import type { DoorPakeCall } from '../../workers/door-pake';
 import { ensureOffscreenDocument } from '../../offscreen-document';
+import type { BoxJson } from '@repo/encryption/box';
 
 /** true only inside the offscreen document - the one place that owns real Workers */
 const isOffscreenHost = (): boolean =>
@@ -1228,6 +1229,8 @@ export interface HistoryEntry {
   /** the unshield that funded a fresh-address payment, folded into this row */
   moveTxid?: string;
   expiryHeight?: number;
+  /** recipient, memo and payments as sealed at rest: open with state/sent-seal openSentRows */
+  sealed?: BoxJson;
 }
 
 /**
@@ -1693,12 +1696,17 @@ export const completeSendTxPcztInWorker = async (
   serverUrl: string,
   signedPcztHex: string,
   /** SendTxPcztUnsignedResult.coldSendId from the matching build */
-  coldSendId?: string,
+  coldSendId: string | undefined,
+  /**
+   * what was reviewed: the unsigned PCZT zafu built and the wallet's viewing
+   * key. The worker broadcasts the signed PCZT only if it is that transaction.
+   */
+  reviewed: { unsignedPcztHex: string; ufvk: string },
 ): Promise<{ txid: string }> => {
   return callWorker(
     network,
     'send-tx-pczt-complete',
-    { serverUrl, signedPcztHex, coldSendId },
+    { serverUrl, signedPcztHex, coldSendId, ...reviewed },
     walletId,
   );
 };

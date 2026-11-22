@@ -252,6 +252,7 @@ describe('gh #19 - same-origin approval-popup dedup', () => {
     // used to be dropped as a duplicate, which the site read as a refusal
     const origin = 'https://dkg-then-send.example';
     await grantCapability(origin, 'frost');
+    await grantCapability(origin, 'connect');
     const joined = call({ type: 'zafu_dkg_join', rendezvousCode: '7-a-b' }, validSender(origin));
     await flush();
     expect(createMock).toHaveBeenCalledTimes(1);
@@ -267,8 +268,7 @@ describe('gh #19 - same-origin approval-popup dedup', () => {
       { type: 'zafu_zcash_send', outputs: [{ address: 'utest1seat', amount: 1000 }] },
       validSender(origin),
     );
-    await flush();
-    expect(createMock).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(createMock).toHaveBeenCalledTimes(2));
     expect(String((createMock.mock.calls[1]![0] as { url: string }).url)).toContain(
       'approval/zcash-send',
     );
@@ -286,6 +286,25 @@ describe('gh #19 - same-origin approval-popup dedup', () => {
     await flush();
 
     expect(createMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('send and the contact picker - one window per site, like every prompt', () => {
+  it('a page asking again while its send window is open opens nothing', async () => {
+    const origin = 'https://loop-send.example';
+    const req = { type: 'send', address: 'u1someone', amount_zat: 10_000 };
+    expect(await call(req, validSender(origin))).toEqual({ ok: true });
+    expect(await call(req, validSender(origin))).toEqual({ ok: false });
+    expect(createMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a page asking again while its picker is open is told denied, with no second window', async () => {
+    const origin = 'https://loop-pick.example';
+    void call({ type: 'zafu_pick_contacts', purpose: 'invite' }, validSender(origin));
+    await flush();
+    const second = await call({ type: 'zafu_pick_contacts' }, validSender(origin));
+    expect(second).toEqual({ success: false, error: 'denied' });
+    expect(createMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -324,6 +343,21 @@ describe('contact discovery is left to its own listeners', () => {
       expect(respond).not.toHaveBeenCalled();
     },
   );
+});
+
+describe('frost entries - top frame only', () => {
+  it.each([
+    { type: 'zafu_frost_create' },
+    { type: 'zafu_frost_join', roomCode: 'r1' },
+    { type: 'zafu_dkg_join', roomCode: 'r1' },
+    { type: 'zafu_delete_multisig', multisigLabel: 'poker-table' },
+  ])('$type from a granted site inside an iframe is refused, no window', async req => {
+    const origin = `https://frost-iframe-${req.type}.example`;
+    await grantCapability(origin, 'frost');
+    const res = await call(req, { ...validSender(origin), frameId: 3 });
+    expect(res).toEqual({ success: false, error: 'denied' });
+    expect(createMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('gh #18 - zafu_delete_multisig uniform rejection', () => {
@@ -382,26 +416,52 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
 
   const create = (rpId: string) => ({ type: 'zafu_passkey_create', rpId });
 
-  it('(g) a locked wallet opens the unlock surface instead of the passkey screen', async () => {
+  it('(g) a locked wallet is still offered: the passkey screen opens, and "not now" mints nothing', async () => {
     const origin = 'https://passkey-locked.example';
     await sessionExtStorage.remove('passwordKey');
 
-    const res = await call(create('passkey-locked.example'), validSender(origin));
+    const pending = call(create('passkey-locked.example'), validSender(origin));
+    expect(await waitForPopup(origin)).toContain('passkey-approve');
+    expect(createCredentialMock).not.toHaveBeenCalled();
+    await tap(origin, { approved: false });
 
-    expect(popupUrlFor(origin)).toBeUndefined();
-    expect(res).toMatchObject({ success: false, code: 'cancelled' });
+    expect(await pending).toMatchObject({ success: false, code: 'denied' });
     expect(createCredentialMock).not.toHaveBeenCalled();
   });
 
-  it('(h) a locked wallet refuses to sign rather than reroute the site', async () => {
+  it('(h) a locked wallet signs in once the password is given on the passkey screen, user verified', async () => {
     const origin = 'https://passkey-signlocked.example';
     await grantCapability(origin, 'passkey');
     await sessionExtStorage.remove('passwordKey');
 
-    const res = await call(getReq('passkey-signlocked.example'), validSender(origin));
-
-    expect(res).toMatchObject({ success: false, code: 'cancelled' });
+    const pending = call(getReq('passkey-signlocked.example'), validSender(origin));
+    const url = await waitForPopup(origin);
+    // which wallet answers is sealed while locked: the screen opens without it
+    expect(new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('wallet')).toBeNull();
     expect(signAssertionMock).not.toHaveBeenCalled();
+
+    // the password, given on that screen: it unlocks, then reports verified
+    await sessionExtStorage.set('passwordKey', 'unlocked-key');
+    await tap(origin, { approved: true, verified: true });
+
+    expect(await pending).toMatchObject({ success: true });
+    expect(signAssertionMock.mock.calls.at(-1)?.at(-1)).toBe(true);
+  });
+
+  it('(h2) the screen carries what the site asks of user verification; a bare tap is not "verified"', async () => {
+    const origin = 'https://passkey-uv.example';
+    await grantCapability(origin, 'passkey');
+
+    const pending = call(
+      { ...getReq('passkey-uv.example'), userVerification: 'discouraged' },
+      validSender(origin),
+    );
+    const url = await waitForPopup(origin);
+    expect(new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('uv')).toBe('discouraged');
+    await tap(origin, { approved: true });
+
+    expect(await pending).toMatchObject({ success: true });
+    expect(signAssertionMock.mock.calls.at(-1)?.at(-1)).toBe(false);
   });
 
   it('(i) a mint failure after the tap is reported as failed, not as a denial', async () => {
@@ -414,6 +474,71 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
     await tap(origin, { approved: true });
 
     expect(await pending).toMatchObject({ success: false, code: 'failed' });
+  });
+
+  describe('where the passkey screen shows', () => {
+    // chrome.runtime is a module here: swap it whole, with a panel and a message sink
+    const runtime = globalThis.chrome.runtime;
+    const setRuntime = (r: unknown) => {
+      (globalThis.chrome as unknown as { runtime: unknown }).runtime = r;
+    };
+    let open = false;
+    const panelOpen = (o: boolean) => {
+      open = o;
+    };
+    const navigated: { type: string; route: string }[] = [];
+    beforeEach(() => {
+      navigated.length = 0;
+      setRuntime({
+        id: runtime.id,
+        getURL: (path: string) => runtime.getURL(path),
+        getContexts: async () => (open ? [{ contextType: 'SIDE_PANEL', windowId: 7 }] : []),
+        // the real panel answers true once its listener has navigated
+        sendMessage: async (m: { type: string; route: string }) => {
+          navigated.push(m);
+          return true;
+        },
+      });
+    });
+    afterEach(async () => {
+      panelOpen(false);
+      setRuntime(runtime);
+      await localExtStorage.remove('approvalSurface' as never);
+    });
+
+    it('in the side panel when it is open: no window, and the tap there signs in', async () => {
+      const origin = 'https://passkey-panel.example';
+      panelOpen(true);
+      const pending = call(create('passkey-panel.example'), validSender(origin));
+      await vi.waitFor(() => expect(navigated.length).toBeGreaterThan(0));
+      expect(createMock).not.toHaveBeenCalled();
+      const { route } = navigated.at(-1)!;
+      expect(route).toMatch(/^\/passkey-approve\?/);
+      const requestId = new URLSearchParams(route.slice(route.indexOf('?') + 1)).get('requestId');
+      await call(
+        { type: 'zafu_passkey_result', requestId, result: { approved: true } },
+        internalSender(),
+      );
+      expect(await pending).toMatchObject({ success: true });
+    });
+
+    it('a panel closed with the request unanswered is the cancel', async () => {
+      const origin = 'https://passkey-panel-closed.example';
+      panelOpen(true);
+      const pending = call(create('passkey-panel-closed.example'), validSender(origin));
+      await vi.waitFor(() => expect(navigated.length).toBeGreaterThan(0));
+      panelOpen(false);
+      expect(await pending).toMatchObject({ success: false, code: 'cancelled' });
+    });
+
+    it('in a window when the person chose windows, panel open or not', async () => {
+      const origin = 'https://passkey-window.example';
+      panelOpen(true);
+      await localExtStorage.set('approvalSurface' as never, 'popup' as never);
+      void call(create('passkey-window.example'), validSender(origin));
+      await waitForPopup(origin);
+      expect(navigated).toEqual([]);
+    });
   });
 
   it('(a) create mints nothing until the tap, and shows the site, rpId and wallet', async () => {
@@ -683,8 +808,8 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
     const first = call(getReq('dedup.example'), validSender(origin));
     await waitForPopup(origin);
     const second = call(getReq('dedup.example'), validSender(origin));
-    // no code: the person declined nothing, so the page does not back off
-    expect(await second).toEqual({ success: false, error: 'denied' });
+    // `busy`: the page refuses it, with no wait and no browser prompt beside zafu's window
+    expect(await second).toEqual({ success: false, error: 'busy', code: 'busy' });
     expect(popupUrlsFor(origin)).toHaveLength(1);
 
     await tap(origin, { approved: true });
@@ -714,12 +839,29 @@ describe('zafu_zcash_send - top-frame gate and same-origin popup dedup', () => {
     expect(createMock).not.toHaveBeenCalled();
   });
 
+  it('refuses a site the person has not connected, with no window', async () => {
+    const res = await call(
+      { type: 'zafu_zcash_send', outputs },
+      validSender('https://send-unconnected.example'),
+    );
+    expect(res).toEqual({ success: false, error: 'not connected', code: 'denied' });
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("never carries the site's fee into the approval", async () => {
+    const origin = 'https://send-fee.example';
+    await grantCapability(origin, 'connect');
+    void call({ type: 'zafu_zcash_send', outputs, fee: 99_000_000 }, validSender(origin));
+    await vi.waitFor(() => expect(anyPopupUrlFor(origin)).toBeDefined());
+    expect(anyPopupUrlFor(origin)).not.toContain('fee=');
+  });
+
   it('opens one popup for two concurrent sends from the same origin', async () => {
     const origin = 'https://send-dup.example';
+    await grantCapability(origin, 'connect');
 
     void call({ type: 'zafu_zcash_send', outputs }, validSender(origin));
-    await flush();
-    expect(createMock).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
 
     const second = await call({ type: 'zafu_zcash_send', outputs }, validSender(origin));
     expect(second).toEqual({ success: false, error: 'denied' });
@@ -728,6 +870,7 @@ describe('zafu_zcash_send - top-frame gate and same-origin popup dedup', () => {
 
   it('never carries the sender favicon into the approval popup url', async () => {
     const origin = 'https://no-favicon.example';
+    await grantCapability(origin, 'connect');
     void call(
       { type: 'zafu_zcash_send', outputs },
       {
@@ -735,7 +878,7 @@ describe('zafu_zcash_send - top-frame gate and same-origin popup dedup', () => {
         tab: { id: 1, favIconUrl: 'https://evil.example/f.ico' } as chrome.tabs.Tab,
       },
     );
-    await flush();
+    await vi.waitFor(() => expect(anyPopupUrlFor(origin)).toBeDefined());
     const url = anyPopupUrlFor(origin);
     expect(url).toBeDefined();
     expect(url).not.toContain('favIconUrl');

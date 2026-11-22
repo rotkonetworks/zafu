@@ -131,7 +131,7 @@ const ErrorScreen = ({ error }: { error: unknown }) => {
       <Mark variant='seal' glyph='間' size={50} className='-rotate-6' />
       <h1 className='font-display text-[28px] text-fg-high'>a brief pause</h1>
       <p className='text-data leading-[1.6] text-fg-muted'>
-        something broke on our side, not yours.
+        something went wrong in zafu.
         <br />
         nothing was lost.
       </p>

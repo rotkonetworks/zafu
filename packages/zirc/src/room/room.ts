@@ -58,7 +58,7 @@
  *     from the room secret and the recipient's pubkey, so any holder of the room
  *     secret can derive that key and read the message. The DM lane hides who is
  *     talking to whom from the relay, and keeps non-members out; it is NOT a
- *     member-to-member secret. See docs/design/zirc-shared-secret-mailbox.md.
+ *     member-to-member secret. See packages/zirc/shared-secret-mailbox.md.
  *   - No forward secrecy beyond the window: the room secret is long-lived. A
  *     member who leaks it can read this window and every window its writers
  *     derive from it, and the derivation is a KDF, not a ratchet with compromise
@@ -924,7 +924,7 @@ export class Room {
    * leaving) can read every DM in the room. It is also why any member can seal
    * *to* you, so a member can spam your slot; they cannot replace what you sent
    * because tags are random per write. A genuine member-to-member secret needs a
-   * pairwise key exchange (see docs/design/zirc-shared-secret-mailbox.md).
+   * pairwise key exchange (see packages/zirc/shared-secret-mailbox.md).
    */
   async sendDirect(
     to: string,

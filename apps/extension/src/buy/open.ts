@@ -1,6 +1,6 @@
 /**
- * Every way into a buy. The beta build opens buy.html in its own tab; prod
- * opens Peer's buy page for zec with zafu's referral, until the in-wallet buy works
+ * Every way into a buy. With beta features on (the beta build's default) it
+ * opens buy.html in its own tab; otherwise Peer's buy page for zec with zafu's referral, until the in-wallet buy works
  * again (Peer's curator stopped giving out sellers' handles, 2026-11). Entries
  * carry `data-preload={BUY_PRELOAD}`: the popup's intent preloader (pointer
  * down, hover, focus) runs {@link preloadBuyPage}, registered in the router,
@@ -8,7 +8,7 @@
  * request to Peer, Base or NEAR.
  */
 
-import { IS_BETA_BUILD } from '../config/feature-flags';
+import { betaFeatures } from '../config/beta';
 import { PEER_BUY_ZEC_URL } from '../config/ramps';
 
 export const BUY_PRELOAD = 'page:buy';
@@ -16,7 +16,7 @@ export const BUY_PRELOAD = 'page:buy';
 const PAGE_CHUNKS = ['buy-root.js', 'buy-page.js'];
 
 export const preloadBuyPage = (): void => {
-  if (!IS_BETA_BUILD) {
+  if (!betaFeatures()) {
     return;
   }
   for (const f of PAGE_CHUNKS) {
@@ -32,6 +32,6 @@ export const preloadBuyPage = (): void => {
 
 export const openBuyPage = (): void => {
   void chrome.tabs.create({
-    url: IS_BETA_BUILD ? chrome.runtime.getURL('buy.html') : PEER_BUY_ZEC_URL,
+    url: betaFeatures() ? chrome.runtime.getURL('buy.html') : PEER_BUY_ZEC_URL,
   });
 };

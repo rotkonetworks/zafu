@@ -67,6 +67,8 @@ type LOCAL = {
   backupReminderSeen?: boolean;
   seedPhraseBackedUp?: boolean;
   keplrCompat?: boolean;
+  /** beta features on or off; unset: on in the beta build only (config/beta) */
+  betaFeatures?: boolean;
   /**
    * Per-capability participation switch, keyed by `Capability` (see
    * @repo/storage-chrome/capabilities). An absent capability is `unset`, which

@@ -21,6 +21,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { Segmented } from '@repo/ui/components/ui/segmented';
 import { Button } from '@repo/ui/components/ui/button';
 import { Sensitive } from '../../components/sensitive';
@@ -344,10 +345,18 @@ const TransparentSection = ({
   zidecarUrl: string;
 }) => {
   const unit = useUnit();
-  const { tAddresses } = useTransparentAddresses(isMainnet);
-  const { last, checking, failed, check } = useTransparentBalance(tAddresses);
-  const ready = tAddresses.length > 0;
-  // once per open, as soon as the addresses are known
+  const queryClient = useQueryClient();
+  const { tAddresses, lookBack, due } = useTransparentAddresses(isMainnet);
+  const sweep = (ask: Parameters<typeof lookBack>[0]) => lookBack(ask, queryClient);
+  const {
+    last,
+    checking,
+    failed,
+    check,
+    lookBack: askOlder,
+  } = useTransparentBalance(tAddresses, due ? sweep : undefined);
+  // once per open, as soon as the addresses and whether this check looks back are known
+  const ready = tAddresses.length > 0 && due !== undefined;
   useEffect(() => {
     if (ready) {
       check();
@@ -425,6 +434,26 @@ const TransparentSection = ({
           ))
         )}
       </div>
+
+      {/* zafu asks only about addresses it handed out; a seed alone cannot say which those were */}
+      {ready && (
+        <div className='flex items-center justify-between gap-2 px-0.5'>
+          <span className='text-xs text-fg-muted lowercase'>
+            restored a seed? the node will see 20 addresses asked together
+          </span>
+          <Button
+            variant='quiet'
+            size='sm'
+            disabled={checking}
+            onClick={() =>
+              // a node that did not answer shows as the failed check above
+              void sweep(askOlder).catch(() => undefined)
+            }
+          >
+            look back
+          </Button>
+        </div>
+      )}
     </>
   );
 };

@@ -5,14 +5,14 @@
  * user closes the unlock without unlocking - the caller answers `locked` then,
  * rather than failing inside the keyring with "keyring locked".
  */
-export const unlockedMnemonic = async (): Promise<string | null> => {
+export const unlockedMnemonic = async (origin: string): Promise<string | null> => {
   try {
     const { throwIfNeedsLogin } = await import('../../needs-login');
-    await throwIfNeedsLogin();
+    await throwIfNeedsLogin(origin);
   } catch {
     return null;
   }
-  const { useStore } = await import('../../state');
+  const useStore = await (await import('../../state/loaded')).loadedStore();
   const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
   if (!keyInfo) {
     return null;

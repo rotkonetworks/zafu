@@ -74,6 +74,7 @@ export const payViaZigner = async (
     p.serverUrl,
     signed,
     built.coldSendId,
+    { unsignedPcztHex: built.pcztHex, ufvk: p.ufvk },
   );
   return txid;
 };

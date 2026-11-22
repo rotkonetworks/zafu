@@ -10,8 +10,8 @@
  *
  * Snapshot sources (used by `directory` mode, and by `live` mode as a
  * cache when present): a mirror url, or the user's own api key. The key
- * is the user's own: plain local storage, never bundled, never sent
- * anywhere but zcash.me.
+ * is the user's own: sealed apart from this config (./api-key), never
+ * bundled, never sent anywhere but zcash.me.
  *
  * Config and index are module-level so every popup surface (tx rows,
  * inbox threads, the picker, settings) shares one storage read and
@@ -42,8 +42,6 @@ export interface ZcashMeConfig {
   mode: ZcashMeMode;
   /** https url serving a `DirectorySnapshot` json; empty = none */
   mirrorUrl: string;
-  /** user's own zcash.me api key for bulk directory pulls; empty = none */
-  apiKey: string;
   /** user chose "not now" on an in-context offer; passive offers stop */
   promptDismissed: boolean;
   /**
@@ -61,7 +59,6 @@ export const DEFAULT_LIVE_DECOYS = 4;
 export const DEFAULT_ZCASHME_CONFIG: ZcashMeConfig = {
   mode: 'off',
   mirrorUrl: '',
-  apiKey: '',
   promptDismissed: false,
   decoys: 0,
 };
@@ -92,7 +89,8 @@ export const readZcashMeConfig = (): Promise<ZcashMeConfig> => {
     reading = localExtStorage
       .get('zcashMeConfig')
       .then(stored => {
-        cached = { ...DEFAULT_ZCASHME_CONFIG, ...(stored ?? {}) };
+        const { apiKey: _, ...plain } = stored ?? {};
+        cached = { ...DEFAULT_ZCASHME_CONFIG, ...plain };
         notify();
         return cached;
       })
@@ -104,7 +102,9 @@ export const readZcashMeConfig = (): Promise<ZcashMeConfig> => {
 };
 
 export const writeZcashMeConfig = async (config: ZcashMeConfig): Promise<void> => {
-  await localExtStorage.set('zcashMeConfig', config);
+  // an older version's plain key stays until it is sealed (./api-key), never dropped here
+  const apiKey = (await localExtStorage.get('zcashMeConfig'))?.apiKey ?? '';
+  await localExtStorage.set('zcashMeConfig', { ...config, apiKey });
   cached = config;
   notify();
 };

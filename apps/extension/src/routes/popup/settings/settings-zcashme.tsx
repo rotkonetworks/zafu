@@ -38,6 +38,7 @@ import {
   type DirectoryIndex,
 } from '../../../services/zcashme/directory';
 import { MAX_DECOYS } from '../../../services/zcashme/decoys';
+import { readZcashMeApiKey, writeZcashMeApiKey } from '../../../services/zcashme/api-key';
 import { cn } from '@repo/ui/lib/utils';
 
 const MODES: { value: ZcashMeMode; detail: string }[] = [
@@ -69,6 +70,7 @@ const fmtAge = (ms: number): string => {
 
 export function SettingsZcashMe() {
   const [config, setConfig] = useState<ZcashMeConfig>(DEFAULT_ZCASHME_CONFIG);
+  const [apiKey, setApiKey] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [index, setIndex] = useState<DirectoryIndex | null>(getDirectoryIndex());
   const [busy, setBusy] = useState<string | null>(null);
@@ -76,25 +78,30 @@ export function SettingsZcashMe() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    void readZcashMeConfig().then(c => {
+    void Promise.all([readZcashMeConfig(), readZcashMeApiKey()]).then(([c, key]) => {
       setConfig(c);
+      setApiKey(key);
       setLoaded(true);
     });
     void loadDirectoryIndex().then(setIndex);
     return onDirectoryChange(() => setIndex(getDirectoryIndex()));
   }, []);
 
+  const flashSaved = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+
   const persist = async (next: ZcashMeConfig) => {
     setConfig(next);
     await writeZcashMeConfig(next);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    flashSaved();
   };
 
   const refresh = async () => {
     setError(null);
     const mirror = config.mirrorUrl.trim();
-    const key = config.apiKey.trim();
+    const key = apiKey.trim();
     if (!mirror && !key) {
       setError('add a mirror url or an api key first');
       return;
@@ -253,9 +260,9 @@ export function SettingsZcashMe() {
               </label>
               <input
                 type='password'
-                value={config.apiKey}
-                onChange={e => setConfig({ ...config, apiKey: e.target.value })}
-                onBlur={() => void persist(config)}
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+                onBlur={() => void writeZcashMeApiKey(apiKey.trim()).then(ok => ok && flashSaved())}
                 placeholder='X-API-Key'
                 autoComplete='off'
                 className={inputCls}

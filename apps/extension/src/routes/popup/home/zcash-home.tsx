@@ -166,8 +166,11 @@ export const ZcashContent = ({
   const walletBirthday = useQuery(birthdayQuery).data ?? 0;
 
   // the transparent figure is the last check: asked on intent, never on a timer
-  const { tAddresses } = useTransparentAddresses(isMainnet);
-  const transparent = useTransparentBalance(tAddresses);
+  const { tAddresses, lookBack, due } = useTransparentAddresses(isMainnet);
+  const transparent = useTransparentBalance(
+    tAddresses,
+    due ? ask => lookBack(ask, queryClient) : undefined,
+  );
   const transparentZat = transparent.last?.zat ?? 0n;
   const tip = chainTip?.height ?? 0;
   const eachBlock = useStore(s => s.privacy.settings.zcashTransparentEachBlock);
@@ -271,9 +274,10 @@ export const ZcashContent = ({
 
   const inFlight = pendingSends.filter(t => t.status === 'pending' && !payMoves.has(t.id));
   const failedSends = pendingSends.filter(t => t.status === 'failed');
-  // a swap or lp address was handed out and never checked: keep its row and its
-  // "check now" on screen rather than calling the pocket empty
-  const tUnchecked = transparent.last === null && tAddresses.length > 1;
+  // never checked: keep the transparent row and its "check now" on screen rather
+  // than calling the pocket empty, or coins paid to its address would have no
+  // way to be found from here (nothing is asked until the person asks)
+  const tUnchecked = transparent.last === null;
   const empty = totalZat === 0n && inFlight.length === 0 && balanceState === 'ready' && !tUnchecked;
   const reading = totalZat === 0n && balanceState === 'loading';
 

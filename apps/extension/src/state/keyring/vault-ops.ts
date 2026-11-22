@@ -26,14 +26,10 @@ export const vaultsToKeyInfos = (vaults: EncryptedVault[], selectedId?: string):
     insensitive: v.insensitive,
   }));
 
-/** A 12-word phrase is penumbra-only: zcash won't work on 12 words. */
-export const penumbraOnlyPhrase = (mnemonic: string) => mnemonic.trim().split(/\s+/).length === 12;
-
 export const buildMnemonicVault = (
   vaultId: string,
   name: string,
   encryptedData: string,
-  mnemonic: string,
 ): EncryptedVault => ({
   id: vaultId,
   type: 'mnemonic',
@@ -41,8 +37,8 @@ export const buildMnemonicVault = (
   createdAt: Date.now(),
   encryptedData,
   salt: '',
-  // no field means every network, as for every vault made before this
-  insensitive: penumbraOnlyPhrase(mnemonic) ? { supportedNetworks: ['penumbra'] } : {},
+  // no field means every network, including a 12-word import
+  insensitive: {},
 });
 
 export const zignerSupportedNetworks = (data: ZignerZafuImport): string[] => {
@@ -301,6 +297,26 @@ export const keyInfoSupportsNetwork = (k: KeyInfo, network: NetworkType): boolea
     return true;
   }
   return supported.includes(network);
+};
+
+/** the networks a wallet is limited to, or undefined when it serves every one (a seed phrase) */
+export const keyInfoNetworks = (k: KeyInfo): NetworkType[] | undefined =>
+  k.insensitive['supportedNetworks'] as NetworkType[] | undefined;
+
+/**
+ * where picking a wallet lands: the active network when the wallet serves it,
+ * else the first network it serves that is on, else the first it serves
+ */
+export const networkForWallet = (
+  k: KeyInfo,
+  active: NetworkType,
+  enabled: readonly NetworkType[],
+): NetworkType => {
+  if (keyInfoSupportsNetwork(k, active)) {
+    return active;
+  }
+  const own = keyInfoNetworks(k) ?? [];
+  return own.find(n => enabled.includes(n)) ?? own[0] ?? active;
 };
 
 export const findCompatibleVault = (

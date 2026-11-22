@@ -34,7 +34,13 @@ vi.mock('../../../state/keyring', () => ({
   selectActiveNetwork: () => 'zcash',
   selectEffectiveKeyInfo: () => undefined,
 }));
-vi.mock('../../../state/pockets', () => ({ activeAccountIndex: () => 0 }));
+vi.mock('../../../state/pockets', () => ({
+  activeAccountIndex: () => 0,
+  // read by the active zcash wallet selector: no zigner pockets here
+  zignerPocketAccount: () => undefined,
+  pocketOwner: () => '',
+  pocketsOf: () => [],
+}));
 
 const { SendPage } = await import('./index');
 

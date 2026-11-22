@@ -148,7 +148,11 @@ const handleSignRequest = async (
       : undefined;
 
     const perms = await getOriginPermissions(sender.origin);
-    if (kind === 'hot' && hasCapability(perms, 'sign_identity')) {
+    // a cross-site key is the one every cross-site site sees: what it signs could
+    // be presented elsewhere, so it is never signed without the person looking
+    const { zidPreferenceFor } = await import('../../state/identity');
+    const crossSite = (await zidPreferenceFor(sender.origin))?.mode === 'cross-site';
+    if (kind === 'hot' && !crossSite && hasCapability(perms, 'sign_identity')) {
       const signed = await signRemembered(sender.origin, req.challengeHex);
       if (signed) {
         silentOrigins.add(sender.origin);
@@ -203,16 +207,16 @@ const signRemembered = async (
   origin: string,
   challengeHex: string,
 ): Promise<{ signature: string; publicKey: string } | null> => {
-  const mnemonic = await unlockedMnemonic();
+  const mnemonic = await unlockedMnemonic(origin);
   if (!mnemonic) {
     return null;
   }
-  const { signZid, getZidIndex, readZidSitePreference } = await import('../../state/identity');
+  const { signZid, getZidIndex, zidPreferenceFor } = await import('../../state/identity');
   return signZid(
     mnemonic,
     origin,
     hexToBytes(challengeHex),
-    await readZidSitePreference(origin),
+    await zidPreferenceFor(origin),
     await getZidIndex(),
   );
 };

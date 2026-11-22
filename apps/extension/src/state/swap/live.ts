@@ -61,7 +61,7 @@ export interface Gate {
 export const plain = (route: RouteId, e: unknown): string => {
   const name = ROUTES[route].label;
   const text = isEgressBlocked(e)
-    ? e.refusal.reason === 'transport-down'
+    ? e.refusal.reason === 'transport-down' || e.refusal.reason === 'redirect'
       ? e.message
       : 'off in settings'
     : typeof e === 'string'
@@ -129,7 +129,7 @@ export const quoteQuery = (route: RouteId, wallet: string, req: QuoteRequest) =>
     req.direction,
     req.token.symbol,
     req.token.chain,
-    // by what arrives, the paid figure is only a hint (exact output: kept for the unified screen)
+    // by what arrives, the paid figure is only a hint
     req.exactOut ? `out:${req.exactOut}` : req.amountIn,
     req.otherAddress,
     !!req.zcashTransparent,

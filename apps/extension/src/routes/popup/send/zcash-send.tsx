@@ -53,7 +53,8 @@ import { parseZcashMeHandle, type ZcashMeProfile } from '../../../services/zcash
 import { zcashMeLabel } from '../../../services/zcashme/label';
 import { directoryProfileByAddress } from '../../../services/zcashme/directory';
 import { usePasswordGate } from '../../../hooks/password-gate';
-import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import { LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import { useBetaFeatures } from '../../../config/beta';
 import {
   CAPS,
   PENUMBRA_ONLY,
@@ -90,7 +91,8 @@ import { PopupPath } from '../paths';
 import { formatZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import { looksLikeLink, notYet, parseLink } from '../../../links/router';
 import { viaLine } from '../../../links/land';
-import { zcashAddressOf, zcashPayRefusal } from '../../../addresses/kind';
+import { payAcrossOf, zcashAddressOf, zcashPayRefusal } from '../../../addresses/kind';
+import type { SwapLinkState } from '../../../links/land';
 import {
   FRESH_WORDS,
   PUBLIC_LINE,
@@ -126,11 +128,6 @@ import { zignerCodeChain, type ZignerChain } from '../../../shared/zigner-code';
 import { useCatchUp } from '../../../state/witness-rebuild';
 import { signedPcztOfAnswer } from '../../../signing/zigner-answer';
 import { selectZcashEndpoint } from '../../../state/networks';
-
-const SEND_FLAGS = {
-  hardwareWallet: HARDWARE_WALLET_ENABLED,
-  ledgerTransparent: LEDGER_TRANSPARENT_ENABLED,
-};
 
 interface ZcashSendProps {
   onClose: () => void;
@@ -177,6 +174,10 @@ const DEVICE: Partial<Record<WalletKind, string>> = {
 };
 
 export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSendProps) {
+  const SEND_FLAGS = {
+    hardwareWallet: useBetaFeatures(),
+    ledgerTransparent: LEDGER_TRANSPARENT_ENABLED,
+  };
   const UNIT = getNetworkConfig(zcashNetworkOf(mainnet)).symbol;
   const unit = UNIT.toLowerCase();
   const {
@@ -595,6 +596,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     kind === 'ledger-transparent' || kind === 'hot' || kind === 'zigner',
   );
   const toValid = !!to && !toRefusal;
+  // another chain's address is paid through a swap: the form becomes "pay", the
+  // address kept, the amount asked in the coin it is owed (replace: back is home)
+  const across = step === 'form' ? payAcrossOf(to) : undefined;
+  useEffect(() => {
+    if (across) {
+      const link = { direction: 'from_zec', ...across, address: to, out: '' } as const;
+      navigate(PopupPath.SWAP, { replace: true, state: { link } satisfies SwapLinkState });
+    }
+  }, [across?.token, across?.chain, to]);
   const toName =
     recipientContact?.contact.name ??
     (resolvedProfile?.address === to ? zcashMeLabel(resolvedProfile) : undefined);
@@ -886,7 +896,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     try {
       const walletId = selectedKeyInfo.id;
       const amountZat = Math.round(Number(amount) * 1e8).toString();
-      const coldDeps = { walletId: storeId ?? walletId, zidecarUrl, mainnet };
+      const coldDeps = { walletId: storeId ?? walletId, zidecarUrl, mainnet, ufvk };
       const finish = (txid: string) => {
         run.broadcasting();
         run.finish();
@@ -1450,7 +1460,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       const finalResult = await signAndBroadcast(
         frostAirgapSigner(orchardSigs, result),
         result,
-        { walletId: storeId ?? selectedKeyInfo!.id, zidecarUrl, mainnet },
+        { walletId: storeId ?? selectedKeyInfo!.id, zidecarUrl, mainnet, ufvk },
         {
           onSigned: () => {
             runRef.current?.broadcasting();

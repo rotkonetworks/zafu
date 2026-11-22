@@ -17,6 +17,7 @@ import {
   toStored,
   type TransparentCheck,
   fundedFirst,
+  highestFunded,
 } from './zcash-check';
 
 const utxo = (address: string, valueZat: bigint): Utxo => ({
@@ -184,5 +185,16 @@ describe('fundedFirst', () => {
       { address: 'b', zat: 9n },
     ]);
     expect(fundedFirst([])).toEqual([]);
+  });
+});
+
+describe('highestFunded', () => {
+  const older = ['t0', 't1', 't2', 't3'];
+  it('is the furthest address holding coins, by derivation position', () => {
+    expect(highestFunded(older, [utxo('t1', 1n), utxo('t3', 1n), utxo('t0', 1n)])).toBe(3);
+  });
+  it('is 0 when nothing past the first holds coins, or a coin is not ours', () => {
+    expect(highestFunded(older, [])).toBe(0);
+    expect(highestFunded(older, [utxo('t0', 1n), utxo('elsewhere', 1n)])).toBe(0);
   });
 });

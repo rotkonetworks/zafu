@@ -93,11 +93,16 @@ describe('passkey intercept → bridge relay', () => {
     const cred = (await promise) as unknown as PublicKeyCredential;
     expect(cred.id).toBe('q80'); // base64url of 0xab 0xcd
     expect(cred.type).toBe('public-key');
-    expect(
-      Array.from(
-        new Uint8Array((cred.response as AuthenticatorAttestationResponse).getPublicKey()!),
-      ),
-    ).toEqual([0x04, 0xaa]);
+    // getPublicKey is a SubjectPublicKeyInfo: the ES256 header, then the point
+    const spki = Array.from(
+      new Uint8Array((cred.response as AuthenticatorAttestationResponse).getPublicKey()!),
+    );
+    expect(spki.slice(0, 2)).toEqual([0x30, 0x59]);
+    expect(spki.slice(-2)).toEqual([0x04, 0xaa]);
+    // and the JSON form newer sites send instead of the fields
+    const json = (cred as unknown as { toJSON: () => Record<string, unknown> }).toJSON();
+    expect(json).toMatchObject({ type: 'public-key', authenticatorAttachment: 'platform' });
+    expect(json['id']).toBe(cred.id);
     expect(cred.getClientExtensionResults()).toEqual({ prf: { enabled: true } });
     expect(sendMessage).not.toHaveBeenCalled();
   });
@@ -116,6 +121,19 @@ describe('passkey intercept → bridge relay', () => {
 
     await expect(promise).resolves.toEqual({ id: 'platform-create' });
     expect(platformCreate).toHaveBeenCalledWith(options);
+  });
+
+  it('a sign-in the person declined in zafu is a cancel, never the browser saying it has no passkey', async () => {
+    for (const code of ['cancelled', 'denied']) {
+      const promise = navigator.credentials.get({
+        publicKey: { rpId: 'passkey.example', challenge: Uint8Array.from([5, 6]) },
+      } as CredentialRequestOptions);
+      await vi.waitFor(() => expect(postSpy).toHaveBeenCalled());
+      bridgeResponds(lastRequest(), { success: false, error: code, code });
+      await expect(promise).rejects.toMatchObject({ name: 'NotAllowedError' });
+      postSpy.mockClear();
+    }
+    expect(platformGet).not.toHaveBeenCalled();
   });
 
   it('relays get with clientDataHash + prf salts and maps the signature back', async () => {

@@ -179,6 +179,8 @@ surface.
 
 no transaction is created and no funds are at risk - the signature only
 proves control of the zid private key.
+see [sign in with zafu](sign-in.md) for how this compares with
+payment-per-login designs, and what changes in the next version.
 
 > **security:** the signature covers only `challengeHex`. the wallet
 > displays the calling origin but does NOT bind it into the signed

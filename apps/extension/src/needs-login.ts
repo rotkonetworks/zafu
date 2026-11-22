@@ -125,19 +125,36 @@ const openUnlockSurface = async (): Promise<void> => {
 let inflightUnlock: Promise<void> | undefined;
 
 /**
+ * A site whose unlock prompt was dismissed waits before it may raise another,
+ * so a page cannot loop the prompt. The wait doubles with each dismissal, up
+ * to UNLOCK_WAIT_MAX_MS. The worker sees no user gesture behind an external
+ * message, so the only trusted way out is the person unlocking zafu
+ * themselves, which clears every wait.
+ */
+const UNLOCK_WAIT_MS = 30_000;
+const UNLOCK_WAIT_MAX_MS = 8 * UNLOCK_WAIT_MS;
+const unlockWaits = new Map<string, { until: number; wait: number }>();
+
+/**
  * Ensures user is logged in before continuing.
  * If not logged in, opens a login popup and waits for login.
- * Throws if user closes the login window without logging in.
+ * Throws if user closes the login window without logging in, or `origin`
+ * dismissed one within its wait.
  *
  * Deduped across every caller (tx/sign approval, the dapp connect gate, and
  * several dapp tabs auto-reconnecting at once) via a shared in-flight promise:
  * spawnLoginPopup has no dedup of its own, unlike popup()'s per-type
  * navigator.locks, so without this each locked caller would open its own window.
  */
-export const throwIfNeedsLogin = async () => {
+export const throwIfNeedsLogin = async (origin?: string) => {
   const loggedIn = await sessionExtStorage.get('passwordKey');
   if (loggedIn) {
+    unlockWaits.clear();
     return;
+  }
+  const waiting = origin ? unlockWaits.get(origin) : undefined;
+  if (waiting && Date.now() < waiting.until) {
+    throw new ConnectError('Login dismissed recently', Code.Canceled);
   }
   // Join the existing attempt if one is already showing; otherwise start it and
   // clear the slot when it settles (either outcome), so a later locked action can
@@ -145,5 +162,14 @@ export const throwIfNeedsLogin = async () => {
   inflightUnlock ??= openUnlockSurface().finally(() => {
     inflightUnlock = undefined;
   });
-  await inflightUnlock;
+  try {
+    await inflightUnlock;
+    unlockWaits.clear();
+  } catch (e) {
+    if (origin) {
+      const wait = waiting ? Math.min(waiting.wait * 2, UNLOCK_WAIT_MAX_MS) : UNLOCK_WAIT_MS;
+      unlockWaits.set(origin, { until: Date.now() + wait, wait });
+    }
+    throw e;
+  }
 };

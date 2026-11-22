@@ -2,10 +2,11 @@
  * A pocket's transparent addresses, cached per pocket store (sealed at rest). Index 0 is the
  * one address the pocket shows. Every swap that leaves or lands on a
  * t-address (THORChain) takes a fresh index of its own above the highest
- * ever handed out, so two swaps never share an address on chain. The scan
- * covers every index up to that highest one, so those addresses are counted
- * and shielded like the rest; older builds' rotated indices sit in the same
- * range.
+ * ever handed out, so two swaps never share an address on chain. The check
+ * covers every index up to that highest one and none past it, so those
+ * addresses are counted and shielded like the rest; older builds' rotated
+ * indices sit in the same range, and a restored seed finds them by looking
+ * back once (lookBackTAddresses).
  */
 
 import { queryOptions, useQuery, type QueryClient } from '@tanstack/react-query';
@@ -19,7 +20,14 @@ import { selectEffectiveKeyInfo, keyRingSelector, selectActiveNetwork } from '..
 import { selectActiveZcashWallet } from '../state/wallets';
 import { deriveZcashTransparent, deriveZcashTransparentFromUfvk } from './use-address';
 import { activeZcashStoreId, activeAccountIndex } from '../state/pockets';
-import { pocketTransparentIndices, zcashTransparentIndexKey } from '../state/pocket-id';
+import {
+  pocketTransparentIndices,
+  RESTORE_T_INDEX,
+  T_SWEEP_BEFORE,
+  tSweptKey,
+  zcashTransparentIndexKey,
+} from '../state/pocket-id';
+import { highestFunded } from '../transparent/zcash-check';
 
 /** why a wallet that exists has no transparent address */
 export type NoTransparent = 'undecryptable' | 'no-transparent-key';
@@ -179,6 +187,22 @@ export const nextSwapTAddressQuery = (source: TSource, isMainnet: boolean) =>
 /** every realm takes the same lock, so two swaps never claim one index */
 const T_INDEX_LOCK = () => `${chrome.runtime.id}.zcash-t-index`;
 
+/** move a pocket's highest handed-out index, under the lock; the scan and the next look follow */
+const moveTIndex = async (
+  key: string,
+  to: (highest: number) => number,
+  client?: QueryClient,
+): Promise<number> => {
+  const index = await navigator.locks.request(T_INDEX_LOCK(), { mode: 'exclusive' }, async () => {
+    const next = to(await highestIndex(key));
+    await chrome.storage.local.set({ [key]: next });
+    return next;
+  });
+  void client?.invalidateQueries({ queryKey: ['zcashTAddrs'] });
+  void client?.invalidateQueries({ queryKey: ['zcashSwapTAddr'] });
+  return index;
+};
+
 /**
  * Claim a fresh t-address for one swap: the next index above any ever handed
  * out, written before it is used so the scan covers it from now on (and a
@@ -190,15 +214,7 @@ export const claimSwapTAddress = async (
   isMainnet: boolean,
   client?: QueryClient,
 ): Promise<SwapTAddress> => {
-  const key = indexKeyOf(source);
-  const index = await navigator.locks.request(T_INDEX_LOCK(), { mode: 'exclusive' }, async () => {
-    const next = (await highestIndex(key)) + 1;
-    await chrome.storage.local.set({ [key]: next });
-    return next;
-  });
-  // the scan and the next look both move on
-  void client?.invalidateQueries({ queryKey: ['zcashTAddrs'] });
-  void client?.invalidateQueries({ queryKey: ['zcashSwapTAddr'] });
+  const index = await moveTIndex(indexKeyOf(source), h => h + 1, client);
   const [address] = await deriveAt(source, [index], isMainnet);
   if (!address) {
     throw new Error('this wallet has no transparent address');
@@ -217,6 +233,42 @@ export const tAddressAt = async (
 export const claimTAddress = (s: AllSlices, isMainnet: boolean): Promise<SwapTAddress> =>
   claimSwapTAddress(tAddrSource(s), isMainnet);
 
+/**
+ * A restored seed's older addresses, asked once on the person's word: the
+ * first twenty, each on its own. The highest that holds coins counts as
+ * handed out from then on, so every check after covers it; the rest are
+ * never asked again.
+ */
+export const lookBackTAddresses = async (
+  source: TSource,
+  isMainnet: boolean,
+  ask: (addresses: string[]) => Promise<{ address: string }[]>,
+  client?: QueryClient,
+): Promise<void> => {
+  const older = await deriveAt(source, pocketTransparentIndices(RESTORE_T_INDEX), isMainnet);
+  const found = highestFunded(older, await ask(older));
+  if (found > 0) {
+    await moveTIndex(indexKeyOf(source), h => Math.max(h, found), client);
+  }
+  await chrome.storage.local.set({ [sweptKey(source)]: true });
+  void client?.invalidateQueries({ queryKey: ['zcashTSweepDue'] });
+};
+
+const sweptKey = (source: TSource) => tSweptKey(source.storeId ?? source.keyInfo?.id ?? '');
+
+/**
+ * A pocket of a wallet made before this install asked only handed-out
+ * addresses, that has not looked back yet: its first check looks back once.
+ */
+export const sweepDue = async (source: TSource): Promise<boolean> => {
+  const key = sweptKey(source);
+  const got = await chrome.storage.local.get([key, T_SWEEP_BEFORE]);
+  const before: unknown = got[T_SWEEP_BEFORE];
+  return (
+    !got[key] && typeof before === 'number' && !!source.keyInfo && source.keyInfo.createdAt < before
+  );
+};
+
 /** the transparent-address query for the active pocket, built from the store as it is now */
 export const activeTransparentAddressesQuery = (s: AllSlices, isMainnet: boolean) =>
   transparentAddressesQuery(tAddrSource(s), isMainnet);
@@ -224,7 +276,22 @@ export const activeTransparentAddressesQuery = (s: AllSlices, isMainnet: boolean
 export function useTransparentAddresses(isMainnet: boolean) {
   const source = useStore(useShallow(tAddrSource));
   const { data = NONE, isPending } = useQuery(transparentAddressesQuery(source, isMainnet));
-  return { tAddresses: data.tAddresses, isLoading: isPending, missing: data.missing };
+  const due = useQuery({
+    queryKey: ['zcashTSweepDue', source.storeId, source.keyInfo?.id],
+    queryFn: () => sweepDue(source),
+    enabled: source.isZcash,
+  }).data;
+  return {
+    /** this pocket's first check looks back once (sweepDue); undefined until read */
+    due,
+    tAddresses: data.tAddresses,
+    isLoading: isPending,
+    missing: data.missing,
+    lookBack: (
+      ask: (addresses: string[]) => Promise<{ address: string }[]>,
+      client?: QueryClient,
+    ) => lookBackTAddresses(source, isMainnet, ask, client),
+  };
 }
 
 /**
