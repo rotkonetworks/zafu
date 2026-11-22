@@ -1,7 +1,7 @@
 # Closing the ratchet gap: what to build, in what order
 
 Status: plan. Nothing here is implemented. Follows
-`zirc-shared-secret-mailbox.md` (the shape and its limits) and the messaging
+`packages/zirc/shared-secret-mailbox.md` (the shape and its limits) and the messaging
 review findings (the wallet's channels, the group session, the room). Issue #47
 tracks this work.
 
