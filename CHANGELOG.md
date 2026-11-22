@@ -6,6 +6,43 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.7.2
+
+### Security
+
+- Shared (multisig) wallets: before you co-sign, zafu now checks every output
+  of the transaction as it is committed, not only the outputs your viewing key
+  can open. A co-signer who builds the transaction can no longer add a hidden
+  payment beside the one you are shown, and the fee is checked against what the
+  transaction really pays. Escrow payouts are checked the same way. Reported by
+  Daniel Gorgonha (DeegaLabs).
+- Security reports can be sent privately through GitHub (Security tab, "Report
+  a vulnerability"); see SECURITY.md.
+
+### Send and pay
+
+- Paying a Bitcoin, Ethereum, Solana or NEAR address from send: the screen
+  becomes "pay", asks the amount in that coin, and the routes say what it costs
+  in zec. Swap's "you get" can be typed too.
+- A send waits until zafu has caught up with the chain, so it no longer picks a
+  note already spent elsewhere ("duplicate nullifier").
+
+### Wallets
+
+- Zigner wallets have pockets: each is an account your Zigner shows the
+  viewing key of. Signing a pocket's send needs the Zigner release that signs
+  as the account the spends belong to.
+- A site you approved signs in without asking again while zafu is unlocked; a
+  site in cross-site mode is always asked. Joining an escrow vault and paying in
+  is one approval.
+
+### Smaller things
+
+- zafu names itself in errors ("something went wrong in zafu") instead of an
+  "us"; a sync that cannot start says so and offers a reload.
+- No more "blocking webRequest" error in the extensions page.
+- Beta: Hyperliquid (USDC ramp, zec in and out through Unit).
+
 ## 29.7.1
 
 ### Passkeys
