@@ -93,7 +93,7 @@ export const ASK_LINE =
 export const OWNER_LINE = 'this take-out or add belongs to another pocket · nothing was sent';
 
 const line = (e: unknown) =>
-  e instanceof Error && e.message ? e.message : 'something broke on our side, not yours';
+  e instanceof Error && e.message ? e.message : 'something went wrong in zafu';
 
 export const PAUSED_LINE = {
   add: 'thorchain has paused adds to this pool · nothing was sent',

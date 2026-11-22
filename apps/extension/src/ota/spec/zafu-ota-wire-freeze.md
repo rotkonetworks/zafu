@@ -1,7 +1,7 @@
 # Zafu OTA wire contract — frozen implementation notes (v1)
 
-Implementers: the normative spec lives in `docs/design/zigner-firmware-ota.md` and
-`docs/design/zigner-ota-rfc.md`. This file records the _concrete_ decisions that make
+Implementers: the normative spec lives in `zigner-firmware-ota.md` and
+`zigner-ota-rfc.md`. This file records the _concrete_ decisions that make
 the two sides match byte-for-byte. The golden corpus is
 `apps/extension/src/ota/test-data/test-vectors.json` (TS, zafu) and
 `rust/ota/test-data/test-vectors.json` (Rust, zigner) — identical file.

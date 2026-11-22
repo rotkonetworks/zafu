@@ -1,16 +1,8 @@
-# CHANGELOG
+# changelog
 
-full release history lives in the git tags and github releases. the current
-version is **28.1.0**. a few recent highlights (from `git log`):
+every release is listed in the repository's
+[CHANGELOG.md](https://github.com/rotkonetworks/zafu/blob/main/CHANGELOG.md),
+newest first, and on the
+[github releases](https://github.com/rotkonetworks/zafu/releases) page.
 
-- **zcash voting** - active/past tabs on the zcash vote screen; test rounds hidden
-- **error recovery** - route error boundary plus a guarded one-shot auto-reload for
-  stale lazy chunks after a chrome auto-update
-- **storage migrations** - local storage migrations attached at construction so the
-  popup, options page, and service worker realms all run them
-- **injective** - native-usdc (`USDC.inj`) ramp wired as a penumbra subnetwork and
-  launched; the signer is proven on mainnet and the ibc path is actively relayed
-- **penumbra sends** - spend-all "max" button that reserves the um fee and leaves no
-  dust change notes
-
-for the authoritative list see <https://github.com/rotkonetworks/zafu/releases>.
+the version zafu is running is shown in settings, under about.

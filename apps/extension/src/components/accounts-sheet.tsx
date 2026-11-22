@@ -38,6 +38,7 @@ import {
   type PenumbraAccountRow,
   pocketOwner,
   visiblePockets,
+  zignerPockets,
 } from '../state/pockets';
 import { pocketStoreId } from '../state/pocket-id';
 import { zcashWorkerQuery } from '../hooks/zcash-pool-balances';
@@ -221,25 +222,29 @@ export const AccountsSheet = ({
   const inSidePanel = isSidePanel();
 
   const isHotWallet = selectedKeyInfo?.type === 'mnemonic';
-  // the active hot wallet gets its own header + pockets block above; listing
-  // it again here would be the same wallet twice, and tapping it would do
-  // nothing (it is already selected).
-  const otherKeyInfos = isHotWallet ? keyInfos.filter(k => k.id !== selectedKeyInfo?.id) : keyInfos;
+  const onPenumbra = activeNetwork === 'penumbra';
+  // hyperliquid lists its own accounts (the seed's evm indices), not the pockets
+  const onHyperliquid = activeNetwork === 'hyperliquid';
+  // a zigner wallet's zcash pockets are accounts whose keys it showed
+  const zignerWithPockets = useStore(s => !!zignerPockets(s)) && !onPenumbra && !onHyperliquid;
+  const withPockets = isHotWallet || zignerWithPockets;
+  // the active wallet with pockets gets its own header + pockets block above;
+  // listing it again here would be the same wallet twice, and tapping it would
+  // do nothing (it is already selected).
+  const otherKeyInfos = withPockets ? keyInfos.filter(k => k.id !== selectedKeyInfo?.id) : keyInfos;
   const pockets = useStore(useShallow(activePockets));
   const shown = visiblePockets(pockets);
   const hiddenCount = pockets.length - shown.length;
   const target = pocketTarget(activeNetwork);
   const activeAccount = useStore(target.active);
-  const onPenumbra = activeNetwork === 'penumbra';
-  // hyperliquid lists its own accounts (the seed's evm indices), not the pockets
-  const onHyperliquid = activeNetwork === 'hyperliquid';
   const hl = useHyperliquidAccounts();
   const { data: funded = [] } = useQuery({
     ...penumbraAccountsQuery(selectedKeyInfo?.id),
     enabled: open && onPenumbra,
   });
   const rows = onPenumbra
-    ? penumbraAccountRows(pockets, funded, activeAccount)
+    ? // zigner pockets are zcash accounts: on penumbra its rows are as before
+      penumbraAccountRows(isHotWallet ? pockets : [], funded, activeAccount)
     : shown.map(p => ({ account: p.account, name: p.name, pocket: true }));
   const renamePocket = useStore(s => s.pockets.rename);
   const hidePocket = useStore(s => s.pockets.hide);
@@ -248,7 +253,7 @@ export const AccountsSheet = ({
   // the active pocket's figure is home's own cached one (same query), so the
   // panel opens with it; it re-reads only while open
   const activeStore =
-    isHotWallet && selectedKeyInfo && target.store
+    withPockets && selectedKeyInfo && target.store
       ? target.store(selectedKeyInfo.id, activeAccount)
       : undefined;
   const { data: activeBalanceZat } = useQuery({
@@ -333,10 +338,14 @@ export const AccountsSheet = ({
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title='accounts' className='gap-0 pb-0'>
       {open && navTimingOn && <Painted target='sheet:wallets' />}
-      {isHotWallet && selectedKeyInfo && (
+      {withPockets && selectedKeyInfo && (
         <div className='-mx-4 flex flex-col px-3 pb-2'>
           <div className='flex items-center gap-2 px-2'>
-            <Mark variant='seal' size={20} />
+            {isHotWallet ? (
+              <Mark variant='seal' size={20} />
+            ) : (
+              <span className={cn('size-5 shrink-0', CUSTODY_ICON.cold)} aria-hidden='true' />
+            )}
             <button
               type='button'
               onClick={() =>
@@ -356,7 +365,9 @@ export const AccountsSheet = ({
                 aria-hidden='true'
               />
             </button>
-            <span className='shrink-0 text-[11px] text-fg-muted'>{CUSTODY_META.hot}</span>
+            <span className='shrink-0 text-[11px] text-fg-muted'>
+              {CUSTODY_META[isHotWallet ? 'hot' : 'cold']}
+            </span>
           </div>
           {onHyperliquid
             ? hl.rows.map((r, i) => (
@@ -408,7 +419,7 @@ export const AccountsSheet = ({
         </div>
       )}
 
-      {!isHotWallet && onPenumbra && (
+      {!withPockets && onPenumbra && (
         <div className='-mx-4 flex flex-col px-3 pb-2'>{rows.map(renderRow)}</div>
       )}
 

@@ -121,7 +121,7 @@ export const PasswordsPage = () => {
     let live = true;
     getIdentityKey(keyId, getMnemonic).then(
       id => live && setIdentity(id),
-      () => live && setError('something broke on our side, not yours. nothing was lost.'),
+      () => live && setError('something went wrong in zafu. nothing was lost.'),
     );
     return () => {
       live = false;

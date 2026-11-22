@@ -73,7 +73,7 @@ export const applyProxy = async (): Promise<void> => {
   // a login with no hook to give it: the proxy would refuse everything, unexplained
   const loginUnanswerable =
     p.kind !== 'socks5' &&
-    !listenForLogin() &&
+    !(await listenForLogin()) &&
     (await chrome.storage.local.get(PROXY_LOGIN_KEY))[PROXY_LOGIN_KEY] !== undefined;
   await noteApplied(!held ? 'other-extension' : loginUnanswerable ? 'no-permission' : 'ok');
   if (held) {
@@ -134,17 +134,19 @@ const answerLogin = (
 };
 
 /**
- * Listen for the proxy's login, and say whether zafu is listening. `webRequest`
- * alone (a Peer buy grants it) exposes the event, but a blocking listener also
- * needs `webRequestAuthProvider`, and Chrome throws without it. That throw ran
- * at the worker's top level and stopped everything after it, passkeys included.
+ * Listen for the proxy's login. `webRequest` alone (a Peer buy grants it)
+ * exposes the event, but a blocking listener also needs
+ * `webRequestAuthProvider`: without it Chrome refuses the listener and logs an
+ * error on every start, so the grant is checked first. The check is a moment
+ * late for an event that wakes the worker, which only a proxy login while the
+ * worker sleeps would be; the proxy is primed on unlock, with the worker awake.
  */
-const listenForLogin = (): boolean => {
+const listenForLogin = async (): Promise<boolean> => {
   const ev = chrome.webRequest?.onAuthRequired;
-  if (!ev) {
-    return false;
-  }
   try {
+    if (!ev || !(await chrome.permissions.contains({ permissions: ['webRequestAuthProvider'] }))) {
+      return false;
+    }
     if (!ev.hasListener(answerLogin)) {
       ev.addListener(answerLogin, { urls: ['<all_urls>'] }, ['asyncBlocking']);
     }
@@ -156,9 +158,9 @@ const listenForLogin = (): boolean => {
 
 /** call at the worker's top level, synchronously */
 export const startProxy = (): void => {
-  listenForLogin();
+  void listenForLogin();
   chrome.permissions.onAdded.addListener(() => {
-    listenForLogin();
+    void listenForLogin();
     void applyProxy();
   });
   // a permission taken back: the policy then refuses, it never goes direct

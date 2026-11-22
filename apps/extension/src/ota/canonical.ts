@@ -2,7 +2,7 @@
  * Strict canonical CBOR (RFC 8949) for the Zafu firmware-OTA wire contract.
  *
  * This module implements the ONE frozen serialization used by every signed
- * form in the OTA spec (see docs/design/zafu-ota-wire-freeze.md). The wallet
+ * form in the OTA spec (see apps/extension/src/ota/spec/zafu-ota-wire-freeze.md). The wallet
  * side and the device side MUST produce byte-exact identical output.
  *
  * Rules enforced (freeze doc):

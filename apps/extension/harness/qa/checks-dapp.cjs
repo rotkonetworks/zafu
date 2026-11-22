@@ -105,6 +105,10 @@ module.exports = {
           await w.shot(`${c.dir}/create.png`);
           await L.sleep(3000);
           await w.click('create passkey');
+          // the first signing since the unlock asks for the password, on this screen
+          await L.sleep(1200);
+          await w.type('input[type=password]', z.password);
+          await w.click('sign');
         }
         const created = await create;
         const fromPlatform = (await cdp.send('WebAuthn.getCredentials', { authenticatorId }))

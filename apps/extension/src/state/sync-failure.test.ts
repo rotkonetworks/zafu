@@ -105,6 +105,7 @@ describe('classifySyncFailure - sniffed', () => {
     ['version change transaction was blocked', 'storageBusy'],
     ['QuotaExceededError: idb write failed', 'storageFatal'],
     ['UnknownError: Internal error opening backing store for indexedDB', 'storageFatal'],
+    ['Error: could not activate offscreen document for zcash worker', 'engine'],
     ['something nobody has ever seen', 'unknown'],
   ] as [string, SyncFailureKind][])('classifies %s as %s', (raw, kind) => {
     expect(classifySyncFailure(raw).kind).toBe(kind);
@@ -136,6 +137,22 @@ describe('classifySyncFailure - sniffed', () => {
     // matching it would turn a chain problem into "the network is down".
     expect(classifySyncFailure('tree root mismatch at height 3503415').kind).toBe('chainRecovery');
     expect(classifySyncFailure('scan stalled at 2415033').kind).toBe('unknown');
+  });
+});
+
+describe("zafu's own failures name zafu", () => {
+  it('a sync that could not start asks for a reload, and says who', () => {
+    const f = classifySyncFailure(
+      new Error('could not activate offscreen document for zcash worker'),
+    );
+    expect(f).toMatchObject({ kind: 'engine', action: { kind: 'reload' }, autoRetries: false });
+    expect(f.message).toMatch(/zafu/);
+  });
+
+  it('never says "us": zafu runs on your own computer', () => {
+    for (const kind of ['engine', 'unknown', 'storageFatal'] as SyncFailureKind[]) {
+      expect(syncFailureMessage(kind)).not.toMatch(/\bus\b|our side|not yours/);
+    }
   });
 });
 

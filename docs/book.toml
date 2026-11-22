@@ -1,6 +1,6 @@
 [book]
 title = "zafu"
-description = "privacy wallet for zcash and penumbra"
+description = "privacy wallet for zcash, with penumbra and cosmos"
 authors = ["rotko networks"]
 language = "en"
 src = "src"

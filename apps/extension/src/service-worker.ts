@@ -124,6 +124,7 @@ import { requestStopAllSync } from './state/keyring/network-worker';
 import { stampSeenVersion } from './state/moved-notice';
 import { stampTSweepCutoff } from './state/pocket-id';
 import { idleFor } from './state/idle-activity';
+import { lockInPlace } from './auto-lock';
 import { keptCaptureAccess } from './buy/capture/kept';
 
 // performance.now() counts from the worker's start, so this is wake to here:
@@ -755,8 +756,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
       const key = await chrome.storage.session.get('passwordKey');
       if (key?.['passwordKey']) {
         console.log(`[idle] auto-locking after ${minutes}m of inactivity`);
-        // grace must never outlive the unlock; session storage survives
-        // runtime.reload(), so remove it explicitly here too
+        // grace must never outlive the unlock
         await chrome.storage.session.remove([
           'passwordKey',
           'identityKeys',
@@ -765,7 +765,8 @@ chrome.alarms.onAlarm.addListener(async alarm => {
           'retiredPasswordKey',
           'penumbraBalancesSnapshot',
         ]);
-        chrome.runtime.reload();
+        // no runtime.reload(): it cut every open tab off from zafu (auto-lock.ts)
+        await lockInPlace();
       }
     }
     return;

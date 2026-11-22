@@ -3,7 +3,7 @@
  *
  * Verification only - the wallet NEVER signs firmware. All signatures are
  * over a fixed domain tag (including the leading 0x00, frozen by
- * docs/design/zafu-ota-wire-freeze.md) concatenated with the canonical CBOR
+ * apps/extension/src/ota/spec/zafu-ota-wire-freeze.md) concatenated with the canonical CBOR
  * of the signed field set.
  *
  * Strictness (RFC 8032, spec §1/§3.3):

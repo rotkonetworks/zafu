@@ -1,8 +1,8 @@
 # Zafu OTA wallet-side — implementation status (wire v1)
 
 Implements the ZAFU (browser-extension) half of the Zafu/Zigner OTA spec.
-Normative specs: `docs/design/zigner-firmware-ota.md`, `zigner-ota-rfc.md`,
-`zafu-ota-wire-freeze.md`. Golden corpus: `apps/extension/src/ota/test-data/test-vectors.json`
+Normative specs: `spec/zigner-firmware-ota.md`, `spec/zigner-ota-rfc.md`,
+`spec/zafu-ota-wire-freeze.md`. Golden corpus: `apps/extension/src/ota/test-data/test-vectors.json`
 (identical to the zigner `rust/ota` copy — freeze contract; do not modify without
 regenerating BOTH copies identically).
 
@@ -34,7 +34,7 @@ regenerating BOTH copies identically).
 
 OTA target = the SMALL signed MODULE layer (1–3 MB wasm, QR ~1–2 min), NOT a whole
 firmware/kernel replacement (which is a store/USB path). UI presents "protocol module
-update". See IMPLEMENTATION.md context + `zafu-ota-wire-freeze.md`.
+update". See IMPLEMENTATION.md context + `spec/zafu-ota-wire-freeze.md`.
 
 ## Known gaps / notes
 

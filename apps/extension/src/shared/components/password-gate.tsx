@@ -18,9 +18,22 @@ interface PasswordGateModalProps {
   open: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /**
+   * what a right password does, when it is more than a check: a locked zafu
+   * unlocks with it. Resolves false for a wrong one. Default: check only.
+   */
+  check?: (password: string) => Promise<boolean>;
+  /** what is being signed, when it is not a transaction */
+  title?: string;
 }
 
-export const PasswordGateModal = ({ open, onConfirm, onCancel }: PasswordGateModalProps) => {
+export const PasswordGateModal = ({
+  open,
+  onConfirm,
+  onCancel,
+  check,
+  title = 'confirm this transaction',
+}: PasswordGateModalProps) => {
   const { isPassword } = useStore(passwordSelector);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -50,7 +63,7 @@ export const PasswordGateModal = ({ open, onConfirm, onCancel }: PasswordGateMod
     setError('');
 
     try {
-      const valid = await isPassword(password);
+      const valid = await (check ?? isPassword)(password);
       if (valid) {
         onConfirm();
       } else {
@@ -63,7 +76,7 @@ export const PasswordGateModal = ({ open, onConfirm, onCancel }: PasswordGateMod
     } finally {
       setChecking(false);
     }
-  }, [password, isPassword, onConfirm]);
+  }, [password, isPassword, check, onConfirm]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -101,7 +114,7 @@ export const PasswordGateModal = ({ open, onConfirm, onCancel }: PasswordGateMod
             <div className='mb-4 flex items-center gap-2'>
               <span className='i-ph-lock h-4 w-4 text-zigner-gold' />
               <DialogTitle className='text-lg font-normal leading-normal tracking-normal'>
-                confirm this transaction
+                {title}
               </DialogTitle>
             </div>
             <p className='mb-3 text-xs text-fg-muted'>your password, to sign it.</p>

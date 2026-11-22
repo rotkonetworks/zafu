@@ -8,7 +8,7 @@ type BoxJson = { cipherText: string; nonce: string };
 
 /**
  * v3 extends v2 with two additive maps that support fresh burner-address
- * rotation for external dapps (per docs/design/burner-rotation.md and gh #34):
+ * rotation for external dapps (gh #34):
  *
  *   - `cosmosChainCounters`  — per-chain HD index counter used by
  *     `nextHdIndex(chainId)` on the unshield path so every exit derives a fresh

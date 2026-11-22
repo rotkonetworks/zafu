@@ -74,7 +74,10 @@ const setup = async (z, dir, seedFile) => {
   // the onboarding birthday is clamped to mainnet heights; set the testnet one directly
   await z.sw().evaluate(async b => {
     const all = await chrome.storage.local.get(null);
-    const ks = Object.keys(all).filter(k => k.startsWith('zcashBirthday_'));
+    // zafu keeps a birthday per chain: the testnet one is the wallet's key with @test
+    const ks = Object.keys(all)
+      .filter(k => k.startsWith('zcashBirthday_'))
+      .flatMap(k => [k, k.endsWith('@test') ? k : `${k}@test`]);
     await chrome.storage.local.set(Object.fromEntries(ks.map(k => [k, b])));
   }, birthday);
   // the personalize step writes its own (default) node back; set ours again, as a person would

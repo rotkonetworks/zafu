@@ -110,5 +110,5 @@ export function ledgerGuidance(e: unknown): LedgerGuidance {
   if (name === 'AbortError') {
     return device('cancelled');
   }
-  return { title: 'something broke on our side, not yours', action: text, retryable: true };
+  return { title: 'something went wrong in zafu', action: text, retryable: true };
 }

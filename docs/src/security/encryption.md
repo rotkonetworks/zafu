@@ -5,34 +5,45 @@ with a key derived from the user's password via PBKDF2.
 
 ## what is encrypted
 
-the following storage keys are encrypted at rest:
+every value under these storage keys is sealed before it is written
+(`ENCRYPTED_KEYS` in `apps/extension/src/state/encrypted-storage.ts`):
 
-- `penumbraWallets` - penumbra full viewing keys and custody data
-- `zcashWallets` - zcash orchard full viewing keys and addresses. this record
-  also carries FROST multisig wallets (their `keyPackageHex` secret share), so
-  those are sealed by the same scheme.
-- `contacts` - user contact entries
-- `recentAddresses` - recently used addresses
-- `dismissedContactSuggestions` - dismissed contact suggestion records
-- `messages` - zcash memo messages
-- `diversifiedAddresses` - derived diversified receiving addresses
-- `groupChats` - multisig group chat state
+- `penumbraWallets`, `zcashWallets` - viewing keys and addresses. viewing keys
+  reveal full transaction history; no viewing key is ever stored in plaintext.
+  `zcashWallets` also carries FROST multisig wallets and their secret share.
+- `contacts`, `recentAddresses`, `dismissedContactSuggestions`,
+  `diversifiedAddresses`, `yourAddresses` - who you pay and your own addresses
+- `messages`, `peopleRooms`, `peopleThreads`, `peopleInvites` - memos, chats and
+  the room keys that open them
+- `frostRelayIdentities` - each multisig group's relay key (see
+  [frost](frost.md)); it also opens the retired group chat's history
+- `groupChats` - that retired history, still sealed, read by nothing
+- `passwordLogins`, `passkeyGrants` - saved logins and which sites may use your
+  passkeys
+- `openBuy`, `openSwaps`, `openPayments`, `zecLp` - buys, swaps, payments and
+  liquidity in flight (deposit addresses, memos, fresh addresses)
+- `sentKey` - the key that seals the zcash worker's own send records
+- `txNotes` - your notes on transactions
+- `netContacted` - what zafu contacted lately, kept on this computer only
+- `zcashMeApiKey`, `netProxyLogin` - your own api key and proxy login
 
-these are the keys in the `ENCRYPTED_KEYS` set. viewing keys (FVK) reveal full
-transaction history. no viewing key data is stored in plaintext - ever.
+your seed phrase is sealed separately: each vault in `vaults` keeps its secret
+as a `Box` sealed by the same password key, and only the vault's public facts
+(name, kind, account, device) sit beside it in plaintext. when the zcash worker
+needs the vault key to sign, the page wraps it to a one-time key the worker
+issued (ECDH P-256, HKDF, AES-GCM), so nothing readable crosses the extension's
+message bus.
 
-the following are not encrypted:
+not encrypted:
 
-- `knownSites` - origin approval records (origin, choice, date). these contain
-  no private data and are read by the origin storage package which does not have
-  access to the session key.
-- `passwordKeyPrint` - the salt and verification hash used to check the password
-  on unlock (see [key print](#key-print)). it is a verifier, not secret data.
-- `frostRelayIdentities` - per-group relay transport keypairs (see
-  [frost](frost.md)). the private key is not a wallet key; leaking it allows
-  relay impersonation only, never spending.
-- `grpcEndpoint`, `frontendUrl`, `numeraires`, `activeWalletIndex`,
-  `activeZcashIndex` - non-sensitive configuration values.
+- `knownSites` - origin approvals (origin, choice, date). no private data, and
+  read by a package that has no session key.
+- `passwordKeyPrint` - the salt and verification hash checked at unlock (see
+  [key print](#key-print)). a verifier, not a secret.
+- settings the egress policy compiles from (enabled networks, endpoints, which
+  destinations you allowed or blocked, the proxy address), which must be
+  readable while zafu is locked
+- `activeWalletIndex`, `activeZcashIndex` and similar non-sensitive config
 
 ## key derivation
 

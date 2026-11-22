@@ -23,18 +23,27 @@ encrypted and must be trial-decrypted against the user's viewing keys.
 transparent chains using BIP44 secp256k1 with bech32 address encoding. they are
 modeled as **subnetworks of penumbra** (a `parent: 'penumbra'` config) rather than
 top-level networks - they exist to move value into and out of the penumbra
-shielded pool over ibc, and to reach off-ramp exchanges. the design rationale is
-recorded in `docs/adrs/cosmos-as-penumbra-subwallets.md`.
+shielded pool over ibc, and to reach off-ramp exchanges.
 
-`IbcNetwork` = `noble | cosmoshub | osmosis | injective`:
+the same seed that holds a penumbra wallet derives its cosmos addresses, so there
+is no separate import: the unshielded balances on each chain show as sub-wallets
+under the selected penumbra wallet, not as a separate "cosmos" mode. pages can
+also see zafu as a cosmos wallet: a keplr-compatible provider (`window.keplr`,
+`content-scripts/injected-keplr.ts` with its `keplr-bridge.ts`) lets cosmos dapps
+connect and ask zafu to sign, for example an ibc deposit into penumbra.
+
+`IbcNetwork` is any chain id in the cosmos registry. the built-in ones:
 
 - **noble** - bech32 prefix `noble`, denom `uusdc`, chain id `noble-1`. the
-  usdc/cctp gateway and default unshield destination. launched.
-- **cosmoshub** - bech32 prefix `cosmos`, denom `uatom`. not launched (no live
-  channel in the current veil config).
-- **osmosis** - bech32 prefix `osmo`, denom `uosmo`, chain id `osmosis-1`. not
-  launched until the channel client is confirmed active.
-- **injective** - special case, see below. launched.
+  usdc/cctp gateway and default unshield destination.
+- **cosmoshub** - bech32 prefix `cosmos`, denom `uatom`, chain id `cosmoshub-4`.
+- **osmosis** - bech32 prefix `osmo`, denom `uosmo`, chain id `osmosis-1`.
+- **injective** - special case, see below.
+
+every one of them is launched, and every chain the penumbrafi registry adds
+becomes a launched subnetwork too. a chain is offered only while the penumbra
+node reports a live ibc route to it (`transparent/penumbra-routes`), and nothing
+contacts a chain until a flow that uses it turns it on.
 
 the standard cosmos chains use coin type 118 and derivation path
 `m/44'/118'/0'/0/0`, differing only in bech32 prefix.
@@ -55,18 +64,13 @@ shared coin-118 deposit machinery.
 
 fully public ledgers with no client-side scanning requirement.
 
-- **polkadot** - ss58 prefix 0, supports sr25519/ed25519/ecdsa encryption types.
-  includes parachains (hydration, acala, moonbeam, astar) as sub-chain configs
-  under the polkadot umbrella.
-- **kusama** - ss58 prefix 2, same encryption type support as polkadot. includes
-  parachains (karura, moonriver).
-- **ethereum** - secp256k1, chain id 1, BIP44 coin type 60.
-- **bitcoin** - BIP-84 native segwit (`bc1...`), coin type 0.
+- **ethereum** - secp256k1, chain id 1, BIP44 coin type 60. defined, not
+  launched.
+- **bitcoin** - BIP-84 native segwit (`bc1...`), coin type 0. defined, not
+  launched.
 
-substrate networks (polkadot, kusama) support multiple encryption types per
-network. the default is sr25519, but users can choose ed25519 (including
-ledger-compatible SLIP-10/BIP32-Ed25519 derivation) or ecdsa (for evm-compatible
-parachains like moonbeam).
+paying a bitcoin, ethereum, solana or near address from zafu goes through a swap
+out of zec, not through these configs.
 
 ## network configuration
 
@@ -87,15 +91,16 @@ interface NetworkConfig {
 ```
 
 the `launched` flag controls which networks appear in the ui. currently launched:
-**zcash**, **penumbra**, and the penumbra subnetworks **noble** and **injective**
-(subnetworks are not top-level networks). the rest are defined but disabled in the
-ui.
+**zcash** (with **zcash testnet** as its subnetwork), **penumbra**, and the
+penumbra subnetworks (noble, cosmoshub, osmosis, injective and the registry
+chains). ethereum and bitcoin are defined but not launched.
 
 helpers derive the ui lists from these flags:
 
 - `getTopLevelNetworks()` - launched networks with no `parent` (the main network
   picker): zcash and penumbra
-- `getSubnetworks(parent)` - launched subnetworks of a parent (noble under penumbra)
+- `getSubnetworks(parent)` - launched subnetworks of a parent (the cosmos chains
+  under penumbra)
 - `getActiveIbcChainIds(parent)` - launched subnetworks that carry an `ibcChainId`
   (a live channel) - valid ibc deposit/withdraw destinations
 - `getActiveIbcSubnetworks(parent)` - the same set, returned as network keys;
@@ -108,7 +113,7 @@ true only for zcash. zcash also has `vote: true` (governance voting, backed by t
 lazy-loaded voting wasm in `state/voting-wasm.ts`).
 
 `NETWORK_CONFIGS` in `network-types.ts` holds the technical config (symbol,
-decimals, derivation paths, ss58 prefixes, bech32 prefixes, chain ids).
+decimals, derivation paths, bech32 prefixes, chain ids).
 
 ## vault system - one seed, multiple networks
 
@@ -116,23 +121,21 @@ the keyring vault system (described in detail in [state.md](state.md)) maps one
 vault to multiple network keys. a single bip39 mnemonic stored in a vault can
 derive keys for every supported network using standard derivation paths:
 
-| network   | coin type | path                  |
-| --------- | --------- | --------------------- |
-| penumbra  | 6532      | `m/44'/6532'/0'`      |
-| zcash     | 133       | `m/44'/133'/0'/0/0`   |
-| noble     | 118       | `m/44'/118'/0'/0/0`   |
-| cosmoshub | 118       | `m/44'/118'/0'/0/0`   |
-| osmosis   | 118       | `m/44'/118'/0'/0/0`   |
-| injective | 60        | `m/44'/60'/0'/0/0`    |
-| polkadot  | 354       | `m/44'/354'/0'/0'/0'` |
-| kusama    | 434       | `m/44'/434'/0'/0'/0'` |
-| ethereum  | 60        | `m/44'/60'/0'/0/0`    |
-| bitcoin   | 0         | `m/84'/0'/0'/0/0`     |
+| network   | coin type | path                |
+| --------- | --------- | ------------------- |
+| penumbra  | 6532      | `m/44'/6532'/0'`    |
+| zcash     | 133       | `m/44'/133'/0'/0/0` |
+| noble     | 118       | `m/44'/118'/0'/0/0` |
+| cosmoshub | 118       | `m/44'/118'/0'/0/0` |
+| osmosis   | 118       | `m/44'/118'/0'/0/0` |
+| injective | 60        | `m/44'/60'/0'/0/0`  |
+| ethereum  | 60        | `m/44'/60'/0'/0/0`  |
+| bitcoin   | 0         | `m/84'/0'/0'/0/0`   |
 
 zigner-zafu vaults import viewing keys (not mnemonics) from an air-gapped
 signing device. these vaults declare which networks they support based on the
 keys present in the import data (`fullViewingKey` for penumbra, `viewingKey` for
-zcash, `polkadotSs58` for substrate, `cosmosAddresses` for ibc chains).
+zcash, `cosmosAddresses` for ibc chains).
 
 frost-multisig vaults store a frost dkg key package and ephemeral seed. these
 currently support zcash only.
@@ -176,17 +179,10 @@ for each privacy network. each worker runs in its own thread with:
 the requested network. concurrent spawn calls are deduplicated - multiple callers
 share the same spawn promise.
 
-currently supported worker urls:
-
-- zcash: `/workers/zcash-worker.js`
-- penumbra: `/workers/penumbra-worker.js`
-
-`getWorkerUrl` maps both networks, but in practice only the zcash worker is
-actually built (`webpack.config.ts` bundles `workers/zcash-worker` and
-`workers/ur-decode-worker`) and spawned. penumbra does not use a dedicated web
-worker - its sync runs inside the service worker via the `Services` class (see
-[penumbra services](#penumbra-services) below); the penumbra url entry is
-vestigial.
+the zcash worker (`/workers/zcash-worker.js`) is the one network worker that is
+built and spawned. penumbra has no dedicated web worker: its sync runs inside the
+service worker via the `Services` class (see
+[penumbra services](#penumbra-services) below).
 
 the worker posts a `ready` message once its wasm is initialized. the spawn
 function polls for this and times out after 30 seconds.
@@ -313,15 +309,3 @@ when switching the active network via `setActiveNetwork(network)`:
 
 this ensures the ui always shows a vault that is capable of operating on the
 active network.
-
-## substrate chain support
-
-polkadot and kusama act as umbrella networks for their parachains.
-`SUBSTRATE_CHAINS` in `network-types.ts` defines known chains with their
-ss58 prefixes, para ids, and rpc endpoints.
-
-the service worker also supports custom chainspecs loaded from storage. on
-startup and when `customChainspecs` changes in storage,
-`loadCustomChainspecsIfEnabled()` registers/unregisters chains with the polkadot
-light client via
-`registerCustomChainspec()` / `unregisterCustomChainspec()`.

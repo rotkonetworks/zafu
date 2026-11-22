@@ -256,15 +256,11 @@ describe('global opt-in - the other gates', () => {
     await flush();
     expect((await modes())?.passkey).toBe('enabled');
 
-    // ...and the site-bound work only starts after the global answer: the
-    // unlock, not the consent screen (the mint needs the mnemonic, so the
-    // consent screen must never be the first thing a locked wallet sees).
-    expect(await until(() => createMock.mock.calls.length === 2)).toBe(true);
-    expect(urlAt(1)).toContain('#/login');
-    expect(createMock.mock.calls.every(c => !String(c[0].url).includes('passkey-approve'))).toBe(
-      true,
-    );
-    void answer;
+    // ...and the site-bound work only starts after the global answer. There
+    // is no wallet here, so it ends there: no unlock window is ever opened for
+    // a passkey (the passkey screen asks for the password itself).
+    expect(await answer).toMatchObject({ success: false, code: 'no-wallet' });
+    expect(createMock).toHaveBeenCalledTimes(1);
   });
 
   it('refuses a disabled passkey without an unlock or a popup', async () => {

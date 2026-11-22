@@ -433,7 +433,7 @@ type LOCAL = {
   proLicense?: string;
   /**
    * Per-device (zid_pubkey) verified firmware records for the Zigner OTA flow
-   * (spec docs/design/zafu-ota-wire-freeze.md §8). Keyed by hex zid_pubkey.
+   * (spec apps/extension/src/ota/spec/zafu-ota-wire-freeze.md §8). Keyed by hex zid_pubkey.
    * Mutated ONLY from a device-signed, verified ur:zafu-result: `source` is
    * always 'ur:zafu-result'. Unverified claims never touch this map.
    */

@@ -250,7 +250,7 @@ export const Stopped = ({
     <Strip>{sending}</Strip>
     <Main className='pt-5'>
       <StatusSlot tone='warn' icon='i-ph-warning'>
-        {error || 'something broke on our side, not yours'}
+        {error || 'something went wrong in zafu'}
       </StatusSlot>
     </Main>
     <Footer>

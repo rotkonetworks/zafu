@@ -35,10 +35,7 @@ export interface QuoteRequest {
   /**
    * decimal, in the asset received: quote by what arrives instead. `amountIn`
    * is then only a hint (the other field's last figure).
-   *
-   * Exact output is kept on purpose: the unified swap screen quotes by what
-   * arrives next. No screen sets `exactOut` yet; the tests in swap.test.ts
-   * and market.test.ts keep it working until one does.
+   * A payment quotes this way: the recipient is owed an exact amount.
    */
   exactOut?: string;
   /** out of zec: the ZIP-317 fee of the shielded send to the deposit, in zat (a string: it is stored) */
@@ -135,7 +132,7 @@ export interface SwapProvider {
   /** what the token picker offers; may ask for this route's egress */
   tokens: () => Promise<SwapToken[]>;
   quote: (req: QuoteRequest, signal?: AbortSignal) => Promise<Quote>;
-  /** quotes `exactOut` itself; any other route is inverted by probes (kept for the unified screen, see QuoteRequest.exactOut) */
+  /** quotes `exactOut` itself; any other route is inverted by probes (state/swap/market.ts invert) */
   exactOut?: true;
   /** absent when the route can't be watched from here; `txid` for `watch: 'txid'` quotes */
   status?: (quote: Quote, txid?: string) => Promise<SwapStatusView>;
@@ -179,18 +176,50 @@ export const fromUnits = (units: bigint, decimals: number, places = 8): string =
 export const rescale = (units: bigint, from: number, to: number): bigint =>
   to >= from ? units * 10n ** BigInt(to - from) : units / 10n ** BigInt(from - to);
 
-/** sendable first, then most out after fees; the head is the best route */
-export const rank = (quotes: readonly Quote[]): Quote[] =>
-  [...quotes].sort((a, b) =>
-    !!a.notYet !== !!b.notYet
-      ? a.notYet
-        ? 1
-        : -1
-      : Number(b.amountOut > a.amountOut) - Number(a.amountOut > b.amountOut),
-  );
+/** what a quote asks to be paid, in source base units (exact on an exact-output quote) */
+export const paidOf = (q: Quote, inDecimals: number): bigint => toUnits(q.amountInText, inDecimals);
 
-/** how much more the best sendable route pays than the next, in destination base units */
-export const lead = (ranked: readonly Quote[]): bigint | undefined => {
+/**
+ * Sendable first. By what is paid: most out after fees. By what arrives
+ * (`inDecimals` given): every route lands the same amount, so the least paid
+ * wins, an exact quote before an "about" one. The head is the best route.
+ */
+export const rank = (quotes: readonly Quote[], inDecimals?: number): Quote[] =>
+  [...quotes].sort((a, b) => {
+    if (!!a.notYet !== !!b.notYet) {
+      return a.notYet ? 1 : -1;
+    }
+    if (inDecimals === undefined) {
+      return Number(b.amountOut > a.amountOut) - Number(a.amountOut > b.amountOut);
+    }
+    if (!!a.approx !== !!b.approx) {
+      return a.approx ? 1 : -1;
+    }
+    const [x, y] = [paidOf(a, inDecimals), paidOf(b, inDecimals)];
+    return Number(x > y) - Number(y > x);
+  });
+
+/**
+ * How far the best sendable route is ahead of the next: more out in
+ * destination units, or by what arrives (`inDecimals`), less paid in source units.
+ */
+export const lead = (ranked: readonly Quote[], inDecimals?: number): bigint | undefined => {
   const [best, next] = ranked.filter(q => !q.notYet);
-  return best && next ? best.amountOut - next.amountOut : undefined;
+  if (!best || !next) {
+    return undefined;
+  }
+  return inDecimals === undefined
+    ? best.amountOut - next.amountOut
+    : paidOf(next, inDecimals) - paidOf(best, inDecimals);
 };
+
+/**
+ * The request a review freezes and the deposit is built from. By what
+ * arrives, the typed paid figure was only a hint: what is paid is the quote's
+ * own. A route quoted through probes is asked again by that figure; a route
+ * with an exact-output mode keeps quoting by what arrives.
+ */
+export const firmRequest = (req: QuoteRequest, q: Quote, quotesExactOut: boolean): QuoteRequest =>
+  req.exactOut
+    ? { ...req, amountIn: q.amountInText, exactOut: quotesExactOut ? req.exactOut : undefined }
+    : req;

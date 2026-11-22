@@ -91,7 +91,8 @@ import { PopupPath } from '../paths';
 import { formatZecAmount } from '@repo/wallet/networks/zcash/zip321';
 import { looksLikeLink, notYet, parseLink } from '../../../links/router';
 import { viaLine } from '../../../links/land';
-import { zcashAddressOf, zcashPayRefusal } from '../../../addresses/kind';
+import { payAcrossOf, zcashAddressOf, zcashPayRefusal } from '../../../addresses/kind';
+import type { SwapLinkState } from '../../../links/land';
 import {
   FRESH_WORDS,
   PUBLIC_LINE,
@@ -601,6 +602,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     kind === 'ledger-transparent' || kind === 'hot' || kind === 'zigner',
   );
   const toValid = !!to && !toRefusal;
+  // another chain's address is paid through a swap: the form becomes "pay", the
+  // address kept, the amount asked in the coin it is owed (replace: back is home)
+  const across = step === 'form' ? payAcrossOf(to) : undefined;
+  useEffect(() => {
+    if (across) {
+      const link = { direction: 'from_zec', ...across, address: to, out: '' } as const;
+      navigate(PopupPath.SWAP, { replace: true, state: { link } satisfies SwapLinkState });
+    }
+  }, [across?.token, across?.chain, to]);
   const toName =
     recipientContact?.contact.name ??
     (resolvedProfile?.address === to ? zcashMeLabel(resolvedProfile) : undefined);

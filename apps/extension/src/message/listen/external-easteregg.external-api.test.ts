@@ -416,26 +416,52 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
 
   const create = (rpId: string) => ({ type: 'zafu_passkey_create', rpId });
 
-  it('(g) a locked wallet opens the unlock surface instead of the passkey screen', async () => {
+  it('(g) a locked wallet is still offered: the passkey screen opens, and "not now" mints nothing', async () => {
     const origin = 'https://passkey-locked.example';
     await sessionExtStorage.remove('passwordKey');
 
-    const res = await call(create('passkey-locked.example'), validSender(origin));
+    const pending = call(create('passkey-locked.example'), validSender(origin));
+    expect(await waitForPopup(origin)).toContain('passkey-approve');
+    expect(createCredentialMock).not.toHaveBeenCalled();
+    await tap(origin, { approved: false });
 
-    expect(popupUrlFor(origin)).toBeUndefined();
-    expect(res).toMatchObject({ success: false, code: 'cancelled' });
+    expect(await pending).toMatchObject({ success: false, code: 'denied' });
     expect(createCredentialMock).not.toHaveBeenCalled();
   });
 
-  it('(h) a locked wallet refuses to sign rather than reroute the site', async () => {
+  it('(h) a locked wallet signs in once the password is given on the passkey screen, user verified', async () => {
     const origin = 'https://passkey-signlocked.example';
     await grantCapability(origin, 'passkey');
     await sessionExtStorage.remove('passwordKey');
 
-    const res = await call(getReq('passkey-signlocked.example'), validSender(origin));
-
-    expect(res).toMatchObject({ success: false, code: 'cancelled' });
+    const pending = call(getReq('passkey-signlocked.example'), validSender(origin));
+    const url = await waitForPopup(origin);
+    // which wallet answers is sealed while locked: the screen opens without it
+    expect(new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('wallet')).toBeNull();
     expect(signAssertionMock).not.toHaveBeenCalled();
+
+    // the password, given on that screen: it unlocks, then reports verified
+    await sessionExtStorage.set('passwordKey', 'unlocked-key');
+    await tap(origin, { approved: true, verified: true });
+
+    expect(await pending).toMatchObject({ success: true });
+    expect(signAssertionMock.mock.calls.at(-1)?.at(-1)).toBe(true);
+  });
+
+  it('(h2) the screen carries what the site asks of user verification; a bare tap is not "verified"', async () => {
+    const origin = 'https://passkey-uv.example';
+    await grantCapability(origin, 'passkey');
+
+    const pending = call(
+      { ...getReq('passkey-uv.example'), userVerification: 'discouraged' },
+      validSender(origin),
+    );
+    const url = await waitForPopup(origin);
+    expect(new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('uv')).toBe('discouraged');
+    await tap(origin, { approved: true });
+
+    expect(await pending).toMatchObject({ success: true });
+    expect(signAssertionMock.mock.calls.at(-1)?.at(-1)).toBe(false);
   });
 
   it('(i) a mint failure after the tap is reported as failed, not as a denial', async () => {
@@ -467,8 +493,10 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
         id: runtime.id,
         getURL: (path: string) => runtime.getURL(path),
         getContexts: async () => (open ? [{ contextType: 'SIDE_PANEL', windowId: 7 }] : []),
+        // the real panel answers true once its listener has navigated
         sendMessage: async (m: { type: string; route: string }) => {
           navigated.push(m);
+          return true;
         },
       });
     });
@@ -780,8 +808,8 @@ describe('passkeys - one tap in zafu for every create and every sign-in', () => 
     const first = call(getReq('dedup.example'), validSender(origin));
     await waitForPopup(origin);
     const second = call(getReq('dedup.example'), validSender(origin));
-    // no code: the person declined nothing, so the page does not back off
-    expect(await second).toEqual({ success: false, error: 'denied' });
+    // `busy`: the page refuses it, with no wait and no browser prompt beside zafu's window
+    expect(await second).toEqual({ success: false, error: 'busy', code: 'busy' });
     expect(popupUrlsFor(origin)).toHaveLength(1);
 
     await tap(origin, { approved: true });
@@ -887,8 +915,22 @@ describe('send - own address only for a connected site', () => {
 describe('ping', () => {
   it('tells an unconnected site the protocol, not the release version', async () => {
     const res = await call({ type: 'ping' }, validSender('https://ping-stranger.example'));
-    expect(res).toMatchObject({ zafu: true, version: '' });
+    expect(res).toMatchObject({ zafu: true, version: '', features: [] });
     expect(typeof res.protocolVersion).toBe('number');
+  });
+
+  it('tells a connected site what it can fold into one approval', async () => {
+    const origin = 'https://ping-features.example';
+    await grantCapability(origin, 'connect');
+    const runtime = chrome.runtime as unknown as { getManifest?: () => { version: string } };
+    const before = runtime.getManifest;
+    runtime.getManifest = () => ({ version: '9.9.9' });
+    try {
+      const res = await call({ type: 'ping' }, validSender(origin));
+      expect(res.features).toContain('dkg_join_deposit');
+    } finally {
+      runtime.getManifest = before;
+    }
   });
 
   it('tells a connected site the release version', async () => {
@@ -928,6 +970,52 @@ describe('poker escrow custody - dkg join by room code, payout co-sign with the 
     expect(q.get('rendezvousCode')).toBe('42-amber-fox');
     expect(q.get('network')).toBe('test');
     expect(q.get('roomCode')).toBe('');
+  });
+
+  it('a deposit rides along to the same popup, and only its checked fields', async () => {
+    const origin = 'https://poker-pay.example';
+    await grantCapability(origin, 'frost');
+    void call(
+      {
+        type: 'zafu_dkg_join',
+        rendezvousCode: '7-a-b',
+        network: 'test',
+        deposit: {
+          vaultIndex: 2,
+          amountZat: 50_000,
+          memo: 'zk.poker/v1/payout:u1x',
+          address: 'u1evil',
+        },
+      },
+      validSender(origin),
+    );
+    await flush();
+    const q = popupQuery(origin);
+    expect(q.get('action')).toBe('dkg-join');
+    expect(JSON.parse(q.get('depositJson')!)).toEqual({
+      vaultIndex: 2,
+      amountZat: 50_000,
+      memo: 'zk.poker/v1/payout:u1x',
+    });
+  });
+
+  it('a malformed deposit is refused before any popup', async () => {
+    const origin = 'https://poker-badpay.example';
+    await grantCapability(origin, 'frost');
+    const r = await call(
+      { type: 'zafu_dkg_join', rendezvousCode: '7-a-b', deposit: { vaultIndex: 1, amountZat: -5 } },
+      validSender(origin),
+    );
+    expect(r).toMatchObject({ error: expect.stringMatching(/deposit/) });
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('a plain join carries no deposit', async () => {
+    const origin = 'https://poker-plain.example';
+    await grantCapability(origin, 'frost');
+    void call({ type: 'zafu_dkg_join', rendezvousCode: '7-a-b' }, validSender(origin));
+    await flush();
+    expect(popupQuery(origin).has('depositJson')).toBe(false);
   });
 
   it('a dkg join with neither a session nor a room code is refused', async () => {

@@ -88,7 +88,7 @@ export const ForgotPassword = () => {
             />
           </RowGroup>
           <span className='h-[18px] text-label text-warning' aria-live='polite'>
-            {broke ? 'something broke on our side, not yours. please try once more.' : ''}
+            {broke ? 'something went wrong in zafu. please try once more.' : ''}
           </span>
         </div>
       )}

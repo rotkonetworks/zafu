@@ -65,6 +65,7 @@ import {
   type TreeWrite,
 } from './note-trees';
 import { ironwoodBranchRefusal } from './branch-ids';
+import { isCaughtUp, NOT_CAUGHT_UP } from './caught-up';
 import { describeNode, measuredProtocol, type NodeInfo } from '../state/keyring/node-info';
 import type { ZcashChainCheck } from '../state/keyring/network-worker';
 import {
@@ -1140,6 +1141,13 @@ const loadState = async (walletId: string): Promise<WalletState> => {
 const getSyncHeight = async (walletId: string): Promise<number> => {
   const r = await idbGet<{ value: number }>('meta', [walletId, 'syncHeight']);
   return r?.value ?? 0;
+};
+
+/** a send picks notes only from a store that has scanned to the tip (caught-up.ts) */
+const assertCaughtUp = async (walletId: string, tipHeight: number): Promise<void> => {
+  if (!isCaughtUp(await getSyncHeight(walletId), tipHeight)) {
+    throw new Error(NOT_CAUGHT_UP);
+  }
 };
 
 const getTreeSize = async (walletId: string): Promise<number> => {
@@ -5124,6 +5132,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         emitProgress('fetching chain tip');
         const sendTip = await build.race(sendClient.getTip());
+        await assertCaughtUp(walletId, sendTip.height);
 
         // ── NU6.3 spend-pool selection ──────────────────────────────────────
         // Post-NU6.3 (synced tip >= activation height) orchard-to-orchard sends
@@ -5553,6 +5562,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const sendClient = makeZcashClient(sendPayload.serverUrl);
         emitProgress('fetching chain tip');
         const sendTip = await build.race(sendClient.getTip());
+        await assertCaughtUp(walletId, sendTip.height);
         const pcztPool: NotePool =
           sendTip.height >= nu63ActivationHeight(sendPayload.mainnet) ? 'ironwood' : 'orchard';
 
@@ -6111,6 +6121,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         emitProgress('fetching chain tip');
         const migrateTip = await build.race(migrateClient.getTip());
+        await assertCaughtUp(walletId, migrateTip.height);
         emitProgress('building merkle witnesses', `tip=${migrateTip.height}`);
         // orchard spends -> orchard witnesses; the migration needs no
         // ironwood anchor (output-only on the ironwood side)
@@ -6467,6 +6478,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         {
           const routeClient = makeZcashClient(multiPayload.serverUrl);
           const routeTip = await build.race(routeClient.getTip());
+          await assertCaughtUp(walletId, routeTip.height);
           if (
             multiSendRoute(routeTip.height, nu63ActivationHeight(multiPayload.mainnet)) ===
             'ironwood-one-tx'

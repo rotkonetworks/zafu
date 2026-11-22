@@ -69,6 +69,7 @@ import { maxSendable, quoteSend } from '../send/spendable';
 import { PROVIDERS, routeTokens } from '../../../state/swap';
 import {
   figure,
+  firmRequest,
   fromUnits,
   lead,
   rank,
@@ -298,47 +299,6 @@ const Figure = ({ text, stale, struck }: { text: string; stale?: boolean; struck
   </span>
 );
 
-/** the amount you get, counting from the last figure to the new one */
-const CountUp = ({ text }: { text: string }) => {
-  const [between, setBetween] = useState<string>();
-  const from = useRef(text);
-  useEffect(() => {
-    const [a, b] = [parseFloat(from.current), parseFloat(text)];
-    from.current = text;
-    if (!(a > 0 && b > 0) || a === b || calm()) {
-      return;
-    }
-    const places = text.split('.')[1]?.length ?? 0;
-    const t0 = performance.now();
-    let frame = requestAnimationFrame(function tick(t) {
-      const k = Math.min(1, (t - t0) / 250);
-      setBetween(k < 1 ? (a + (b - a) * (1 - (1 - k) ** 3)).toFixed(places) : undefined);
-      frame = k < 1 ? requestAnimationFrame(tick) : 0;
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [text]);
-  return <Sensitive>{between ?? text}</Sensitive>;
-};
-
-/** the amount the swap pays out, counting up to each new price */
-const YouGet = ({ view, stale, struck }: { view?: Quote; stale: boolean; struck: boolean }) => (
-  <span className='min-w-0 truncate font-display text-2xl text-fg-high'>
-    {view ? (
-      <span
-        className={cn(
-          'transition-opacity duration-300',
-          stale && 'opacity-50',
-          struck && 'line-through',
-        )}
-      >
-        <CountUp text={view.amountOutText} />
-      </span>
-    ) : (
-      <span className='text-fg-dim'>0</span>
-    )}
-  </span>
-);
-
 /** rows glide from where they were when their order changes (FLIP), instead of jumping */
 const useFlip = (list: RefObject<HTMLElement | null>, order: string) => {
   const was = useRef(new Map<string, number>());
@@ -362,6 +322,7 @@ const useFlip = (list: RefObject<HTMLElement | null>, order: string) => {
 const RouteChoice = ({
   quote,
   unit,
+  shows,
   on,
   best,
   more,
@@ -370,11 +331,13 @@ const RouteChoice = ({
 }: {
   quote: Quote;
   unit: string;
+  /** the figure that differs between routes: what arrives, or by what arrives, what is paid */
+  shows: string;
   decimals: number;
   on: boolean;
   best: boolean;
-  /** how much more than the next route, on the best one */
-  more?: string;
+  /** how far ahead of the next route, on the best one */
+  more?: Ahead;
   onPick: () => void;
 }) => (
   <button
@@ -399,7 +362,7 @@ const RouteChoice = ({
       </span>
       <span className='grow text-sm text-fg-high'>{routeLabel(quote.route, best)}</span>
       <span className='text-sm text-fg-high'>
-        <Figure text={`${quote.amountOutText} ${unit}`} />
+        <Figure text={shows} />
       </span>
     </span>
     <span className='flex flex-wrap gap-x-3 pl-7 text-[11px] text-fg-muted'>
@@ -407,6 +370,12 @@ const RouteChoice = ({
     </span>
   </button>
 );
+
+/** the best route's lead: more arrives, or by what arrives, less is paid */
+interface Ahead {
+  text: string;
+  word: 'more' | 'less';
+}
 
 const RouteMeta = ({
   quote,
@@ -417,14 +386,14 @@ const RouteMeta = ({
   quote: Quote;
   unit: string;
   decimals: number;
-  more?: string;
+  more?: Ahead;
 }) => (
   <>
     {quote.timeText && <span>{quote.timeText}</span>}
     {quote.atLeastText && <span>{`at least ${quote.atLeastText} ${unit}`}</span>}
     {more && (
       <span>
-        <Sensitive className='text-success'>{`${more} ${unit}`}</Sensitive> more
+        <Sensitive className='text-success'>{more.text}</Sensitive> {more.word}
       </span>
     )}
     {quote.cost && <CostMeta cost={quote.cost} unit={unit} decimals={decimals} />}
@@ -615,12 +584,20 @@ export const CrosschainSwap = ({
   // what the user chose; anything left undefined is derived from defaults below
   const [pickedDirection, setDirection] = useState(link?.link.direction);
   const [pickedToken, setToken] = useState<SwapToken>();
-  const [typedAmount, setAmount] = useState(link?.link.amount);
+  const [typedAmount, setTyped] = useState(link?.link.amount);
+  // by what arrives (a payment): the amount the recipient is owed, typed in "you get"
+  const [typedOut, setTypedOut] = useState(link?.link.out);
+  // by what arrives, the paid figure last shown: a hint for the routes and the send fee
+  const [hintIn, setHintIn] = useState<string>();
+  const setAmount = (v: string | undefined) => {
+    setTyped(v);
+    setTypedOut(undefined);
+  };
   const [typedAddress, setAddress] = useState(link?.link.address);
-  // a link names its token by symbol: the picker opens (its list is the
-  // fetch the egress sheet asks about) and picks it once the list is here
+  // a link names its token by symbol: the list is read and the token picked
+  // once it is here; the picker opens only if the token isn't offered
   const [linkToken, setLinkToken] = useState(link?.link);
-  const [pickerOpen, setPickerOpen] = useState(!!link);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [contactsOpen, setContactsOpen] = useState(false);
   const [routesOpen, setRoutesOpen] = useState(false);
   const [picked, setPicked] = useState<RouteId>();
@@ -746,9 +723,11 @@ export const CrosschainSwap = ({
   const outUnit = isFromZec ? unit : 'zec';
   const inUnit = isFromZec ? 'zec' : unit;
   const outDecimals = isFromZec ? (token?.decimals ?? 8) : 8;
-  const amountIn = typedAmount ?? defaultAmount(direction, maxZat, token);
-  const overMax = isFromZec && toUnits(amountIn, 8) > maxZat;
-  const quick = isFromZec ? chips(maxZat) : [];
+  const inDecimals = isFromZec ? 8 : (token?.decimals ?? 8);
+  const byOut = typedOut !== undefined;
+  const typedIn = typedAmount ?? defaultAmount(direction, maxZat, token);
+  // the chips are shares of the zec there is: they belong to the paid side
+  const quick = isFromZec && !byOut ? chips(maxZat) : [];
 
   // the chain the other address is on; the picker and "yours" follow it
   const fieldChain = chainOfSwap(token?.chain);
@@ -761,9 +740,12 @@ export const CrosschainSwap = ({
   const known = yours.some(y => y.address === otherAddress);
 
   // what the routes are asked: a default at once, a typed value once it rests
-  const settledAmount = useSettled(amountIn, parseFloat(amountIn) > 0);
+  const typedValue = (byOut ? typedOut : typedIn) ?? '';
+  const settledAmount = useSettled(typedValue, parseFloat(typedValue) > 0);
   const settledAddress = useSettled(otherAddress, fits(otherAddress));
-  const askAmount = typedAmount === undefined ? amountIn : settledAmount;
+  const askAmount = !byOut && typedAmount === undefined ? typedIn : settledAmount;
+  // by what arrives, what is paid is the routes' to say; until then, the last figure shown
+  const paidHint = byOut ? (hintIn ?? '') : askAmount;
   const askAddress = typedAddress === undefined ? otherAddress : settledAddress;
   const signsOpReturn = !!kind && !!CAPS[kind].opReturn;
   // thorchain pays (and refunds) a t-address: each swap its own, never the pocket's shown one
@@ -778,7 +760,8 @@ export const CrosschainSwap = ({
         ? {
             direction,
             token,
-            amountIn: askAmount!,
+            amountIn: paidHint ?? '',
+            exactOut: byOut ? askAmount : undefined,
             zcashAddress,
             zcashTransparent,
             otherAddress: askAddress ?? '',
@@ -786,7 +769,8 @@ export const CrosschainSwap = ({
             // out of zec, the send to the deposit pays its own ZIP-317 fee: part of the cost
             sourceFeeZat: isFromZec
               ? String(
-                  quoteSend(notes, toUnits(askAmount!, 8), { transparentRecipient: true }).feeZat,
+                  quoteSend(notes, toUnits(paidHint ?? '', 8), { transparentRecipient: true })
+                    .feeZat,
                 )
               : undefined,
           }
@@ -796,7 +780,9 @@ export const CrosschainSwap = ({
       token,
       zcashAddress,
       usable,
+      byOut,
       askAmount,
+      paidHint,
       askAddress,
       zcashTransparent,
       signsOpReturn,
@@ -804,7 +790,7 @@ export const CrosschainSwap = ({
       notes,
     ],
   );
-  const typing = amountIn !== askAmount || otherAddress !== askAddress;
+  const typing = typedValue !== askAmount || otherAddress !== askAddress;
 
   // every route for the pair: allowed ones are asked, the rest say why in one line
   const egress = useQuery(egressViewQuery).data;
@@ -822,7 +808,10 @@ export const CrosschainSwap = ({
       };
     }),
   });
-  const quotes = rank(answers.flatMap(a => (a.data ? [a.data] : [])));
+  const quotes = rank(
+    answers.flatMap(a => (a.data ? [a.data] : [])),
+    byOut ? inDecimals : undefined,
+  );
   const best = quotes.find(q => !q.notYet);
   const live = (id?: RouteId) => quotes.find(q => q.route === id && !q.notYet);
   const quote = live(picked) ?? live(key ? chosen[key] : undefined) ?? best;
@@ -835,10 +824,18 @@ export const CrosschainSwap = ({
   const stale = typing || !!shown?.isPlaceholderData || !!shown?.isFetching;
   const fetching = answers.some(a => a.isFetching);
   const expiredLive = !!view?.expiresAt && view.expiresAt <= Date.now();
+  // the two figures as the form shows them: the typed side, and the route's answer on the other
+  const amountIn = byOut ? (view?.amountInText ?? '') : typedIn;
+  const amountOut = byOut ? typedOut : (view?.amountOutText ?? '');
+  const overMax = isFromZec && toUnits(amountIn, 8) > maxZat;
   const reviewable =
     !!quote && !typing && !overMax && !answerOf(quote.route)?.isPlaceholderData && !expiredLive;
-  const ahead = lead(quotes);
-  const more = ahead ? figure(ahead, outDecimals) : undefined;
+  const ahead = lead(quotes, byOut ? inDecimals : undefined);
+  const more: Ahead | undefined = ahead
+    ? byOut
+      ? { text: `${figure(ahead, inDecimals)} ${inUnit}`, word: 'less' }
+      : { text: `${figure(ahead, outDecimals)} ${outUnit}`, word: 'more' }
+    : undefined;
   // the routes with no price: refused, failed, blocked or not asked yet
   const quiet = [
     ...asked.flatMap((g, i) => {
@@ -850,6 +847,11 @@ export const CrosschainSwap = ({
   const below = answers.find(a => a.error instanceof BelowMinimum && !a.data)?.error;
   const allFailed =
     !!req && !quotes.length && !fetching && asked.length > 0 && quiet.length >= asked.length;
+  // what tells routes apart: what arrives, or by what arrives, what is paid
+  const shownOf = (q: Quote) =>
+    byOut
+      ? `${q.approx ? 'about ' : ''}${q.amountInText} ${inUnit}`
+      : `${q.amountOutText} ${outUnit}`;
   // every route keeps its one line, best first: an arrival reorders rows, never adds or removes one
   const lines = gated
     .map(g => {
@@ -858,7 +860,7 @@ export const CrosschainSwap = ({
       return {
         route: g.route,
         line: q
-          ? `${q.amountOutText} ${outUnit}${q.notYet ? ` · ${q.notYet}` : ''}`
+          ? `${shownOf(q)}${q.notYet ? ` · ${q.notYet}` : ''}`
           : (g.line ?? (a?.error ? plain(g.route, a.error) : undefined)),
         on: !!q && q.route === view?.route,
         waiting: !!a?.isFetching,
@@ -953,12 +955,12 @@ export const CrosschainSwap = ({
     return () => window.removeEventListener('zcash-send-progress', handler);
   }, [step]);
 
-  // the picker's tokens, fetched only once the user opens it, never merely from opening swap
+  // the picker's tokens, fetched once the user opens it or a link names one, never merely from opening swap
   const pickerRoutes = pinned ? [pinned] : QUOTABLE;
   const tokenQuery = useQuery({
     queryKey: ['swap-tokens', pickerRoutes],
     staleTime: 300_000,
-    enabled: pickerOpen,
+    enabled: pickerOpen || !!linkToken,
     queryFn: () => routeTokens(pickerRoutes),
   });
   const tokens = tokenQuery.data ?? [];
@@ -973,8 +975,12 @@ export const CrosschainSwap = ({
     setLinkToken(undefined);
     if (t) {
       setToken(t);
-      setPickerOpen(false);
+      // a payment from send waits on what is owed, after any ask sheet has closed
+      if (linkToken.out === '') {
+        requestAnimationFrame(() => document.getElementById('swap-out')?.focus());
+      }
     } else {
+      setPickerOpen(true);
       setError(`${symbol} isn't offered for swaps right now · please pick another`);
     }
   }, [linkToken, tokenQuery.data]);
@@ -989,6 +995,9 @@ export const CrosschainSwap = ({
     setError(undefined);
     if (d !== direction || d === 'into_zec') {
       setAmount(undefined);
+    } else if (t?.symbol !== token?.symbol || t?.chain !== token?.chain) {
+      // an amount owed in one token means nothing in another
+      setTypedOut(undefined);
     }
     remember({ direction: d, token: t });
   };
@@ -1019,7 +1028,7 @@ export const CrosschainSwap = ({
   const openReview = () => {
     if (reviewable && req) {
       setError(undefined);
-      setFirm({ quote, req });
+      setFirm({ quote, req: firmRequest(req, quote, !!PROVIDERS[quote.route]?.exactOut) });
       setReviewOpen(true);
     }
   };
@@ -1047,8 +1056,10 @@ export const CrosschainSwap = ({
       // a THORNode route touches a t-address: this swap claims its own before the firm price
       const t = firm.quote.route !== 'near' ? (swapT ?? (await swapTNext.claim())) : undefined;
       setSwapT(t);
-      const req = t ? { ...firm.req, zcashTransparent: t.address } : firm.req;
-      const got = await PROVIDERS[firm.quote.route]!.quote({ ...req, dry: false }, ask.signal);
+      const asked = t ? { ...firm.req, zcashTransparent: t.address } : firm.req;
+      const got = await PROVIDERS[firm.quote.route]!.quote({ ...asked, dry: false }, ask.signal);
+      // by what arrives, the firm quote says what to deposit; that figure is what is sent
+      const req = firmRequest(asked, got, !!asked.exactOut);
       // out of zec over thorchain, the legs are priced again for the firm memo and the claimed address
       const plan =
         got.memo && req.direction === 'from_zec'
@@ -1058,7 +1069,11 @@ export const CrosschainSwap = ({
         return;
       }
       // a moved price or moved legs get a second look; nothing is signed that wasn't shown
-      if (got.amountOut !== firm.quote.amountOut || (plan && !samePlan(plan, reviewedPlan))) {
+      if (
+        got.amountOut !== firm.quote.amountOut ||
+        req.amountIn !== firm.req.amountIn ||
+        (plan && !samePlan(plan, reviewedPlan))
+      ) {
         setFirm({ quote: got, req, was: firm.quote, checked: true });
         return;
       }
@@ -1240,6 +1255,7 @@ export const CrosschainSwap = ({
     setDepositTxid(undefined);
     setError(undefined);
     setAmount(undefined);
+    setHintIn(undefined);
   };
 
   // what this form would fill for someone else: never this wallet's own refund
@@ -1253,13 +1269,21 @@ export const CrosschainSwap = ({
         direction,
         token: token.symbol.toLowerCase(),
         chain: token.chain,
-        amount: amountIn || undefined,
+        amount: byOut ? undefined : typedIn || undefined,
+        out: byOut ? typedOut || undefined : undefined,
         address: isFromZec ? otherAddress || undefined : undefined,
         route: sharedRoute,
       },
     });
 
-  const header = (meta?: ReactNode) => <ScreenHeader title='swap' onBack={goBack} meta={meta} />;
+  // a payment (an amount owed, from send or a link) is named for what it is
+  const header = (meta?: ReactNode) => (
+    <ScreenHeader
+      title={link?.link.out !== undefined ? 'pay' : 'swap'}
+      onBack={goBack}
+      meta={meta}
+    />
+  );
 
   if (resuming || (step === 'input' && !decided)) {
     return <div className='flex h-full flex-col bg-canvas'>{header()}</div>;
@@ -1312,6 +1336,7 @@ export const CrosschainSwap = ({
               available={isFromZec ? balanceZec : undefined}
               helper={helper}
               warn={!!helper}
+              dim={byOut && (stale || expiredLive)}
             />
             {quick.length > 0 && (
               <div className='-mt-1 flex justify-end gap-1.5'>
@@ -1343,34 +1368,21 @@ export const CrosschainSwap = ({
           >
             <span className='i-lucide-arrow-up-down size-4' aria-hidden='true' />
           </Button>
-          <div className='flex flex-col gap-1.5'>
-            <span className='text-xs text-fg-muted'>
-              you get{token && isFromZec ? ` · on ${chainName(token.chain)}` : ''}
-            </span>
-            {/* out of zec it picks the token; into zec it only shows the figure (the flip button reverses) */}
-            {isFromZec ? (
-              <button
-                type='button'
-                onClick={() => setPickerOpen(true)}
-                aria-label={`choose what you get · now ${unit}`}
-                className='flex h-14 items-center justify-between border border-border-soft bg-elev-1 px-3 text-left'
-              >
-                <YouGet view={view} stale={stale} struck={expiredLive} />
-                <span className='flex items-center gap-1 text-[13px] text-fg-muted lowercase'>
-                  {tokenQuery.isFetching ? 'reading' : unit}
-                  <span className='i-lucide-chevron-down size-3' />
-                </span>
-              </button>
-            ) : (
-              <output
-                aria-label='what you get, in zec'
-                className='flex h-14 items-center justify-between border border-border-soft bg-elev-1 px-3'
-              >
-                <YouGet view={view} stale={stale} struck={expiredLive} />
-                <span className='text-[13px] text-fg-muted lowercase'>zec</span>
-              </output>
-            )}
-          </div>
+          {/* either side may be typed: the other is the best route's answer */}
+          <AmountField
+            id='swap-out'
+            label={`you get${token && isFromZec ? ` · on ${chainName(token.chain)}` : ''}`}
+            value={amountOut}
+            onChange={v => {
+              setHintIn(amountIn || hintIn);
+              setTyped(undefined);
+              setTypedOut(v);
+              setError(undefined);
+            }}
+            unit={isFromZec ? (tokenQuery.isFetching ? 'reading' : unit) : 'zec'}
+            onUnit={isFromZec ? () => setPickerOpen(true) : undefined}
+            dim={!byOut && (stale || expiredLive)}
+          />
           {token && (
             <div className='flex flex-col gap-1.5'>
               <div className='relative'>
@@ -1478,7 +1490,7 @@ export const CrosschainSwap = ({
         </Main>
         <Footer>
           <Button className='w-full' onClick={openReview} disabled={!reviewable}>
-            review swap
+            {link?.link.out !== undefined ? 'review payment' : 'review swap'}
           </Button>
         </Footer>
         <TokenSheet
@@ -1515,6 +1527,7 @@ export const CrosschainSwap = ({
               key={q.route}
               quote={q}
               unit={outUnit}
+              shows={shownOf(q)}
               on={q.route === quote?.route}
               best={q.route === best?.route}
               more={q.route === best?.route ? more : undefined}
@@ -1614,8 +1627,9 @@ export const CrosschainSwap = ({
             )}
             {deal.route === best?.route && more && (
               <p className='text-xs text-fg-muted'>
-                you get <Sensitive className='text-success'>{`${more} ${outUnit}`}</Sensitive> more
-                than the next route
+                you {more.word === 'less' ? 'pay' : 'get'}{' '}
+                <Sensitive className='text-success'>{more.text}</Sensitive> {more.word} than the
+                next route
               </p>
             )}
             {note && (
