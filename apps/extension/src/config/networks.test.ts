@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+// these cases describe the beta build, where hyperliquid is offered (prod: hyperliquid-prod.test.ts)
+vi.mock('./feature-flags', async orig => ({ ...(await orig<object>()), IS_BETA_BUILD: true }));
+
 import {
   getNetwork,
   getSubnetworks,

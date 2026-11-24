@@ -52,6 +52,7 @@ import {
   type RequestClass,
 } from './egress-table';
 import type { NetPurpose } from './purpose';
+import { isLaunched } from '../config/networks';
 import { NYM } from './nym-bridge';
 import { PROXY_APPLIED_KEY, PROXY_KEY, proxyInUse } from './proxy';
 import { transportFor } from './nym-plan';
@@ -747,6 +748,10 @@ const stateOf = (spec: DestinationSpec, i: EgressInputs): { on: boolean; why: De
   if (choice === 'blocked') {
     return { on: false, why: 'you-blocked' };
   }
+  // a network this build does not offer is never contacted, whatever was allowed
+  if (spec.gate.kind === 'network' && !spec.gate.networks.some(isLaunched)) {
+    return { on: false, why: 'network-off' };
+  }
   if (choice === 'allowed' && !spec.hidden) {
     return { on: true, why: 'you-allowed' };
   }
@@ -784,7 +789,10 @@ const REASON: Partial<Record<DestinationWhy, EgressRule['reason']>> = {
 /** Every destination with its current state: the "everything zafu talks to" list. */
 export const describeEgress = (i: EgressInputs): DestinationView[] => {
   const table = compileEgress(i);
-  return DESTINATIONS.filter(d => !d.hidden).map(spec => {
+  // a network this build does not offer is not listed either
+  return DESTINATIONS.filter(
+    d => !d.hidden && (d.gate.kind !== 'network' || d.gate.networks.some(isLaunched)),
+  ).map(spec => {
     const { on, why } = stateOf(spec, i);
     // only the hosts this destination owns: the configured zcash endpoint is
     // the light client's, not also one of the "other zcash servers"
