@@ -67,9 +67,13 @@ const MainPopup = () => {
     void loadBalancesSnapshot()
       .then(snapshot => {
         if (snapshot) {
-          queryClient.setQueryData(balancesQueryKey(snapshot.account), snapshot.items, {
-            updatedAt: snapshot.at,
-          });
+          queryClient.setQueryData(
+            balancesQueryKey(snapshot.wallet, snapshot.account),
+            snapshot.items,
+            {
+              updatedAt: snapshot.at,
+            },
+          );
         }
       })
       .finally(() => setCacheSeeded(true));

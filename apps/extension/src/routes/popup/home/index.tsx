@@ -55,7 +55,7 @@ export const PopupIndex = () => {
   const navigate = useNavigate();
 
   // preload balances in background for instant display
-  usePreloadBalances(penumbraAccount);
+  usePreloadBalances(selectedKeyInfo?.id, penumbraAccount);
 
   // Backup nudge: shown for mnemonic vaults until the user demonstrably
   // possesses their recovery phrase (onboarding checkbox, import, settings

@@ -12,6 +12,7 @@ import type { AllSlices } from '../../state';
 import {
   selectActiveNetwork,
   selectEffectiveKeyInfo,
+  selectEffectiveWalletId,
   selectPenumbraAccount,
 } from '../../state/keyring';
 import {
@@ -39,7 +40,7 @@ const isPenumbra = (s: AllSlices) => getRootNetwork(selectActiveNetwork(s)) === 
 const penumbraBalances: Preload = ({ client, state }) =>
   isPenumbra(state) &&
   client.prefetchQuery({
-    ...balancesQueryOptions(selectPenumbraAccount(state)),
+    ...balancesQueryOptions(selectEffectiveWalletId(state), selectPenumbraAccount(state)),
     staleTime: 30_000,
   });
 
@@ -78,7 +79,9 @@ const everyPocket: Preload = ctx => {
 const history: Preload = ({ client, state }) =>
   state.privacy.settings.enableTransactionHistory &&
   isPenumbra(state) &&
-  client.prefetchQuery(penumbraHistoryQuery(selectPenumbraAccount(state), true));
+  client.prefetchQuery(
+    penumbraHistoryQuery(selectEffectiveWalletId(state), selectPenumbraAccount(state), true),
+  );
 
 /** the transparent addresses receive shows, keyed as receive reads them (local derivation, cached) */
 const tAddresses: Preload = ({ client, state }) =>

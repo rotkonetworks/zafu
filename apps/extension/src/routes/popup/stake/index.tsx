@@ -9,7 +9,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Sensitive } from '../../../components/sensitive';
 import { viewClient, stakeClient } from '../../../clients';
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
+import {
+  selectActiveNetwork,
+  selectEffectiveWalletId,
+  selectPenumbraAccount,
+} from '../../../state/keyring';
 import { hasFeature } from '../../../config/networks';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
@@ -130,6 +134,8 @@ const findValidatorForDelegation = (
 export const StakePage = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const penumbraAccount = useStore(selectPenumbraAccount);
+  // the view service is rebuilt per wallet; its cached answers are the wallet's own
+  const wallet = useStore(selectEffectiveWalletId);
   const [action, setAction] = useState<StakeAction>(undefined);
   const [amount, setAmount] = useState('');
   const [selectedValidator, setSelectedValidator] = useState<ValidatorRow | undefined>();
@@ -212,7 +218,7 @@ export const StakePage = () => {
     isLoading: delegationsLoading,
     refetch: refetchDelegations,
   } = useQuery({
-    queryKey: ['delegations', penumbraAccount],
+    queryKey: ['delegations', wallet, penumbraAccount],
     enabled: canStake,
     staleTime: 30_000,
     queryFn: async () => {
@@ -235,7 +241,7 @@ export const StakePage = () => {
 
   // fetch staking token balance
   const { data: stakingBalance } = useQuery({
-    queryKey: ['staking-balance', penumbraAccount],
+    queryKey: ['staking-balance', wallet, penumbraAccount],
     enabled: canStake,
     staleTime: 30_000,
     queryFn: async () => {

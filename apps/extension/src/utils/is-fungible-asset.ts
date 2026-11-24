@@ -119,7 +119,7 @@ export const filterSelectableBalances = (balances: BalancesResponse[]): Balances
 
 // ── picker selectors (react-query `select`) ──
 //
-// Every consumer of the `['balances', account]` query shares ONE cache entry
+// Every consumer of the `['balances', wallet, account]` query shares ONE cache entry
 // holding the RAW `BalancesResponse[]` (see `hooks/penumbra-balances.ts`). The
 // per-consumer filtering and sorting lives here, applied through react-query's
 // per-observer `select` option, so it runs on the cached data no matter which

@@ -5,7 +5,7 @@ import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
 import { useStore } from '../../../state';
-import type { NetworkType } from '../../../state/keyring';
+import { selectEffectiveWalletId, type NetworkType } from '../../../state/keyring';
 import { activeZcashStoreId } from '../../../state/pockets';
 import { selectZcashIsMainnet } from '../../../state/wallets';
 import { messagesSelector } from '../../../state/messages';
@@ -70,9 +70,14 @@ export const AskHistorySheet = ({ hasFunds }: { hasFunds: boolean }) => {
  * Penumbra's history from the local view service, as the query home's section,
  * activity and their intent preloads share.
  */
-export const penumbraHistoryQuery = (account: number, enabled: boolean) =>
+export const penumbraHistoryQuery = (
+  wallet: string | undefined,
+  account: number,
+  enabled: boolean,
+) =>
   queryOptions({
-    queryKey: ['homeHistory', 'penumbra', account],
+    // keyed by wallet: the view service is rebuilt per wallet, its cache is not
+    queryKey: ['homeHistory', 'penumbra', wallet, account],
     enabled,
     staleTime: 10_000,
     queryFn: async (): Promise<ParsedTransaction[]> => {
@@ -185,6 +190,7 @@ export const HistoryContent = ({
   const messages = useStore(messagesSelector);
   // the active pocket's own store: account 0 is the bare wallet id
   const zcashStoreId = useStore(activeZcashStoreId);
+  const wallet = useStore(selectEffectiveWalletId);
   const isMainnet = useStore(selectZcashIsMainnet);
   const { tAddresses } = useTransparentAddresses(isMainnet);
   // the last transparent check, the only thing that asks the node about these addresses
@@ -206,7 +212,11 @@ export const HistoryContent = ({
 
   // hooks must always be called in the same order - queries use `enabled` flag instead
   const penumbraQ = useQuery(
-    penumbraHistoryQuery(penumbraAccount, getRootNetwork(network) === 'penumbra' && historyEnabled),
+    penumbraHistoryQuery(
+      wallet,
+      penumbraAccount,
+      getRootNetwork(network) === 'penumbra' && historyEnabled,
+    ),
   );
   const zcashQ = useQuery(
     zcashHistoryQuery(

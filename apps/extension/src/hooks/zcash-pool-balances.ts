@@ -28,6 +28,7 @@ import {
   type PoolNotes,
 } from '../state/keyring/network-worker';
 import { openSentRows } from '../state/sent-seal';
+import { parsePocketStoreId } from '../state/pocket-id';
 
 /** Zeroed balances - the value before the first fetch resolves. */
 export const EMPTY_POOL_BALANCES: PoolBalances = {
@@ -82,6 +83,22 @@ export const zcashBirthdayQuery = (walletId: string | undefined) =>
   });
 
 /**
+ * The placeholder for a pocket switch: the last store's figure stays on
+ * screen (dimmed) only while that store is a pocket of the same wallet.
+ * Another wallet's figure is never shown for this one.
+ */
+export const keepPocketFigure =
+  (storeId: string | undefined) =>
+  <T>(previous: T | undefined, query?: { queryKey: readonly unknown[] }): T | undefined => {
+    const from = query?.queryKey[1];
+    return storeId &&
+      typeof from === 'string' &&
+      parsePocketStoreId(from).walletId === parsePocketStoreId(storeId).walletId
+      ? previous
+      : undefined;
+  };
+
+/**
  * Read a worker value from the cache, and re-read it on every
  * `network-sync-progress` tick for this wallet and whenever `syncTick`
  * (usually workerSyncHeight) moves. The cached value shows at once on mount.
@@ -102,7 +119,7 @@ export function useWorkerValue<T>(
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       // sync-progress events carry a walletId; ignore other wallets' ticks
-      if (detail?.network === 'zcash' && (!detail.walletId || detail.walletId === walletId)) {
+      if (detail?.network === 'zcash' && detail.walletId === walletId) {
         reread();
       }
     };
