@@ -128,20 +128,15 @@ export const QrScanner = ({
         stream.getTracks().forEach(t => t.stop());
         return;
       }
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
-
-      const controls = await reader.decodeFromVideoDevice(
-        undefined, // use the stream already attached to the video element
-        videoRef.current,
-        result => {
-          if (result && !scannedRef.current) {
-            scannedRef.current = true;
-            stopScanning();
-            onScanRef.current(resultToHex(result.getText()));
-          }
-        },
-      );
+      // decode this stream, from the camera picked above: given no device,
+      // decodeFromVideoDevice opens a second, default one in its place
+      const controls = await reader.decodeFromStream(stream, videoRef.current, result => {
+        if (result && !scannedRef.current) {
+          scannedRef.current = true;
+          stopScanning();
+          onScanRef.current(resultToHex(result.getText()));
+        }
+      });
 
       controlsRef.current = controls;
       startingRef.current = false;
@@ -340,7 +335,11 @@ export const QrScanner = ({
         </button>
       </div>
 
-      <div className='flex-1 relative min-h-0 overflow-hidden'>{cameraView}</div>
+      <div className='flex flex-1 min-h-0 items-center justify-center p-4'>
+        <div className='relative aspect-square w-full max-w-sm overflow-hidden border border-green-500/40'>
+          {cameraView}
+        </div>
+      </div>
 
       {isScanning && (
         <div className='flex-none p-4 bg-black text-center'>
