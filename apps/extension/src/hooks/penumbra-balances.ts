@@ -1,5 +1,5 @@
 /**
- * Single source of truth for the penumbra `['balances', account]` query.
+ * Single source of truth for the penumbra `['balances', wallet, account]` query.
  *
  * The home preload, the assets table, the send forms and the swap form all
  * read this one cache entry. It MUST always hold the RAW, unfiltered
@@ -21,7 +21,12 @@ import { queryOptions } from '@tanstack/react-query';
 import { viewClient } from '../clients';
 import { saveBalancesSnapshot } from './balances-snapshot';
 
-export const balancesQueryKey = (account: number) => ['balances', account] as const;
+/**
+ * Keyed by wallet as well as account: the view service is rebuilt per wallet,
+ * and account 0 of one wallet is not account 0 of another.
+ */
+export const balancesQueryKey = (wallet: string | undefined, account: number) =>
+  ['balances', wallet, account] as const;
 
 export const fetchBalances = async (account: number) => {
   const balances = await Array.fromAsync(viewClient.balances({ accountFilter: { account } }));
@@ -31,9 +36,9 @@ export const fetchBalances = async (account: number) => {
   return balances;
 };
 
-export const balancesQueryOptions = (account: number) =>
+export const balancesQueryOptions = (wallet: string | undefined, account: number) =>
   queryOptions({
-    queryKey: balancesQueryKey(account),
+    queryKey: balancesQueryKey(wallet, account),
     queryFn: () => fetchBalances(account),
     // One retry, not react-query's default three with 1s/2s/4s backoff: this
     // is a full balances stream over every note (hundreds of LP NFTs on a big

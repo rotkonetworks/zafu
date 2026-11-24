@@ -50,7 +50,7 @@ export const PopupIndex = () => {
   const penumbraAccount = useStore(selectPenumbraAccount);
 
   // preload balances in background for instant display
-  usePreloadBalances(penumbraAccount);
+  usePreloadBalances(selectedKeyInfo?.id, penumbraAccount);
 
   const backupNudge = useBackupNudge();
 

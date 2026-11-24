@@ -1327,6 +1327,9 @@ export const selectPenumbraOnly = (state: AllSlices) => {
   return !!k && keyInfoSupportsNetwork(k, 'penumbra') && !keyInfoSupportsNetwork(k, 'zcash');
 };
 
+/** the id of the wallet on screen: what wallet-scoped caches are keyed by */
+export const selectEffectiveWalletId = (state: AllSlices) => selectEffectiveKeyInfo(state)?.id;
+
 export const selectEffectiveKeyInfo = (state: AllSlices) => {
   const { keyInfos, selectedKeyInfo, activeNetwork } = state.keyRing;
   if (

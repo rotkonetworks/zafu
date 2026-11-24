@@ -126,8 +126,8 @@ export function useZcashWorkerSync() {
       if (detail?.network !== 'zcash') {
         return;
       }
-      // only accept events for the currently active wallet
-      if (activeWalletId && detail.walletId && detail.walletId !== activeWalletId) {
+      // only accept events for the currently active wallet (every tick names its wallet)
+      if (activeWalletId && detail.walletId !== activeWalletId) {
         return;
       }
       if (typeof detail.currentHeight === 'number') {
@@ -160,12 +160,17 @@ export function useZcashWorkerSync() {
       return;
     }
     const key = zcashSyncHeightKey(activeWalletId);
+    // a read that lands after the next switch is the last wallet's height
+    let current = true;
     chrome.storage.local.get(key, result => {
       const stored = result[key];
-      if (typeof stored === 'number' && stored > 0) {
+      if (current && typeof stored === 'number' && stored > 0) {
         setWorkerSyncHeight(h => Math.max(h, stored));
       }
     });
+    return () => {
+      current = false;
+    };
   }, [activeWalletId]);
 
   return { workerSyncHeight, workerChainHeight, workerError, workerFailure, notesPreparing };

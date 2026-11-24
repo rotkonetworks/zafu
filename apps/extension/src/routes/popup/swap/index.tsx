@@ -15,7 +15,11 @@ import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sensitive } from '../../../components/sensitive';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
+import {
+  selectActiveNetwork,
+  selectEffectiveWalletId,
+  selectPenumbraAccount,
+} from '../../../state/keyring';
 import { selectNetworkShown } from '../../../state/wallets';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
@@ -154,6 +158,7 @@ export const SwapPage = () => {
 const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) => {
   const goBack = useBackNav(PopupPath.INDEX);
   const penumbraAccount = useStore(selectPenumbraAccount);
+  const wallet = useStore(selectEffectiveWalletId);
   const [amountIn, setAmountIn] = useState('');
   const [pick, setPick] = useState<'in' | 'out'>();
   const [selectedIn, setSelectedIn] = useState<InputAsset | undefined>();
@@ -162,7 +167,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
   const routes = usePenumbraRoutes();
 
   // fetch balances
-  // The ['balances', account] cache holds the RAW list (the home screen
+  // The ['balances', wallet, account] cache holds the RAW list (the home screen
   // preloads it); `select` buckets it per observer, so the picker filter
   // applies no matter who populated the cache.
   const {
@@ -170,7 +175,7 @@ const PenumbraSwap = ({ prefillFromAsset }: { prefillFromAsset?: string } = {}) 
     isLoading: balancesLoading,
     refetch: refetchBalances,
   } = useQuery({
-    ...balancesQueryOptions(penumbraAccount),
+    ...balancesQueryOptions(wallet, penumbraAccount),
     staleTime: 30_000,
     select: selectPickerBuckets,
   });
