@@ -42,12 +42,22 @@ export const setBuyGate = (gate: () => boolean): (() => void) => {
   };
 };
 
+const openTab = (): void => {
+  void chrome.tabs.create({
+    url: betaFeatures() ? chrome.runtime.getURL('buy.html') : PEER_BUY_ZEC_URL,
+  });
+};
+
 export const openBuyPage = (): void => {
   // buy.html can only say "choose another wallet"; the popup says it in place
   if (betaFeatures() && buyGate?.()) {
     return;
   }
-  void chrome.tabs.create({
-    url: betaFeatures() ? chrome.runtime.getURL('buy.html') : PEER_BUY_ZEC_URL,
-  });
+  openTab();
 };
+
+/**
+ * Carry on a buy already started. It belongs to the wallet that started it
+ * (its keys sign the rest), so it is never offered another wallet.
+ */
+export const resumeBuyPage = openTab;

@@ -35,7 +35,7 @@ vi.mock('../state/keyring', () => ({
 vi.mock('../config/beta', () => ({ betaFeatures: () => true }));
 
 const { BuyHotWalletSheet } = await import('./buy-hot-wallet-sheet');
-const { openBuyPage } = await import('../buy/open');
+const { openBuyPage, resumeBuyPage } = await import('../buy/open');
 
 describe('buy with a cold wallet', () => {
   let root: Root;
@@ -79,6 +79,26 @@ describe('buy with a cold wallet', () => {
     expect(state.keyRing.selectKeyRing).toHaveBeenCalledWith('h');
     expect(create).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('carries on a started buy without offering another wallet', () => {
+    state.keyRing.selectedKeyInfo = cold;
+    act(() => resumeBuyPage());
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('says so in the sheet when switching wallets fails, and opens nothing', async () => {
+    state.keyRing.selectedKeyInfo = cold;
+    state.keyRing.selectKeyRing = vi.fn(() => Promise.reject(new Error('locked')));
+    act(() => openBuyPage());
+    await act(async () =>
+      [...document.querySelectorAll('button')].find(b => b.textContent === 'use everyday')!.click(),
+    );
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      'zafu could not switch wallets',
+    );
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('opens the buy page for a phrase wallet', () => {
