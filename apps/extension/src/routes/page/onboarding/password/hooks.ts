@@ -11,7 +11,7 @@ import { keyRingSelector } from '../../../../state/keyring';
 import { networksSelector } from '../../../../state/networks';
 import { zignerConnectSelector } from '../../../../state/zigner';
 import { ZCASH_MAINNET_ENDPOINTS, defaultZcashEndpoint } from '../../../../config/zcash-endpoints';
-import type { ZignerZafuImport } from '../../../../state/keyring/types';
+import { addPendingZignerWallets, pendingZignerAdds } from '../../../../state/zigner-imports';
 import { viewingKeyImport } from '../../../../hooks/use-viewing-key';
 import { useOnboarding } from '..';
 import { BIRTHDAY_PATH } from '../flow';
@@ -108,42 +108,18 @@ export const useFinalizeOnboarding = () => {
     // zigner flow: set password then import watch-only wallet
     await setPassword(password);
 
-    if (walletImport) {
-      // penumbra zigner import - convert protobuf to base64 strings
-      const fvkInner = walletImport.fullViewingKey.inner;
-      const walletIdInner = walletImport.walletId.inner;
-      const legacyDeviceId = walletIdInner
-        ? btoa(String.fromCharCode(...walletIdInner))
-        : `penumbra-${Date.now()}`;
-      const zignerData: ZignerZafuImport = {
-        fullViewingKey: fvkInner ? btoa(String.fromCharCode(...fvkInner)) : undefined,
-        accountIndex: walletImport.accountIndex,
-        deviceId: walletImport.zidPublicKey ?? legacyDeviceId,
-        zidPublicKey: walletImport.zidPublicKey,
-      };
-      await newZignerZafuKey(zignerData, walletLabel || 'zigner penumbra');
-    } else if (zcashWalletImport) {
-      // zcash zigner import - use ZID as canonical deviceId for dedup
-      const zignerData: ZignerZafuImport = {
-        viewingKey: zcashWalletImport.ufvk,
-        accountIndex: zcashWalletImport.accountIndex,
-        deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
-        zidPublicKey: zcashWalletImport.zidPublicKey,
-      };
-      await newZignerZafuKey(zignerData, walletLabel || 'zigner zcash');
-    } else if (parsedCosmosExport) {
-      // cosmos zigner import
-      const zignerData: ZignerZafuImport = {
-        cosmosAddresses: parsedCosmosExport.addresses,
-        cosmosXpub: parsedCosmosExport.xpub,
-        publicKey: parsedCosmosExport.publicKey || undefined,
-        accountIndex: parsedCosmosExport.accountIndex,
-        deviceId: `cosmos-${Date.now()}`,
-      };
-      await newZignerZafuKey(zignerData, walletLabel || 'zigner cosmos');
-    } else {
+    const adds = pendingZignerAdds({
+      walletImport,
+      zcashWalletImport,
+      parsedCosmosExport,
+      walletLabel,
+    });
+    if (adds.length === 0) {
       throw new Error('no zigner wallet data found');
     }
+    // password is already set, so both adds can use newZignerZafuKey; the
+    // second is told the first vault id so it joins even without a ZID
+    await addPendingZignerWallets(adds, newZignerZafuKey);
 
     clearZignerState();
   };

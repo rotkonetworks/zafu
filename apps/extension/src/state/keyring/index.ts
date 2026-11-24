@@ -77,7 +77,7 @@ import { keySwap, keyUse } from '../keyring-lock';
 import { migrateOrphanedMultisigs, hasOrphanedMultisigs } from './migration';
 
 // zigner same-device vault merging (one device = one wallet, even across networks)
-import { mergeTargetFor, mergeZignerCapabilities } from './zigner-merge';
+import { resolveMergeTarget, mergeZignerCapabilities } from './zigner-merge';
 
 export * from './types';
 export * from './network-loader';
@@ -107,8 +107,12 @@ export interface KeyRingSlice {
 
   /** `generated`: zafu made this phrase just now (its penumbra sync starts at the tip) */
   newMnemonicKey: (mnemonic: string, name: string, generated?: boolean) => Promise<string>;
-  newZignerZafuKey: (data: ZignerZafuImport, name: string) => Promise<string>;
-  addZignerUnencrypted: (data: ZignerZafuImport, name: string) => Promise<string>;
+  newZignerZafuKey: (data: ZignerZafuImport, name: string, joinVaultId?: string) => Promise<string>;
+  addZignerUnencrypted: (
+    data: ZignerZafuImport,
+    name: string,
+    joinVaultId?: string,
+  ) => Promise<string>;
   /** add a Ledger cold-signer account (flag-gated hardware-wallet scaffolding).
    *  zcash-only single-signer; reuses the zigner-zafu vault path with
    *  `coldSignerType: 'ledger'`, mirroring the Keystone precedent. */
@@ -513,14 +517,15 @@ export const createKeyRingSlice =
         return vaultId;
       },
 
-      newZignerZafuKey: async (data: ZignerZafuImport, name: string) => {
+      newZignerZafuKey: async (data: ZignerZafuImport, name: string, joinVaultId?: string) => {
         // same device+account (by ZID), or a viewing key this signer holds:
         // add to that wallet instead of creating a separate one
         const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-        const mergeTarget = mergeTargetFor(
+        const mergeTarget = resolveMergeTarget(
           existingVaults,
           data.viewingKey ? ((await local.get('zcashWallets')) ?? []) : [],
           data,
+          joinVaultId,
         );
         if (mergeTarget) {
           const mergedId = await mergeZignerCapabilities(mergeTarget, data, local, session);
@@ -579,17 +584,18 @@ export const createKeyRingSlice =
         return vaultId;
       },
 
-      addZignerUnencrypted: async (data: ZignerZafuImport, name: string) => {
+      addZignerUnencrypted: async (data: ZignerZafuImport, name: string, joinVaultId?: string) => {
         const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
 
         // ── merge: the same zigner device importing a different network (by
         // ZID + accountIndex), or a signer for a viewing key already here,
         // joins that wallet instead of creating a separate vault. keeps "one
         // device = one wallet" across network imports.
-        const mergeTarget = mergeTargetFor(
+        const mergeTarget = resolveMergeTarget(
           existingVaults,
           data.viewingKey ? ((await local.get('zcashWallets')) ?? []) : [],
           data,
+          joinVaultId,
         );
         if (mergeTarget) {
           const mergedVaultId = await mergeZignerCapabilities(mergeTarget, data, local, session);

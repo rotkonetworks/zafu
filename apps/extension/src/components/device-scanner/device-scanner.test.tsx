@@ -80,6 +80,7 @@ describe('device scanner', () => {
     expect(keyRing.addZignerUnencrypted).toHaveBeenLastCalledWith(
       expect.objectContaining({ fullViewingKey: 'penumbrafullviewingkey1example' }),
       'zigner penumbra',
+      undefined,
     );
     expect(onDone).not.toHaveBeenCalled();
 
@@ -89,7 +90,11 @@ describe('device scanner', () => {
     expect(keyRing.addZignerUnencrypted).toHaveBeenLastCalledWith(
       expect.objectContaining({ viewingKey: 'uview1example', zidPublicKey: zid }),
       'zigner zcash',
+      'v1',
     );
     expect(onDone).toHaveBeenCalledTimes(1);
+    // the second add is told the vault the first created, so it can join
+    // even if a code has no ZID
+    expect(keyRing.addZignerUnencrypted.mock.calls[1]![2]).toBe('v1');
   });
 });
