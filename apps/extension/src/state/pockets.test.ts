@@ -19,7 +19,6 @@ import {
   forgetWallet,
   hiddenPockets,
   hidePocket,
-  MAX_POCKETS,
   mergePocketBooks,
   penumbraAccountRows,
   pocketOwner,
@@ -119,12 +118,12 @@ describe('pocket book', () => {
     expect(book['z']!.active).toBe(0);
   });
 
-  test('add stops at the cap', () => {
+  test('add has no cap', () => {
     let book: PocketBook = {};
-    for (let i = 1; i < MAX_POCKETS; i++) {
+    for (let i = 1; i <= 20; i++) {
       book = addPocket(book, 'z', `p${i}`);
     }
-    expect(() => addPocket(book, 'z', 'one too many')).toThrow(/at most/);
+    expect(book['z']!.pockets.map(p => p.account)).toEqual([...Array(21).keys()]);
   });
 
   test('rename trims, ignores blanks and unknown pockets', () => {
@@ -509,7 +508,7 @@ describe('penumbra accounts beyond the pockets', () => {
     { account: 4, name: 'old', hidden: true },
   ];
 
-  test('every funded account is listed, past MAX_POCKETS and outside the pocket book', () => {
+  test('every funded account is listed, outside the pocket book', () => {
     const rows = penumbraAccountRows(pockets, [4173902, 0, 3, 100055], 0);
     expect(rows).toEqual([
       { account: 0, name: 'main', pocket: true },

@@ -32,16 +32,7 @@ import { SettingsWallets } from './settings-wallets';
 describe('settings > wallets: import a recovery phrase', () => {
   let root: Root;
   const render = async (types: string[]) => {
-    state = {
-      keyRing: {
-        keyInfos: types.map((type, i) => ({
-          id: `${i}`,
-          name: type,
-          type,
-          insensitive: type === 'mnemonic' ? {} : { supportedNetworks: ['zcash'] },
-        })),
-      },
-    };
+    state = { keyRing: { keyInfos: types.map((type, i) => ({ id: `${i}`, name: type, type })) } };
     const container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
@@ -50,9 +41,9 @@ describe('settings > wallets: import a recovery phrase', () => {
       await Promise.resolve();
     });
   };
-  const row = (label = 'import a recovery phrase') =>
+  const row = () =>
     [...document.querySelectorAll<HTMLElement>('button, [role="button"]')].find(el =>
-      el.textContent?.includes(label),
+      el.textContent?.includes('import a recovery phrase'),
     );
   afterEach(() => {
     act(() => root.unmount());
@@ -66,25 +57,9 @@ describe('settings > wallets: import a recovery phrase', () => {
     expect(openPageInTab).toHaveBeenCalledWith(PagePath.IMPORT_SEED_PHRASE, true);
   });
 
-  it('opens beside a phrase wallet, as a second wallet for each network', async () => {
-    await render(['mnemonic']);
+  it('opens beside any number of wallets of any kind', async () => {
+    await render(['mnemonic', 'mnemonic', 'zigner-zafu', 'frost-multisig']);
     act(() => row()?.click());
     expect(openPageInTab).toHaveBeenCalledWith(PagePath.IMPORT_SEED_PHRASE, true);
-  });
-
-  it('greys out and says why once a network has two wallets', async () => {
-    await render(['zigner-zafu', 'mnemonic']);
-    expect(row()?.textContent).toContain('zafu holds up to two zcash wallets');
-    act(() => row()?.click());
-    expect(openPageInTab).not.toHaveBeenCalled();
-    // penumbra still has room, so a signer can still be scanned
-    expect(row('scan a signer')?.textContent).toContain('zigner, keystone');
-  });
-
-  it('greys out scanning only once every network has two wallets', async () => {
-    await render(['mnemonic', 'mnemonic']);
-    expect(row('scan a signer')?.textContent).toContain(
-      'zafu holds up to two zcash and penumbra wallets',
-    );
   });
 });

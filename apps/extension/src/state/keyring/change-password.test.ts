@@ -12,13 +12,6 @@ import type { WalletJson } from '@repo/wallet';
 import { Key } from '@repo/encryption/key';
 import { Box } from '@repo/encryption/box';
 
-// one of every kind at once is more zcash wallets than a profile may add;
-// the limit has its own tests (wallet-limit.test.ts)
-vi.mock('./wallet-limit', async importOriginal => ({
-  ...(await importOriginal<object>()),
-  assertWalletRoom: () => undefined,
-}));
-
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, unknown> }).mock;
 

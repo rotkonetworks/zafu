@@ -14,7 +14,7 @@ import { Input } from '@repo/ui/components/ui/input';
 import { useStore } from '../state';
 import { selectZcashBackend, selectZcashEndpoint } from '../state/networks';
 import { selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
-import { MAX_POCKETS, pocketOwner, pocketsOf, zignerPockets } from '../state/pockets';
+import { pocketOwner, pocketsOf, zignerPockets } from '../state/pockets';
 import { parseZcashUr } from '@repo/wallet/ur-parser';
 import { QrScanner } from '../shared/components/qr-scanner';
 import { zcashClient } from '../state/keyring/zcash-backend';
@@ -49,7 +49,6 @@ export const NewPocketSheet = ({
   const owner = selectedKeyInfo ? pocketOwner(selectedKeyInfo) : undefined;
   const existing = owner ? pocketsOf(book, owner) : [];
   const nextAccount = existing.length > 0 ? Math.max(...existing.map(p => p.account)) + 1 : 1;
-  const atLimit = !rename && existing.length >= MAX_POCKETS;
 
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -152,7 +151,7 @@ export const NewPocketSheet = ({
       }
       return;
     }
-    if (!owner || atLimit) {
+    if (!owner) {
       return;
     }
     setBusy(true);
@@ -172,78 +171,72 @@ export const NewPocketSheet = ({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title={rename ? 'rename' : 'new pocket'}>
-      {atLimit ? (
-        <p className='text-label text-fg-muted lowercase'>
-          this wallet has {MAX_POCKETS} pockets, the most it can hold.
-        </p>
-      ) : (
-        <div className='flex flex-col gap-3'>
-          <label htmlFor='new-pocket-name' className='text-label text-fg-muted lowercase'>
-            name
-          </label>
-          <Input
-            id='new-pocket-name'
-            type='text'
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                void handleSubmit();
-              }
-            }}
-            autoFocus
-            placeholder={rename ? undefined : `pocket ${nextAccount}`}
-          />
-          {zigner && !rename && (
-            <p className='text-label text-fg-muted lowercase'>
-              on zigner: zcash key · account {nextAccount} · scan its viewing key
-            </p>
-          )}
-          {scanning && (
-            <>
-              <QrScanner
-                inline
-                onScan={raw => void handleZignerKey(raw)}
-                onError={e => setError(e)}
-                onClose={() => setScanning(false)}
-              />
-              <Input
-                aria-label='or paste the code'
-                placeholder='or paste the code'
-                value={pasted}
-                onChange={e => setPasted(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && pasted.trim()) {
-                    e.preventDefault();
-                    void handleZignerKey(pasted);
-                  }
-                }}
-              />
-            </>
-          )}
-          {error && <p className='text-label text-hanko-light lowercase'>{error}</p>}
-          <Button
-            onClick={() => void handleSubmit()}
-            loading={busy}
-            disabled={rename ? busy : !owner || scanning}
-          >
-            {rename ? 'rename' : zigner ? 'scan zigner' : 'create pocket'}
-          </Button>
-          {rename?.pocket && (
-            <>
-              {holds && (
-                <p className='text-label text-fg-muted lowercase'>
-                  it still has {holds} zec · it stays yours
-                </p>
-              )}
-              <Button variant='quiet' onClick={() => void handleHide()} disabled={busy}>
-                hide this pocket
-              </Button>
-            </>
-          )}
-        </div>
-      )}
+      <div className='flex flex-col gap-3'>
+        <label htmlFor='new-pocket-name' className='text-label text-fg-muted lowercase'>
+          name
+        </label>
+        <Input
+          id='new-pocket-name'
+          type='text'
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              void handleSubmit();
+            }
+          }}
+          autoFocus
+          placeholder={rename ? undefined : `pocket ${nextAccount}`}
+        />
+        {zigner && !rename && (
+          <p className='text-label text-fg-muted lowercase'>
+            on zigner: zcash key · account {nextAccount} · scan its viewing key
+          </p>
+        )}
+        {scanning && (
+          <>
+            <QrScanner
+              inline
+              onScan={raw => void handleZignerKey(raw)}
+              onError={e => setError(e)}
+              onClose={() => setScanning(false)}
+            />
+            <Input
+              aria-label='or paste the code'
+              placeholder='or paste the code'
+              value={pasted}
+              onChange={e => setPasted(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && pasted.trim()) {
+                  e.preventDefault();
+                  void handleZignerKey(pasted);
+                }
+              }}
+            />
+          </>
+        )}
+        {error && <p className='text-label text-hanko-light lowercase'>{error}</p>}
+        <Button
+          onClick={() => void handleSubmit()}
+          loading={busy}
+          disabled={rename ? busy : !owner || scanning}
+        >
+          {rename ? 'rename' : zigner ? 'scan zigner' : 'create pocket'}
+        </Button>
+        {rename?.pocket && (
+          <>
+            {holds && (
+              <p className='text-label text-fg-muted lowercase'>
+                it still has {holds} zec · it stays yours
+              </p>
+            )}
+            <Button variant='quiet' onClick={() => void handleHide()} disabled={busy}>
+              hide this pocket
+            </Button>
+          </>
+        )}
+      </div>
     </Sheet>
   );
 };

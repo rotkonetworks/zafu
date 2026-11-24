@@ -19,11 +19,6 @@ import {
   type NetworkType,
 } from '../../../state/keyring';
 import { keyInfoSupportsNetwork } from '../../../state/keyring/vault-ops';
-import {
-  fullNetworks,
-  PHRASE_NETWORKS,
-  walletLimitLine,
-} from '../../../state/keyring/wallet-limit';
 import { walletsSelector, type ZcashWalletJson } from '../../../state/wallets';
 import { Section, SettingsScreen } from './settings-screen';
 import { openPageInTab } from '../../../utils/popup-detection';
@@ -65,13 +60,6 @@ export const SettingsWallets = () => {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const zcashOn = enabledNetworks.includes('zcash');
-  // at the limit an add is refused before it starts, never after a scan
-  const fullFor = (networks: readonly string[]) => fullNetworks(keyInfos, networks);
-  const limitLine = (full: string[]) => (full.length ? walletLimitLine(full) : undefined);
-  const phraseFull = fullFor(PHRASE_NETWORKS);
-  const zcashFull = fullFor(['zcash']);
-  // a signer's code is for one network: scanning stays open while either has room
-  const signerFull = phraseFull.length === PHRASE_NETWORKS.length ? phraseFull : [];
   const open = keyInfos.find(v => v.id === openId);
   const held = (v: KeyInfo) => ({
     penumbra: penumbraWallets.some(w => w.vaultId === v.id),
@@ -107,8 +95,7 @@ export const SettingsWallets = () => {
                 type='screen'
                 icon='i-ph-scan'
                 label='scan a signer'
-                description={limitLine(signerFull) ?? 'zigner, keystone'}
-                disabled={!!signerFull.length}
+                description='zigner, keystone'
                 onPress={() => navigate(PopupPath.SETTINGS_CONNECT_DEVICE)}
               />
               {zcashOn && LEDGER_TRANSPARENT_ENABLED && (
@@ -116,20 +103,17 @@ export const SettingsWallets = () => {
                   type='screen'
                   icon='i-ph-usb'
                   label='connect ledger'
-                  description={limitLine(zcashFull) ?? 'zcash'}
-                  disabled={!!zcashFull.length}
+                  description='zcash'
                   // webhid dies with the popup, so the ledger flow runs in a tab
                   onPress={() => void openPageInTab(PagePath.CONNECT_LEDGER, true)}
                 />
               )}
               {/* the options page is the apps page once any wallet exists, so the
-                  import opens on its own screen; a phrase holds every network */}
+                  import opens on its own screen */}
               <Row
                 type='screen'
                 icon='i-ph-key'
                 label='import a recovery phrase'
-                description={limitLine(phraseFull)}
-                disabled={!!phraseFull.length}
                 onPress={() => void openPageInTab(PagePath.IMPORT_SEED_PHRASE, true)}
               />
               {zcashOn && (
@@ -137,8 +121,7 @@ export const SettingsWallets = () => {
                   type='screen'
                   icon='i-ph-eye'
                   label='add a viewing key'
-                  description={limitLine(zcashFull) ?? 'watch only'}
-                  disabled={!!zcashFull.length}
+                  description='watch only'
                   preload={PopupPath.SETTINGS_ADD_VIEWING_KEY}
                   onPress={() => navigate(PopupPath.SETTINGS_ADD_VIEWING_KEY)}
                 />
