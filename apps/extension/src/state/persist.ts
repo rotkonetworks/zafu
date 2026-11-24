@@ -1,6 +1,7 @@
 import { storedList } from '@repo/storage-chrome/stored-list';
 import { StateCreator, StoreMutatorIdentifier } from 'zustand';
 import { AllSlices } from '.';
+import { liveNetworks } from '../config/networks';
 import { produce } from 'immer';
 
 import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
@@ -327,7 +328,9 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         const stored = changes.enabledNetworks.newValue;
         set(
           produce((state: AllSlices) => {
-            state.keyRing.enabledNetworks = stored ?? [];
+            const { enabled, active } = liveNetworks(stored ?? [], state.keyRing.activeNetwork);
+            state.keyRing.enabledNetworks = enabled;
+            state.keyRing.activeNetwork = active;
           }),
         );
       }

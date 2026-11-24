@@ -4,6 +4,7 @@
  */
 
 import type { NetworkType } from '../state/keyring';
+import { IS_BETA_BUILD } from './feature-flags';
 import {
   COSMOS_CHAINS,
   getCosmosChain,
@@ -226,7 +227,8 @@ const WRITTEN: Record<string, NetworkConfig> = {
     focusColor: 'focus:border-teal-200',
     transparent: true,
     // the ramp only: USDC in, out and across. No orders. Hot wallets sign.
-    launched: true,
+    // The beta build only, for now: prod neither lists it nor reaches its api.
+    launched: IS_BETA_BUILD,
     beta: true,
     features: {
       stake: false,
@@ -341,6 +343,21 @@ export const hasFeature = (
   network: NetworkType,
   feature: keyof NetworkConfig['features'],
 ): boolean => getNetwork(network).features[feature];
+
+/**
+ * The stored networks this build offers, and the active one if it is among
+ * them (else the first). A network turned on before it was withdrawn from a
+ * build (hyperliquid in prod) is not shown, synced or contacted.
+ */
+export const liveNetworks = (
+  enabled: readonly string[],
+  active: string,
+): { enabled: NetworkType[]; active: NetworkType } => {
+  // unknown names (a stale or removed network) are not offered either
+  const offered = (n: string) => !!NETWORKS[n]?.launched;
+  const live = enabled.filter(offered);
+  return { enabled: live, active: offered(active) ? active : (live[0] ?? '') };
+};
 
 /**
  * launched top-level networks (no parent) - the main network picker. A beta

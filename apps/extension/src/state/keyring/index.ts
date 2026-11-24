@@ -7,6 +7,7 @@
  * storage effects in wallet-entries.
  */
 
+import { liveNetworks } from '../../config/networks';
 import { Box } from '@repo/encryption/box';
 import { AllSlices, SliceCreator } from '..';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
@@ -260,8 +261,12 @@ export const createKeyRingSlice =
         const keyPrint = await local.get('passwordKeyPrint');
         const rawVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         const selectedId = await local.get('selectedVaultId');
-        const enabledNetworks = (await local.get('enabledNetworks')) ?? [];
-        const activeNetwork = (await local.get('activeNetwork')) ?? enabledNetworks[0] ?? '';
+        const storedEnabled = (await local.get('enabledNetworks')) ?? [];
+        // only what this build offers: a network it withdrew is not shown or synced
+        const { enabled: enabledNetworks, active: activeNetwork } = liveNetworks(
+          storedEnabled,
+          (await local.get('activeNetwork')) ?? storedEnabled[0] ?? '',
+        );
         // wallets are encrypted - read via encrypted path if session key available
         const initSessionKey = await session.get('passwordKey');
 
