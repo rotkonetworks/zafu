@@ -21,6 +21,7 @@ const removed = vi.hoisted(() => {
 const needsLogin = vi.hoisted(() => ({ throwIfNeedsLogin: vi.fn(() => Promise.resolve()) }));
 vi.mock('../../needs-login', () => needsLogin);
 
+import { suggestedPrefix } from '../keplr';
 import { keplrMessageListener } from './keplr';
 
 const sender = (origin: string): chrome.runtime.MessageSender => ({
@@ -103,15 +104,91 @@ describe('ZafuKeplr origin and result senders', () => {
       {
         type: 'ZafuKeplr',
         method: 'experimentalSuggestChain',
-        params: { chainInfo: { chainId: 'x' } },
+        params: { chainInfo: { chainId: 'x', bech32Config: { bech32PrefixAccAddr: 'xchain' } } },
         origin: 'https://app.skip.build',
       },
       sender('https://evil.example'),
     );
     expect(res).toMatchObject({ ok: true });
     const stored = await chrome.storage.session.get(null);
-    expect(stored).toHaveProperty(['keplrSuggested:https://evil.example']);
-    expect(stored).not.toHaveProperty(['keplrSuggested:https://app.skip.build']);
+    expect(stored).toHaveProperty(['keplrSuggested:https://evil.example:x']);
+    expect(stored).not.toHaveProperty(['keplrSuggested:https://app.skip.build:x']);
+  });
+
+  it('enables a suggested chain with its account prefix, never a built-in one', async () => {
+    const origin = 'https://suggest.example';
+    const s = sender(origin);
+    (chrome.runtime as { getURL?: (p: string) => string }).getURL = p =>
+      `chrome-extension://${chrome.runtime.id}/${p}`;
+    const suggest = (chainId: string, bech32PrefixAccAddr: string) =>
+      call(
+        {
+          type: 'ZafuKeplr',
+          method: 'experimentalSuggestChain',
+          params: { chainInfo: { chainId, bech32Config: { bech32PrefixAccAddr } } },
+        },
+        s,
+      );
+    expect(await suggest('examplechain-1', 'example')).toMatchObject({ ok: true });
+    expect(await suggest('noble-1', 'example')).toMatchObject({ ok: true });
+    expect(await suggest('otherchain-1', 'Not A Prefix')).toMatchObject({ ok: true });
+    const enable = call(
+      {
+        type: 'ZafuKeplr',
+        method: 'enable',
+        params: { chainIds: ['examplechain-1', 'noble-1', 'otherchain-1'] },
+      },
+      s,
+    );
+    let key = '';
+    await vi.waitFor(async () => {
+      [key = ''] = Object.keys(await chrome.storage.session.get(null)).filter(k =>
+        k.startsWith('keplrApproval:'),
+      );
+      expect(key).not.toBe('');
+    });
+    // the built-in chain keeps its own prefix, and a malformed one is not used
+    expect((await chrome.storage.session.get(key))[key]).toHaveProperty('prefixes', {
+      'examplechain-1': 'example',
+    });
+    keplrMessageListener(
+      {
+        type: 'zafu_keplr_result',
+        requestId: key.slice('keplrApproval:'.length),
+        result: { approved: false },
+      },
+      {
+        id: chrome.runtime.id,
+        origin: `chrome-extension://${chrome.runtime.id}`,
+        url: `chrome-extension://${chrome.runtime.id}/popup.html`,
+      },
+      vi.fn(),
+    );
+    expect(await enable).toMatchObject({ ok: false });
+  });
+
+  it('keeps only the checked prefix, never the whole suggestion', async () => {
+    const origin = 'https://keep.example';
+    await call(
+      {
+        type: 'ZafuKeplr',
+        method: 'experimentalSuggestChain',
+        params: {
+          chainInfo: { chainId: 'kept-1', bech32Config: { bech32PrefixAccAddr: 'kept' }, rpc: 'x' },
+        },
+      },
+      sender(origin),
+    );
+    const k = `keplrSuggested:${origin}:kept-1`;
+    expect((await chrome.storage.session.get(k))[k]).toBe('kept');
+  });
+
+  it('refuses a suggested chain without a chain id', async () => {
+    const res = await call(
+      { type: 'ZafuKeplr', method: 'experimentalSuggestChain', params: { chainInfo: {} } },
+      sender('https://suggest.example'),
+    );
+    expect(res).toMatchObject({ ok: false });
   });
 
   it('drops an approval result that a content script sends', () => {
@@ -448,5 +525,45 @@ describe('ZafuKeplr approval windows', () => {
       vi.fn(),
     );
     expect(await second).toMatchObject({ ok: false });
+  });
+});
+
+describe('suggestedPrefix: zafu only gives a key it can stand behind', () => {
+  const info = (over: Record<string, unknown> = {}) => ({
+    chainId: 'some-1',
+    bech32Config: { bech32PrefixAccAddr: 'some' },
+    ...over,
+  });
+
+  it('takes a plain cosmos prefix', () => {
+    expect(suggestedPrefix(info())).toBe('some');
+    expect(suggestedPrefix(info({ bip44: { coinType: 118 } }))).toBe('some');
+  });
+
+  it('refuses another coin type: the key would be derived on the wrong path', () => {
+    expect(suggestedPrefix(info({ bip44: { coinType: 60 } }))).toBeUndefined();
+  });
+
+  it('refuses an ethermint chain: its addresses need an eth key', () => {
+    expect(
+      suggestedPrefix(info({ features: ['eth-address-gen', 'eth-key-sign'] })),
+    ).toBeUndefined();
+  });
+
+  it('refuses a prefix a built-in chain uses: a familiar address from the wrong key', () => {
+    for (const prefix of ['inj', 'osmo', 'noble', 'cosmos']) {
+      expect(
+        suggestedPrefix(info({ bech32Config: { bech32PrefixAccAddr: prefix } })),
+      ).toBeUndefined();
+    }
+  });
+
+  it('refuses a prefix too long for a 20-byte bech32 address', () => {
+    expect(suggestedPrefix(info({ bech32Config: { bech32PrefixAccAddr: 'a'.repeat(51) } }))).toBe(
+      'a'.repeat(51),
+    );
+    expect(
+      suggestedPrefix(info({ bech32Config: { bech32PrefixAccAddr: 'a'.repeat(52) } })),
+    ).toBeUndefined();
   });
 });

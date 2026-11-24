@@ -47,6 +47,8 @@ export interface KeplrApprovalRequest {
   signDoc?: unknown;
   favIconUrl?: string;
   title?: string;
+  /** enable: account prefixes the site suggested, only for chains zafu doesn't know */
+  prefixes?: Record<string, string>;
 }
 
 /** the chain id a sign doc commits to: amino `chain_id`, direct `chainId` */
@@ -64,6 +66,42 @@ export const signedChainId = (
 export const keplrApprovalKey = (requestId: string): string => `keplrApproval:${requestId}`;
 export const keplrKeyCacheKey = (origin: string, chainId: string): string =>
   `keplrKey:${origin}:${chainId}`;
+export const keplrSuggestedKey = (origin: string, chainId: string): string =>
+  `keplrSuggested:${origin}:${chainId}`;
+
+/**
+ * The account prefix an experimentalSuggestChain payload names, when zafu can
+ * give that chain a key: only ever for a chain id zafu doesn't know (a
+ * built-in chain keeps its own prefix). The suggestion comes from the site, so
+ * it is refused when zafu's key would be the wrong one for it:
+ * - a coin type other than 118, or an Ethermint chain (eth key features):
+ *   zafu derives a cosmos secp256k1 key, and an address from it on such a
+ *   chain would look right but could not move what is sent there;
+ * - a prefix a built-in chain uses (`inj`, `osmo`, ...): it would show a
+ *   familiar-looking address from the wrong key;
+ * - a prefix too long for a 20-byte address within bech32's 90 characters.
+ */
+export const suggestedPrefix = (chainInfo: unknown): string | undefined => {
+  const info = chainInfo as
+    | {
+        bech32Config?: { bech32PrefixAccAddr?: unknown };
+        bip44?: { coinType?: unknown };
+        features?: unknown;
+      }
+    | undefined;
+  const prefix = info?.bech32Config?.bech32PrefixAccAddr;
+  const coinType = info?.bip44?.coinType ?? 118;
+  const features = Array.isArray(info?.features) ? info.features : [];
+  const ethKeys = features.some(f => typeof f === 'string' && f.startsWith('eth-'));
+  const builtIn = Object.values(COSMOS_CHAINS).some(c => c.bech32Prefix === prefix);
+  return typeof prefix === 'string' &&
+    /^[a-z][a-z0-9]{0,50}$/.test(prefix) &&
+    coinType === 118 &&
+    !ethKeys &&
+    !builtIn
+    ? prefix
+    : undefined;
+};
 
 /** the cached, derived key for one origin+chain (base64 binary) */
 export interface KeplrWireKey {

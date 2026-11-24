@@ -235,10 +235,9 @@ export const AnimatedQrScanner = ({
         stream.getTracks().forEach(t => t.stop());
         return;
       }
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
-
-      const controls = await reader.decodeFromVideoDevice(undefined, videoRef.current, result => {
+      // decode this stream, from the camera picked above: given no device,
+      // decodeFromVideoDevice opens a second, default one in its place
+      const controls = await reader.decodeFromStream(stream, videoRef.current, result => {
         if (!result || completedRef.current) {
           return;
         }
@@ -382,14 +381,10 @@ export const AnimatedQrScanner = ({
         }
       });
 
-      // unmounted/superseded while decodeFromVideoDevice was awaiting: tear the
-      // decoder + camera stream down instead of leaving them running detached.
+      // unmounted/superseded while decodeFromStream was awaiting: stopping the
+      // decoder also stops its stream and clears the video, so nothing runs detached
       if (isStale()) {
         controls.stop();
-        if (videoRef.current?.srcObject) {
-          videoRef.current.srcObject.getTracks().forEach(t => t.stop());
-          videoRef.current.srcObject = null;
-        }
         return;
       }
       controlsRef.current = controls;

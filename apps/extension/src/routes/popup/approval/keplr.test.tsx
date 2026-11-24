@@ -24,6 +24,11 @@ vi.mock('../../../state/keyring', () => ({
 vi.mock('../../../shared/components/origin-icon', () => ({ OriginIcon: () => null }));
 vi.mock('../../../shared/components/qr-display', () => ({ QrDisplay: () => null }));
 vi.mock('../../../shared/components/qr-scanner', () => ({ QrScanner: () => null }));
+const derive = vi.hoisted(() => vi.fn((_m: string, prefix: string) => ({ prefix })));
+vi.mock('@repo/wallet/networks/cosmos/signer', async importOriginal => ({
+  ...(await importOriginal<object>()),
+  deriveKeplrWireKey: derive,
+}));
 
 const { KeplrApproval } = await import('./keplr');
 
@@ -124,5 +129,25 @@ describe('keplr approval', () => {
       },
     });
     expect(host.textContent).toContain('on osmosis-1');
+  });
+
+  it('connects a suggested chain with its prefix, and a built-in chain with its own', async () => {
+    vi.spyOn(window, 'close').mockImplementation(() => undefined);
+    await show({
+      method: 'enable',
+      origin: 'https://dapp.example',
+      chainId: 'examplechain-1',
+      signDoc: { chainIds: ['examplechain-1', 'noble-1'] },
+      prefixes: { 'examplechain-1': 'example', 'noble-1': 'example' },
+    });
+    expect(host.textContent).toContain('examplechain-1 (example1…), noble-1 (noble1…)');
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    await act(async () => {
+      [...host.querySelectorAll('button')].find(b => b.textContent === 'connect')!.click();
+    });
+    await vi.waitFor(() => expect(window.close).toHaveBeenCalled());
+    expect(derive.mock.calls.map(c => c[1])).toEqual(['example', 'noble']);
   });
 });

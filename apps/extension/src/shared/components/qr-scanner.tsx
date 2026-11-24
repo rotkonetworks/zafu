@@ -128,20 +128,28 @@ export const QrScanner = ({
         stream.getTracks().forEach(t => t.stop());
         return;
       }
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
-
-      const controls = await reader.decodeFromVideoDevice(
-        undefined, // use the stream already attached to the video element
-        videoRef.current,
-        result => {
+      // decode this stream, from the camera picked above: given no device,
+      // decodeFromVideoDevice opens a second, default one in its place
+      let controls: { stop: () => void };
+      try {
+        controls = await reader.decodeFromStream(stream, videoRef.current, result => {
           if (result && !scannedRef.current) {
             scannedRef.current = true;
             stopScanning();
             onScanRef.current(resultToHex(result.getText()));
           }
-        },
-      );
+        });
+      } catch (err) {
+        // the decode never started: the camera this stream opened is turned off
+        stream.getTracks().forEach(t => t.stop());
+        throw err;
+      }
+      // closed while the decode was starting: nothing may keep the camera on
+      if (!mountedRef.current) {
+        controls.stop();
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
 
       controlsRef.current = controls;
       startingRef.current = false;
@@ -203,8 +211,8 @@ export const QrScanner = ({
   };
 
   // corner bracket color
-  const cornerColor = inline ? 'border-yellow-500' : 'border-green-500';
-  const scanLineColor = inline ? 'bg-yellow-500' : 'bg-green-500';
+  const cornerColor = 'border-zigner-gold';
+  const scanLineColor = 'bg-zigner-gold';
 
   // shared camera viewport
   const cameraView = (
@@ -312,7 +320,7 @@ export const QrScanner = ({
             <span className='i-ph-x h-3.5 w-3.5' />
           </button>
         </div>
-        <div className='relative aspect-square w-full overflow-hidden border border-yellow-500/40 bg-black'>
+        <div className='relative aspect-square w-full overflow-hidden border border-zigner-gold/40 bg-black'>
           {cameraView}
         </div>
         {description && <p className='text-label text-fg-muted text-center'>{description}</p>}
@@ -340,7 +348,11 @@ export const QrScanner = ({
         </button>
       </div>
 
-      <div className='flex-1 relative min-h-0 overflow-hidden'>{cameraView}</div>
+      <div className='flex flex-1 min-h-0 items-center justify-center p-4'>
+        <div className='relative aspect-square w-full max-w-sm overflow-hidden border border-zigner-gold/40'>
+          {cameraView}
+        </div>
+      </div>
 
       {isScanning && (
         <div className='flex-none p-4 bg-black text-center'>

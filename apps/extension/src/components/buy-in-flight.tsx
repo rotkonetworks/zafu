@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { PendingLine } from './in-flight-card';
 import { cardLines, type OpenBuy } from '../buy/machine';
 import { onOpenBuyChange, readOpenBuy } from '../buy/store';
-import { BUY_PRELOAD, openBuyPage } from '../buy/open';
+import { BUY_PRELOAD, resumeBuyPage } from '../buy/open';
 
 export const BuyInFlight = () => {
   const [buy, setBuy] = useState<OpenBuy | null>(null);
@@ -32,7 +32,7 @@ export const BuyInFlight = () => {
   }
   const line = cardLines(buy, now);
   return (
-    <button type='button' data-preload={BUY_PRELOAD} onClick={openBuyPage} className='text-left'>
+    <button type='button' data-preload={BUY_PRELOAD} onClick={resumeBuyPage} className='text-left'>
       <PendingLine tone={line.tone} icon='i-zafu-enso' title={line.title} status={line.status} />
     </button>
   );

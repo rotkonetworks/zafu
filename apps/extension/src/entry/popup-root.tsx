@@ -22,6 +22,7 @@ import { AppErrorBoundary, reportRenderError } from '../components/error-boundar
 import { loadBalancesSnapshot } from '../hooks/balances-snapshot';
 import { balancesQueryKey } from '../hooks/penumbra-balances';
 import { EgressAskSheet } from '../net/egress-ask-sheet';
+import { BuyHotWalletSheet } from '../components/buy-hot-wallet-sheet';
 import { NymHeldSheet } from '../net/nym-held-sheet';
 import { installRegistryIcons } from '../shared/components/registry-icons';
 import { trackActivity } from '../state/idle-activity';
@@ -132,6 +133,7 @@ const MainPopup = () => {
         <RouterProvider router={popupRouter} />
         <EgressAskSheet />
         <NymHeldSheet />
+        <BuyHotWalletSheet />
       </QueryClientProvider>
     </StrictMode>
   );
