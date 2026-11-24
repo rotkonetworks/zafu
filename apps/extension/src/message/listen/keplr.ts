@@ -154,8 +154,8 @@ async function suggestedPrefixes(origin: string, chainIds: string[]) {
   const prefixes: Record<string, string> = {};
   for (const cid of chainIds.filter(cid => !cosmosChainIdFromKeplr(cid))) {
     const k = keplrSuggestedKey(origin, cid);
-    const prefix = suggestedPrefix((await chrome.storage.session.get(k))[k]);
-    if (prefix) {
+    const prefix: unknown = (await chrome.storage.session.get(k))[k];
+    if (typeof prefix === 'string') {
       prefixes[cid] = prefix;
     }
   }
@@ -246,7 +246,11 @@ async function handleMethod(
       if (typeof chainId !== 'string' || !chainId) {
         throw new Error('a suggested chain needs a chain id');
       }
-      await chrome.storage.session.set({ [keplrSuggestedKey(origin, chainId)]: chainInfo });
+      // only the checked prefix is kept, never the site's whole chain description
+      const prefix = suggestedPrefix(chainInfo);
+      if (prefix) {
+        await chrome.storage.session.set({ [keplrSuggestedKey(origin, chainId)]: prefix });
+      }
       return {};
     }
 
