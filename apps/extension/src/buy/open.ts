@@ -30,7 +30,23 @@ export const preloadBuyPage = (): void => {
   }
 };
 
+/** while the popup is open: shows why a buy can't start here, and says whether it did */
+let buyGate: (() => boolean) | undefined;
+
+export const setBuyGate = (gate: () => boolean): (() => void) => {
+  buyGate = gate;
+  return () => {
+    if (buyGate === gate) {
+      buyGate = undefined;
+    }
+  };
+};
+
 export const openBuyPage = (): void => {
+  // buy.html can only say "choose another wallet"; the popup says it in place
+  if (betaFeatures() && buyGate?.()) {
+    return;
+  }
   void chrome.tabs.create({
     url: betaFeatures() ? chrome.runtime.getURL('buy.html') : PEER_BUY_ZEC_URL,
   });
