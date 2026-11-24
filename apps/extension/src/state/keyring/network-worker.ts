@@ -36,6 +36,7 @@ import {
   type SealedVault,
   type WorkerKey,
 } from '../../shared/vault-seal';
+import { reviveCborPayload } from '../../shared/cbor-wire';
 import type { DepositPlan, DepositRequest, MoveCoin } from '../../workers/transparent-deposit';
 import type { StopOutcome } from '../../workers/build-abort';
 import type { DoorPakeCall } from '../../workers/door-pake';
@@ -452,7 +453,7 @@ const handleWorkerMessage = (
     if (msg.error) {
       callback.reject(new Error(msg.error));
     } else {
-      callback.resolve(msg.payload);
+      callback.resolve(reviveCborPayload(msg.payload));
     }
   }
 };
@@ -1390,6 +1391,8 @@ export const sendTransparentDepositInWorker = async (
 export interface ColdDepositRequest {
   pcztHex: string;
   urFrames: string[];
+  /** hex on the wire; revived to `cborData` when the popup receives the result */
+  cborHex?: string;
   cborData: Uint8Array;
   cborBytes: number;
   /** always false: a compact answer cannot carry transparent signatures */
@@ -1568,6 +1571,11 @@ export interface SendTxPcztUnsignedResult {
   fee: string;
   urFrames: string[];
   cborBytes: number;
+  /**
+   * Hex of the envelope on the JSON message bus. Revived to `cborData` when
+   * the popup receives the result.
+   */
+  cborHex?: string;
   /**
    * The raw UR-source bytes (the CBOR sign-request envelope) the frames were
    * fountained from. Lets the sign UI re-fountain at a user-chosen density (the
@@ -1810,7 +1818,7 @@ export interface ShieldUnsignedResult {
    * the ironwood output and the fee it proves; full, because a compact
    * answer cannot carry transparent signatures.
    */
-  zigner?: { urFrames: string[]; cborData: Uint8Array; cborBytes: number };
+  zigner?: { urFrames: string[]; cborHex?: string; cborData: Uint8Array; cborBytes: number };
 }
 
 /**

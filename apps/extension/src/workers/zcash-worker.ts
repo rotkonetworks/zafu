@@ -42,6 +42,7 @@ import {
   zignerBatchRequest,
   zignerSignRequest,
 } from '../routes/popup/send/zcash-send-cbor-helpers';
+import { bytesToHex } from '../shared/cbor-wire';
 import { shieldFeeZat } from '../routes/popup/send/spendable';
 import { nu63ActivationHeight } from '../config/feature-flags';
 import {
@@ -5801,8 +5802,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               actionCount: iwParsed.action_count,
               fee: fee.toString(),
               urFrames: iwUrFrames,
-              /** raw envelope bytes so the UI can re-fountain at a chosen density */
-              cborData: iwEnvelope,
+              /** envelope hex: Uint8Array is lost on the JSON message bus */
+              cborHex: bytesToHex(iwEnvelope),
               /** true when the request went out compact (tx_type 0x05) */
               compactRequest: iwRequestCompact,
               cborBytes: iwEnvelope.length,
@@ -5899,8 +5900,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             actionCount: parsed.action_count,
             fee: fee.toString(),
             urFrames,
-            /** raw envelope bytes so the UI can re-fountain at a chosen density */
-            cborData: cbor,
+            /** envelope hex: Uint8Array is lost on the JSON message bus */
+            cborHex: bytesToHex(cbor),
             cborBytes: cbor.length,
             /** true when the request went out compact (tx_type 0x05) */
             compactRequest: request.compact,
@@ -7180,7 +7181,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             ...(shieldUZigner && {
               zigner: {
                 urFrames: shieldUZigner.urFrames,
-                cborData: shieldUZigner.envelope,
+                cborHex: bytesToHex(shieldUZigner.envelope),
                 cborBytes: shieldUZigner.envelope.length,
               },
             }),
@@ -7299,7 +7300,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           payload: {
             pcztHex: built.pcztHex,
             urFrames: request.urFrames,
-            cborData: request.envelope,
+            cborHex: bytesToHex(request.envelope),
             cborBytes: request.envelope.length,
             compactRequest: false,
             fee: req.reviewedFee,

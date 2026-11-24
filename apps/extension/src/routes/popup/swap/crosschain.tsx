@@ -81,6 +81,7 @@ import {
   type SwapToken,
 } from '../../../state/swap/provider';
 import { BelowMinimum } from '../../../state/swap/thornode';
+import { PRICE_MOVED_NOTICE, reviewConfirmLabel } from './review-confirm';
 import {
   chips,
   DEBOUNCE_MS,
@@ -1561,12 +1562,12 @@ export const CrosschainSwap = ({
                     disabled={thorOut && !reviewedPlan}
                     loading={checking}
                   >
-                    {askCustody && 'understood · '}
-                    {isFromZec
-                      ? kind === 'zigner'
-                        ? 'sign with zigner'
-                        : 'swap'
-                      : 'show deposit address'}
+                    {reviewConfirmLabel({
+                      isFromZec,
+                      kind,
+                      askCustody,
+                      priceMoved: !!firm.was,
+                    })}
                   </Button>
                 )}
               </div>
@@ -1655,6 +1656,9 @@ export const CrosschainSwap = ({
               )}
             </p>
             {link?.via && <p className='text-[11px] text-fg-muted'>{viaLine(link.via)}</p>}
+            <p className='h-4 text-xs leading-4 text-warn'>
+              {firm.was ? PRICE_MOVED_NOTICE : '\u00a0'}
+            </p>
           </Sheet>
         )}
       </div>

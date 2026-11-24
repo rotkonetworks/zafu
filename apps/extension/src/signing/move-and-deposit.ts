@@ -14,6 +14,7 @@
  */
 
 import type { ZignerRequest } from './zigner-round';
+import { bytesFromWire, bytesToHex, hexToBytes } from '../shared/cbor-wire';
 import {
   MOVE_MISMATCH,
   moveCoin,
@@ -36,6 +37,8 @@ export interface Held {
 export interface BuiltMove {
   /** the PCZT zafu keeps */
   pcztHex: string;
+  /** hex of the envelope on the JSON message bus; revived to `cborData` */
+  cborHex?: string;
   /** the full module envelope `[0x53][0x04][0x03] || pczt`: the copy the device signs */
   cborData?: Uint8Array;
   compactRequest?: boolean;
@@ -65,11 +68,13 @@ export interface PairDeps {
 
 /** the PCZT inside a full single request, the bytes the device would sign, as hex */
 const devicePczt = (m: BuiltMove): string => {
-  const e = m.cborData;
+  const e =
+    bytesFromWire(m.cborData) ??
+    (typeof m.cborHex === 'string' ? hexToBytes(m.cborHex) : undefined);
   if (m.compactRequest || !e || e[0] !== 0x53 || e[1] !== 0x04 || e[2] !== 0x03) {
     throw new Error('this move asked zigner in a shape a batch cannot carry · nothing was sent');
   }
-  return Array.from(e.subarray(3), b => b.toString(16).padStart(2, '0')).join('');
+  return bytesToHex(e.subarray(3));
 };
 
 /** sign both, check both, hold the deposit, then send the move: the move's txid */
