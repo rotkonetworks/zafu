@@ -27,7 +27,21 @@ vi.mock('@zxing/browser', () => ({
 
 const { QrScanner } = await import('./qr-scanner');
 
-const fakeStream = () => ({ getTracks: () => [{ stop: vi.fn() }] }) as unknown as MediaStream;
+const fakeStream = () => {
+  const track = { stop: vi.fn() };
+  return Object.assign({ getTracks: () => [track] }, { track }) as unknown as MediaStream & {
+    track: { stop: ReturnType<typeof vi.fn> };
+  };
+};
+
+const camerasGive = (...streams: MediaStream[]) => {
+  const getUserMedia = vi.fn();
+  for (const s of streams) {
+    getUserMedia.mockResolvedValueOnce(s);
+  }
+  Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia }, configurable: true });
+  return getUserMedia;
+};
 
 describe('qr scanner', () => {
   let root: Root;
@@ -64,5 +78,38 @@ describe('qr scanner', () => {
 
     act(() => decoded({ getText: () => 'u1example' }));
     expect(onScan).toHaveBeenCalledWith('u1example');
+  });
+
+  it('turns the camera off when the decode cannot start', async () => {
+    const chosen = fakeStream();
+    camerasGive(fakeStream(), chosen);
+    zxing.decodeFromStream.mockImplementation(() =>
+      Promise.reject(new Error('video play timeout')),
+    );
+    root = createRoot(document.body.appendChild(document.createElement('div')));
+    await act(async () => {
+      root.render(createElement(QrScanner, { onScan: vi.fn(), onClose: vi.fn() }));
+    });
+    await vi.waitFor(() => expect(chosen.track.stop).toHaveBeenCalled());
+  });
+
+  it('turns the camera off when closed while the decode is still starting', async () => {
+    const chosen = fakeStream();
+    camerasGive(fakeStream(), chosen);
+    const stop = vi.fn();
+    let started: (c: { stop: () => void }) => void = () => undefined;
+    zxing.decodeFromStream.mockImplementation(
+      () => new Promise<{ stop: () => void }>(r => (started = r)),
+    );
+    root = createRoot(document.body.appendChild(document.createElement('div')));
+    await act(async () => {
+      root.render(createElement(QrScanner, { onScan: vi.fn(), onClose: vi.fn() }));
+    });
+    await vi.waitFor(() => expect(zxing.decodeFromStream).toHaveBeenCalled());
+    act(() => root.unmount());
+    await act(async () => started({ stop }));
+    expect(stop).toHaveBeenCalled();
+    expect(chosen.track.stop).toHaveBeenCalled();
+    root = createRoot(document.body.appendChild(document.createElement('div')));
   });
 });
