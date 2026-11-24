@@ -88,8 +88,6 @@ export interface WalletsSlice {
   removeZcashWallet: (index: number) => Promise<void>;
   /** Switch to a different wallet by index */
   setActiveWallet: (index: number) => Promise<void>;
-  /** Switch to a different Zcash wallet by index */
-  setActiveZcashWallet: (index: number) => Promise<void>;
   /**
    * A zigner wallet's new pocket, from the viewing key the device showed for
    * that account (state/zigner-pocket). Files the pocket (or brings back one
@@ -225,19 +223,6 @@ export const createWalletsSlice =
         await local.set('zcashWallets', newWallets);
       },
 
-      setActiveZcashWallet: async (index: number) => {
-        const { zcashWallets } = get().wallets;
-        if (index < 0 || index >= zcashWallets.length) {
-          throw new Error(`invalid zcash wallet index: ${index}`);
-        }
-
-        set(state => {
-          state.wallets.activeZcashIndex = index;
-        });
-
-        await local.set('activeZcashIndex', index);
-      },
-
       addZignerPocket: async (vaultId, scanned, name, birthday) => {
         const { keyRing, pockets, wallets } = get();
         const vault = keyRing.keyInfos.find(k => k.id === vaultId);
@@ -366,19 +351,23 @@ export const selectZcashWallets = (state: AllSlices) =>
   Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
 export const selectActiveZcashIndex = (state: AllSlices) => state.wallets.activeZcashIndex;
 /**
- * The active zcash wallet record. A zigner wallet's pocket is its own record
- * (same vault, that pocket's account and viewing key), so everything that
- * reads the key, address or account follows the active pocket.
+ * The active zcash wallet record: always one of the wallet on screen
+ * (selectEffectiveKeyInfo), the same wallet the worker store id comes from
+ * (activeZcashStoreId), so the store and the key that fills it never belong
+ * to two wallets. A zigner wallet's pocket is its own record (same vault,
+ * that pocket's account and viewing key), so everything that reads the key,
+ * address or account follows the active pocket. A seed wallet has no record
+ * (its keys come from the phrase): undefined, never another wallet's.
  */
 export const selectActiveZcashWallet = (state: AllSlices) => {
-  const { zcashWallets, activeZcashIndex } = state.wallets;
-  const wallet = zcashWallets[activeZcashIndex];
-  const account = wallet && zignerPocketAccount(state);
-  return account
-    ? (zcashWallets.find(
-        w => w.vaultId === wallet.vaultId && w.accountIndex === account && !w.multisig,
-      ) ?? wallet)
-    : wallet;
+  const key = selectEffectiveKeyInfo(state);
+  const own = selectZcashWallets(state).filter(w => w.vaultId === key?.id);
+  const account = zignerPocketAccount(state);
+  const pocket =
+    account !== undefined ? own.find(w => w.accountIndex === account && !w.multisig) : undefined;
+  // the index only picks between records of this wallet
+  const indexed = state.wallets.zcashWallets[state.wallets.activeZcashIndex];
+  return pocket ?? own.find(w => w === indexed) ?? own[0];
 };
 /**
  * Whether the active zcash wallet speaks mainnet: the one place this is
@@ -412,7 +401,7 @@ export const selectNetworkShown = (state: AllSlices): NetworkType => {
  */
 export const selectMyWalletsAsContacts = (state: AllSlices): Contact[] => {
   const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
-  const activeId = state.wallets.zcashWallets?.[state.wallets.activeZcashIndex]?.id;
+  const activeId = selectActiveZcashWallet(state)?.id;
   return wallets
     .filter(w => w.address && !w.multisig?.hidden && w.id !== activeId)
     .map(w => ({

@@ -108,10 +108,12 @@ vi.mock('../../state', async importOriginal => {
       getMnemonic: async (id: string) => (id === 'key-1' ? 'test mnemonic' : `mnemonic of ${id}`),
       getVaultUnlock: async (id: string) => ({ vaultId: id }),
       enabledNetworks: ['zcash'],
+      activeNetwork: 'zcash',
     },
     pockets: { book: {} },
     wallets: {
-      zcashWallets: [{ id: 'z-1', address: 'u1receive', mainnet: true }],
+      // the zigner wallet's own record (its vault is selected in the zigner tests)
+      zcashWallets: [{ id: 'z-1', vaultId: 'zigner-1', address: 'u1receive', mainnet: true }],
       activeZcashIndex: 0,
     },
   };
