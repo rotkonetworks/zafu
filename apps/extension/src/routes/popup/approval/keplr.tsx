@@ -45,8 +45,11 @@ import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { CAPS, walletKind } from '../../../signing/wallet-kind';
 
-/** prefix for a keplr chain id, from our config or a bech32 signer address */
-const prefixFor = (chainId: string, signerAddress?: string): string => {
+/**
+ * prefix for a keplr chain id: from our config, a bech32 signer address, or
+ * the prefix the site suggested for a chain zafu doesn't know
+ */
+const prefixFor = (chainId: string, signerAddress?: string, suggested?: string): string => {
   const id = cosmosChainIdFromKeplr(chainId);
   if (id) {
     return getCosmosChain(id).bech32Prefix;
@@ -59,7 +62,7 @@ const prefixFor = (chainId: string, signerAddress?: string): string => {
       return signerAddress.slice(0, sep);
     }
   }
-  return chainId.split('-')[0] ?? 'cosmos';
+  return suggested ?? chainId.split('-')[0] ?? 'cosmos';
 };
 
 /** a direct doc as a person reads it; bytes that aren't a transaction read as nothing at all */
@@ -136,7 +139,11 @@ export const KeplrApproval = () => {
     if (req.method === 'enable') {
       const keys: Record<string, KeplrWireKey> = {};
       for (const cid of chainIds) {
-        const key = zignerKeplrKey(coldKeyHex, prefixFor(cid), keyInfo.name ?? 'zigner');
+        const key = zignerKeplrKey(
+          coldKeyHex,
+          prefixFor(cid, undefined, req.prefixes?.[cid]),
+          keyInfo.name ?? 'zigner',
+        );
         if (!key) {
           throw new Error('this wallet has no cosmos key · import it again from zigner');
         }
@@ -212,7 +219,11 @@ export const KeplrApproval = () => {
       if (req.method === 'enable') {
         const keys: Record<string, KeplrWireKey> = {};
         for (const cid of chainIds) {
-          keys[cid] = await deriveKeplrWireKey(mnemonic, prefixFor(cid), keyInfo.name ?? 'zafu');
+          keys[cid] = await deriveKeplrWireKey(
+            mnemonic,
+            prefixFor(cid, undefined, req.prefixes?.[cid]),
+            keyInfo.name ?? 'zafu',
+          );
         }
         await respond({ approved: true, payload: { keys } });
         return;
@@ -409,8 +420,13 @@ export const KeplrApproval = () => {
           ) : (
             <p className='text-fg'>
               connect your cosmos address on{' '}
-              <span className='font-mono'>{chainIds.join(', ')}</span> to this site. it will be able
-              to see your address and request signatures (each signature is approved here).
+              <span className='font-mono'>
+                {chainIds
+                  .map(cid => `${cid} (${prefixFor(cid, undefined, req.prefixes?.[cid])}1…)`)
+                  .join(', ')}
+              </span>{' '}
+              to this site. it will be able to see your address and request signatures (each
+              signature is approved here).
             </p>
           )}
         </div>

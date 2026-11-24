@@ -14,7 +14,9 @@ import {
   cosmosChainIdFromKeplr,
   keplrApprovalKey,
   keplrKeyCacheKey,
+  keplrSuggestedKey,
   signedChainId,
+  suggestedPrefix,
   type KeplrApprovalRequest,
   type KeplrWireKey,
 } from '../keplr';
@@ -130,6 +132,7 @@ async function enableMissing(
     origin,
     chainId,
     signDoc: { chainIds },
+    prefixes: await suggestedPrefixes(origin, chainIds),
     ...meta,
   });
   if (!decision.approved) {
@@ -144,6 +147,19 @@ async function enableMissing(
   if (Object.keys(patch).length > 0) {
     await chrome.storage.session.set(patch);
   }
+}
+
+/** prefixes this site suggested for the chains zafu doesn't know; a built-in chain keeps its own */
+async function suggestedPrefixes(origin: string, chainIds: string[]) {
+  const prefixes: Record<string, string> = {};
+  for (const cid of chainIds.filter(cid => !cosmosChainIdFromKeplr(cid))) {
+    const k = keplrSuggestedKey(origin, cid);
+    const prefix = suggestedPrefix((await chrome.storage.session.get(k))[k]);
+    if (prefix) {
+      prefixes[cid] = prefix;
+    }
+  }
+  return prefixes;
 }
 
 async function getCachedKey(origin: string, chainId: string): Promise<KeplrWireKey | undefined> {
@@ -222,10 +238,15 @@ async function handleMethod(
     }
 
     case 'experimentalSuggestChain': {
-      // record the suggestion; we do not maintain a live chain registry, so
-      // accepting is enough for dapps that gate on it
+      // record the suggestion per site and chain; we do not maintain a live
+      // chain registry, so accepting is enough for dapps that gate on it, and
+      // its account prefix is what an enable of that chain derives with
       const chainInfo = params['chainInfo'];
-      await chrome.storage.session.set({ [`keplrSuggested:${origin}`]: chainInfo });
+      const chainId = (chainInfo as { chainId?: unknown } | undefined)?.chainId;
+      if (typeof chainId !== 'string' || !chainId) {
+        throw new Error('a suggested chain needs a chain id');
+      }
+      await chrome.storage.session.set({ [keplrSuggestedKey(origin, chainId)]: chainInfo });
       return {};
     }
 
