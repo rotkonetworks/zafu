@@ -32,19 +32,8 @@ const zid = 'zid-of-one-device';
 vi.mock('./parse-connect-code', () => ({
   parseConnectCodeBytes: () => ({ ok: false, message: 'unused' }),
   parseConnectCode: (raw: string) =>
-    raw === 'penumbra'
+    raw === 'no-zid'
       ? {
-          ok: true,
-          network: 'penumbra',
-          device: 'zigner',
-          accountIndex: 0,
-          label: null,
-          walletIdBytes: new Uint8Array([1]),
-          fvkBytes: new Uint8Array([2]),
-          fvkBech32m: 'penumbrafullviewingkey1example',
-          zidPublicKey: zid,
-        }
-      : {
           ok: true,
           network: 'zcash',
           device: 'zigner',
@@ -52,8 +41,29 @@ vi.mock('./parse-connect-code', () => ({
           label: null,
           ufvk: 'uview1example',
           mainnet: true,
-          zidPublicKey: zid,
-        },
+        }
+      : raw === 'penumbra'
+        ? {
+            ok: true,
+            network: 'penumbra',
+            device: 'zigner',
+            accountIndex: 0,
+            label: null,
+            walletIdBytes: new Uint8Array([1]),
+            fvkBytes: new Uint8Array([2]),
+            fvkBech32m: 'penumbrafullviewingkey1example',
+            zidPublicKey: zid,
+          }
+        : {
+            ok: true,
+            network: 'zcash',
+            device: 'zigner',
+            accountIndex: 0,
+            label: null,
+            ufvk: 'uview1example',
+            mainnet: true,
+            zidPublicKey: zid,
+          },
 }));
 
 const { DeviceScanner } = await import('./device-scanner');
@@ -67,12 +77,37 @@ describe('device scanner', () => {
   const button = (text: string) =>
     [...document.querySelectorAll('button')].find(b => b.textContent === text)!;
 
-  it('keeps the first network when the other network is scanned next', async () => {
-    const onDone = vi.fn();
+  const mount = (onDone = vi.fn()) => {
     const container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
     act(() => root.render(createElement(DeviceScanner, { onDone, onCancel: vi.fn() })));
+    return onDone;
+  };
+
+  it('stays on the code with the reason when adding it fails, and opens no camera', async () => {
+    keyRing.addZignerUnencrypted.mockClear();
+    keyRing.addZignerUnencrypted.mockImplementationOnce(() =>
+      Promise.reject(new Error('could not add this wallet')),
+    );
+    const onDone = mount();
+    act(() => camera.onScan('penumbra'));
+    camera.onScan = () => undefined;
+    await act(async () => button('scan next').click());
+    expect(document.body.textContent).toContain('could not add this wallet');
+    expect(button('scan next')).toBeTruthy();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it('offers no second network for a code without a ZID: it could not join this wallet', () => {
+    mount();
+    act(() => camera.onScan('no-zid'));
+    expect(button('scan next')).toBeUndefined();
+  });
+
+  it('keeps the first network when the other network is scanned next', async () => {
+    keyRing.addZignerUnencrypted.mockClear();
+    const onDone = mount();
 
     act(() => camera.onScan('penumbra'));
     await act(async () => button('scan next').click());

@@ -258,7 +258,12 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
     deviceOverride && parsed.network === 'zcash' ? deviceOverride : parsed.device;
   const companion = otherNetwork(parsed.network);
   // keystone only ever carries zcash - no companion network to offer
-  const offerCompanion = effectiveDevice === 'zigner' && !knownNetworksRef.current.has(companion);
+  // the other code joins this wallet only through the device's ZID: without
+  // one it would land as a second wallet, so it is not offered
+  const offerCompanion =
+    effectiveDevice === 'zigner' &&
+    !!parsed.zidPublicKey &&
+    !knownNetworksRef.current.has(companion);
 
   return (
     <div className='flex flex-col gap-4'>
