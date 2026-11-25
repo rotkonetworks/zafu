@@ -33,6 +33,7 @@ import {
   parseConnectCode,
   type ParsedConnectCode,
 } from '../components/device-scanner/parse-connect-code';
+import { keepCompanionExports } from './zigner-imports';
 
 // ============================================================================
 // Types
@@ -165,15 +166,22 @@ export const createZignerSlice =
       }
 
       set(state => {
+        const first = !state.zigner.parsedPenumbraExport && !state.zigner.parsedZcashExport;
+        const kept = keepCompanionExports(state.zigner, {
+          parsedPenumbraExport:
+            result.network === 'penumbra' ? toPenumbraExport(result) : undefined,
+          parsedZcashExport: result.network === 'zcash' ? toZcashExport(result) : undefined,
+        });
         state.zigner.qrData = qrData.trim();
         state.zigner.detectedNetwork = result.network;
-        state.zigner.parsedPenumbraExport =
-          result.network === 'penumbra' ? toPenumbraExport(result) : undefined;
-        state.zigner.parsedZcashExport =
-          result.network === 'zcash' ? toZcashExport(result) : undefined;
+        state.zigner.parsedPenumbraExport = kept.parsedPenumbraExport;
+        state.zigner.parsedZcashExport = kept.parsedZcashExport;
         state.zigner.parsedCosmosExport = undefined;
-        state.zigner.walletLabel =
-          result.label ?? (result.network === 'penumbra' ? 'zigner penumbra' : 'zigner zcash');
+        // keep a label the user already typed; only fill one on the first code
+        if (first) {
+          state.zigner.walletLabel =
+            result.label ?? (result.network === 'penumbra' ? 'zigner penumbra' : 'zigner zcash');
+        }
         state.zigner.scanState = 'scanned';
         state.zigner.errorMessage = undefined;
       });
@@ -209,11 +217,15 @@ export const createZignerSlice =
         const defaultLabel =
           urExport.label || (device === 'zigner' ? 'zigner zcash' : 'keystone zcash');
         set(state => {
+          const first = !state.zigner.parsedPenumbraExport && !state.zigner.parsedZcashExport;
+          const kept = keepCompanionExports(state.zigner, { parsedZcashExport: exportData });
           state.zigner.qrData = '<multipart-ur:zcash-accounts>'; // sentinel, not a real UR string
           state.zigner.detectedNetwork = 'zcash';
-          state.zigner.parsedZcashExport = exportData;
-          state.zigner.parsedPenumbraExport = undefined;
-          state.zigner.walletLabel = defaultLabel;
+          state.zigner.parsedZcashExport = kept.parsedZcashExport;
+          state.zigner.parsedPenumbraExport = kept.parsedPenumbraExport;
+          if (first) {
+            state.zigner.walletLabel = defaultLabel;
+          }
           state.zigner.scanState = 'scanned';
           state.zigner.errorMessage = undefined;
         });

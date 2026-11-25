@@ -49,6 +49,20 @@ export const mergeTargetFor = (
     : undefined);
 
 /**
+ * Prefer an explicit vault from a just-finished "scan next" add, then fall
+ * back to the usual ZID / viewing-key match. Lets the second network join
+ * even when a code has no ZID (older firmware, or ZID derivation failed).
+ */
+export const resolveMergeTarget = (
+  vaults: EncryptedVault[],
+  zcashWallets: readonly { vaultId?: string; orchardFvk?: string }[],
+  data: ZignerZafuImport,
+  joinVaultId?: string,
+): EncryptedVault | undefined =>
+  (joinVaultId ? vaults.find(v => v.id === joinVaultId && v.type === 'zigner-zafu') : undefined) ??
+  mergeTargetFor(vaults, zcashWallets, data);
+
+/**
  * Merge `incoming` data into `existing` vault (must be the same zigner device).
  * Re-encrypts the vault with the current session key, updates the vaults list,
  * and creates any missing per-network wallet entries (penumbra / zcash).

@@ -4,13 +4,13 @@ import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { cn } from '@repo/ui/lib/utils';
 import { useStore } from '../../../state';
 import { zignerConnectSelector } from '../../../state/zigner';
-import { keyRingSelector, type ZignerZafuImport } from '../../../state/keyring';
+import { keyRingSelector } from '../../../state/keyring';
 import { usePageNav } from '../../../utils/navigate';
 import { useCallback, useRef, useState } from 'react';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 import { PagePath } from '../paths';
-import { keystoneDeviceId } from '../../../utils/viewing-key';
+import { addPendingZignerWallets, pendingZignerAdds } from '../../../state/zigner-imports';
 import { setOnboardingValuesInStorage } from './persist-parameters';
 import { SEED_PHRASE_ORIGIN } from './password/types';
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -143,7 +143,6 @@ export const ImportZigner = () => {
     walletImport,
     zcashWalletImport,
     parsedCosmosExport,
-    detectedNetwork,
     errorMessage,
     processQrData,
     processZcashAccountsBytes,
@@ -205,50 +204,17 @@ export const ImportZigner = () => {
       // reachable from settings > zigner on an already set-up wallet (adding
       // another device) - "make it yours" is only for the first one
       const firstWallet = !(await localExtStorage.get('vaults'))?.length;
-      if (walletImport) {
-        // penumbra zigner import - convert protobuf to base64 strings
-        const fvkInner = walletImport.fullViewingKey.inner;
-        const walletIdInner = walletImport.walletId.inner;
-        // use ZID as canonical deviceId when available - same zigner seed
-        // produces same ZID regardless of network, enabling proper dedup.
-        const legacyDeviceId = walletIdInner
-          ? btoa(String.fromCharCode(...walletIdInner))
-          : `penumbra-${Date.now()}`;
-        const zignerData: ZignerZafuImport = {
-          fullViewingKey: fvkInner ? btoa(String.fromCharCode(...fvkInner)) : undefined,
-          accountIndex: walletImport.accountIndex,
-          deviceId: walletImport.zidPublicKey ?? legacyDeviceId,
-          zidPublicKey: walletImport.zidPublicKey,
-        };
-        await addZignerUnencrypted(zignerData, walletLabel || 'zigner penumbra');
-      } else if (zcashWalletImport) {
-        // zcash import - for zigner, use ZID as canonical deviceId so
-        // same-device imports across networks dedup. Keystone has no ZID;
-        // fall back to a hash-based deviceId so reimporting the same FVK
-        // still dedups against itself.
-        const kind = zcashWalletImport.coldSignerType ?? 'zigner';
-        const ufvk = zcashWalletImport.ufvk;
-        const deviceId =
-          zcashWalletImport.zidPublicKey ??
-          (kind === 'keystone' && ufvk ? keystoneDeviceId(ufvk) : `zcash-${Date.now()}`);
-        const defaultLabel = kind === 'keystone' ? 'keystone zcash' : 'zigner zcash';
-        const zignerData: ZignerZafuImport = {
-          viewingKey: ufvk,
-          accountIndex: zcashWalletImport.accountIndex,
-          deviceId,
-          zidPublicKey: zcashWalletImport.zidPublicKey,
-          coldSignerType: kind,
-        };
-        await addZignerUnencrypted(zignerData, walletLabel || defaultLabel);
-      } else if (parsedCosmosExport) {
-        const zignerData: ZignerZafuImport = {
-          cosmosAddresses: parsedCosmosExport.addresses,
-          publicKey: parsedCosmosExport.publicKey || undefined,
-          accountIndex: parsedCosmosExport.accountIndex,
-          deviceId: `cosmos-${Date.now()}`,
-        };
-        await addZignerUnencrypted(zignerData, walletLabel || 'zigner cosmos');
+      const adds = pendingZignerAdds({
+        walletImport,
+        zcashWalletImport,
+        parsedCosmosExport,
+        walletLabel,
+      });
+      if (adds.length === 0) {
+        setError("please scan your signer's code first");
+        return;
       }
+      await addPendingZignerWallets(adds, addZignerUnencrypted);
       if (firstWallet) {
         await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.ZIGNER);
       }
@@ -316,14 +282,14 @@ export const ImportZigner = () => {
   }
 
   const showManualInput = manualInputRef.current && scanState !== 'scanned';
-  const scanned =
-    scanState === 'scanned' && detectedNetwork
-      ? detailLine(detectedNetwork as DetectedNet, {
-          walletImport,
-          zcashWalletImport,
-          parsedCosmosExport,
-        })
-      : null;
+  const scannedNetworks = (['penumbra', 'zcash', 'cosmos'] as const)
+    .map(net => detailLine(net, { walletImport, zcashWalletImport, parsedCosmosExport }))
+    .filter((line): line is NonNullable<typeof line> => Boolean(line));
+  const scanned = scanState === 'scanned' && scannedNetworks.length > 0;
+  const zignerLike =
+    !zcashWalletImport || (zcashWalletImport.coldSignerType ?? 'zigner') !== 'keystone';
+  const offerCompanion =
+    scanned && zignerLike && Boolean(walletImport) !== Boolean(zcashWalletImport);
 
   return (
     <div className='flex flex-col gap-5'>
@@ -435,18 +401,32 @@ export const ImportZigner = () => {
 
       {scanned && (
         <div className='flex flex-col gap-4'>
-          <div className='flex flex-col gap-1'>
-            <div className='text-body text-fg-high lowercase'>{scanned.title}</div>
-            <div className={cn('font-mono text-fg-muted', 'text-label', 'break-all')}>
-              {scanned.detail}
+          {scannedNetworks.map(line => (
+            <div key={line.title} className='flex flex-col gap-1'>
+              <div className='text-body text-fg-high lowercase'>{line.title}</div>
+              <div className={cn('font-mono text-fg-muted', 'text-label', 'break-all')}>
+                {line.detail}
+              </div>
             </div>
-          </div>
+          ))}
+          {offerCompanion && (
+            <Button
+              variant='secondary'
+              className='w-full'
+              onClick={() => {
+                setMultipart(false);
+                setScanState('scanning');
+              }}
+            >
+              scan the other network next
+            </Button>
+          )}
           <Input
             placeholder='wallet label'
             value={walletLabel}
             onChange={e => setWalletLabel(e.target.value)}
           />
-          <AccessNote kind={scanned.kind} />
+          <AccessNote kind={scannedNetworks[0]!.kind} />
           {errorMessage && (
             <StatusSlot tone='danger' icon='i-ph-warning'>
               {errorMessage}
