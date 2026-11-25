@@ -6,6 +6,7 @@
  * caller, beforehand, whether this scan is going to join one).
  */
 
+import { fullViewingKeyFromBech32m } from '@penumbra-zone/bech32m/penumbrafullviewingkey';
 import type { KeyInfo, ZignerZafuImport } from '../../state/keyring/types';
 import { keystoneDeviceId } from '../../utils/viewing-key';
 import type { ParsedConnectCode } from './parse-connect-code';
@@ -52,8 +53,14 @@ function defaultLabel(parsed: ParsedConnectCode): string {
 export function buildZignerImport(parsed: ParsedConnectCode): ZignerZafuImport {
   if (parsed.network === 'penumbra') {
     const walletIdB64 = btoa(String.fromCharCode(...parsed.walletIdBytes));
+    // the keyring keeps the key's inner bytes in base64 (createZignerWalletEntries
+    // reads it back with atob). A UR code carries the key as bech32m: decode it
+    // here, since a penumbra wallet can't be made from the bech32m text itself
+    const fvkBytes = parsed.fvkBech32m
+      ? fullViewingKeyFromBech32m(parsed.fvkBech32m).inner
+      : parsed.fvkBytes;
     return {
-      fullViewingKey: parsed.fvkBech32m || btoa(String.fromCharCode(...parsed.fvkBytes)),
+      fullViewingKey: btoa(String.fromCharCode(...fvkBytes)),
       accountIndex: parsed.accountIndex,
       deviceId: parsed.zidPublicKey ?? walletIdB64,
       zidPublicKey: parsed.zidPublicKey,

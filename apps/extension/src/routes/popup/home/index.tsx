@@ -18,6 +18,7 @@ import { usePreloadBalances } from '../../../hooks/use-preload';
 
 import { BackupNudge } from './notices';
 import { PenumbraContent } from './penumbra-home';
+import { NoPenumbraKey, penumbraKeyGap } from './no-penumbra-key';
 import { ZcashContent } from './zcash-home';
 import { HyperliquidHome } from './hyperliquid-home';
 
@@ -37,9 +38,16 @@ const ZcashHome = ({ nudge }: { nudge?: ReactNode }) => {
   );
 };
 
-const PenumbraHome = ({ nudge }: { nudge?: ReactNode }) => (
-  <PenumbraContent account={useStore(selectPenumbraAccount)} nudge={nudge} />
-);
+const PenumbraHome = ({ nudge }: { nudge?: ReactNode }) => {
+  const account = useStore(selectPenumbraAccount);
+  const key = useStore(selectEffectiveKeyInfo);
+  const gap = useStore(s => penumbraKeyGap(key, s.wallets.all));
+  return gap && key ? (
+    <NoPenumbraKey gap={gap} name={key.name} />
+  ) : (
+    <PenumbraContent account={account} nudge={nudge} />
+  );
+};
 
 /** every network shares one home (home-screen.tsx), each reading its own state */
 const HOME: Partial<Record<NetworkType, ComponentType<{ nudge?: ReactNode }>>> = {
