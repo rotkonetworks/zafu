@@ -4,6 +4,7 @@ import { beforeAll, describe, it, expect } from 'vitest';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { parseConnectCode, parseConnectCodeBytes } from './parse-connect-code';
 import { buildZignerImport } from './connect-device';
+import { fullViewingKeyFromBech32m } from '@penumbra-zone/bech32m/penumbrafullviewingkey';
 
 // ── fixture builders, from the documented wire formats in
 // packages/wallet/src/{zigner-signer,zcash-zigner}.ts (legacy binary QR) and
@@ -270,5 +271,28 @@ describe('an old-firmware zigner code, with the real zafu-wasm', () => {
     expect(fixOrchardAddress(wasm.address_from_ufvk(result.ufvk, 0))).toBe(address);
     // what the keyring stores is the unified key the sync hook reads
     expect(buildZignerImport(result).viewingKey).toBe(result.ufvk);
+  });
+});
+
+describe('buildZignerImport: penumbra', () => {
+  const fvkBech32m =
+    'penumbrafullviewingkey1vzfytwlvq067g2kz095vn7sgcft47hga40atrg5zu2crskm6tyyjysm28qg5nth2fqmdf5n0q530jreumjlsrcxjwtfv6zdmfpe5kqsa5lg09';
+
+  it("stores a UR code's bech32m key as the inner bytes the keyring reads back", () => {
+    const data = buildZignerImport({
+      ok: true,
+      network: 'penumbra',
+      device: 'zigner',
+      accountIndex: 0,
+      label: null,
+      walletIdBytes: new Uint8Array(32),
+      fvkBytes: new Uint8Array(64), // what parseConnectCode leaves for a UR code
+      fvkBech32m,
+      zidPublicKey: 'zid',
+    });
+    // createZignerWalletEntries does atob(fullViewingKey): it must be the key itself
+    const stored = Uint8Array.from(atob(data.fullViewingKey!), c => c.charCodeAt(0));
+    expect(stored).toEqual(fullViewingKeyFromBech32m(fvkBech32m).inner);
+    expect(stored).toHaveLength(64);
   });
 });
