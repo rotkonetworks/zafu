@@ -43,6 +43,18 @@ describe('cbor wire', () => {
     expect(framesToShow(revived.urFrames, revived.cborData, UR_FRAMES)).toEqual(UR_FRAMES);
   });
 
+  it('an array payload such as the notes list comes back as the same array', () => {
+    const notes = [{ value: '1', height: 2 }, { value: '3', height: 4 }];
+    const revived = reviveCborPayload(notes);
+    expect(revived).toBe(notes);
+    expect(Array.isArray(revived)).toBe(true);
+    expect([...revived]).toHaveLength(2);
+  });
+
+  it('a Uint8Array payload is left alone', () => {
+    expect(reviveCborPayload(ENV)).toBe(ENV);
+  });
+
   it('a nested zigner shield payload is revived too', () => {
     const wire = JSON.parse(
       JSON.stringify({
