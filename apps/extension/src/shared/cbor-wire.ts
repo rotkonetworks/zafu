@@ -66,9 +66,23 @@ const reviveIn = (obj: Record<string, unknown>): void => {
   }
 };
 
-/** Copy a worker payload and revive `cborData` from `cborHex` (or a wire form). */
+/** only a plain object can carry an envelope; an array or a typed array is not one */
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value) as unknown;
+  return proto === Object.prototype || proto === null;
+};
+
+/**
+ * Copy a worker payload and revive `cborData` from `cborHex` (or a wire form).
+ * Every worker answer passes through here, so anything that is not a plain
+ * object (the notes list, a Uint8Array) goes back untouched: spreading an
+ * array leaves an object with numeric keys that is no longer iterable.
+ */
 export const reviveCborPayload = <T>(payload: T): T => {
-  if (!payload || typeof payload !== 'object') {
+  if (!isPlainObject(payload)) {
     return payload;
   }
   const next = { ...(payload as Record<string, unknown>) };
