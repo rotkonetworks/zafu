@@ -1,7 +1,8 @@
 import { storedList } from '@repo/storage-chrome/stored-list';
 import { localExtStorage } from '@repo/storage-chrome/local';
+import { readPenumbraChain } from './penumbra/active-chain';
+import { PENUMBRA_CHAINS, viewDbsOf } from './penumbra/chain';
 
-const PENUMBRA_DB_PREFIX = 'viewdata/penumbra';
 // 'zafu-memo-cache' used to be listed here and in four other clear paths.
 // No such database has ever existed - the memo cache is the 'memo-cache'
 // OBJECT STORE inside 'zafu-zcash' (see zcash-worker.ts). Deleting a
@@ -163,16 +164,19 @@ export const performPendingClears = async (): Promise<void> => {
   console.log('[clear-startup] performing pending clears:', pending);
 
   if (pending.includes('penumbra')) {
+    // the chain in use only: a testnet's resync leaves mainnet as it was, and the other way round
+    const { network, chainId } = await readPenumbraChain();
     try {
-      const dbs = await indexedDB.databases();
-      const targets = dbs
-        .map(d => d.name)
-        .filter((n): n is string => !!n && n.startsWith(PENUMBRA_DB_PREFIX));
+      const names = (await indexedDB.databases()).map(d => d.name).filter((n): n is string => !!n);
+      const targets = chainId ? viewDbsOf(names, chainId) : [];
       await Promise.all(targets.map(name => deleteDb(name).catch(() => {})));
     } catch (e) {
       console.warn('[clear-startup] penumbra enumerate error:', e);
     }
-    await Promise.all([localExtStorage.remove('penumbraSync'), localExtStorage.remove('params')]);
+    await Promise.all([
+      localExtStorage.remove('penumbraSync'),
+      localExtStorage.remove(PENUMBRA_CHAINS[network].params),
+    ]);
   }
 
   if (pending.includes('zcash')) {

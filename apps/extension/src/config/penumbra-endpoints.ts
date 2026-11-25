@@ -18,6 +18,7 @@
 import { ChainRegistryClient } from '@penumbrafi/registry';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { RpcEndpointRegion } from './zcash-endpoints';
+import { penumbraNetworkOf, type PenumbraNetwork } from '../penumbra/chain';
 
 export interface PenumbraEndpointPreset {
   /** stable id; used to key latency/health maps and match user selections. */
@@ -95,6 +96,9 @@ export function defaultPenumbraEndpoint(): PenumbraEndpointPreset {
   return PENUMBRA_MAINNET_ENDPOINTS.find(p => p.isDefault) ?? PENUMBRA_MAINNET_ENDPOINTS[0]!;
 }
 
+/** why penumbra waits while its testnet is on with no node set */
+export const NO_TESTNET_NODE = 'penumbra testnet has no node yet';
+
 /**
  * The Penumbra gRPC endpoint the whole wallet must agree on.
  *
@@ -109,14 +113,24 @@ export function defaultPenumbraEndpoint(): PenumbraEndpointPreset {
  * picked in Settings was then ignored by every proxied RPC until the worker
  * restarted - and with the legacy key unset, that transport waited for an
  * onboarding write that never came, so the router never became ready and every
- * wallet RPC (and the worker-driven send) hung with no error. Hence: always
- * resolvable, never waiting.
+ * wallet RPC (and the worker-driven send) hung with no error. Hence: never
+ * waiting. While the testnet is on it is the testnet's node (unless `only`
+ * names mainnet), and with none set yet it refuses rather than reach mainnet's.
  */
-export const resolvePenumbraEndpoint = async (): Promise<string> => {
-  const [networkEndpoints, legacy] = await Promise.all([
+export const resolvePenumbraEndpoint = async (only?: PenumbraNetwork): Promise<string> => {
+  const [networkEndpoints, legacy, enabled] = await Promise.all([
     localExtStorage.get('networkEndpoints'),
     localExtStorage.get('grpcEndpoint'),
+    localExtStorage.get('enabledNetworks'),
   ]);
+  // a testnet has no default node, and never falls back to mainnet's
+  if ((only ?? penumbraNetworkOf(enabled)) === 'penumbra-testnet') {
+    const testnet = networkEndpoints?.['penumbra-testnet']?.trim();
+    if (!testnet) {
+      throw new Error(NO_TESTNET_NODE);
+    }
+    return testnet;
+  }
   return networkEndpoints?.penumbra || legacy || defaultPenumbraEndpoint().url;
 };
 

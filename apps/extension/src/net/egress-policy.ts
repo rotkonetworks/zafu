@@ -495,6 +495,16 @@ export const DESTINATIONS: DestinationSpec[] = [
     gate: { kind: 'network', networks: ['penumbra'] },
     urls: i => [penumbraEndpoint(i)],
   },
+  // only the node the person set: no default, no preset pool
+  {
+    id: 'penumbra-testnet',
+    label: 'penumbra testnet node',
+    purpose: 'chain-rpc',
+    gate: { kind: 'network', networks: ['penumbra-testnet'] },
+    urls: i => [endpoint(i, 'penumbra-testnet')],
+    // the same calls as penumbra's node, so the same nym choice
+    family: 'penumbra',
+  },
   // the penumbra asset registry (json + icons) is bundled at build time
   // (@penumbrafi/registry, see packages/context/src/registry-client.ts and
   // shared/components/registry-icons.ts). The one runtime copy is the signed

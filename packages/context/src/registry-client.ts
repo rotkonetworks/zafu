@@ -9,10 +9,7 @@
  * egress policy had to special-case, and one more host in the "everything
  * zafu talks to" list for data this package already ships. `@penumbrafi/
  * registry` vendors the same JSON as `client.bundled`, so there is no reason
- * to ask the network for it: this wrapper tries the bundled copy first and
- * only reaches for `remote` when a chain is not in the bundled set at all
- * (shipped after this package was last bumped) - forward-compatible, not the
- * default path.
+ * to ask the network for it: this wrapper reads the bundled copy only.
  *
  * `IndexedDb.initialize` pre-populates asset metadata by calling
  * `registryClient.remote.get(chainId)`, and the storage package catches a
@@ -20,18 +17,29 @@
  * `console.error('Failed pre-population of assets from the registry', error)`.
  * Because that catch lives inside `@penumbra-zone/storage`, a caller has no
  * way to downgrade or silence that line: the only lever is to hand it a
- * client that does not throw. Resolving from the bundled copy first also
- * means that line can no longer fire in normal operation - there is nothing
- * left to fail.
+ * client that does not throw, and this one has nothing left to fail.
+ *
+ * A chain the build ships no registry for (a devnet, a new testnet) gets an
+ * empty one, not a fetch: its assets show by their own denoms, and never as a
+ * mainnet asset that happens to share an id.
  */
-import { ChainRegistryClient } from '@penumbrafi/registry';
+import { ChainRegistryClient, Registry } from '@penumbrafi/registry';
 
 export type RegistryClient = InstanceType<typeof ChainRegistryClient>;
 
+/** the build's registry for `chainId`, or an empty one when it ships none */
+export const registryOf = (chainId: string, client: RegistryClient = new ChainRegistryClient()) => {
+  try {
+    return client.bundled.get(chainId);
+  } catch {
+    return new Registry({ chainId, ibcConnections: [], assetById: {}, numeraires: [] });
+  }
+};
+
 /**
- * Wrap `client` so `remote.get`/`remote.globals` resolve from the bundled
- * registry first, falling back to the network only when the bundled copy
- * does not have the chain. Every other member (`bundled`, …) is the
+ * Wrap `client` so `remote.get` resolves from the bundled registry (empty for
+ * a chain it does not ship) and `remote.globals` from the bundled copy first.
+ * Every other member (`bundled`, …) is the
  * original, inherited unchanged.
  */
 export const withBundledFallback = (
@@ -47,13 +55,7 @@ export const withBundledFallback = (
   // `get` is a class method on the remote client's prototype, so it is
   // non-writable: a plain assignment would throw in strict mode.
   Object.defineProperty(wrapped.remote, 'get', {
-    value: async (chainId: string) => {
-      try {
-        return client.bundled.get(chainId);
-      } catch {
-        return client.remote.get(chainId);
-      }
-    },
+    value: (chainId: string) => Promise.resolve(registryOf(chainId, client)),
     writable: true,
     enumerable: true,
     configurable: true,

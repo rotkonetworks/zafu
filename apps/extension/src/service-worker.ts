@@ -95,13 +95,10 @@ import { internalTransportOptions } from './transport-options';
 // idb, querier, block processor
 import { walletIdCtx } from '@penumbrafi/services/ctx/wallet-id';
 import type { Services } from '@repo/context';
-import {
-  startWalletServices,
-  penumbraGate,
-  refreshPenumbraChainId,
-  storedPenumbraChainId,
-} from './wallet-services';
+import { startWalletServices, penumbraGate, refreshPenumbraChainId } from './wallet-services';
 import type { StartedServices } from './wallet-services';
+import { readPenumbraChain } from './penumbra/active-chain';
+import { resolvePenumbraEndpoint } from './config/penumbra-endpoints';
 import type { BlockProcessor } from '@penumbra-zone/query/block-processor';
 import { errText, storageFailure } from '@penumbra-zone/query/error-text';
 import { getWalletFromStorage } from '@repo/storage-chrome/onboard';
@@ -293,11 +290,16 @@ let currentSyncAbort: AbortController | undefined;
  * into wasm and re-fetches genesis, which on a large wallet (hundreds of LP
  * positions) takes a long time, and dapps see empty/zero state meanwhile.
  */
-const desiredPenumbraTarget = async (): Promise<PenumbraTarget> => ({
-  walletId: (await getWalletFromStorage())?.id,
-  run: (await penumbraGate()).run,
-  chainId: await storedPenumbraChainId(),
-});
+const desiredPenumbraTarget = async (): Promise<PenumbraTarget> => {
+  const { network, stored } = await readPenumbraChain();
+  return {
+    walletId: (await getWalletFromStorage())?.id,
+    run: (await penumbraGate()).run,
+    chainId: stored,
+    network,
+    node: await resolvePenumbraEndpoint().catch(() => undefined),
+  };
+};
 
 const settle = (
   r: { wallet?: WalletJson; reason?: string; chainId?: string },
@@ -435,14 +437,10 @@ localExtStorage.addListener(changes => {
     }
   }
 
-  // Reinitialize when penumbra network is enabled
-  if (changes.enabledNetworks !== undefined) {
-    const newNetworks = changes.enabledNetworks.newValue ?? [];
-    const oldNetworks = changes.enabledNetworks.oldValue ?? [];
-    if (!oldNetworks.includes('penumbra') && newNetworks.includes('penumbra')) {
-      console.log('[sync] penumbra network enabled, initializing services...');
-      void reinitializeServices('penumbra enabled');
-    }
+  // penumbra turned on, its testnet on or off, or its node changed: the
+  // scheduler skips whatever leaves the target as it is
+  if (changes.enabledNetworks !== undefined || changes.networkEndpoints !== undefined) {
+    void reinitializeServices('penumbra chain or node changed');
   }
 
   // Active-scoped sync: when the user switches networks, restart services so

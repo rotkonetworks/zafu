@@ -64,6 +64,18 @@ export const HOME_LOOK = {
     empty: 'no assets yet',
     receive: 'receive',
   },
+  // testnet coins have no value: no total in usd, nothing to swap
+  'penumbra-testnet': {
+    unit: 'um',
+    label: 'testnet balance',
+    eye: false,
+    actionIcons: false,
+    swap: false,
+    heading: 'assets',
+    watermark: 'i-zafu-enso',
+    empty: 'no testnet coins yet',
+    receive: 'receive',
+  },
   // usdc only, and only what can move: no prices, nothing to swap
   hyperliquid: {
     unit: 'usdc',

@@ -10,7 +10,7 @@ import { getWalletFromStorage, getWalletsFromStorage } from '@repo/storage-chrom
 import type { WalletJson } from '@repo/wallet';
 import { Services } from '@repo/context';
 import { WalletServices } from '@penumbrafi/types/services';
-import { getRootNetwork } from './config/networks';
+import { getRootNetwork, hasFeature } from './config/networks';
 import { resolvePenumbraEndpoint } from './config/penumbra-endpoints';
 import { hasLiveDappSession } from './dapp-session-presence';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
@@ -27,6 +27,8 @@ import {
 } from './penumbra/start';
 import { penumbraTiming } from './penumbra/timing';
 import { walletsWithStoredView } from './penumbra/stored-views';
+import { PENUMBRA_CHAINS, type PenumbraNetwork } from './penumbra/chain';
+import { readPenumbraChain } from './penumbra/active-chain';
 import type { BlockProcessor } from '@penumbra-zone/query/block-processor';
 
 /**
@@ -134,25 +136,24 @@ export const startWalletServices = async (
   }
 
   await adoptLegacy();
-  // chosen as penumbra turns on; a wallet that came another way reads the whole chain
-  let asked = startsOf(await localExtStorage.get('penumbraStarts'))?.[wallet.id];
-  // "sync from now" written for a wallet that already holds part of the
-  // chain (an older build asked for every wallet at once) would skip every
-  // block between its stored height and now: it reads on instead
-  if (!asked || (asked === 'tip' && (await walletsWithStoredView([wallet.id])).has(wallet.id))) {
-    asked = { since: 0 };
-    await setStart(wallet.id, asked);
-  }
-
-  const grpcEndpoint = await resolvePenumbraEndpoint();
+  // the chain in use: mainnet, or its testnet while that is on, each with its
+  // own node, params and database; a node that can't serve it leaves a stub
+  const { network } = await readPenumbraChain();
+  const entry = PENUMBRA_CHAINS[network];
+  let grpcEndpoint: string;
+  let chain: { chainId: string; confirmed: boolean };
   let t = performance.now();
-  const { chainId, confirmed } = await startChainId(paramsAt(grpcEndpoint));
-  penumbraTiming(`params (${confirmed ? 'node, first run' : 'stored'})`, t);
-  const numeraires = await numerairesFor(chainId);
-  t = performance.now();
-  // a known start is read at once; only a start still to resolve asks the node
-  const start = isResolved(asked) ? asked : await resolveAt(wallet.id, asked, grpcEndpoint, signal);
-  penumbraTiming(`start (${isResolved(asked) ? 'known' : 'node'})`, t);
+  try {
+    grpcEndpoint = await resolvePenumbraEndpoint();
+    chain = await startChainId(paramsAt(network, grpcEndpoint));
+  } catch (e) {
+    return stubServices(e instanceof Error ? e.message : String(e));
+  }
+  const { chainId, confirmed } = chain;
+  penumbraTiming(`params (${confirmed ? 'node' : 'stored'})`, t);
+  // prices are recorded only for coins that have them (a testnet's have none)
+  const numeraires = hasFeature(network, 'cosmos') ? await numerairesFor(chainId) : [];
+  const start = entry.start ?? (await walletStart(wallet.id, chainId, grpcEndpoint, signal));
   console.log(`[sync] starting from ${grpcEndpoint}, decrypting from ${start.creation}`);
 
   const services = new Services({
@@ -173,14 +174,39 @@ export const startWalletServices = async (
   // lost database must be read again, since a snapshot at a later tip would
   // hide what arrived in between
   const read = knownHeight(await walletServices.indexedDb.getFullSyncHeight());
-  if (start.frontier !== undefined && read !== undefined) {
+  if (!entry.start && start.frontier !== undefined && read !== undefined) {
     await setStart(wallet.id, { creation: start.creation });
   }
-  void publishSyncHeight(wallet.id, walletServices, signal);
+  void publishSyncHeight(wallet.id, chainId, walletServices, signal);
   // `@` is wake to ready: performance.now() in a worker counts from its start
   penumbraTiming('services ready');
 
   return { services, wallet, chainId };
+};
+
+/** a wallet's own start on mainnet: chosen as penumbra turns on, else the whole chain */
+const walletStart = async (
+  walletId: string,
+  chainId: string,
+  grpcEndpoint: string,
+  signal?: AbortSignal,
+) => {
+  let asked = startsOf(await localExtStorage.get('penumbraStarts'))?.[walletId];
+  // "sync from now" written for a wallet that already holds part of the
+  // chain (an older build asked for every wallet at once) would skip every
+  // block between its stored height and now: it reads on instead
+  if (
+    !asked ||
+    (asked === 'tip' && (await walletsWithStoredView([walletId], chainId)).has(walletId))
+  ) {
+    asked = { since: 0 };
+    await setStart(walletId, asked);
+  }
+  const t = performance.now();
+  // a known start is read at once; only a start still to resolve asks the node
+  const start = isResolved(asked) ? asked : await resolveAt(walletId, asked, grpcEndpoint, signal);
+  penumbraTiming(`start (${isResolved(asked) ? 'known' : 'node'})`, t);
+  return start;
 };
 
 /**
@@ -252,21 +278,28 @@ interface ParamsSource {
   stored: () => Promise<AppParameters | undefined>;
   fetch: () => Promise<AppParameters | undefined>;
   save: (params: AppParameters) => Promise<void>;
+  /** why a node's chain can't be read here (PENUMBRA_CHAINS), or undefined */
+  refuse?: (chainId: string) => string | undefined;
 }
 
-const storedParams = () =>
+const storedParams = (network: PenumbraNetwork) =>
   localExtStorage
-    .get('params')
+    .get(PENUMBRA_CHAINS[network].params)
     .then(json => (json ? AppParameters.fromJsonString(json) : undefined));
 
-const paramsAt = (baseUrl: string, timeoutMs?: number): ParamsSource => ({
-  stored: storedParams,
-  fetch: () =>
-    createClient(AppService, createGrpcWebTransport({ baseUrl }))
-      .appParameters({}, { timeoutMs })
-      .then(({ appParameters }) => appParameters),
-  save: params => localExtStorage.set('params', params.toJsonString()),
-});
+/** a network entry's params: kept under its own key, so a testnet never writes mainnet's */
+const paramsAt = (network: PenumbraNetwork, baseUrl: string, timeoutMs?: number): ParamsSource => {
+  const { params, askFirst, refuse } = PENUMBRA_CHAINS[network];
+  return {
+    stored: askFirst ? () => Promise.resolve(undefined) : () => storedParams(network),
+    fetch: () =>
+      createClient(AppService, createGrpcWebTransport({ baseUrl }))
+        .appParameters({}, { timeoutMs })
+        .then(({ appParameters }) => appParameters),
+    save: p => localExtStorage.set(params, p.toJsonString()),
+    refuse,
+  };
+};
 
 /**
  * The chain id the services start on. Stored params come first, so a start
@@ -287,6 +320,10 @@ export const startChainId = async (
   const fetched = await source.fetch().catch(() => undefined);
   if (!fetched?.chainId) {
     throw new Error('No chainId available');
+  }
+  const refused = source.refuse?.(fetched.chainId);
+  if (refused) {
+    throw new Error(refused);
   }
   await source.save(fetched);
   return { chainId: fetched.chainId, confirmed: true };
@@ -315,7 +352,7 @@ export const refreshChainId = async (
   const fetched = await Promise.race([source.fetch().catch(() => undefined), late]).finally(() =>
     clearTimeout(timer),
   );
-  if (!fetched?.chainId) {
+  if (!fetched?.chainId || source.refuse?.(fetched.chainId)) {
     return undefined;
   }
   const stored = await source.stored();
@@ -326,28 +363,33 @@ export const refreshChainId = async (
 };
 
 export const refreshPenumbraChainId = async () =>
-  refreshChainId(paramsAt(await resolvePenumbraEndpoint(), CHAIN_CHECK_TIMEOUT_MS));
-
-/** the chain id of the stored params, without asking anyone */
-export const storedPenumbraChainId = async () =>
-  (await storedParams().catch(() => undefined))?.chainId || undefined;
+  refreshChainId(
+    paramsAt(
+      (await readPenumbraChain()).network,
+      await resolvePenumbraEndpoint(),
+      CHAIN_CHECK_TIMEOUT_MS,
+    ),
+  );
 
 const knownHeight = (h: bigint | undefined) =>
   h == null || h === SENTINEL_U64_MAX ? undefined : Number(h);
 
 /**
  * Publish this wallet's synced height for the home, with the height the run
- * started from. Every write names the wallet and none follows a stop, so a
- * home never shows one wallet's height under another.
+ * started from. Every write names the wallet and its chain and none follows a
+ * stop, so a home never shows one wallet's or one chain's height under another.
  */
 export const publishSyncHeight = async (
   walletId: string,
+  chainId: string,
   { indexedDb }: Pick<WalletServices, 'indexedDb'>,
   signal?: AbortSignal,
 ) => {
   const from = knownHeight(await indexedDb.getFullSyncHeight()) ?? 0;
   const publish = (height: number) =>
-    signal?.aborted ? undefined : localExtStorage.set('penumbraSync', { walletId, height, from });
+    signal?.aborted
+      ? undefined
+      : localExtStorage.set('penumbraSync', { walletId, chainId, height, from });
   await publish(from);
   for await (const { value } of indexedDb.subscribe('FULL_SYNC_HEIGHT')) {
     if (signal?.aborted) {

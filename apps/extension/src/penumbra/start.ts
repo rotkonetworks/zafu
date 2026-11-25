@@ -108,10 +108,18 @@ export interface PenumbraTarget {
    * one later must rebuild them rather than keep a mismatched chain.
    */
   chainId?: string;
+  /**
+   * the entry (mainnet or its testnet) and its node: switching either is a
+   * deliberate change of target, never a chain-id mismatch to recover from
+   */
+  network?: string;
+  node?: string;
 }
 
 export const sameTarget = (running: PenumbraTarget, next: PenumbraTarget) =>
   running.run === next.run &&
+  running.network === next.network &&
+  running.node === next.node &&
   (running.walletId === undefined || running.walletId === next.walletId) &&
   (!running.run ||
     running.chainId === undefined ||

@@ -60,10 +60,10 @@ const readCache = async (): Promise<Cached | undefined> => {
 
 /**
  * The discovered routes, refreshing when older than an hour or when the
- * Penumbra endpoint changed. Undefined when discovery has never succeeded.
+ * Penumbra endpoint changed. Mainnet's always: the ibc chains reach penumbra-1. Undefined when discovery has never succeeded.
  */
 export const getPenumbraRoutes = async (): Promise<PenumbraRoute[] | undefined> => {
-  const [cached, endpoint] = await Promise.all([readCache(), resolvePenumbraEndpoint()]);
+  const [cached, endpoint] = await Promise.all([readCache(), resolvePenumbraEndpoint('penumbra')]);
   if (cached && cached.endpoint === endpoint && Date.now() - cached.at < MAX_AGE_MS) {
     return cached.routes;
   }

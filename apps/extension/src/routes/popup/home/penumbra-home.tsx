@@ -29,6 +29,9 @@ import {
 } from './penumbra-value';
 import { combine, type Book } from '../../../penumbra/price';
 import { QUOTES } from '../../../penumbra/quotes';
+import { penumbraNetworkOf } from '../../../penumbra/chain';
+import { hasFeature } from '../../../config/networks';
+import { useStore } from '../../../state';
 import { SyncStrip } from '../../../components/wallet/sync-strip';
 import { EmptyBox, HomeScreen } from './home-screen';
 import {
@@ -43,8 +46,6 @@ import { PopupPath } from '../paths';
 import { homeFixture } from './fixture';
 import type { BalanceView } from '../../../components/wallet/balance-hero';
 import { Clipped } from '@repo/ui/components/ui/clipped';
-
-const look = HOME_LOOK.penumbra;
 
 const Line = ({ label, children }: { label: string; children: ReactNode }) => (
   <div className='flex min-h-12 items-center justify-between gap-3 px-3.5 text-[13px]'>
@@ -202,7 +203,12 @@ export const AssetRow = ({
 /** penumbra home: the shared home, read from the view service */
 export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: ReactNode }) => {
   const queryClient = useQueryClient();
+  // a testnet's coins have no value and no ibc: no prices, nothing to shield in
+  const network = useStore(s => penumbraNetworkOf(s.keyRing.enabledNetworks));
+  const look = HOME_LOOK[network];
+  const valued = hasFeature(network, 'cosmos');
   const transparent = useTransparent();
+  const ready = valued ? transparent.ready : [];
   const { tip, height, from, error: syncError, storageStopped } = useSyncProgress();
   // the shared RAW balances cache (preload, send, swap read it too); this
   // screen's view of it is the fungible rows
@@ -228,10 +234,10 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
   const caughtUp = tip > 0 && height !== undefined && tip - height <= CAUGHT_UP_BLOCKS;
   const { totalIn } = usePenumbraTotalIn();
   // recorded prices first; the fixed dex pass (same for every wallet) once read to the tip
-  const fixed = useFixedPrices(caughtUp);
+  const fixed = useFixedPrices(caughtUp && valued);
   const book =
     fixture?.book ??
-    (assets && (fixed.data || fixed.isError)
+    (valued && assets && (fixed.data || fixed.isError)
       ? combine(QUOTES, localPrices(assets, height), fixed.data?.book)
       : undefined);
   const hero = heroOf(assets ?? [], book?.[totalIn], totalIn);
@@ -293,9 +299,9 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
       ) : view === 'loading' ? null : (
         <>
           {/* found on a deposit address and waiting: first, one shield each */}
-          {transparent.ready.length > 0 && (
+          {ready.length > 0 && (
             <BalanceGroup heading='ready to shield'>
-              {transparent.ready.map(r => (
+              {ready.map(r => (
                 <BalanceRow
                   key={r.key}
                   tile={<Tile tone='quiet'>{r.symbol.slice(0, 2)}</Tile>}
@@ -318,7 +324,7 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
               ))}
             </BalanceGroup>
           )}
-          {empty && !transparent.ready.length && <EmptyBox look={look} />}
+          {empty && !ready.length && <EmptyBox look={look} />}
           {!empty && (
             <BalanceGroup heading={look.heading}>
               {assets?.map(a => (

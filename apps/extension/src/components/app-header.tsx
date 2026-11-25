@@ -15,7 +15,7 @@ import { PopupPath } from '../routes/popup/paths';
 import { selectActiveZcashWallet, selectNetworkShown } from '../state/wallets';
 import { isViewOnly } from '../signing/wallet-kind';
 import { activePockets, hiddenPockets, pocketOwner } from '../state/pockets';
-import { getNetwork, getRootNetwork } from '../config/networks';
+import { getNetwork, getRootNetwork, isTestnet } from '../config/networks';
 import { AccountsSheet, pocketTarget, type PocketSheetTarget } from './accounts-sheet';
 import { NetworkSheet } from './network-sheet';
 import { AddWalletSheet } from './add-wallet-sheet';
@@ -40,7 +40,7 @@ export const AppHeader = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
-  const testnet = useStore(s => selectNetworkShown(s) === 'zcash-testnet');
+  const testnet = useStore(s => isTestnet(selectNetworkShown(s)));
   const pockets = useStore(useShallow(activePockets));
   const pocketAccount = useStore(pocketTarget(activeNetwork).active);
   const owner = selectedKeyInfo ? pocketOwner(selectedKeyInfo) : undefined;

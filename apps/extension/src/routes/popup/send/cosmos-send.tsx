@@ -3,6 +3,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from 'react';
+import { PENUMBRA_MAINNET } from '../../../penumbra/chain';
 import { Sensitive } from '../../../components/sensitive';
 import { PopupPath } from '../paths';
 import { useQueryClient } from '@tanstack/react-query';
@@ -53,10 +54,10 @@ import { AmountField, AddressSheet, PickSheet, ToField } from './send-fields';
 import { STAGES } from './send-stage';
 import { useChainInUse } from '../../../hooks/enable-network';
 
-// Penumbra's Skip/registry chain id. Shielding USDC INTO penumbra is a direct
-// single-hop IBC MsgTransfer over our own relayed channel, NOT a Skip route -
-// so this id is special-cased throughout the cosmos send flow below.
-const PENUMBRA_CHAIN_ID = 'penumbra-1';
+// Penumbra's Skip/registry chain id (PENUMBRA_MAINNET): shielding USDC INTO
+// penumbra is a direct single-hop IBC MsgTransfer over our own relayed channel
+// to mainnet, NOT a Skip route - so it is special-cased throughout the cosmos
+// send flow below, and never follows a testnet switch.
 
 /**
  * Loaded lazily and defensively ON PURPOSE. This module also hosts
@@ -153,7 +154,7 @@ export function CosmosSend({
   // destination-chain pickers don't apply to it
   const isShield = intent === 'shield' && (!!penumbraChannel || penumbraResting);
   const [destChainId, setDestChainId] = useState<string | undefined>(
-    isShield ? PENUMBRA_CHAIN_ID : undefined,
+    isShield ? PENUMBRA_MAINNET : undefined,
   );
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
@@ -221,7 +222,7 @@ export function CosmosSend({
   const destChains = useMemo(
     () =>
       penumbraChannel || penumbraResting
-        ? [{ chainId: PENUMBRA_CHAIN_ID, chainName: 'Penumbra (shielded)' }]
+        ? [{ chainId: PENUMBRA_MAINNET, chainName: 'Penumbra (shielded)' }]
         : [],
     [penumbraChannel, penumbraResting],
   );
@@ -342,7 +343,7 @@ export function CosmosSend({
     setRecipient('');
     setTxHash(undefined);
     setTxStatus('idle');
-    setDestChainId(isShield ? PENUMBRA_CHAIN_ID : undefined);
+    setDestChainId(isShield ? PENUMBRA_MAINNET : undefined);
   };
   // on the donor: the gas asset, all of what can move
   useEffect(() => {
@@ -394,13 +395,13 @@ export function CosmosSend({
     // always returns "no routes found".
     enabled:
       !!destChainId &&
-      destChainId !== PENUMBRA_CHAIN_ID &&
+      destChainId !== PENUMBRA_MAINNET &&
       parseFloat(amount) > 0 &&
       !!selectedAsset,
   });
 
   // Shielding INTO penumbra: bypass Skip, use our own relayed channel directly.
-  const isPenumbraDest = effectiveDestChainId === PENUMBRA_CHAIN_ID;
+  const isPenumbraDest = effectiveDestChainId === PENUMBRA_MAINNET;
 
   // Injective recipients: inj1 or 0x (EIP-55), with a reason when wrong
   const ethermintRecipient =

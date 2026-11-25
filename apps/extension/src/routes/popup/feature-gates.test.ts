@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { NETWORKS, hasFeature } from '../../config/networks';
+import { NETWORKS, hasFeature, isTestnet } from '../../config/networks';
 import { type NetworkType } from '../../state/keyring/network-types';
 
 const NETWORK_IDS = Object.keys(NETWORKS) as NetworkType[];
@@ -42,11 +42,13 @@ const WRITTEN_SETS: Partial<Record<NetworkType, FeatureKey[]>> = {
   // testnet coins have no value: nothing to swap or vote with
   'zcash-testnet': ['inbox', 'multisig', 'zcash'],
   penumbra: ['stake', 'swap', 'vote', 'inbox', 'cosmos'],
+  // testnet coins have no value: no prices, swaps, votes or ibc
+  'penumbra-testnet': [],
   ethereum: [],
   bitcoin: [],
 };
-/** every penumbra subnetwork, written out or from the registry, is a cosmos surface only */
-const isSubnetwork = (n: NetworkType) => NETWORKS[n]?.parent === 'penumbra';
+/** every penumbra ibc subnetwork, written out or from the registry, is a cosmos surface only */
+const isSubnetwork = (n: NetworkType) => NETWORKS[n]?.parent === 'penumbra' && !isTestnet(n);
 const EXPECTED_SETS: Record<NetworkType, FeatureKey[]> = Object.fromEntries(
   NETWORK_IDS.map(n => [n, WRITTEN_SETS[n] ?? (isSubnetwork(n) ? ['cosmos'] : [])]),
 );

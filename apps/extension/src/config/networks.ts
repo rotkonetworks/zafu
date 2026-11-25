@@ -128,6 +128,27 @@ const WRITTEN: Record<string, NetworkConfig> = {
       zcash: false,
     },
   },
+  // penumbra's own testnet, as zcash's: on, penumbra reads the node the person
+  // sets for it (there is none by default), into the chain's own database, and
+  // mainnet waits untouched (penumbra/chain). Its coins have no value: no
+  // prices, swaps, votes or ibc
+  'penumbra-testnet': {
+    name: 'Penumbra testnet',
+    color: 'bg-teal-400',
+    focusColor: 'focus:border-penumbra-purple',
+    transparent: false,
+    launched: true,
+    parent: 'penumbra',
+    features: {
+      stake: false,
+      swap: false,
+      vote: false,
+      inbox: false,
+      multisig: false,
+      cosmos: false,
+      zcash: false,
+    },
+  },
   noble: {
     name: 'Noble',
     color: 'bg-blue-400',
@@ -375,9 +396,17 @@ export const getTopLevelNetworks = (
       (!NETWORKS[n]?.beta || beta || enabled.includes(n)),
   );
 
-/** launched subnetworks (IBC destinations) of a parent network */
+export const isTestnet = (network: string) => network.endsWith('-testnet');
+
+/** launched subnetworks (IBC destinations) of a parent network; its own testnet is not one */
 export const getSubnetworks = (parent: NetworkType): NetworkType[] =>
-  Object.keys(NETWORKS).filter(n => NETWORKS[n]?.launched && NETWORKS[n]?.parent === parent);
+  Object.keys(NETWORKS).filter(
+    n => NETWORKS[n]?.launched && NETWORKS[n]?.parent === parent && !isTestnet(n),
+  );
+
+/** a network's own testnet entry, when it has one */
+export const testnetOf = (network: NetworkType): NetworkType | undefined =>
+  NETWORKS[`${network}-testnet`]?.launched ? `${network}-testnet` : undefined;
 
 /**
  * IBC chain ids reachable from `parent` right now: launched subnetworks that

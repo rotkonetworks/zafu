@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { loadStoredRegistry } from '../transparent/registry-live';
-import { refreshPenumbraRegistry } from '../penumbra/asset-registry';
+import { onPenumbraChainChange, refreshPenumbraRegistry } from '../penumbra/asset-registry';
 import { RouterProvider } from 'react-router-dom';
 import { popupRouter, popupRoutes } from '../routes/popup/router';
 import { installPreload } from '../routes/popup/preload';
@@ -55,6 +55,8 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, refetchOnReconnect: false } },
 });
 installPreload({ routes: popupRoutes, client: queryClient });
+// what was read on one penumbra chain is never shown on another
+onPenumbraChainChange(() => queryClient.removeQueries());
 
 const MainPopup = () => {
   const [wasmReady, setWasmReady] = useState(false);

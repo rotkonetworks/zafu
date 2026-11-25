@@ -20,20 +20,23 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../state';
 import { getActiveWalletJson } from '../state/wallets';
 import { resyncStart, startsOf } from '../penumbra/start';
+import { readPenumbraChain } from '../penumbra/active-chain';
+import { PENUMBRA_CHAINS } from '../penumbra/chain';
 
 /** the penumbra wallet in view, or undefined when none is active */
 const activeWalletId = (): string | undefined => getActiveWalletJson(useStore.getState())?.id;
 
 /**
  * Forget what penumbra has found for the active wallet and read the chain
- * again from its own start. Clears every penumbra wallet's view data on this
- * computer (the clear-cache mechanism is not scoped narrower than that) and
- * reloads the extension; resolves once the clear has been requested, not
+ * again from its own start. Clears every penumbra wallet's view data for the
+ * chain in use on this computer (the clear-cache mechanism is not scoped
+ * narrower than that) and reloads the extension; resolves once the clear has been requested, not
  * once it finishes.
  */
 export const resyncPenumbraFromStart = async (everything = false): Promise<void> => {
   const walletId = activeWalletId();
-  if (walletId) {
+  // a testnet reads from genesis, so only mainnet keeps starts to set
+  if (walletId && !PENUMBRA_CHAINS[(await readPenumbraChain()).network].start) {
     const starts = startsOf(await localExtStorage.get('penumbraStarts')) ?? {};
     await localExtStorage.set('penumbraStarts', {
       ...starts,

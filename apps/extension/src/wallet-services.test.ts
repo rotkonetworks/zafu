@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
 import { publishSyncHeight, refreshChainId, startChainId } from './wallet-services';
+import { PENUMBRA_CHAINS } from './penumbra/chain';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 
@@ -35,33 +36,53 @@ const tick = () => new Promise(r => setTimeout(r, 10));
 describe('publishSyncHeight', () => {
   beforeEach(() => localMock.clear());
 
-  it('names the wallet and the height this run started from', async () => {
+  it('names the wallet, its chain and the height this run started from', async () => {
     const d = db(12_997_731n);
-    void publishSyncHeight('w1', d, new AbortController().signal);
+    void publishSyncHeight('w1', 'penumbra-1', d, new AbortController().signal);
     await tick();
-    expect(await published()).toEqual({ walletId: 'w1', height: 12_997_731, from: 12_997_731 });
+    expect(await published()).toEqual({
+      walletId: 'w1',
+      chainId: 'penumbra-1',
+      height: 12_997_731,
+      from: 12_997_731,
+    });
     d.push(12_997_800n);
     await tick();
-    expect(await published()).toEqual({ walletId: 'w1', height: 12_997_800, from: 12_997_731 });
+    expect(await published()).toEqual({
+      walletId: 'w1',
+      chainId: 'penumbra-1',
+      height: 12_997_800,
+      from: 12_997_731,
+    });
   });
 
   it('a fresh scan starts from the start of the chain', async () => {
-    void publishSyncHeight('w1', db(undefined), new AbortController().signal);
+    void publishSyncHeight('w1', 'penumbra-1', db(undefined), new AbortController().signal);
     await tick();
-    expect(await published()).toEqual({ walletId: 'w1', height: 0, from: 0 });
+    expect(await published()).toEqual({
+      walletId: 'w1',
+      chainId: 'penumbra-1',
+      height: 0,
+      from: 0,
+    });
   });
 
   it('writes nothing once its wallet is switched away from', async () => {
     const old = db(435_000n);
     const stop = new AbortController();
-    void publishSyncHeight('w0', old, stop.signal);
+    void publishSyncHeight('w0', 'penumbra-1', old, stop.signal);
     await tick();
     stop.abort();
-    void publishSyncHeight('w1', db(12_997_731n), new AbortController().signal);
+    void publishSyncHeight('w1', 'penumbra-1', db(12_997_731n), new AbortController().signal);
     await tick();
     old.push(435_001n);
     await tick();
-    expect(await published()).toEqual({ walletId: 'w1', height: 12_997_731, from: 12_997_731 });
+    expect(await published()).toEqual({
+      walletId: 'w1',
+      chainId: 'penumbra-1',
+      height: 12_997_731,
+      from: 12_997_731,
+    });
   });
 });
 
@@ -134,5 +155,22 @@ describe('params come from storage first', () => {
     const s = source('penumbra-1', new Error('down'));
     expect(await refreshChainId(s.source)).toBeUndefined();
     expect(s.calls).toEqual(['node']);
+  });
+
+  it('a testnet source asks its node and refuses one serving mainnet, storing nothing', async () => {
+    const { refuse } = PENUMBRA_CHAINS['penumbra-testnet'];
+    const mainnet = source(undefined, 'penumbra-1');
+    await expect(startChainId({ ...mainnet.source, refuse })).rejects.toThrow(
+      'that node serves penumbra mainnet',
+    );
+    expect(mainnet.saved()).toBeUndefined();
+    expect(await refreshChainId({ ...mainnet.source, refuse })).toBeUndefined();
+    expect(mainnet.saved()).toBeUndefined();
+
+    const devnet = source(undefined, 'penumbra-testnet-brinance-1');
+    expect(await startChainId({ ...devnet.source, refuse })).toEqual({
+      chainId: 'penumbra-testnet-brinance-1',
+      confirmed: true,
+    });
   });
 });
