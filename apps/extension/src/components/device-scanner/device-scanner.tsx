@@ -67,6 +67,7 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
   // once the current device's other network has been offered "scan next",
   // remember it joined the same device rather than re-deriving from scratch
   const knownNetworksRef = useRef<Set<ParsedConnectCode['network']>>(new Set());
+  // the vault the last "scan next" add created, so the companion code joins it
 
   const startBlockNum = parseInt(startBlock, 10);
   const startBlockHint = startBlock.trim() ? describeZcashHeight(startBlockNum) : null;
