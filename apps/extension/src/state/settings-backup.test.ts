@@ -152,6 +152,7 @@ describe('settings backup', () => {
     capabilityModes: { 'zid-discovery': 'disabled' },
     enabledNetworks: ['zcash', 'zcash-testnet', 'penumbra'],
     keplrCompat: true,
+    evmWindowEthereum: true,
     hyperliquidPath: "m/44'/60'/2000'/1/0",
   };
 

@@ -18,7 +18,7 @@ import { resyncPenumbraFromStart } from '../../../services/penumbra-resync';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
 import { NodeSheet } from './node-sheet';
-import { KeplrCompatToggle } from './keplr-compat-toggle';
+import { CompatToggle } from './compat-toggle';
 import { useExplain } from './settings-explain';
 import { RpcPoolSheet } from './transparent-chain-endpoints';
 
@@ -205,7 +205,18 @@ export const SettingsPenumbraNetwork = () => {
           ))}
         </RowGroup>
         <RowGroup>
-          <KeplrCompatToggle {...explainProps('devices.actAsKeplr')} />
+          <CompatToggle
+            storageKey='keplrCompat'
+            label='act as keplr'
+            off='a real keplr extension is left untouched'
+            {...explainProps('devices.actAsKeplr')}
+          />
+          <CompatToggle
+            storageKey='evmWindowEthereum'
+            label='act as window.ethereum'
+            off='evm sites still find zafu in their wallet list'
+            {...explainProps('devices.actAsEthereum')}
+          />
         </RowGroup>
       </Sheet>
 

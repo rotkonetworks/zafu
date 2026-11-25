@@ -54,6 +54,7 @@ import { openWalletRoute } from './message/listen/external-easteregg';
 import { omniboxDescription, omniboxUri, escapeOmniboxXml } from './links/omnibox';
 import { PopupPath } from './routes/popup/paths';
 import { keplrMessageListener } from './message/listen/keplr';
+import { createEvmMessageListener, penumbraOwner } from './message/listen/evm';
 import { createPenumbraSendListener } from './message/listen/penumbra-send';
 import { TX_OP_PREFIX, isTxOp, type TxOp } from './tx-ops';
 import { sweepAndResume, defaultTrackerDeps, whileOpen } from './state/ibc-transfer-tracker';
@@ -578,6 +579,11 @@ const getInternalViewClient = async (): Promise<Client<typeof ViewService>> => {
   return internalViewClient;
 };
 listen(createPenumbraSendListener(getInternalViewClient));
+
+// evm provider (EIP-1193): evm dapps connect, read their chain, and ask for
+// transactions and signatures, each approved in zafu and signed here. The view
+// service tells whether a penumbra receiver is the person's own.
+listen(createEvmMessageListener(penumbraOwner(getInternalViewClient)));
 
 // IBC transfer tracker: poll destination chains for shield/unshield arrival.
 // Shield-in reads the Penumbra note via the SW's INTERNAL view client (no

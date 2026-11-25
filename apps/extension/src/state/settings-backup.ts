@@ -74,6 +74,7 @@ const PREFS = {
     return known?.length ? known : undefined;
   },
   keplrCompat: bool,
+  evmWindowEthereum: bool,
   betaFeatures: bool,
   hyperliquidPath: v => (typeof v === 'string' && isBip32Path(v) ? v : undefined),
 } satisfies Record<string, Parse>;

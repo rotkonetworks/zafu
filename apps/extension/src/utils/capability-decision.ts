@@ -53,10 +53,11 @@ export const decideCapabilityUse = (state: CapabilityState): CapabilityDecision 
 /**
  * Capabilities zafu does unless turned off: no one-time opt-in. `encrypt` is
  * one: its keys are derived per site, so a site can only open what was sealed
- * to its own identity there, never another site's or the wallet's. Each site
- * still asks its own consent once.
+ * to its own identity there, never another site's or the wallet's. `evm` is
+ * another: every transaction and signature is still approved one by one. Each
+ * site still asks its own consent once.
  */
-export const DEFAULT_ON: ReadonlySet<Capability> = new Set<Capability>(['encrypt']);
+export const DEFAULT_ON: ReadonlySet<Capability> = new Set<Capability>(['encrypt', 'evm']);
 
 /** A capability's mode once its default is applied: unset means on for these. */
 export const withDefault = (capability: Capability, mode: CapabilityMode): CapabilityMode =>

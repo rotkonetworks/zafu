@@ -270,6 +270,12 @@ export const SETTINGS_EXPLAIN = {
     on: 'those sites can connect to zafu; takes effect on the next page load',
     off: 'those sites see no wallet from zafu; a real keplr extension, if installed, is left untouched',
   },
+  'devices.actAsEthereum': {
+    blurb:
+      'answers evm sites that only look for window.ethereum, as if zafu were the browser wallet.',
+    on: 'those sites find zafu without a wallet list; takes effect on the next page load, and only when no other wallet holds the slot',
+    off: 'sites that list wallets (EIP-6963) still find zafu; window.ethereum is left to another wallet',
+  },
   'about.betaFeatures': {
     blurb:
       'what is built and tested here but not yet proven on real devices or with real sellers: ledger shielded signing and the in-wallet buy.',

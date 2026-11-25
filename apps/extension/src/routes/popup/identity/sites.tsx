@@ -28,6 +28,7 @@ const CAPS: Capability[] = [
   'frost',
   'passkey',
   'encrypt',
+  'evm',
 ];
 
 const SiteSheet = ({

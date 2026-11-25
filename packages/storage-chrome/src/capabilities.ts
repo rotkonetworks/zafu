@@ -10,7 +10,8 @@ export type Capability =
   | 'frost' // create/join/sign multisig sessions
   | 'passkey' // register and sign in with a site-bound WebAuthn passkey
   | 'auto_sign' // skip per-tx confirmation (time-limited)
-  | 'encrypt'; // sealed box encrypt/decrypt with ZID keys
+  | 'encrypt' // sealed box encrypt/decrypt with ZID keys
+  | 'evm'; // see the evm address, ask for evm transactions and signatures
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
@@ -73,6 +74,11 @@ export const CAPABILITY_META: Record<
     // lets a site seal and open its messages with a key zafu keeps for it.
     label: 'Site encryption keys',
     description: 'Let a site seal and open its messages with a key zafu keeps for that site',
+    risk: 'medium',
+  },
+  evm: {
+    label: 'EVM accounts',
+    description: 'See your evm address and request transactions (each one still requires approval)',
     risk: 'medium',
   },
 };

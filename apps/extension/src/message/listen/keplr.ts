@@ -29,12 +29,8 @@ import {
   verifyAdr036,
   type StdSignatureWire,
 } from '@repo/wallet/networks/cosmos/adr036';
-import {
-  openApprovalPopup,
-  registerPendingApproval,
-  releasePopupGuardForRequest,
-  takePendingApproval,
-} from './external-easteregg';
+import { releasePopupGuardForRequest, takePendingApproval } from './external-easteregg';
+import { askInWindow } from './approval-window';
 
 const b64ToBytes = (b64: string): Uint8Array => Uint8Array.from(atob(b64), c => c.charCodeAt(0));
 const bytesToB64 = (bytes: Uint8Array): string => {
@@ -45,47 +41,8 @@ const bytesToB64 = (bytes: Uint8Array): string => {
   return btoa(s);
 };
 
-interface Decision {
-  approved: boolean;
-  payload?: unknown;
-  error?: string;
-}
-
-/**
- * Ask in an approval window: unlocked first, one window per site as every
- * prompt, and a window closed without deciding is a rejection.
- */
-async function openApproval(req: KeplrApprovalRequest): Promise<Decision> {
-  const { throwIfNeedsLogin } = await import('../../needs-login');
-  // the site waits after a dismissed unlock, as for every other prompt
-  await throwIfNeedsLogin(req.origin);
-  await chrome.storage.session.set({ [keplrApprovalKey(req.requestId)]: req });
-  // the closed-window sweep answers { cancelled: true }, which is no approval
-  const decision = new Promise<Decision>(resolve =>
-    registerPendingApproval(req.requestId, r => {
-      const d = r as (Partial<Decision> & { cancelled?: boolean }) | undefined;
-      resolve(
-        d?.approved === true
-          ? { approved: true, payload: d.payload }
-          : { approved: false, error: d?.cancelled ? 'request rejected' : d?.error },
-      );
-    }),
-  );
-  const params = new URLSearchParams({ requestId: req.requestId });
-  const url = chrome.runtime.getURL(`popup.html#/approval/keplr?${params.toString()}`);
-  try {
-    if (!(await openApprovalPopup(req.origin, url, req.requestId))) {
-      takePendingApproval(req.requestId);
-      return {
-        approved: false,
-        error: "zafu couldn't open this request · another from this site may still be open",
-      };
-    }
-    return await decision;
-  } finally {
-    void chrome.storage.session.remove(keplrApprovalKey(req.requestId));
-  }
-}
+const openApproval = (req: KeplrApprovalRequest) =>
+  askInWindow('approval/keplr', keplrApprovalKey(req.requestId), req);
 
 /** each site's enables, one after another: the second sees what the first was given */
 const enabling = new Map<string, Promise<void>>();
@@ -359,7 +316,8 @@ export const keplrMessageListener = (
   sender: chrome.runtime.MessageSender,
   sendResponse: (response?: unknown) => void,
 ): boolean => {
-  // the approval popup posting its result back - only from zafu's own pages:
+  // an approval window posting its result back (the keplr and evm screens,
+  // see approval-window.ts) - only from zafu's own pages:
   // a content script carries this extension's id too, and a forged result
   // would answer an approval the person never saw
   if (isKeplrApprovalResult(message)) {

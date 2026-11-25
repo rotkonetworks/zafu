@@ -322,6 +322,7 @@ export default ({
       'injected-session': path.join(injectDir, 'injected-session.ts'),
       'injected-penumbra-global': path.join(injectDir, 'injected-penumbra-global.ts'),
       'injected-keplr': path.join(injectDir, 'injected-keplr.ts'),
+      'injected-evm': path.join(injectDir, 'injected-evm.ts'),
       'keplr-bridge': path.join(injectDir, 'keplr-bridge.ts'),
       'passkey-bridge': path.join(injectDir, 'passkey-bridge.ts'),
       'passkey-intercept': path.join(injectDir, 'passkey-intercept.ts'),
@@ -350,6 +351,7 @@ export default ({
             'injected-session',
             'injected-penumbra-global',
             'injected-keplr',
+            'injected-evm',
             'keplr-bridge',
             'passkey-bridge',
             'passkey-intercept',
@@ -387,6 +389,12 @@ export default ({
           generator: {
             filename: 'videos/[hash][ext][query]',
           },
+        },
+        {
+          // `?inline`: a data: url in the bundle, for a page script that must
+          // not reach back to the extension (the evm provider's icon)
+          resourceQuery: /inline/,
+          type: 'asset/inline',
         },
         {
           // bundled registry/skip/chain and swap icons: shipped in the build,

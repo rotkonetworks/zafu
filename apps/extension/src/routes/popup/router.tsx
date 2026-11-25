@@ -271,6 +271,10 @@ export const popupRoutes: RouteObject[] = [
             path: PopupPath.KEPLR_APPROVAL,
             ...screen('keplrApproval'),
           },
+          {
+            path: PopupPath.EVM_APPROVAL,
+            ...screen('evmApproval'),
+          },
         ],
       },
     ],

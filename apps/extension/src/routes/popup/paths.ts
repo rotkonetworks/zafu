@@ -104,6 +104,8 @@ export enum PopupPath {
   ZCASH_SEND_APPROVAL = '/approval/zcash-send',
   // Keplr provider approval (connect + cosmos signing, opened by cosmos dapps)
   KEPLR_APPROVAL = '/approval/keplr',
+  // evm provider approval (connect, transactions, messages, opened by evm dapps)
+  EVM_APPROVAL = '/approval/evm',
 
   // Settings sub-pages (multisig)
   SETTINGS_MULTISIG = '/settings/multisig',
@@ -173,6 +175,7 @@ export const APPROVAL_ROUTES: readonly string[] = [
   PopupPath.CAPABILITY_APPROVAL,
   PopupPath.ZCASH_SEND_APPROVAL,
   PopupPath.KEPLR_APPROVAL,
+  PopupPath.EVM_APPROVAL,
   PopupPath.CONTACT_DISCOVERY_APPROVAL,
   PopupPath.CONNECT_APPROVAL,
   PopupPath.DESTINATION_APPROVAL,

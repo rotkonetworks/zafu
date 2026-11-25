@@ -41,6 +41,7 @@ import {
 import { BUNDLED_SERVICE_CONFIG } from '../services/voting/bundled-config';
 import { BASE_RPC, PEER_HOSTS } from '../config/ramps';
 import { HYPERLIQUID_API, UNIT_API } from '@repo/wallet/networks/hyperliquid/api';
+import { EVM_CHAINS } from '../evm/chains';
 import { PAY_APPS } from '../buy/apps';
 import { hostOf, isPrivateNetworkHost } from './destination';
 import { backendKey, backendOfEndpoint, isZcashBackend } from '../state/keyring/zcash-backend';
@@ -524,6 +525,20 @@ export const DESTINATIONS: DestinationSpec[] = [
     gate: { kind: 'network', networks: ['hyperliquid'] },
     urls: () => [UNIT_API],
   },
+  // a site's evm chain (the evm provider): asked when a site first connects on it
+  ...EVM_CHAINS.flatMap(({ destination, name, rpc }): DestinationSpec[] =>
+    destination
+      ? [
+          {
+            id: destination,
+            label: `${name} rpc`,
+            purpose: 'chain-rpc',
+            gate: { kind: 'optional' },
+            urls: () => [rpc],
+          },
+        ]
+      : [],
+  ),
   ...Object.entries(OTHER_NETWORKS).map(
     ([id, urls]): DestinationSpec => ({
       id,

@@ -69,6 +69,7 @@ export const popupScreens = {
   passkeyApprove: () => import('./approval/passkey').then(m => m.PasskeyApprove),
   zcashSendApproval: () => import('./approval/zcash-send').then(m => m.ZcashSendApproval),
   keplrApproval: () => import('./approval/keplr').then(m => m.KeplrApproval),
+  evmApproval: () => import('./approval/evm').then(m => m.EvmApproval),
 
   // tab pages and flows
   tools: () => import('./tools').then(m => m.ToolsPage),

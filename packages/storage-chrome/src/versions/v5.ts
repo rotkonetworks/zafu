@@ -67,6 +67,8 @@ type LOCAL = {
   backupReminderSeen?: boolean;
   seedPhraseBackedUp?: boolean;
   keplrCompat?: boolean;
+  /** zafu's evm provider takes window.ethereum when it is free (settings, off by default) */
+  evmWindowEthereum?: boolean;
   /** beta features on or off; unset: on in the beta build only (config/beta) */
   betaFeatures?: boolean;
   /** the person's own Hyperliquid derivation path; unset: the wallet's one evm key */
