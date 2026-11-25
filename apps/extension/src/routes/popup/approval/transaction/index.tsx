@@ -13,6 +13,7 @@ import { AuthorizeRequest } from '@penumbra-zone/protobuf/penumbra/custody/v1/cu
 import { TransactionPlan } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import { useTransactionViewSwitcher } from './use-transaction-view-switcher';
 import { ViewTabs } from './view-tabs';
+import { testnetLine } from '../../../../penumbra/chain';
 import { ApproveDeny } from '../approve-deny';
 import { UserChoice } from '@repo/storage-chrome/records';
 import type { Jsonified } from '@penumbrafi/types/jsonified';
@@ -108,6 +109,7 @@ export const TransactionApproval = () => {
   if (!authorizeRequest?.plan || !selectedTransactionView) {
     return null;
   }
+  const testnet = testnetLine(authorizeRequest.plan.transactionParameters?.chainId);
 
   // After responding, a toolbar popup or dedicated window should close, but the
   // side panel must NOT - closing it tears down the panel the user deliberately
@@ -256,8 +258,18 @@ export const TransactionApproval = () => {
 
   return (
     <div className='flex h-full min-h-0 flex-col bg-canvas'>
-      <ScreenHeader title='review transaction' backPath={false} meta='penumbra' />
+      <ScreenHeader
+        title='review transaction'
+        backPath={false}
+        meta={testnet ? 'penumbra testnet' : 'penumbra'}
+      />
       <Main className='gap-4 pt-5'>
+        {/* the chain the plan itself names: a testnet's signature is good only there */}
+        {testnet && (
+          <StatusSlot tone='warn' icon='i-ph-flask'>
+            {testnet}
+          </StatusSlot>
+        )}
         {invalidPlan && (
           <StatusSlot tone='danger' icon='i-ph-warning'>
             this transaction can&apos;t be signed ·{' '}

@@ -3,11 +3,13 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../state';
 import { startsOf, type PenumbraStart } from '../penumbra/start';
 import { walletsWithStoredView } from '../penumbra/stored-views';
+import { readPenumbraChain } from '../penumbra/active-chain';
+import { PENUMBRA_MAINNET } from '../penumbra/chain';
 import { askPenumbraStart } from '../components/wallet/penumbra-start-sheet';
 import { refreshEgress } from '../net/egress';
 import type { NetworkType } from '../state/keyring';
 import { isIbcNetwork } from '../state/keyring/network-types';
-import { getNetwork, getSubnetworks } from '../config/networks';
+import { getNetwork, getSubnetworks, testnetOf } from '../config/networks';
 
 /** a wallet with a stored height decrypts everything from there */
 const READ_ON: PenumbraStart = { since: 0 };
@@ -29,7 +31,12 @@ export const useEnableNetwork = () => {
       const unasked = penumbraWallets.filter(w => !starts[w.id]);
       // the answer is only for wallets with nothing stored: one that already
       // read part of the chain reads on from there, every block decrypted
-      const stored = await walletsWithStoredView(unasked.map(w => w.id));
+      // starts are mainnet's: a testnet's database says nothing of what mainnet holds
+      const { chainId = PENUMBRA_MAINNET } = await readPenumbraChain('penumbra');
+      const stored = await walletsWithStoredView(
+        unasked.map(w => w.id),
+        chainId,
+      );
       const fresh = unasked.filter(w => !stored.has(w.id));
       const start = fresh.length ? await askPenumbraStart() : 'tip';
       if (!start) {
@@ -52,12 +59,14 @@ export const useEnableNetwork = () => {
   };
 };
 
-/** turning a network off also turns off its ibc chains, so none keeps reaching its nodes */
+/** turning a network off also turns off its ibc chains and testnet, so none keeps reaching its nodes */
 export const useDisableNetwork = () => {
   const toggleNetwork = useStore(s => s.keyRing.toggleNetwork);
   const enabled = useStore(s => s.keyRing.enabledNetworks);
   return async (n: NetworkType) => {
-    for (const c of [...getSubnetworks(n), n].filter(c => enabled.includes(c))) {
+    for (const c of [...getSubnetworks(n), testnetOf(n), n].filter(
+      (c): c is NetworkType => !!c && enabled.includes(c),
+    )) {
       await toggleNetwork(c);
     }
   };

@@ -3,10 +3,11 @@
  * launched top-level network (not just the enabled ones), so a disabled
  * network still shows up with a "turn on" row instead of being invisible.
  *
- * Zcash testnet is an entry of its own, right under zcash: picking it is
- * picking zcash with its testnet switch on (a seed wallet's zcash then speaks
- * testnet; mainnet waits untouched, and only the chain in use syncs), and
- * picking zcash turns the switch off. The mark follows the chain shown.
+ * A network's testnet (zcash's, penumbra's) is an entry of its own, right
+ * under it: picking it is picking the network with its testnet switch on (it
+ * then speaks testnet; mainnet waits untouched, and only the chain in use
+ * syncs), and picking the network turns the switch off. The mark follows the
+ * chain shown. A penumbra testnet has no node until the person sets one.
  */
 
 import { Clipped } from '@repo/ui/components/ui/clipped';
@@ -21,11 +22,12 @@ import {
   selectKeyInfos,
   selectSelectedKeyInfo,
   selectSetActiveNetwork,
+  type NetworkType,
 } from '../state/keyring';
 import { findCompatibleVault, keyInfoSupportsNetwork } from '../state/keyring/vault-ops';
 import { selectNetworkShown } from '../state/wallets';
 import { useEnableNetwork } from '../hooks/enable-network';
-import { getNetwork, getSubnetworks, getTopLevelNetworks } from '../config/networks';
+import { getNetwork, getTopLevelNetworks, testnetOf } from '../config/networks';
 import { PopupPath } from '../routes/popup/paths';
 import { useBetaFeatures } from '../config/beta';
 
@@ -34,6 +36,7 @@ export const NETWORK_BLURB: Partial<Record<string, string>> = {
   zcash: 'encrypted money',
   'zcash-testnet': 'coins have no value',
   penumbra: 'private defi',
+  'penumbra-testnet': 'coins have no value · your own node',
   hyperliquid: 'beta · usdc in and out, public',
 };
 
@@ -57,39 +60,40 @@ export const NetworkSheet = ({
   /** the wallet setActiveNetwork moves to when the selected one can't serve `n` */
   const switchesTo = (n: (typeof enabledNetworks)[number]) =>
     selected && !keyInfoSupportsNetwork(selected, n) ? findCompatibleVault(keyInfos, n) : undefined;
-  const testnetOn = enabledNetworks.includes('zcash-testnet');
+  const penumbraNode = useStore(s => !!s.networks.networks['penumbra-testnet'].endpoint);
 
-  /** zcash, then its testnet as an entry of its own, then the rest */
-  const entries = getTopLevelNetworks(useBetaFeatures(), enabledNetworks).flatMap(n =>
-    n === 'zcash' ? [n, ...getSubnetworks(n)] : [n],
-  );
+  /** each network, then its testnet as an entry of its own */
+  const entries = getTopLevelNetworks(useBetaFeatures(), enabledNetworks).flatMap(n => [
+    n,
+    ...[testnetOf(n)].filter((t): t is NetworkType => !!t),
+  ]);
 
-  const pick = async (n: (typeof enabledNetworks)[number]) => {
+  const pick = async (n: NetworkType) => {
     onOpenChange(false);
     if (n === shown) {
       return;
     }
-    if (n === 'zcash-testnet') {
-      if (!enabledNetworks.includes('zcash')) {
-        await toggleNetwork('zcash');
+    // a testnet is its network with the switch on; the network itself is mainnet
+    const network = getNetwork(n).parent ?? n;
+    const testnet = testnetOf(network);
+    const want = [network, ...(testnet && n === testnet ? [testnet] : [])];
+    for (const t of [network, testnet].filter((t): t is NetworkType => !!t)) {
+      if (want.includes(t) !== enabledNetworks.includes(t)) {
+        await toggleNetwork(t);
       }
-      if (!testnetOn) {
-        await toggleNetwork('zcash-testnet');
-      }
-      await setActiveNetwork('zcash');
-    } else {
-      // zcash itself is mainnet: leaving testnet turns its switch off
-      if (n === 'zcash' && testnetOn) {
-        await toggleNetwork('zcash-testnet');
-      }
-      await setActiveNetwork(n);
     }
-    // always land on home - the previous sub-page may not exist on the
-    // newly selected network
-    navigate(PopupPath.INDEX);
+    await setActiveNetwork(network);
+    // a penumbra testnet reads only the node the person sets
+    navigate(
+      n === 'penumbra-testnet' && !penumbraNode
+        ? `${PopupPath.SETTINGS_PENUMBRA_NETWORK}?sheet=testnet`
+        : // always land on home - the previous sub-page may not exist on the
+          // newly selected network
+          PopupPath.INDEX,
+    );
   };
 
-  const turnOn = async (n: (typeof enabledNetworks)[number]) => {
+  const turnOn = async (n: NetworkType) => {
     await enable(n);
     onOpenChange(false);
     navigate(PopupPath.INDEX);

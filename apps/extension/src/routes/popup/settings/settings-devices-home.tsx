@@ -3,10 +3,10 @@ import { useShallow } from 'zustand/react/shallow';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
 import { useStore } from '../../../state';
-import { selectEnabledNetworks } from '../../../state/keyring';
+import { selectEnabledNetworks, type NetworkType } from '../../../state/keyring';
 import { useDisableNetwork, useEnableNetwork } from '../../../hooks/enable-network';
 import { NETWORK_BLURB } from '../../../components/network-sheet';
-import { getNetwork, getSubnetworks, getTopLevelNetworks } from '../../../config/networks';
+import { getNetwork, getTopLevelNetworks, testnetOf } from '../../../config/networks';
 import { DEFAULT_RELAY_URL } from '../../../config/multisig-relay';
 import { relayHost } from '../../../config/people-relay';
 import { IS_BETA_BUILD, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
@@ -18,8 +18,6 @@ import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
 import { isZigner, networkNames } from './settings-status';
 import { useExplain, type ExplainId } from './settings-explain';
-
-const isTestnet = (n: string) => n.endsWith('-testnet');
 
 /** the one place a network turns on or off; its node and chains live on its own screen */
 const NetworksRow = () => {
@@ -53,18 +51,20 @@ const NetworksRow = () => {
               onChange={on => void (on ? enable(n) : disable(n))}
               {...explainProps(`network.${n}Enable` as ExplainId)}
             />,
-            ...(enabled.includes(n) ? getSubnetworks(n).filter(isTestnet) : []).map(sub => (
-              <Row
-                key={sub}
-                type='toggle'
-                className='pl-8'
-                label='testnet'
-                description={NETWORK_BLURB[sub]}
-                checked={enabled.includes(sub)}
-                onChange={on => void (on ? enable(sub) : disable(sub))}
-                {...explainProps(`network.${sub}Enable` as ExplainId)}
-              />
-            )),
+            ...[enabled.includes(n) && testnetOf(n)]
+              .filter((t): t is NetworkType => !!t)
+              .map(sub => (
+                <Row
+                  key={sub}
+                  type='toggle'
+                  className='pl-8'
+                  label='testnet'
+                  description={NETWORK_BLURB[sub]}
+                  checked={enabled.includes(sub)}
+                  onChange={on => void (on ? enable(sub) : disable(sub))}
+                  {...explainProps(`network.${sub}Enable` as ExplainId)}
+                />
+              )),
           ])}
         </RowGroup>
       </Sheet>

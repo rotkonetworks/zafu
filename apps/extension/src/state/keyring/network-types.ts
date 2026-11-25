@@ -61,6 +61,7 @@ const WRITTEN_ENCRYPTION: Record<string, EncryptionType> = {
   zcash: 'zcash',
   'zcash-testnet': 'zcash',
   penumbra: 'penumbra',
+  'penumbra-testnet': 'penumbra',
   // ibc/cosmos - all use same cosmos encryption
   noble: 'cosmos',
   cosmoshub: 'cosmos',
@@ -122,6 +123,15 @@ const WRITTEN_CONFIGS: Record<string, NetworkConfig> = {
   penumbra: {
     id: 'penumbra',
     name: 'Penumbra',
+    symbol: 'UM',
+    decimals: 6,
+    type: 'privacy',
+    syncRequired: true,
+    bech32Prefix: 'penumbra',
+  },
+  'penumbra-testnet': {
+    id: 'penumbra-testnet',
+    name: 'Penumbra testnet',
     symbol: 'UM',
     decimals: 6,
     type: 'privacy',

@@ -183,4 +183,24 @@ describe('penumbra rebuild targets', () => {
     await s.request('chain id changed');
     expect(built).toEqual([{ ...t, chainId: 'penumbra-2' }]);
   });
+
+  it('a switch between mainnet and its testnet, or of node, rebuilds: a target change, not a mismatch', async () => {
+    const t = { walletId: 'w1', run: true, chainId: 'penumbra-1', network: 'penumbra', node: 'a' };
+    const { s, built, want } = setup(t);
+    s.setRunning(settledTarget(t, 'w1'));
+    // a testnet no node has named yet still differs from mainnet
+    const testnet = {
+      ...t,
+      chainId: undefined,
+      network: 'penumbra-testnet',
+      node: 'http://127.0.0.1:38080',
+    };
+    want(testnet);
+    await s.request('testnet on');
+    expect(built).toEqual([testnet]);
+    const other = { ...testnet, node: 'http://127.0.0.1:38081' };
+    want(other);
+    await s.request('node changed');
+    expect(built).toEqual([testnet, other]);
+  });
 });

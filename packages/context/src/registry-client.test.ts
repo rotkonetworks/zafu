@@ -1,11 +1,11 @@
 import { describe, test, expect, vi, afterEach } from 'vitest';
 import { ChainRegistryClient } from '@penumbrafi/registry';
-import { withBundledFallback, type RegistryClient } from './registry-client';
+import { registryOf, withBundledFallback, type RegistryClient } from './registry-client';
 
 /**
  * `withBundledFallback` resolves from the registry bundled in the extension
- * first - no network, online or offline - and only reaches for `remote` when
- * the bundled copy does not have the chain at all.
+ * only - no network, online or offline - and an empty registry for a chain
+ * the build does not ship.
  */
 
 const CHAIN_ID = 'penumbra-1';
@@ -37,11 +37,23 @@ describe('withBundledFallback', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  test('falls back to remote only when the bundled copy has no such chain', async () => {
-    const remote = new ChainRegistryClient().bundled.get(CHAIN_ID);
-    const client = withBundledFallback(stubWithRemoteGet(() => Promise.resolve(remote)));
+  test('a chain the build ships no registry for is empty, never fetched', async () => {
+    const remoteGet = vi.fn(() => Promise.resolve(new ChainRegistryClient().bundled.get(CHAIN_ID)));
+    const client = withBundledFallback(stubWithRemoteGet(remoteGet));
 
-    expect(await client.remote.get('a-chain-not-yet-shipped')).toBe(remote);
+    const registry = await client.remote.get('penumbra-testnet-brinance-1');
+    expect(registry.chainId).toBe('penumbra-testnet-brinance-1');
+    expect(registry.getAllAssets()).toEqual([]);
+    expect(remoteGet).not.toHaveBeenCalled();
+  });
+
+  test('an unknown chain never shows mainnet metadata for an id it shares', () => {
+    const mainnet = registryOf(CHAIN_ID);
+    const um = mainnet.getAllAssets().find(m => m.symbol === 'UM')!;
+    expect(registryOf('penumbra-testnet-brinance-1').tryGetMetadata(um.penumbraAssetId!)).toBe(
+      undefined,
+    );
+    expect(mainnet.tryGetMetadata(um.penumbraAssetId!)?.symbol).toBe('UM');
   });
 
   test('resolves the globals the settings forms need from the bundled copy, no fetch', async () => {

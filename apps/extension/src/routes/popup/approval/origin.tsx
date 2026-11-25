@@ -15,6 +15,9 @@ import {
 } from '@repo/storage-chrome/capabilities';
 import { useApprovalFixture } from './use-approval-fixture';
 import { Clipped } from '@repo/ui/components/ui/clipped';
+import { StatusSlot } from '@repo/ui/components/ui/status-slot';
+import { usePenumbraChainId } from '../../../penumbra/asset-registry';
+import { testnetLine } from '../../../penumbra/chain';
 
 const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string }> = {
   low: { border: 'border-border-soft', bg: '', text: 'text-fg-muted' },
@@ -60,6 +63,7 @@ export const OriginApproval = () => {
   const { requestOrigin, title, lastRequest, requestedCapabilities, setChoice, sendResponse } =
     useStore(originApprovalSelector);
   const acceptRequest = useStore(s => s.originApproval.acceptRequest);
+  const chainId = usePenumbraChainId();
 
   useApprovalFixture(!!requestOrigin, () => {
     void acceptRequest({
@@ -111,6 +115,8 @@ export const OriginApproval = () => {
     originUrl = undefined;
   }
 
+  const testnet = testnetLine(chainId);
+
   return (
     <ApprovalScreen
       header={
@@ -145,6 +151,12 @@ export const OriginApproval = () => {
     >
       <div className='w-full px-[30px]'>
         <div className='flex flex-col gap-2'>
+          {/* a penumbra dapp reads the chain in use: say so while that is a testnet */}
+          {testnet && (
+            <StatusSlot tone='warn' icon='i-ph-flask'>
+              {testnet}
+            </StatusSlot>
+          )}
           {/* capability list, one line each */}
           <div className='flex flex-col gap-2'>
             {knownCapabilities.map(cap => (

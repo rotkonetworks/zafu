@@ -207,6 +207,16 @@ export const SETTINGS_EXPLAIN = {
     on: 'zafu shows your penumbra balance and syncs it from your chosen node',
     off: 'penumbra is hidden everywhere in zafu; your keys are untouched and nothing is asked of any penumbra node',
   },
+  'network.penumbra-testnetEnable': {
+    blurb: 'a penumbra testnet, to try zafu and apps with coins that have no value.',
+    on: 'penumbra reads the testnet node you set, into its own storage, from its first block. mainnet waits, untouched',
+    off: 'penumbra is mainnet again and the testnet node is never contacted',
+  },
+  'network.penumbraTestnetNode': {
+    blurb: 'the node zafu reads your penumbra testnet from. there is none built in.',
+    footer:
+      'zafu asks it which chain it serves and shows that here. a node that serves penumbra mainnet is not used for the testnet',
+  },
   'network.hyperliquidEnable': {
     blurb: 'hyperliquid, for usdc only: deposit, withdraw and send. no trading in zafu.',
     on: 'zafu shows your hyperliquid address and usdc, read from api.hyperliquid.xyz when you open it. the address and its balances are public',

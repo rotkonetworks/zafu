@@ -7,8 +7,10 @@ import {
   getSubnetworks,
   getTopLevelNetworks,
   hasFeature,
+  testnetOf,
   zcashNetworkOf,
 } from './networks';
+import { selectNetworkShown } from '../state/wallets';
 import { getNetworkConfig, getNetworkEncryption } from '../state/keyring/network-types';
 import { selectZcashBackend, selectZcashEndpoint, zcashEndpointOf } from '../state/networks';
 import type { AllSlices } from '../state';
@@ -24,7 +26,8 @@ const hotState = (enabledNetworks: string[], endpoint = '') =>
 describe('zcash testnet', () => {
   it('is a switch under zcash, never a network of its own in the picker', () => {
     expect(getTopLevelNetworks(true, [])).not.toContain('zcash-testnet');
-    expect(getSubnetworks('zcash')).toEqual(['zcash-testnet']);
+    expect(getSubnetworks('zcash')).toEqual([]);
+    expect(testnetOf('zcash')).toBe('zcash-testnet');
     expect(getNetwork('zcash-testnet').parent).toBe('zcash');
   });
 
@@ -50,6 +53,45 @@ describe('zcash testnet', () => {
     expect(selectZcashBackend(hotState(['zcash']))).toBe('lightwalletd');
     // a mainnet shared wallet keeps its node while testnet is on
     expect(zcashEndpointOf(on, true)).toBe('https://mine.example');
+  });
+});
+
+describe('penumbra testnet', () => {
+  const penumbraState = (enabledNetworks: string[]) =>
+    ({
+      ...hotState(enabledNetworks),
+      keyRing: {
+        keyInfos: [hot],
+        selectedKeyInfo: hot,
+        activeNetwork: 'penumbra',
+        enabledNetworks,
+      },
+    }) as unknown as AllSlices;
+
+  it('is a switch under penumbra, apart from its ibc chains', () => {
+    expect(getTopLevelNetworks(true, [])).not.toContain('penumbra-testnet');
+    expect(testnetOf('penumbra')).toBe('penumbra-testnet');
+    expect(getSubnetworks('penumbra')).not.toContain('penumbra-testnet');
+    expect(getSubnetworks('penumbra')).toContain('noble');
+    expect(getNetworkEncryption('penumbra-testnet')).toBe('penumbra');
+  });
+
+  it('has no prices, swaps, votes or ibc', () => {
+    for (const f of ['swap', 'vote', 'stake', 'cosmos'] as const) {
+      expect(hasFeature('penumbra-testnet', f)).toBe(false);
+    }
+    expect(hasFeature('penumbra', 'cosmos')).toBe(true);
+  });
+
+  it('is the network shown while its switch is on, whatever the wallet', () => {
+    expect(selectNetworkShown(penumbraState(['penumbra']))).toBe('penumbra');
+    expect(selectNetworkShown(penumbraState(['penumbra', 'penumbra-testnet']))).toBe(
+      'penumbra-testnet',
+    );
+    // zcash's switch leaves penumbra on mainnet, and the other way round
+    expect(selectNetworkShown(penumbraState(['penumbra', 'zcash-testnet']))).toBe('penumbra');
+    expect(selectNetworkShown(hotState(['zcash', 'penumbra-testnet']))).toBe('zcash');
+    expect(selectNetworkShown(hotState(['zcash', 'zcash-testnet']))).toBe('zcash-testnet');
   });
 });
 

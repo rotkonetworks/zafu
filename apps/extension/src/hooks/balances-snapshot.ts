@@ -7,13 +7,14 @@
  * closes. A privacy wallet must not write plaintext balances to disk; the cost
  * is that the first popup after a browser restart computes from scratch.
  *
- * Scoped to the exact wallet (vault + wallet index) and account, so one
- * wallet's numbers can never be shown for another. Always refreshed in the
+ * Scoped to the exact wallet (vault + wallet index), chain and account, so
+ * one wallet's numbers can never be shown for another. Always refreshed in the
  * background: the snapshot is only a starting point, never the answer.
  */
 
 import { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { localExtStorage } from '@repo/storage-chrome/local';
+import { readPenumbraChain } from '../penumbra/active-chain';
 
 const KEY = 'penumbraBalancesSnapshot';
 
@@ -24,10 +25,12 @@ interface StoredSnapshot {
   items: string[];
 }
 
+/** the wallet and the chain it was read on: mainnet's numbers never paint a testnet's home */
 const ownerKey = async (): Promise<string> => {
   const vault = await localExtStorage.get('selectedVaultId');
   const index = await localExtStorage.get('activeWalletIndex');
-  return `${String(vault ?? '')}:${String(index ?? 0)}`;
+  const { chainId } = await readPenumbraChain();
+  return `${String(vault ?? '')}:${String(index ?? 0)}:${chainId ?? ''}`;
 };
 
 export const saveBalancesSnapshot = async (

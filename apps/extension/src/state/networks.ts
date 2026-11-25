@@ -27,6 +27,7 @@ import { ZCASH_TESTNET_ENDPOINT, defaultZcashEndpoint } from '../config/zcash-en
 export type NetworkId =
   // privacy networks (local sync required)
   | 'penumbra'
+  | 'penumbra-testnet'
   | 'zcash'
   // ibc/cosmos chains (for penumbra deposits/withdrawals)
   | 'noble'
@@ -135,7 +136,15 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     denom: 'upenumbra',
     enabled: false,
     endpoint: 'https://penumbra.rotko.net',
-    chainId: 'penumbra-1',
+    bech32Prefix: 'penumbra',
+  },
+  // no default node: the person sets the testnet's own (penumbra/chain)
+  'penumbra-testnet': {
+    id: 'penumbra-testnet',
+    name: 'Penumbra testnet',
+    symbol: 'UM',
+    decimals: 6,
+    enabled: false,
     bech32Prefix: 'penumbra',
   },
   zcash: {

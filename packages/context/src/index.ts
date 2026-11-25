@@ -181,16 +181,17 @@ export class Services implements ServicesInterface {
     onPhase?.('wasm view server (tree load)', t);
     t = performance.now();
 
-    // Dynamically fetch the 'local' genesis file from the exentsion's
-    // static assets.
-    const response = await fetch('./penumbra-1-genesis.bin');
-    const genesisBinaryData = await response.arrayBuffer();
+    // penumbra-1's genesis ships with the extension; another chain's (a
+    // testnet) comes from its node like every other block
+    const genesisBlock =
+      chainId === 'penumbra-1'
+        ? CompactBlock.fromBinary(
+            new Uint8Array(await (await fetch('./penumbra-1-genesis.bin')).arrayBuffer()),
+          )
+        : undefined;
 
     const blockProcessor = new BlockProcessor({
-      genesisBlock:
-        chainId === 'penumbra-1'
-          ? CompactBlock.fromBinary(new Uint8Array(genesisBinaryData))
-          : undefined,
+      genesisBlock,
       viewServer,
       querier,
       indexedDb,

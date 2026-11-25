@@ -124,6 +124,8 @@ type LOCAL = {
   /** what the running penumbra sync publishes for the home: one wallet at a time */
   penumbraSync?: {
     walletId: string;
+    /** the chain it reads; absent in what older builds wrote, which read only penumbra-1 */
+    chainId?: string;
     height?: number;
     from?: number;
     /** sync stopped because local data could not be read or written (reload to retry) */
@@ -131,6 +133,8 @@ type LOCAL = {
   };
   grpcEndpoint?: string;
   params?: string;
+  /** the penumbra testnet's app parameters, apart from mainnet's (apps/extension penumbra/chain) */
+  penumbraTestnetParams?: string;
   passwordKeyPrint?: { hash: string; salt: string };
   /** legacy global penumbra birthday; adopted per wallet into `penumbraStarts` */
   walletCreationBlockHeight?: number;
@@ -193,6 +197,8 @@ type LOCAL = {
   enabledNetworks?: string[];
   networkEndpoints?: {
     penumbra?: string;
+    /** the penumbra testnet's node: set by the person, there is no default */
+    'penumbra-testnet'?: string;
     zcash?: string;
     noble?: string;
     cosmoshub?: string;

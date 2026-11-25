@@ -1,20 +1,23 @@
 /**
- * Which penumbra wallets already have a view database on this computer.
+ * Which penumbra wallets already have a view database on this computer, for
+ * one chain.
  *
  * `IndexedDb.initialize` names each wallet's database
- * `viewdata/<chainId>/<bech32mWalletId>`, and the chain id is the node's, so
- * the name is matched by its wallet part under any chain.
+ * `viewdata/<chainId>/<bech32mWalletId>`: a testnet's database says nothing
+ * about what the wallet holds on mainnet.
  */
 
 import { bech32mWalletId } from '@penumbra-zone/bech32m/penumbrawalletid';
 import { WalletId } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
+import { viewDbsOf } from './chain';
 
 /** the ids among `walletIds` with a database among `dbNames` (pure, for tests) */
 export const withStoredView = (
   walletIds: readonly string[],
   dbNames: readonly string[],
+  chainId: string,
 ): Set<string> => {
-  const views = dbNames.filter(n => n.startsWith('viewdata/'));
+  const views = viewDbsOf(dbNames, chainId);
   return new Set(
     walletIds.filter(id => {
       let bech32: string;
@@ -36,10 +39,13 @@ export const withStoredView = (
  * arrived there without a word. When the databases can't be listed, every
  * wallet counts as stored: reading too much only costs time.
  */
-export const walletsWithStoredView = async (walletIds: readonly string[]): Promise<Set<string>> => {
+export const walletsWithStoredView = async (
+  walletIds: readonly string[],
+  chainId: string,
+): Promise<Set<string>> => {
   try {
     const names = (await indexedDB.databases()).map(d => d.name).filter((n): n is string => !!n);
-    return withStoredView(walletIds, names);
+    return withStoredView(walletIds, names, chainId);
   } catch {
     return new Set(walletIds);
   }

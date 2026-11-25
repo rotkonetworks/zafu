@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { Row, RowGroup } from '@repo/ui/components/ui/row';
 import { Sheet } from '@repo/ui/components/ui/sheet';
@@ -15,6 +16,8 @@ import { probeAllPenumbra } from '../../../state/keyring/penumbra-endpoint-laten
 import { hostOf } from '../../../net/destination';
 import { getClearCacheStepLabel, type ClearCacheProgress } from '../../../message/services';
 import { resyncPenumbraFromStart } from '../../../services/penumbra-resync';
+import { PENUMBRA_CHAINS } from '../../../penumbra/chain';
+import { chainIdAt } from '../../../penumbra/active-chain';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
 import { NodeSheet } from './node-sheet';
@@ -27,6 +30,25 @@ const PRESETS = getRegistryEndpoints();
 /** a penumbra ibc chain: a network zafu can turn on, with a cosmos chain config */
 type Chain = Extract<CosmosChainId, NetworkType>;
 const CHAINS = getSubnetworks('penumbra');
+const TESTNET = PENUMBRA_CHAINS['penumbra-testnet'];
+
+/** what the testnet's node said it serves, in a line: its chain id, or why it can't be used */
+const useTestnetChain = (endpoint: string, on: boolean) => {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['penumbraTestnetChain', endpoint],
+    queryFn: () => chainIdAt(endpoint),
+    // asked only while the testnet is on: an off network is never contacted
+    enabled: on && !!endpoint,
+    staleTime: Infinity,
+  });
+  return !endpoint
+    ? 'no node yet · please set one'
+    : isLoading
+      ? 'asking the node which chain it serves'
+      : error || data === undefined
+        ? 'no answer from that node yet'
+        : (TESTNET.refuse(data) ?? `${data} · coins have no value`);
+};
 
 const speedTest = async () => {
   const results = await probeAllPenumbra(PRESETS);
@@ -35,11 +57,16 @@ const speedTest = async () => {
 
 const chainName = (id: Chain) => getCosmosChain(id).name.toLowerCase();
 
-type Open = 'node' | 'ibc' | 'resync' | Chain | null;
+type Open = 'node' | 'testnet' | 'ibc' | 'resync' | Chain | null;
 
 const openFrom = (params: URLSearchParams): Open => {
   const chain = params.get('chain');
-  return chain && CHAINS.includes(chain) ? chain : params.get('sheet') === 'node' ? 'node' : null;
+  const sheet = params.get('sheet');
+  return chain && CHAINS.includes(chain)
+    ? chain
+    : sheet === 'node' || sheet === 'testnet'
+      ? sheet
+      : null;
 };
 
 /** one ibc chain: on or off, and the nodes it reads from */
@@ -72,6 +99,8 @@ export const SettingsPenumbraNetwork = () => {
   const [open, setOpen] = useState<Open>(() => openFrom(params));
   const enabled = useStore(selectEnabledNetworks);
   const endpoint = useStore(s => s.networks.networks.penumbra.endpoint) ?? '';
+  const testnetEndpoint = useStore(s => s.networks.networks['penumbra-testnet'].endpoint) ?? '';
+  const testnetChain = useTestnetChain(testnetEndpoint, enabled.includes('penumbra-testnet'));
   const setEndpoint = useStore(s => s.networks.setNetworkEndpoint);
   const { totalIn, setTotalIn } = usePenumbraTotalIn();
   const keepSyncing = useStore(s => s.privacy.settings.keepPenumbraSyncing);
@@ -121,6 +150,16 @@ export const SettingsPenumbraNetwork = () => {
           </StatusSlot>
         )}
         <RowGroup>
+          {enabled.includes('penumbra-testnet') && (
+            <Row
+              type='value'
+              label='testnet node'
+              description={testnetChain}
+              value={hostOf(testnetEndpoint) ?? 'not set'}
+              onPress={() => setOpen('testnet')}
+              {...explainProps('network.penumbraTestnetNode')}
+            />
+          )}
           <Row
             type='value'
             label='node'
@@ -189,6 +228,18 @@ export const SettingsPenumbraNetwork = () => {
         measure={speedTest}
         onPick={url => setEndpoint('penumbra', url)}
         onExplain={explainProps('network.ownNode').onExplain}
+      />
+
+      <NodeSheet
+        open={open === 'testnet'}
+        onOpenChange={sheet('testnet')}
+        title='penumbra testnet node'
+        presets={[]}
+        current={testnetEndpoint}
+        egress='penumbra-servers'
+        measure={() => Promise.resolve(new Map())}
+        onPick={url => setEndpoint('penumbra-testnet', url)}
+        onExplain={explainProps('network.penumbraTestnetNode').onExplain}
       />
 
       <Sheet open={open === 'ibc'} onOpenChange={sheet('ibc')} title='ibc chains'>
