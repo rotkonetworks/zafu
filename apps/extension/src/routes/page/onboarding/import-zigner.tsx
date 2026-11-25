@@ -288,8 +288,11 @@ export const ImportZigner = () => {
   const scanned = scanState === 'scanned' && scannedNetworks.length > 0;
   const zignerLike =
     !zcashWalletImport || (zcashWalletImport.coldSignerType ?? 'zigner') !== 'keystone';
+  // the other code joins this wallet only through the device's ZID (as in the
+  // device scanner): without one it would land as a second wallet
+  const hasZid = Boolean((walletImport ?? zcashWalletImport)?.zidPublicKey);
   const offerCompanion =
-    scanned && zignerLike && Boolean(walletImport) !== Boolean(zcashWalletImport);
+    scanned && zignerLike && hasZid && Boolean(walletImport) !== Boolean(zcashWalletImport);
 
   return (
     <div className='flex flex-col gap-5'>

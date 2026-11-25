@@ -82,19 +82,13 @@ export async function connectDevice(
     label?: string;
     birthday?: number;
     keyInfos: KeyInfo[];
-    addZignerUnencrypted: (
-      data: ZignerZafuImport,
-      name: string,
-      joinVaultId?: string,
-    ) => Promise<string>;
-    /** vault created by a just-finished "scan next" add; the next code joins it */
-    joinVaultId?: string;
+    addZignerUnencrypted: (data: ZignerZafuImport, name: string) => Promise<string>;
   },
 ): Promise<ConnectOutcome> {
-  const joined = Boolean(findJoinTarget(parsed, opts.keyInfos) || opts.joinVaultId);
+  const joined = Boolean(findJoinTarget(parsed, opts.keyInfos));
   const zignerData = buildZignerImport(parsed);
   const label = opts.label?.trim() || defaultLabel(parsed);
-  const vaultId = await opts.addZignerUnencrypted(zignerData, label, opts.joinVaultId);
+  const vaultId = await opts.addZignerUnencrypted(zignerData, label);
 
   if (parsed.network === 'zcash' && opts.birthday) {
     await chrome.storage.local.set({ [`zcashBirthday_${vaultId}`]: opts.birthday });

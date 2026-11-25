@@ -68,8 +68,6 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
   // remember it joined the same device rather than re-deriving from scratch
   const knownNetworksRef = useRef<Set<ParsedConnectCode['network']>>(new Set());
   // the vault the last "scan next" add created, so the companion code joins it
-  // even when a code has no ZID
-  const joinVaultIdRef = useRef<string | undefined>(undefined);
 
   const startBlockNum = parseInt(startBlock, 10);
   const startBlockHint = startBlock.trim() ? describeZcashHeight(startBlockNum) : null;
@@ -153,15 +151,12 @@ export const DeviceScanner = ({ onDone, onCancel }: DeviceScannerProps) => {
         birthday,
         keyInfos,
         addZignerUnencrypted,
-        joinVaultId: joinVaultIdRef.current,
       });
       knownNetworksRef.current.add(parsed.network);
       if (then === 'scan next') {
-        joinVaultIdRef.current = outcome.vaultId;
         scanAnother();
         return;
       }
-      joinVaultIdRef.current = undefined;
       setScreen({ kind: 'done', outcome });
       onDone(outcome);
     } catch (cause) {

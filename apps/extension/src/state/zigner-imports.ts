@@ -116,13 +116,18 @@ export function pendingZignerAdds(opts: {
   return out;
 }
 
+/**
+ * Add each pending code in order. Codes from one zigner join one wallet by
+ * their ZID (mergeTargetFor); a code without one is a wallet of its own,
+ * since nothing proves it came from the same seed.
+ */
 export async function addPendingZignerWallets(
   adds: PendingZignerAdd[],
-  add: (data: ZignerZafuImport, name: string, joinVaultId?: string) => Promise<string>,
+  add: (data: ZignerZafuImport, name: string) => Promise<string>,
 ): Promise<string | undefined> {
-  let joinId: string | undefined;
+  let last: string | undefined;
   for (const item of adds) {
-    joinId = await add(item.data, item.name, joinId);
+    last = await add(item.data, item.name);
   }
-  return joinId;
+  return last;
 }

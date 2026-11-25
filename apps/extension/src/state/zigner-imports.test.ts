@@ -71,7 +71,7 @@ describe('pendingZignerAdds', () => {
 });
 
 describe('addPendingZignerWallets', () => {
-  it('passes the first vault id so the second network joins it', async () => {
+  it('adds each code in order; codes from one zigner join by their ZID, not by being next', async () => {
     const add = vi.fn().mockResolvedValueOnce('vault-1').mockResolvedValueOnce('vault-1');
     const id = await addPendingZignerWallets(
       [
@@ -81,17 +81,11 @@ describe('addPendingZignerWallets', () => {
       add,
     );
     expect(id).toBe('vault-1');
-    expect(add).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ deviceId: 'a' }),
-      'one',
-      undefined,
-    );
+    expect(add).toHaveBeenNthCalledWith(1, expect.objectContaining({ deviceId: 'a' }), 'one');
     expect(add).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ viewingKey: 'uview1example' }),
       'two',
-      'vault-1',
     );
   });
 });
