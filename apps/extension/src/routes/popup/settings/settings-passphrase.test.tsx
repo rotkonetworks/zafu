@@ -1,7 +1,7 @@
 /**
- * Recovery phrase screen: `?zigner=1` opens the existing "back up to zigner"
- * QR sheet once the password unlocks the phrase; cancelling before unlock
- * leaves seedPhraseBackedUp unset.
+ * Recovery phrase screen: the seed QR for zigner stays behind its own tap
+ * after the password unlocks the phrase; cancelling before unlock leaves
+ * seedPhraseBackedUp unset.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
@@ -42,7 +42,7 @@ vi.mock('../../../components/qr-code', () => ({
 
 const { SettingsPassphrase } = await import('./settings-passphrase');
 
-describe('settings passphrase zigner backup deep link', () => {
+describe('settings passphrase', () => {
   let host: HTMLDivElement;
   let root: Root;
 
@@ -74,17 +74,7 @@ describe('settings passphrase zigner backup deep link', () => {
     document.body.innerHTML = '';
   });
 
-  it('opens the zigner backup sheet straight after unlock when ?zigner=1', async () => {
-    search.value = 'zigner=1';
-    act(() => root.render(<SettingsPassphrase />));
-    await unlock();
-    const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog?.textContent).toContain('back up to zigner');
-    expect(dialog?.querySelector('[data-qr]')?.getAttribute('data-qr')).toContain('abandon');
-    expect(storageSet).toHaveBeenCalledWith('seedPhraseBackedUp', true);
-  });
-
-  it('keeps the sheet closed without ?zigner=1 until requested', async () => {
+  it('keeps the seed QR closed after unlock until it is asked for', async () => {
     act(() => root.render(<SettingsPassphrase />));
     await unlock();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -96,7 +86,6 @@ describe('settings passphrase zigner backup deep link', () => {
   });
 
   it('not now goes back without marking backed up', () => {
-    search.value = 'zigner=1';
     act(() => root.render(<SettingsPassphrase />));
     const btn = [...host.querySelectorAll('button')].find(b => b.textContent === 'not now');
     act(() => btn!.click());

@@ -15,11 +15,7 @@ export const BackupNudge = ({
   onBackUp: () => void;
   onDismiss: () => void;
 }) => (
-  <StatusSlot
-    tone='warn'
-    icon='i-ph-warning'
-    action={{ label: 'back up to zigner', onClick: onBackUp }}
-  >
+  <StatusSlot tone='warn' icon='i-ph-warning' action={{ label: 'back up', onClick: onBackUp }}>
     <span className='flex items-center gap-2'>
       your recovery phrase isn&apos;t backed up yet
       <button
@@ -65,7 +61,7 @@ export const useBackupNudge = () => {
   }
   return (
     <BackupNudge
-      onBackUp={() => navigate(`${PopupPath.SETTINGS_RECOVERY_PASSPHRASE}?zigner=1`)}
+      onBackUp={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
       onDismiss={() => setDismissed(true)}
     />
   );

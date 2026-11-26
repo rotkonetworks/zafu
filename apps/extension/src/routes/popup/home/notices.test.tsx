@@ -1,5 +1,5 @@
 /**
- * Backup nudge: points unbacked phrase wallets at the zigner backup flow,
+ * Backup nudge: points unbacked phrase wallets at their recovery phrase,
  * and dismissing it hides only this visit without marking the phrase backed up.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -63,14 +63,12 @@ describe('backup nudge', () => {
     host.remove();
   });
 
-  it('points to the zigner backup flow when unbacked', async () => {
+  it('points to the recovery phrase when unbacked', async () => {
     await mount();
-    const action = [...host.querySelectorAll('button')].find(
-      b => b.textContent === 'back up to zigner',
-    );
+    const action = [...host.querySelectorAll('button')].find(b => b.textContent === 'back up');
     expect(action).toBeDefined();
     act(() => action!.click());
-    expect(navigate).toHaveBeenCalledWith('/settings/recovery-passphrase?zigner=1');
+    expect(navigate).toHaveBeenCalledWith('/settings/recovery-passphrase');
   });
 
   it('dismisses without marking the phrase backed up', async () => {

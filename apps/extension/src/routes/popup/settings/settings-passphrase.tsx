@@ -56,9 +56,6 @@ export const SettingsPassphrase = () => {
           setPhrase((await getMnemonic(vault.id)).trim().split(/\s+/));
           // revealing the phrase counts as possessing it - clear the home nudge
           void localExtStorage.set('seedPhraseBackedUp', true);
-          if (params.get('zigner') === '1') {
-            setQrOpen(true);
-          }
         } else {
           setWrong(true);
         }

@@ -1,6 +1,6 @@
 /**
  * Receive screen: reminds unbacked phrase wallets before they hand out an
- * address, pointing at the zigner backup flow; dismissing hides only now.
+ * address, pointing at the recovery phrase; dismissing hides only now.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
@@ -88,15 +88,13 @@ describe('receive backup reminder', () => {
     host.remove();
   });
 
-  it('reminds unbacked phrase wallets on receive and opens the zigner backup flow', async () => {
+  it('reminds unbacked phrase wallets on receive and opens the recovery phrase', async () => {
     await mount();
     expect(host.textContent).toContain("your recovery phrase isn't backed up yet");
-    const action = [...host.querySelectorAll('button')].find(
-      b => b.textContent === 'back up to zigner',
-    );
+    const action = [...host.querySelectorAll('button')].find(b => b.textContent === 'back up');
     expect(action).toBeDefined();
     act(() => action!.click());
-    expect(navigate).toHaveBeenCalledWith('/settings/recovery-passphrase?zigner=1');
+    expect(navigate).toHaveBeenCalledWith('/settings/recovery-passphrase');
   });
 
   it('dismisses without marking backed up', async () => {
