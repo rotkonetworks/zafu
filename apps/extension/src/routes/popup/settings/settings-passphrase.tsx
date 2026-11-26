@@ -6,7 +6,7 @@ import { QrCode } from '../../../components/qr-code';
 import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
-import { usePopupNav } from '../../../utils/navigate';
+import { useBackNav } from '../../../utils/navigate';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
@@ -18,7 +18,7 @@ import { cn } from '@repo/ui/lib/utils';
 const RECOVER_AFTER_MS = 60_000;
 
 export const SettingsPassphrase = () => {
-  const navigate = usePopupNav();
+  const back = useBackNav(PopupPath.SETTINGS_SECURITY);
   const { isPassword } = useStore(passwordSelector);
   const getMnemonic = useStore(selectGetMnemonic);
   const [params] = useSearchParams();
@@ -138,7 +138,7 @@ export const SettingsPassphrase = () => {
               variant='secondary'
               className='w-[110px]'
               data-preload={PopupPath.SETTINGS_SECURITY}
-              onClick={() => navigate(PopupPath.SETTINGS_SECURITY)}
+              onClick={back}
             >
               not now
             </Button>
@@ -147,11 +147,7 @@ export const SettingsPassphrase = () => {
             </Button>
           </>
         ) : (
-          <Button
-            className='flex-1'
-            data-preload={PopupPath.SETTINGS_SECURITY}
-            onClick={() => navigate(PopupPath.SETTINGS_SECURITY)}
-          >
+          <Button className='flex-1' data-preload={PopupPath.SETTINGS_SECURITY} onClick={back}>
             done
           </Button>
         )}

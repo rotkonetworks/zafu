@@ -1,6 +1,5 @@
-import { Suspense, useState, useCallback, useEffect } from 'react';
+import { Suspense } from 'react';
 import type { ComponentType, ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
 import {
@@ -10,13 +9,11 @@ import {
   type NetworkType,
 } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
-import { localExtStorage } from '@repo/storage-chrome/local';
 import { needsLogin, needsOnboard } from '../popup-needs';
-import { PopupPath } from '../paths';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { usePreloadBalances } from '../../../hooks/use-preload';
 
-import { BackupNudge } from './notices';
+import { useBackupNudge } from './notices';
 import { PenumbraContent } from './penumbra-home';
 import { ZcashContent } from './zcash-home';
 import { HyperliquidHome } from './hyperliquid-home';
@@ -50,38 +47,12 @@ const HOME: Partial<Record<NetworkType, ComponentType<{ nudge?: ReactNode }>>> =
 
 export const PopupIndex = () => {
   const activeNetwork = useStore(selectActiveNetwork);
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraAccount = useStore(selectPenumbraAccount);
-  const navigate = useNavigate();
 
   // preload balances in background for instant display
   usePreloadBalances(penumbraAccount);
 
-  // Backup nudge: shown for mnemonic vaults until the user demonstrably
-  // possesses their recovery phrase (onboarding checkbox, import, settings
-  // reveal, or explicit dismissal here). A fresh key, because the old
-  // `backupReminderSeen` is poisoned `true` for every pre-fix wallet.
-  const [showBackupNudge, setShowBackupNudge] = useState(false);
-  useEffect(() => {
-    if (selectedKeyInfo?.type !== 'mnemonic') {
-      setShowBackupNudge(false);
-      return;
-    }
-    void localExtStorage.get('seedPhraseBackedUp').then(done => {
-      setShowBackupNudge(done !== true);
-    });
-  }, [selectedKeyInfo?.type, selectedKeyInfo?.id]);
-  const dismissBackupNudge = useCallback(() => {
-    setShowBackupNudge(false);
-    void localExtStorage.set('seedPhraseBackedUp', true);
-  }, []);
-
-  const backupNudge = showBackupNudge ? (
-    <BackupNudge
-      onBackUp={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
-      onDismiss={dismissBackupNudge}
-    />
-  ) : null;
+  const backupNudge = useBackupNudge();
 
   // a burner chain is penumbra's plumbing: an older wallet left on one sees penumbra
   const Home = HOME[activeNetwork] ?? PenumbraHome;

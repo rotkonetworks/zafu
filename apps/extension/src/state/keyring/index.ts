@@ -615,18 +615,23 @@ export const createKeyRingSlice =
           return mergedVaultId;
         }
 
-        // dedup: check if a vault with the same viewing key already exists
-        for (const v of existingVaults) {
-          if (v.type !== 'zigner-zafu') {
-            continue;
-          }
-          // match by deviceId + accountIndex (same device, same account = same keys)
-          if (
+        // the same device and account scanned again: the wallet is already
+        // here, so select it, as re-importing a phrase does. Nothing is
+        // rewritten; the person's goal is met, so it is not an error.
+        const already = existingVaults.find(
+          v =>
+            v.type === 'zigner-zafu' &&
             v.insensitive['deviceId'] === data.deviceId &&
-            v.insensitive['accountIndex'] === data.accountIndex
-          ) {
-            throw new Error('this zigner wallet is already imported');
-          }
+            v.insensitive['accountIndex'] === data.accountIndex,
+        );
+        if (already) {
+          await local.set('selectedVaultId', already.id);
+          const keyInfos = vaultsToKeyInfos(existingVaults, already.id);
+          set(state => {
+            state.keyRing.keyInfos = keyInfos;
+            state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+          });
+          return already.id;
         }
         // also check zcash wallets for matching FVK (catches cross-device duplicates)
         if (data.viewingKey) {
