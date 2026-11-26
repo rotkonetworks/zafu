@@ -25,6 +25,8 @@ import {
   type CosmosChainId,
 } from '@repo/wallet/networks/cosmos/chains';
 import { resolvePenumbraEndpoint } from '../config/penumbra-endpoints';
+import { hasFeature } from '../config/networks';
+import { readPenumbraChain } from '../penumbra/active-chain';
 import { forgetRegistryAssets, refreshRegistryAssets } from './assets';
 import { fetchLiveRegistry, refreshForUnknownChains } from './registry-live';
 import { REGISTRY_EGRESS } from './registry-endpoint';
@@ -60,9 +62,15 @@ const readCache = async (): Promise<Cached | undefined> => {
 
 /**
  * The discovered routes, refreshing when older than an hour or when the
- * Penumbra endpoint changed. Mainnet's always: the ibc chains reach penumbra-1. Undefined when discovery has never succeeded.
+ * Penumbra endpoint changed; mainnet's always, as the ibc chains reach
+ * penumbra-1. Undefined when discovery has never succeeded.
  */
 export const getPenumbraRoutes = async (): Promise<PenumbraRoute[] | undefined> => {
+  // the ibc chains reach mainnet only: while a testnet is in use nothing is
+  // offered, and mainnet's node is not asked
+  if (!hasFeature((await readPenumbraChain()).network, 'cosmos')) {
+    return [];
+  }
   const [cached, endpoint] = await Promise.all([readCache(), resolvePenumbraEndpoint('penumbra')]);
   if (cached && cached.endpoint === endpoint && Date.now() - cached.at < MAX_AGE_MS) {
     return cached.routes;

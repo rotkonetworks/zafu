@@ -8,7 +8,7 @@ import { AppService } from '@penumbra-zone/protobuf';
 import { createClient } from '@connectrpc/connect';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { PENUMBRA_CHAINS, penumbraNetworkOf, type PenumbraNetwork } from './chain';
+import { PENUMBRA_CHAINS, penumbraNetworkOf, type ChainInUse, type PenumbraNetwork } from './chain';
 
 const chainIdOf = (json: string | undefined): string | undefined => {
   try {
@@ -18,12 +18,9 @@ const chainIdOf = (json: string | undefined): string | undefined => {
   }
 };
 
-export interface PenumbraChainNow {
-  network: PenumbraNetwork;
+export interface PenumbraChainNow extends ChainInUse {
   /** what the entry's node last said; undefined before it has said anything */
   stored?: string;
-  /** stored, else mainnet's id on mainnet; a testnet no node has named has none */
-  chainId?: string;
 }
 
 /** the entry in use, or the one named */

@@ -454,6 +454,13 @@ const chainNodes = (chain: CosmosChainConfig): DestinationSpec => ({
   ],
 });
 
+/** whether destination `id`'s request to `url` goes over nym; otherwise it goes direct */
+export const urlOverNym = (i: EgressInputs, id: string, url: string): boolean => {
+  const spec = destinationSpec(id);
+  const group = spec && groupOf(spec);
+  return !!spec && !!group && groupOverNym(i, group.id) && nymReaches(spec, i, url);
+};
+
 /** a nym group's requests go over nym: the global switch is on and the group is not set to direct */
 export const groupOverNym = (i: EgressInputs, id: NymGroup['id']): boolean => {
   const group = NYM_GROUPS.find(g => g.id === id);

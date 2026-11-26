@@ -2,6 +2,7 @@ import { UserChoice } from '@repo/storage-chrome/records';
 import { Capability } from '@repo/storage-chrome/capabilities';
 import { AllSlices, SliceCreator } from '.';
 import { PopupRequest, PopupResponse, PopupType } from '../message/popup';
+import type { ChainInUse } from '../penumbra/chain';
 
 export interface OriginApprovalSlice {
   responder?: PromiseWithResolvers<
@@ -14,6 +15,8 @@ export interface OriginApprovalSlice {
   lastRequest?: Date;
   /** Capabilities being requested in this approval */
   requestedCapabilities: Capability[];
+  /** the penumbra chain the approval binds to; unset until a request names it */
+  chain?: ChainInUse;
 
   acceptRequest: (
     req: PopupRequest<PopupType.OriginApproval>[PopupType.OriginApproval],
@@ -34,7 +37,7 @@ export const createOriginApprovalSlice = (): SliceCreator<OriginApprovalSlice> =
   },
 
   acceptRequest: req => {
-    const { origin: requestOrigin, favIconUrl, title, lastRequest } = req;
+    const { origin: requestOrigin, favIconUrl, title, lastRequest, chain } = req;
 
     const existing = get().originApproval;
     if (existing.responder) {
@@ -60,6 +63,7 @@ export const createOriginApprovalSlice = (): SliceCreator<OriginApprovalSlice> =
       state.originApproval.requestOrigin = requestOrigin;
       state.originApproval.lastRequest = lastRequest ? new Date(lastRequest) : undefined;
       state.originApproval.requestedCapabilities = capabilities;
+      state.originApproval.chain = chain;
     });
 
     return responder.promise;
@@ -93,6 +97,7 @@ export const createOriginApprovalSlice = (): SliceCreator<OriginApprovalSlice> =
         state.originApproval.favIconUrl = undefined;
         state.originApproval.title = undefined;
         state.originApproval.requestedCapabilities = ['connect'];
+        state.originApproval.chain = undefined;
       });
     }
   },

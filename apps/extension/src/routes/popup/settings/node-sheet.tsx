@@ -61,6 +61,7 @@ export const NodeSheet = ({
   measure,
   custom,
   ownHint,
+  ownRefuse,
   className,
   onExplain,
 }: {
@@ -77,6 +78,8 @@ export const NodeSheet = ({
   custom?: ReactNode;
   /** what to say about a typed url that can't be what this chain needs */
   ownHint?: (url: string) => string | undefined;
+  /** why a typed url can't be used at all: said, and "use this node" waits */
+  ownRefuse?: (url: string) => string | undefined;
   /** column-align the sheet where the page itself isn't full width (onboarding) */
   className?: string;
   /** opens a Sheet explaining node choice, via a small "?" after the label */
@@ -88,6 +91,8 @@ export const NodeSheet = ({
   const [testing, setTesting] = useState(false);
   const currentHost = hostOf(current);
   const preset = presets.find(p => hostOf(p.url) === currentHost);
+  const refused = draft ? ownRefuse?.(draft) : undefined;
+  const draftNote = refused ?? ownHint?.(draft);
 
   const close = (next: boolean) => {
     onOpenChange(next);
@@ -169,9 +174,7 @@ export const NodeSheet = ({
             className='font-mono text-xs'
             autoFocus
           />
-          {ownHint?.(draft) && (
-            <span className='text-xs leading-relaxed text-warn'>{ownHint(draft)}</span>
-          )}
+          {draftNote && <span className='text-xs leading-relaxed text-warn'>{draftNote}</span>}
           {custom}
           <div className='flex gap-2'>
             <Button variant='secondary' className='w-[110px]' onClick={() => setStep('list')}>
@@ -179,7 +182,7 @@ export const NodeSheet = ({
             </Button>
             <Button
               className='flex-1'
-              disabled={!isHttpUrl(draft)}
+              disabled={!isHttpUrl(draft) || !!refused}
               onClick={() => void pick(draft)}
             >
               use this node

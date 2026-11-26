@@ -1,4 +1,5 @@
 import { JsonObject, toPlainMessage } from '@bufbuild/protobuf';
+import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { addressFromBech32m } from '@penumbra-zone/bech32m/penumbra';
 import { fullViewingKeyFromBech32m } from '@penumbra-zone/bech32m/penumbrafullviewingkey';
@@ -91,7 +92,10 @@ const spend = new ActionPlan({
   },
 });
 
-const plan = new TransactionPlan({ actions: [spend] });
+const plan = new TransactionPlan({
+  actions: [spend],
+  transactionParameters: { chainId: 'penumbra-1' },
+});
 
 describe('Transaction Approval Slice', () => {
   let useStore: TestStore;
@@ -138,6 +142,47 @@ describe('Transaction Approval Slice', () => {
 
       expect(useStore.getState().txApproval.authorizeRequest).toEqual(
         toPlainMessage(authorizeRequest),
+      );
+    });
+
+    test('a plan for the chain in use is valid, and carries no testnet line', async () => {
+      void useStore.getState().txApproval.acceptRequest(txApprovalRequest);
+      await vi.waitFor(() => expect(useStore.getState().txApproval.authorizeRequest).toBeDefined());
+      expect(useStore.getState().txApproval.invalidPlan).toBeUndefined();
+      expect(useStore.getState().txApproval.chain).toEqual({
+        network: 'penumbra',
+        chainId: 'penumbra-1',
+      });
+    });
+
+    test('a plan naming a testnet while mainnet is in use is refused', async () => {
+      const testnetPlan = new AuthorizeRequest({
+        plan: new TransactionPlan({
+          actions: [spend],
+          transactionParameters: { chainId: 'penumbra-testnet-x' },
+        }),
+      });
+      void useStore
+        .getState()
+        .txApproval.acceptRequest({ authorizeRequest: testnetPlan.toJson() as JsonObject });
+      await vi.waitFor(() => expect(useStore.getState().txApproval.authorizeRequest).toBeDefined());
+      expect(useStore.getState().txApproval.invalidPlan?.message).toContain(
+        'this transaction names penumbra-testnet-x · zafu is on penumbra-1',
+      );
+      // the banner follows the chain in use: none on mainnet, whatever the plan says
+      expect(useStore.getState().txApproval.chain?.network).toBe('penumbra');
+    });
+
+    test('a plan naming mainnet while the testnet is in use is refused', async () => {
+      await localExtStorage.set('enabledNetworks', ['penumbra', 'penumbra-testnet']);
+      await localExtStorage.set(
+        'penumbraTestnetParams',
+        new AppParameters({ chainId: 'penumbra-testnet-brinance-1' }).toJsonString(),
+      );
+      void useStore.getState().txApproval.acceptRequest(txApprovalRequest);
+      await vi.waitFor(() => expect(useStore.getState().txApproval.authorizeRequest).toBeDefined());
+      expect(useStore.getState().txApproval.invalidPlan?.message).toContain(
+        'this transaction names penumbra-1 · zafu is on penumbra-testnet-brinance-1',
       );
     });
 

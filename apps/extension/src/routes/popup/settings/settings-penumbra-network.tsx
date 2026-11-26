@@ -16,7 +16,7 @@ import { probeAllPenumbra } from '../../../state/keyring/penumbra-endpoint-laten
 import { hostOf } from '../../../net/destination';
 import { getClearCacheStepLabel, type ClearCacheProgress } from '../../../message/services';
 import { resyncPenumbraFromStart } from '../../../services/penumbra-resync';
-import { PENUMBRA_CHAINS } from '../../../penumbra/chain';
+import { PENUMBRA_CHAINS, testnetNodeProblem } from '../../../penumbra/chain';
 import { chainIdAt } from '../../../penumbra/active-chain';
 import { PopupPath } from '../paths';
 import { Section, SettingsScreen } from './settings-screen';
@@ -24,6 +24,8 @@ import { NodeSheet } from './node-sheet';
 import { CompatToggle } from './compat-toggle';
 import { useExplain } from './settings-explain';
 import { RpcPoolSheet } from './transparent-chain-endpoints';
+import { useConnections } from './nym-rows';
+import { urlOverNym } from '../../../net/egress-policy';
 
 // the bundled registry, resolved once per realm: no remote fetch, and a stable identity
 const PRESETS = getRegistryEndpoints();
@@ -101,6 +103,16 @@ export const SettingsPenumbraNetwork = () => {
   const endpoint = useStore(s => s.networks.networks.penumbra.endpoint) ?? '';
   const testnetEndpoint = useStore(s => s.networks.networks['penumbra-testnet'].endpoint) ?? '';
   const testnetChain = useTestnetChain(testnetEndpoint, enabled.includes('penumbra-testnet'));
+  // nym can't carry a node on this computer, or on a port its exits don't open: say so
+  const connections = useConnections();
+  const testnetDirect =
+    !!testnetEndpoint &&
+    !!connections &&
+    !urlOverNym(
+      { ...connections.inputs, netEgress: connections.ledger },
+      'penumbra-testnet',
+      testnetEndpoint,
+    );
   const setEndpoint = useStore(s => s.networks.setNetworkEndpoint);
   const { totalIn, setTotalIn } = usePenumbraTotalIn();
   const keepSyncing = useStore(s => s.privacy.settings.keepPenumbraSyncing);
@@ -154,7 +166,7 @@ export const SettingsPenumbraNetwork = () => {
             <Row
               type='value'
               label='testnet node'
-              description={testnetChain}
+              description={testnetDirect ? `${testnetChain} · direct` : testnetChain}
               value={hostOf(testnetEndpoint) ?? 'not set'}
               onPress={() => setOpen('testnet')}
               {...explainProps('network.penumbraTestnetNode')}
@@ -239,6 +251,7 @@ export const SettingsPenumbraNetwork = () => {
         egress='penumbra-servers'
         measure={() => Promise.resolve(new Map())}
         onPick={url => setEndpoint('penumbra-testnet', url)}
+        ownRefuse={testnetNodeProblem}
         onExplain={explainProps('network.penumbraTestnetNode').onExplain}
       />
 

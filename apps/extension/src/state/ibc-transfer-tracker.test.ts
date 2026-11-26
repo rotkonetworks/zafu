@@ -12,6 +12,7 @@ import {
   pollOnce,
   sweepAndResume,
   whileOpen,
+  onItsChain,
   transition,
   isTerminalTransferStatus,
   type IbcTransfer,
@@ -191,5 +192,44 @@ describe('ibc-transfer-tracker: only while a window is open', () => {
     await sweepAndResume(probe, deps);
     expect(asked).toHaveBeenCalledTimes(1);
     expect((await storage.getAll())['tx-abc']?.status).toBe('arrived');
+  });
+});
+
+describe('a shield-in is probed on the penumbra chain it targets', () => {
+  const shield = (penumbraChainId?: string): IbcTransfer => ({
+    id: 'tx-in',
+    direction: 'shield',
+    amount: '5000000',
+    denom: 'USDC',
+    srcTxHash: 'tx-in',
+    startedAt: T0,
+    expiresAt: T0 + TEN_MIN,
+    status: 'broadcast',
+    destAccount: 0,
+    matchSymbol: 'USDC',
+    ...(penumbraChainId ? { penumbraChainId } : {}),
+  });
+
+  it('while a testnet is in use, a mainnet shield-in has no news, so a testnet balance never marks it arrived', async () => {
+    const asked = vi.fn(() => Promise.resolve(99_000_000n));
+    const probe = onItsChain(() => Promise.resolve('penumbra-testnet-brinance-1'), asked);
+    expect(await probe(shield('penumbra-1'))).toBeUndefined();
+    expect(asked).not.toHaveBeenCalled();
+    expect(transition(shield('penumbra-1'), await probe(shield('penumbra-1')), T0).status).toBe(
+      'broadcast',
+    );
+  });
+
+  it('on its own chain it is asked; one recorded before chains were named is mainnet', async () => {
+    const asked = vi.fn(() => Promise.resolve(7n));
+    const probe = onItsChain(() => Promise.resolve('penumbra-1'), asked);
+    expect(await probe(shield('penumbra-1'))).toBe(7n);
+    expect(await probe(shield())).toBe(7n);
+  });
+
+  it('an unshield is asked of its cosmos chain whatever penumbra chain is in use', async () => {
+    const asked = vi.fn(() => Promise.resolve(3n));
+    const probe = onItsChain(() => Promise.resolve('penumbra-testnet-brinance-1'), asked);
+    expect(await probe({ ...newUnshield(), startedAt: T0, status: 'broadcast' })).toBe(3n);
   });
 });

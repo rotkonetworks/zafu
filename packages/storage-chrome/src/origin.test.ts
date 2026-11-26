@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'vitest';
-import { grantCapability, denyCapability, getOriginPermissions, getAllPermissions } from './origin';
+import {
+  grantCapability,
+  denyCapability,
+  getOriginPermissions,
+  getAllPermissions,
+  getOriginRecord,
+  upsertOriginRecord,
+} from './origin';
+import { UserChoice } from './records/user-choice';
 import { GRANT_TTL_MS, TIME_LIMITED_CAPABILITIES, hasCapability } from './capabilities';
 import { localExtStorage } from './local';
 
@@ -144,5 +152,45 @@ describe('knownSites written by another build', () => {
     await denyCapability(origin, 'encrypt');
     const all = (await getAllPermissions()) as unknown as Record<string, unknown>[];
     expect(all.find(p => p['origin'] === origin)?.['laterField']).toBe('kept');
+  });
+});
+
+describe('a penumbra connect grant is bound to the chain it was made on', () => {
+  const DEVNET = 'penumbra-testnet-brinance-1';
+
+  test('a grant made on a testnet does not connect the site on mainnet', async () => {
+    const origin = 'https://demo.example';
+    await upsertOriginRecord({ origin, choice: UserChoice.Approved, date: 1 }, DEVNET);
+    expect((await getOriginRecord(origin, DEVNET))?.choice).toBe(UserChoice.Approved);
+    expect(await getOriginRecord(origin, 'penumbra-1')).toBeUndefined();
+  });
+
+  test('approving again on mainnet moves the grant there', async () => {
+    const origin = 'https://moved.example';
+    await upsertOriginRecord({ origin, choice: UserChoice.Approved, date: 1 }, DEVNET);
+    await upsertOriginRecord({ origin, choice: UserChoice.Approved, date: 2 }, 'penumbra-1');
+    expect((await getOriginRecord(origin, 'penumbra-1'))?.choice).toBe(UserChoice.Approved);
+    expect(await getOriginRecord(origin, DEVNET)).toBeUndefined();
+  });
+
+  test('a grant from before testnets counts as penumbra-1', async () => {
+    const origin = 'https://old.example';
+    await localExtStorage.set('knownSites', [
+      { origin, choice: UserChoice.Approved, date: 1 },
+    ] as never);
+    expect((await getOriginRecord(origin, 'penumbra-1'))?.choice).toBe(UserChoice.Approved);
+    expect(await getOriginRecord(origin, DEVNET)).toBeUndefined();
+  });
+
+  test('a testnet with no named chain connects no one', async () => {
+    const origin = 'https://none.example';
+    await upsertOriginRecord({ origin, choice: UserChoice.Approved, date: 1 }, 'penumbra-1');
+    expect(await getOriginRecord(origin, undefined)).toBeUndefined();
+  });
+
+  test('a denial or "don\'t ask again" stands on every chain', async () => {
+    const origin = 'https://quiet.example';
+    await upsertOriginRecord({ origin, choice: UserChoice.Ignored, date: 1 }, 'penumbra-1');
+    expect((await getOriginRecord(origin, DEVNET))?.choice).toBe(UserChoice.Ignored);
   });
 });

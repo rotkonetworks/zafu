@@ -9,6 +9,7 @@
 
 import { storedList } from '@repo/storage-chrome/stored-list';
 import type { ResolvedStart } from './start';
+import { isLocalDeviceHost } from '../net/destination';
 
 export const PENUMBRA_MAINNET = 'penumbra-1';
 
@@ -20,9 +21,10 @@ interface PenumbraChain {
   /** the chain id before any node has said one */
   fallback?: string;
   /**
-   * asked of the node on every start, never read from storage first: a stored
-   * id is only checked after sync begins, too late to keep a node serving
-   * another chain out of this entry's database
+   * the node is anyone's: asked on every start, never read from storage
+   * first (a stored id is only checked after sync begins, too late to keep a
+   * node serving another chain out of this entry's database), and watched
+   * while it is read (penumbra/chain-check `watch`)
    */
   askFirst: boolean;
   /** why a node's chain can't be read into this entry, or undefined when it can */
@@ -61,8 +63,42 @@ export const penumbraNetworkOf = (enabledNetworks: unknown): PenumbraNetwork =>
 export const viewDbsOf = (names: readonly string[], chainId: string): string[] =>
   names.filter(n => n.startsWith(`viewdata/${chainId}/`));
 
-/** the line an approval shows for a chain that is not mainnet */
-export const testnetLine = (chainId: string | undefined): string | undefined =>
-  !chainId || chainId === PENUMBRA_MAINNET
+/** the penumbra chain in use: the entry, and the id its node said (none yet on a fresh testnet) */
+export interface ChainInUse {
+  network: PenumbraNetwork;
+  chainId?: string;
+}
+
+/** the line an approval shows while a testnet is in use; none on mainnet */
+export const chainLine = ({ network, chainId }: ChainInUse): string | undefined =>
+  network === 'penumbra'
     ? undefined
-    : `penumbra testnet · ${chainId} · coins have no value`;
+    : chainId
+      ? `penumbra testnet · ${chainId} · coins have no value`
+      : 'penumbra testnet · no node yet';
+
+/** why a plan can't be signed on the chain in use: it must name exactly that chain */
+export const planChainProblem = (
+  planChainId: string | undefined,
+  active: ChainInUse,
+): string | undefined =>
+  !active.chainId
+    ? 'penumbra testnet has no node yet'
+    : !planChainId
+      ? 'this transaction names no chain'
+      : planChainId !== active.chainId
+        ? `this transaction names ${planChainId} · zafu is on ${active.chainId}`
+        : undefined;
+
+/** why a testnet node's address can't be used: only one on this computer may skip https */
+export const testnetNodeProblem = (url: string): string | undefined => {
+  let u: URL;
+  try {
+    u = new URL(url.trim());
+  } catch {
+    return 'that is not a node address';
+  }
+  return u.protocol === 'https:' || (u.protocol === 'http:' && isLocalDeviceHost(u.host))
+    ? undefined
+    : 'a node away from this computer needs https';
+};

@@ -215,7 +215,7 @@ export const SETTINGS_EXPLAIN = {
   'network.penumbraTestnetNode': {
     blurb: 'the node zafu reads your penumbra testnet from. there is none built in.',
     footer:
-      'zafu asks it which chain it serves and shows that here. a node that serves penumbra mainnet is not used for the testnet',
+      'zafu asks it which chain it serves, shows that here, and asks again while it reads. a node that serves penumbra mainnet is not used for the testnet. one away from this computer needs https, and "direct" means nym cannot carry it: the node sees your ip',
   },
   'network.hyperliquidEnable': {
     blurb: 'hyperliquid, for usdc only: deposit, withdraw and send. no trading in zafu.',

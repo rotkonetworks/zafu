@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { approveSender } from './approve';
+import { alreadyApprovedSender, approveSender } from './approve';
+import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
+
+const DEVNET = 'penumbra-testnet-brinance-1';
 import { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
 import { PopupType } from '../message/popup';
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -104,6 +107,7 @@ describe('origin approvals', () => {
         favIconUrl: mockTab.favIconUrl,
         title: mockTab.title,
         lastRequest: undefined,
+        chain: { network: 'penumbra', chainId: 'penumbra-1' },
       });
     });
 
@@ -128,6 +132,43 @@ describe('origin approvals', () => {
       // after upsert, storage contains OriginPermissions shapes
       const stored = await localExtStorage.get('knownSites');
       expect(stored).toHaveLength(2);
+    });
+
+    it('a site approved on the testnet is asked again on mainnet, shown the chain', async () => {
+      const origin = 'mock://demo.example.com';
+      await localExtStorage.set('enabledNetworks', ['penumbra', 'penumbra-testnet']);
+      await localExtStorage.set(
+        'penumbraTestnetParams',
+        new AppParameters({ chainId: DEVNET }).toJsonString(),
+      );
+      mockPopup.mockResolvedValue({ choice: UserChoice.Approved, date: 1, origin });
+      await approveSender({ origin, tab: mockTab });
+      expect(mockPopup).toHaveBeenLastCalledWith(
+        PopupType.OriginApproval,
+        expect.objectContaining({ chain: { network: 'penumbra-testnet', chainId: DEVNET } }),
+      );
+      expect(await alreadyApprovedSender({ origin } as never)).toBe(true);
+
+      await localExtStorage.set('enabledNetworks', ['penumbra']);
+      expect(await alreadyApprovedSender({ origin } as never)).toBe(false);
+      mockPopup.mockClear();
+      await approveSender({ origin, tab: mockTab });
+      expect(mockPopup).toHaveBeenCalledWith(
+        PopupType.OriginApproval,
+        expect.objectContaining({ chain: { network: 'penumbra', chainId: 'penumbra-1' } }),
+      );
+    });
+
+    it('a testnet no node has named yet approves no one', async () => {
+      const origin = 'mock://early.example.com';
+      await localExtStorage.set('enabledNetworks', ['penumbra', 'penumbra-testnet']);
+      mockPopup.mockResolvedValue({ choice: UserChoice.Approved, date: 1, origin });
+      expect(await approveSender({ origin, tab: mockTab })).toBe(UserChoice.Denied);
+      expect(mockPopup).toHaveBeenCalledWith(
+        PopupType.OriginApproval,
+        expect.objectContaining({ chain: { network: 'penumbra-testnet', chainId: undefined } }),
+      );
+      expect(await alreadyApprovedSender({ origin } as never)).toBe(false);
     });
   });
 });

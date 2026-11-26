@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { PENUMBRA_CHAINS, penumbraNetworkOf, testnetLine, viewDbsOf } from './chain';
+import {
+  PENUMBRA_CHAINS,
+  chainLine,
+  penumbraNetworkOf,
+  planChainProblem,
+  testnetNodeProblem,
+  viewDbsOf,
+} from './chain';
 
 const DEVNET = 'penumbra-testnet-brinance-1';
 
@@ -54,13 +61,64 @@ describe('viewDbsOf', () => {
   });
 });
 
-describe('testnetLine', () => {
-  it('names the chain and says its coins have no value', () => {
-    expect(testnetLine(DEVNET)).toBe(`penumbra testnet · ${DEVNET} · coins have no value`);
+describe('chainLine', () => {
+  it('names a testnet chain and says its coins have no value', () => {
+    expect(chainLine({ network: 'penumbra-testnet', chainId: DEVNET })).toBe(
+      `penumbra testnet · ${DEVNET} · coins have no value`,
+    );
+  });
+
+  it('says so when the testnet has no node yet, rather than look like mainnet', () => {
+    expect(chainLine({ network: 'penumbra-testnet' })).toBe('penumbra testnet · no node yet');
   });
 
   it('says nothing on mainnet', () => {
-    expect(testnetLine('penumbra-1')).toBeUndefined();
-    expect(testnetLine(undefined)).toBeUndefined();
+    expect(chainLine({ network: 'penumbra', chainId: 'penumbra-1' })).toBeUndefined();
+  });
+});
+
+describe('planChainProblem', () => {
+  const mainnet = { network: 'penumbra' as const, chainId: 'penumbra-1' };
+  const testnet = { network: 'penumbra-testnet' as const, chainId: DEVNET };
+
+  it('a plan for the chain in use is fine', () => {
+    expect(planChainProblem('penumbra-1', mainnet)).toBeUndefined();
+    expect(planChainProblem(DEVNET, testnet)).toBeUndefined();
+  });
+
+  it('a plan naming a testnet while mainnet is in use is refused, never labelled valueless', () => {
+    expect(planChainProblem(DEVNET, mainnet)).toBe(
+      `this transaction names ${DEVNET} · zafu is on penumbra-1`,
+    );
+  });
+
+  it('a plan naming mainnet while the testnet is in use is refused', () => {
+    expect(planChainProblem('penumbra-1', testnet)).toBe(
+      `this transaction names penumbra-1 · zafu is on ${DEVNET}`,
+    );
+  });
+
+  it('a testnet with no named chain signs nothing', () => {
+    expect(planChainProblem(DEVNET, { network: 'penumbra-testnet' })).toBe(
+      'penumbra testnet has no node yet',
+    );
+    expect(planChainProblem(undefined, mainnet)).toBe('this transaction names no chain');
+  });
+});
+
+describe('testnetNodeProblem', () => {
+  it('a node on this computer may speak plain http', () => {
+    for (const u of ['http://127.0.0.1:38080', 'http://localhost:8080', 'http://[::1]:8080']) {
+      expect(testnetNodeProblem(u)).toBeUndefined();
+    }
+  });
+
+  it('any other node needs https', () => {
+    expect(testnetNodeProblem('https://testnet.example.org')).toBeUndefined();
+    expect(testnetNodeProblem('http://testnet.example.org')).toBe(
+      'a node away from this computer needs https',
+    );
+    expect(testnetNodeProblem('http://192.168.1.5:8080')).toBeDefined();
+    expect(testnetNodeProblem('not a url')).toBeDefined();
   });
 });
