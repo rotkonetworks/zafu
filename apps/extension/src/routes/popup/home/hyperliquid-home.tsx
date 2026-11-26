@@ -16,7 +16,7 @@ import { microToUsdc, zatToZec } from '@repo/wallet/networks/hyperliquid/client'
 import { HYPERLIQUID_DEFAULT_PATH, isBip32Path } from '@repo/wallet/networks/hyperliquid/derive';
 import type { BalanceView } from '../../../components/wallet/balance-hero';
 import { useHyperliquidAccount, useHyperliquidAccounts } from '../../../hooks/hyperliquid';
-import { SCAN_GAP } from '../../../hyperliquid/accounts';
+import { SCAN_GAP, isHyperliquidPath } from '../../../hyperliquid/accounts';
 import { Facts, Helper } from '../send/send-ui';
 import { useNavigate } from 'react-router-dom';
 import { PopupPath } from '../paths';
@@ -40,7 +40,9 @@ const PathSheet = ({
   const { customPath, setCustomPath } = useHyperliquidAccounts();
   const [draft, setDraft] = useState<string>();
   const text = (draft ?? customPath ?? '').trim();
-  const valid = isBip32Path(text);
+  const valid = isHyperliquidPath(text);
+  // a valid path refused only because it is the key evm sites see
+  const dapp = isBip32Path(text) && !valid;
   const close = (next: string | undefined) => {
     void setCustomPath(next).then(() => {
       setDraft(undefined);
@@ -86,9 +88,11 @@ const PathSheet = ({
           className='font-mono'
         />
         <Helper warn={!!text && !valid}>
-          {text && !valid
-            ? `a path looks like ${HYPERLIQUID_DEFAULT_PATH}`
-            : 'it joins your accounts as one more · the others stay as they are'}
+          {dapp
+            ? 'that is the key evm sites see in zafu · please choose another'
+            : text && !valid
+              ? `a path looks like ${HYPERLIQUID_DEFAULT_PATH}`
+              : 'it joins your accounts as one more · the others stay as they are'}
         </Helper>
       </div>
     </Sheet>

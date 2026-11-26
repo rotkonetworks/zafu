@@ -25,7 +25,8 @@ export const isEvmMessage = (m: unknown): m is EvmMessage =>
 /** the request stashed in session storage for the approval screen to read */
 export interface EvmApprovalRequest {
   requestId: string;
-  kind: 'connect' | 'send' | 'sign';
+  /** `chain`: a site asks to use a chain no egress opt-in covers (the local node) */
+  kind: 'connect' | 'send' | 'sign' | 'chain';
   origin: string;
   title?: string;
   favIconUrl?: string;

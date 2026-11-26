@@ -5,6 +5,7 @@ import {
   accountsOf,
   activeOf,
   customPathOf,
+  isHyperliquidPath,
   mergeRestored,
   nameOf,
   parseBook,
@@ -78,6 +79,16 @@ describe('making and naming accounts', () => {
     expect(activeOf({ top: 1, names: {}, active: 7 }, undefined)).toBe(0);
     expect(customPathOf('nonsense')).toBeUndefined();
     expect(customPathOf(CUSTOM)).toBe(CUSTOM);
+  });
+
+  // audit I-2: the key evm sites see must never also be a hyperliquid account
+  it("refuses the evm sites' key as an imported path, however it is written", () => {
+    for (const path of ["m/44'/60'/1'/0/0", "m/44'/060'/01'/0/00"]) {
+      expect(isHyperliquidPath(path)).toBe(false);
+      expect(customPathOf(path)).toBeUndefined();
+    }
+    expect(isHyperliquidPath("m/44'/60'/1'/0/1")).toBe(true);
+    expect(isHyperliquidPath("m/44'/60'/1/0/0")).toBe(true);
   });
 
   it('only ever raises the highest index', () => {

@@ -13,6 +13,7 @@
 
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { isBip32Path } from '@repo/wallet/networks/hyperliquid/derive';
+import { DAPP_EVM_PATH } from '../evm/chains';
 
 /** an account index, or the one imported path */
 export type AccountId = number | 'path';
@@ -68,9 +69,25 @@ export const accountsOf = (book: AccountsBook, owner: string | undefined): Walle
 
 export const accountPath = (index: number): string => `m/44'/60'/0'/0/${index}`;
 
+/** a path's indices, so "01'" and "1'" read as the one key they are */
+const indices = (path: string): string =>
+  path
+    .slice(2)
+    .split('/')
+    .map(s => `${parseInt(s, 10)}${s.endsWith("'") ? "'" : ''}`)
+    .join('/');
+
+/**
+ * A path a person may name for a hyperliquid account: any valid one but the
+ * key evm sites see (evm/chains DAPP_EVM_PATH), which would put that account
+ * one approval from every site connected to zafu.
+ */
+export const isHyperliquidPath = (path: string): boolean =>
+  isBip32Path(path) && indices(path) !== indices(DAPP_EVM_PATH);
+
 /** a stored custom path, when it is one */
 export const customPathOf = (stored: unknown): string | undefined =>
-  typeof stored === 'string' && isBip32Path(stored) ? stored : undefined;
+  typeof stored === 'string' && isHyperliquidPath(stored) ? stored : undefined;
 
 /** the account in use: one that exists, else account 0 */
 export const activeOf = (w: WalletAccounts, customPath: string | undefined): AccountId =>

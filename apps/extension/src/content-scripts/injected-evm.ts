@@ -133,6 +133,12 @@ const installEthereum = () => {
   }
 };
 
+/** what the worker tells this page: a chain switch, or a wallet switch that took its accounts */
+const WORKER_EVENTS: Partial<Record<string, (value: unknown) => void>> = {
+  chainChanged: sawChain,
+  accountsChanged: sawAccounts,
+};
+
 /**
  * What the bridge says unasked. A page could forge either: that only installs
  * this same provider in window.ethereum, or makes its own provider announce a
@@ -140,7 +146,7 @@ const installEthereum = () => {
  */
 const FROM_BRIDGE: Partial<Record<string, (d: { event?: unknown; value?: unknown }) => void>> = {
   ethereum: installEthereum,
-  event: d => d.event === 'chainChanged' && sawChain(d.value),
+  event: d => WORKER_EVENTS[String(d.event)]?.(d.value),
 };
 
 window.addEventListener('message', (ev: MessageEvent) => {
