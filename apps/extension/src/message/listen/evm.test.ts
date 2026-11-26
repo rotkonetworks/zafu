@@ -18,7 +18,13 @@ vi.mock('./approval-window', () => window_);
 import { bech32mAddress } from '@penumbra-zone/bech32m/penumbra';
 import { denyCapability, grantCapability } from '@repo/storage-chrome/origin';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { HANDLERS, createEvmMessageListener, evmRequest, penumbraOwner } from './evm';
+import {
+  HANDLERS,
+  createEvmMessageListener,
+  evmRequest,
+  penumbraOwner,
+  vaultSwitched,
+} from './evm';
 
 const site = { origin: 'https://veil.example' };
 const whose = vi.fn(() => Promise.resolve(undefined));
@@ -35,6 +41,12 @@ beforeEach(async () => {
   tabs.sendMessage.mockReset().mockResolvedValue(undefined);
   (chrome as unknown as { tabs: unknown }).tabs = tabs;
 });
+
+/** a site connected while `vault` was the selected wallet, as the worker records it */
+const connectWith = async (vault: string, origin = site.origin) => {
+  await grantCapability(origin, 'evm');
+  await localExtStorage.set('evmSites', { [origin]: vault });
+};
 
 /** a phrase wallet, the kind that signs evm */
 const hotWallet = async () => {
@@ -134,6 +146,7 @@ describe('a site that has not connected', () => {
   });
 
   it('finds the local dev chain only while beta features are on', async () => {
+    window_.askInWindow.mockResolvedValue({ approved: true });
     await localExtStorage.set('betaFeatures', false);
     await expect(call('wallet_switchEthereumChain', [{ chainId: '0x7a69' }])).rejects.toMatchObject(
       { code: 4902 },
@@ -141,6 +154,26 @@ describe('a site that has not connected', () => {
     await localExtStorage.set('betaFeatures', true);
     expect(await call('wallet_switchEthereumChain', [{ chainId: '0x7a69' }])).toBeNull();
     expect(await call('eth_chainId')).toBe('0x7a69');
+  });
+
+  // audit F-9: no egress opt-in covers a node on this computer, so each site asks
+  it('asks before a site may use the node on this computer, once', async () => {
+    await localExtStorage.set('betaFeatures', true);
+    await expect(call('wallet_switchEthereumChain', [{ chainId: '0x7a69' }])).rejects.toMatchObject(
+      { code: 4001 },
+    );
+    expect(window_.askInWindow.mock.calls[0]?.[2]).toMatchObject({
+      kind: 'chain',
+      chain: { id: 31337 },
+    });
+    expect(await call('eth_chainId')).toBe('0x38');
+
+    await chrome.storage.session.remove(`evmDeclined:${site.origin}`);
+    window_.askInWindow.mockResolvedValue({ approved: true });
+    expect(await call('wallet_switchEthereumChain', [{ chainId: '0x7a69' }])).toBeNull();
+    await call('wallet_switchEthereumChain', [{ chainId: '0x38' }]);
+    await call('wallet_switchEthereumChain', [{ chainId: '0x7a69' }]);
+    expect(window_.askInWindow).toHaveBeenCalledTimes(2);
   });
 
   it('learns nothing of the wallet: every refusal before a window reads the same', async () => {
@@ -176,8 +209,10 @@ describe('a site that has not connected', () => {
 
 describe('a connected site', () => {
   it("reads its chain's node as asked", async () => {
-    await grantCapability(site.origin, 'evm');
+    await hotWallet();
+    await connectWith('h');
     await localExtStorage.set('betaFeatures', true);
+    window_.askInWindow.mockResolvedValue({ approved: true });
     await call('wallet_switchEthereumChain', [{ chainId: '0x7a69' }]);
     const fetch = vi.fn(() =>
       Promise.resolve(new Response('{"jsonrpc":"2.0","id":1,"result":"0x2a"}')),
@@ -194,7 +229,8 @@ describe('a connected site', () => {
   });
 
   it("passes on the node's own error code", async () => {
-    await grantCapability(site.origin, 'evm');
+    await hotWallet();
+    await connectWith('h');
     stubFetch(
       vi.fn(() =>
         Promise.resolve(
@@ -285,5 +321,60 @@ describe('whose a penumbra receiver is', () => {
     await vi.advanceTimersByTimeAsync(3000);
     expect(await slow).toBeUndefined();
     vi.useRealTimers();
+  });
+});
+
+// audit F-3: a connection is to one wallet, never to whichever is selected later
+describe('a site connected with one wallet', () => {
+  // a fresh origin each: the "not now" back-off is per origin, and lasts a while
+  let n = 0;
+  const shop = { origin: '' };
+  const call = (method: string, params: unknown[] = []) =>
+    evmRequest(method, params, { site: shop, whose });
+  const A = '0x00000000000000000000000000000000000000aa';
+  const B = '0x00000000000000000000000000000000000000bb';
+  beforeEach(async () => {
+    await localExtStorage.set('vaults', [
+      { id: 'a', type: 'mnemonic', insensitive: {} },
+      { id: 'b', type: 'mnemonic', insensitive: {} },
+    ] as never);
+    // what the worker cached for each wallet after earlier use
+    await chrome.storage.session.set({ 'evmAddress:a': A, 'evmAddress:b': B });
+    shop.origin = `https://wallet-switch-${n++}.example`;
+    await localExtStorage.set('selectedVaultId', 'a');
+    await connectWith('a', shop.origin);
+  });
+
+  it("never sees another wallet's address after a switch, and is asked again", async () => {
+    expect(await call('eth_accounts')).toEqual([A]);
+    await localExtStorage.set('selectedVaultId', 'b');
+    expect(await call('eth_accounts')).toEqual([]);
+    await expect(call('eth_getBalance', [B, 'latest'])).rejects.toMatchObject({ code: 4100 });
+    await expect(call('eth_requestAccounts')).rejects.toMatchObject({ code: 4001 });
+    expect(window_.askInWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('is told its accounts are gone when the person switches wallet', async () => {
+    tabs.query.mockResolvedValue([{ id: 4, url: `${shop.origin}/x` }]);
+    await vaultSwitched('b');
+    expect(tabs.sendMessage).toHaveBeenCalledWith(4, {
+      type: 'ZafuEvmEvent',
+      event: 'accountsChanged',
+      value: [],
+    });
+    tabs.sendMessage.mockClear();
+    await vaultSwitched('a');
+    expect(tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('signs nothing when the wallet changes while the window is open', async () => {
+    window_.askInWindow.mockImplementation(async () => {
+      await localExtStorage.set('selectedVaultId', 'b');
+      return { approved: true };
+    });
+    await expect(call('personal_sign', ['0x68656c6c6f', A])).rejects.toMatchObject({
+      code: 4100,
+      message: 'the wallet changed while this was open · nothing was signed',
+    });
   });
 });

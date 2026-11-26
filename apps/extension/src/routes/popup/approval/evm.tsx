@@ -14,7 +14,7 @@ import { Clipped } from '@repo/ui/components/ui/clipped';
 import { OriginIcon, hostnameOf } from '../../../shared/components/origin-icon';
 import { evmApprovalKey, type EvmApprovalRequest } from '../../../message/evm';
 import { callLines, readCall } from '../../../evm/calldata';
-import { isKnownBridge } from '../../../evm/chains';
+import { knownBridge } from '../../../evm/chains';
 import { requestEgressOptIn } from '../../../net/egress-opt-in';
 import { ApproveDeny } from './approve-deny';
 
@@ -22,6 +22,7 @@ const TITLE: Record<EvmApprovalRequest['kind'], [title: string, approve: string]
   connect: ['connect wallet', 'connect'],
   send: ['approve transaction', 'approve'],
   sign: ['sign a message', 'sign'],
+  chain: ['use a node on this computer', 'allow'],
 };
 
 const Line = ({
@@ -46,7 +47,7 @@ const Line = ({
 
 const Send = ({ req }: { req: EvmApprovalRequest }) => {
   const tx = req.tx!;
-  const lines = callLines(readCall(tx.data, isKnownBridge(req.chain, tx.to)), req.token, req.owner);
+  const lines = callLines(readCall(tx.data, knownBridge(req.chain, tx.to)), req.token, req.owner);
   return (
     <>
       <Line label='from'>{req.from}</Line>
@@ -54,9 +55,8 @@ const Send = ({ req }: { req: EvmApprovalRequest }) => {
       <Line label='value'>
         {formatUnits(BigInt(tx.value), 18)} {req.chain.symbol}
       </Line>
-      {lines.map(([label, text]) => (
-        // only a receiver that isn't this wallet's is said loudly
-        <Line key={label} label={label} alert={label === 'whose' && req.owner === 'not-yours'}>
+      {lines.map(([label, text, warn]) => (
+        <Line key={label} label={label} alert={warn}>
           {text}
         </Line>
       ))}
@@ -90,8 +90,16 @@ const Connect = ({ req }: { req: EvmApprovalRequest }) => (
   </p>
 );
 
+const LocalChain = ({ req }: { req: EvmApprovalRequest }) => (
+  <p className='py-2 text-fg'>
+    this site asks zafu to use the node at {req.chain.rpc} on this computer. its reads and
+    transactions on {req.chain.name} go there.
+  </p>
+);
+
 const BODY: Record<EvmApprovalRequest['kind'], (p: { req: EvmApprovalRequest }) => ReactNode> = {
   connect: Connect,
+  chain: LocalChain,
   send: Send,
   sign: Sign,
 };

@@ -54,7 +54,7 @@ import { openWalletRoute } from './message/listen/external-easteregg';
 import { omniboxDescription, omniboxUri, escapeOmniboxXml } from './links/omnibox';
 import { PopupPath } from './routes/popup/paths';
 import { keplrMessageListener } from './message/listen/keplr';
-import { createEvmMessageListener, penumbraOwner } from './message/listen/evm';
+import { createEvmMessageListener, penumbraOwner, vaultSwitched } from './message/listen/evm';
 import { createPenumbraSendListener } from './message/listen/penumbra-send';
 import { TX_OP_PREFIX, isTxOp, type TxOp } from './tx-ops';
 import { sweepAndResume, defaultTrackerDeps, whileOpen } from './state/ibc-transfer-tracker';
@@ -584,6 +584,11 @@ listen(createPenumbraSendListener(getInternalViewClient));
 // transactions and signatures, each approved in zafu and signed here. The view
 // service tells whether a penumbra receiver is the person's own.
 listen(createEvmMessageListener(penumbraOwner(getInternalViewClient)));
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && 'selectedVaultId' in changes) {
+    void vaultSwitched(changes['selectedVaultId']?.newValue as string | undefined);
+  }
+});
 
 // IBC transfer tracker: poll destination chains for shield/unshield arrival.
 // Shield-in reads the Penumbra note via the SW's INTERNAL view client (no

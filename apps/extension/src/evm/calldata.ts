@@ -7,21 +7,27 @@
  */
 
 import { decodeFunctionData, formatUnits, parseAbi, toFunctionSelector, type Hex } from 'viem';
+import type { KnownBridge } from './chains';
+
+/** an ics20 move as the call states it; `timeout` in unix seconds, 0 for none */
+export interface IbcMove {
+  token: Hex;
+  amount: bigint;
+  receiver: string;
+  timeout: bigint;
+  memo: string;
+  sourceClient?: string;
+  destPort?: string;
+}
 
 export type CallView =
   | { kind: 'none' }
   | { kind: 'approve'; spender: Hex; amount: bigint }
   | { kind: 'transfer'; to: Hex; amount: bigint }
-  /** `timeout` in unix seconds, 0 for none */
-  | {
-      kind: 'ibc';
-      token: Hex;
-      amount: bigint;
-      receiver: string;
-      timeout: bigint;
-      memo: string;
-      sourceClient?: string;
-    }
+  /** to a known bridge, on the route pinned for it (evm/chains) */
+  | ({ kind: 'ibc' } & IbcMove)
+  /** to a known bridge, on any other client or port: it may go anywhere */
+  | ({ kind: 'off-route' } & IbcMove)
   | { kind: 'call'; selector: string; bytes: number };
 
 interface SendTransferMsg {
@@ -31,6 +37,7 @@ interface SendTransferMsg {
   timeoutTimestamp: bigint;
   memo: string;
   sourceClient?: string;
+  destPort?: string;
 }
 
 const ibc = (m: SendTransferMsg, timeoutUnit = 1n): CallView => ({
@@ -41,6 +48,7 @@ const ibc = (m: SendTransferMsg, timeoutUnit = 1n): CallView => ({
   timeout: m.timeoutTimestamp / timeoutUnit,
   memo: m.memo,
   ...(m.sourceClient !== undefined && { sourceClient: m.sourceClient }),
+  ...(m.destPort !== undefined && { destPort: m.destPort }),
 });
 
 const MSG =
@@ -77,11 +85,13 @@ const BY_SELECTOR = new Map(READERS.map(([sig, read]) => [toFunctionSelector(sig
 export const UNLIMITED = 2n ** 96n;
 
 /**
- * `bridge`: the call goes to one of the chain's known ics20 / bridge contracts
- * (evm/chains isKnownBridge). Only then is an ibc move read as one; the same
- * shape sent anywhere else is an unreadable call.
+ * `bridge`: the known ics20 / bridge contract the call goes to (evm/chains
+ * knownBridge), if it does. Only then is an ibc move read as one, and only on
+ * the client and port pinned for that bridge: the client picks the chain a
+ * packet goes to, not the receiver string. The same shape sent anywhere else
+ * is an unreadable call; on another route it is `off-route`.
  */
-export const readCall = (data: Hex | undefined, bridge = false): CallView => {
+export const readCall = (data: Hex | undefined, bridge?: KnownBridge): CallView => {
   if (!data || data === '0x') {
     return { kind: 'none' };
   }
@@ -93,7 +103,14 @@ export const readCall = (data: Hex | undefined, bridge = false): CallView => {
   const read = BY_SELECTOR.get(data.slice(0, 10).toLowerCase() as Hex);
   try {
     const view = read?.(decodeFunctionData({ abi: ABI, data }).args ?? []);
-    return view && (view.kind !== 'ibc' || bridge) ? view : unread;
+    if (view?.kind !== 'ibc') {
+      return view ?? unread;
+    }
+    if (!bridge) {
+      return unread;
+    }
+    const onRoute = view.sourceClient === bridge.client && view.destPort === bridge.port;
+    return onRoute ? view : { ...view, kind: 'off-route' };
   } catch {
     // its selector matched but its arguments don't decode
     return unread;
@@ -102,7 +119,7 @@ export const readCall = (data: Hex | undefined, bridge = false): CallView => {
 
 /** the token a call moves: the contract called for erc-20, the denom for an ibc move */
 export const tokenAddress = (view: CallView, to: Hex | undefined): Hex | undefined =>
-  view.kind === 'ibc'
+  view.kind === 'ibc' || view.kind === 'off-route'
     ? view.token
     : view.kind === 'approve' || view.kind === 'transfer'
       ? to
@@ -139,7 +156,21 @@ interface Token {
   symbol: string;
   decimals: number;
 }
-export type Line = [label: string, text: string];
+/** a line of the approval; `warn` is said loudly */
+export type Line = [label: string, text: string, warn?: true];
+
+const routeLines = (v: IbcMove): (Line | false)[] => [
+  ['token', v.token],
+  v.sourceClient !== undefined && ['source client', v.sourceClient],
+  v.destPort !== undefined && ['destination port', v.destPort],
+];
+
+const tailLines = (v: IbcMove): (Line | false)[] => [
+  v.timeout > 0n && ['back to you if not there by', utc(v.timeout)],
+  !!v.memo && ['memo', v.memo],
+];
+
+const lines = (all: (Line | false)[]): Line[] => all.filter((l): l is Line => !!l);
 
 /** what the data does, line by line; nothing for a plain value transfer */
 export const callLines = (view: CallView, token?: Token, owner?: Owner): Line[] => {
@@ -155,20 +186,35 @@ export const callLines = (view: CallView, token?: Token, owner?: Owner): Line[] 
       return [['what it does', `sends ${amountOf(view.amount, token)} to ${view.to}`]];
     case 'ibc': {
       const penumbra = isPenumbraReceiver(view.receiver);
-      const lines: (Line | false)[] = [
+      // anything short of "yours" is said loudly: not yours, or not checked
+      const whose: Line =
+        owner === 'account' || owner === 'one-time'
+          ? ['whose', WHOSE[owner]]
+          : ['whose', WHOSE[owner ?? 'unknown'], true];
+      return lines([
         [
           'what it does',
           `moves ${amountOf(view.amount, token)} ${penumbra ? 'into penumbra' : 'over ibc to another chain'}`,
         ],
-        ['token', view.token],
-        view.sourceClient !== undefined && ['source client', view.sourceClient],
+        ...routeLines(view),
         ['to', view.receiver],
-        penumbra && ['whose', WHOSE[owner ?? 'unknown']],
-        view.timeout > 0n && ['back to you if not there by', utc(view.timeout)],
-        !!view.memo && ['memo', view.memo],
-      ];
-      return lines.filter((l): l is Line => !!l);
+        penumbra && whose,
+        ...tailLines(view),
+      ]);
     }
+    case 'off-route':
+      return lines([
+        [
+          'what it does',
+          `sends ${amountOf(view.amount, token)} over a route this bridge doesn't use for penumbra · it may never arrive, please don't approve unless you expected it`,
+          true,
+        ],
+        ['token', view.token],
+        ['source client', view.sourceClient ?? 'none'],
+        ['destination port', view.destPort ?? 'none'],
+        ['to', view.receiver],
+        ...tailLines(view),
+      ]);
     case 'call':
       return [
         [

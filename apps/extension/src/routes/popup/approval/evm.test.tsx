@@ -130,6 +130,47 @@ describe('evm approval', () => {
     );
   });
 
+  it('warns when a chapel eureka call leaves the route into penumbra', async () => {
+    const MSG =
+      '(address denom,uint256 amount,string receiver,string sourceClient,string destPort,uint64 timeoutTimestamp,string memo)';
+    await show({
+      kind: 'send',
+      chain: EVM_CHAINS.find(c => c.id === 97),
+      token: { symbol: 'tUSDT', decimals: 18 },
+      owner: 'account',
+      tx: {
+        chainId: 97,
+        to: '0xAAffe45F7c9352188783f0d4D945c672788545A3',
+        value: '0',
+        data: encodeFunctionData({
+          abi: parseAbi([`function sendTransfer(${MSG} msg_) returns (uint64)`]),
+          functionName: 'sendTransfer',
+          args: [
+            {
+              denom: BRIDGE,
+              amount: 10n ** 18n,
+              receiver: 'penumbra1abc',
+              sourceClient: 'client-9',
+              destPort: 'transfer',
+              timeoutTimestamp: 0n,
+              memo: '',
+            },
+          ],
+        }),
+        gas: '1',
+        gasPrice: '1',
+        nonce: 0,
+      },
+    });
+    expect(host.querySelector('[role=alert]')?.textContent).toContain(
+      "over a route this bridge doesn't use for penumbra",
+    );
+    expect(host.textContent).toContain('client-9');
+    expect(host.textContent).toContain('destination port');
+    expect(host.textContent).not.toContain('into penumbra');
+    expect(host.textContent).not.toContain('your own');
+  });
+
   it('reads the same call to an unknown contract as unreadable', async () => {
     await show(deposit(bsc));
     expect(host.textContent).not.toContain('penumbra');

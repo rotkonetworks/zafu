@@ -31,7 +31,7 @@ import {
   DEFAULT_EVM_CHAIN,
   evmChain,
   hexChainId,
-  isKnownBridge,
+  knownBridge,
   parseChainId,
   type EvmChain,
 } from '../../evm/chains';
@@ -133,31 +133,59 @@ const currentChain = async (origin: string): Promise<EvmChain> =>
 const reachable = async (chain: EvmChain): Promise<boolean> =>
   !chain.destination || !!(await readEgressView()).find(d => d.id === chain.destination && d.on);
 
-const connected = async (origin: string): Promise<boolean> =>
-  (await getCapabilityMode('evm')) !== 'disabled' &&
-  hasCapability(await getOriginPermissions(origin), 'evm');
+/**
+ * The wallet this site connected with, while it is still the selected one. A
+ * connection is to one wallet (audit F-3): after a switch the site sees no
+ * accounts until it asks again, so it never learns that two wallets are one
+ * person's.
+ */
+const connectedVault = async (origin: string): Promise<string | undefined> => {
+  if (
+    (await getCapabilityMode('evm')) === 'disabled' ||
+    !hasCapability(await getOriginPermissions(origin), 'evm')
+  ) {
+    return undefined;
+  }
+  const vault = ((await localExtStorage.get('evmSites')) ?? {})[origin];
+  return vault !== undefined && vault === (await localExtStorage.get('selectedVaultId'))
+    ? vault
+    : undefined;
+};
 
-const requireConnected = async (origin: string): Promise<void> => {
+const connected = async (origin: string): Promise<boolean> =>
+  (await connectedVault(origin)) !== undefined;
+
+/** the wallet this site connected with; refused when there is none */
+const requireConnected = async (origin: string): Promise<string> => {
+  const vault = await connectedVault(origin);
   // otherwise any page could have zafu reach a node on its behalf, unasked
-  if (!(await connected(origin))) {
+  if (vault === undefined) {
     throw new EvmError(UNAUTHORIZED, "this site isn't connected to zafu · please connect first");
   }
+  return vault;
+};
+
+const connect = async (origin: string, vault: string): Promise<void> => {
+  await grantCapability(origin, 'evm');
+  const sites = (await localExtStorage.get('evmSites')) ?? {};
+  await localExtStorage.set('evmSites', { ...sites, [origin]: vault });
 };
 
 type Ask = Omit<EvmApprovalRequest, 'requestId' | keyof Site>;
 
 /** after "not now", a site's next ask in this long is answered no without a window */
 const BACKOFF_MS = 30_000;
-const declinedAt = new Map<string, number>();
+// in session storage, not memory: the worker restarting must not reopen the loop
+const declinedKey = (origin: string) => `evmDeclined:${origin}`;
 
 const ask = async (site: Site, part: Ask): Promise<void> => {
-  if (Date.now() - (declinedAt.get(site.origin) ?? -Infinity) < BACKOFF_MS) {
+  if (Date.now() - ((await session<number>(declinedKey(site.origin))) ?? -Infinity) < BACKOFF_MS) {
     throw new EvmError(REJECTED, 'you said not now · zafu will ask again in a little while');
   }
   const req: EvmApprovalRequest = { requestId: crypto.randomUUID(), ...site, ...part };
   const decision = await askInWindow('approval/evm', evmApprovalKey(req.requestId), req);
   if (!decision.approved) {
-    declinedAt.set(site.origin, Date.now());
+    await chrome.storage.session.set({ [declinedKey(site.origin)]: Date.now() });
     throw new EvmError(REJECTED, decision.error ?? 'request rejected');
   }
 };
@@ -214,22 +242,32 @@ export const penumbraOwner =
 const sameAddress = (a: unknown, b: string) =>
   typeof a === 'string' && a.toLowerCase() === b.toLowerCase();
 
-/** sign with the selected wallet, refusing if its key is not the address the site was given */
-const signAs = <T>(
+/**
+ * Sign with the wallet this site connected with, as the address it was
+ * shown. The person can switch wallets while the window is open: the selected
+ * wallet is read again here, at the moment of signing, and must still be the
+ * connected one, and its key must still be the address that was approved.
+ */
+const signAs = async <T>(
   origin: string,
+  vault: string,
   from: Hex,
-  sign: Signer,
   fn: (a: EvmAccount) => Promise<T>,
-): Promise<T> =>
-  sign(origin, a => {
+): Promise<T> => {
+  const now = await selectedSigner();
+  if (now.id !== vault) {
+    throw new EvmError(UNAUTHORIZED, 'the wallet changed while this was open · nothing was signed');
+  }
+  return now.sign(origin, a => {
     if (!sameAddress(a.address, from)) {
       throw new EvmError(
         UNAUTHORIZED,
-        'the wallet changed since this site connected · nothing was signed',
+        'the wallet changed while this was open · nothing was signed',
       );
     }
     return fn(a);
   });
+};
 
 type Handler = (params: unknown[], ctx: Ctx) => Promise<unknown>;
 
@@ -254,18 +292,30 @@ const requestAccounts: Handler = async (_, { site }) => {
   const chain = await currentChain(site.origin);
   if (!(await connected(site.origin)) || !(await reachable(chain))) {
     await ask(site, { kind: 'connect', chain });
-    await grantCapability(site.origin, 'evm');
+    // the wallet selected when the person said yes
+    await connect(site.origin, (await selectedSigner()).id);
   }
   return [await addressOf(site.origin, true)];
 };
 
-/** tell every open tab of this site, through its bridge, that its chain changed */
-const tellTabs = async (origin: string, chainId: string): Promise<void> => {
+/** tell every open tab of this site, through its bridge, of an EIP-1193 event */
+const tellTabs = async (origin: string, event: string, value: unknown): Promise<void> => {
   for (const tab of await chrome.tabs.query({})) {
     if (tab.id !== undefined && tab.url && new URL(tab.url).origin === origin) {
       void chrome.tabs
-        .sendMessage(tab.id, { type: 'ZafuEvmEvent', event: 'chainChanged', value: chainId })
+        .sendMessage(tab.id, { type: 'ZafuEvmEvent', event, value })
         .catch(() => undefined);
+    }
+  }
+};
+
+/** the person switched wallet: every site connected with another one loses its accounts */
+export const vaultSwitched = async (vault: string | undefined): Promise<void> => {
+  for (const [origin, connectedWith] of Object.entries(
+    (await localExtStorage.get('evmSites')) ?? {},
+  )) {
+    if (connectedWith !== vault) {
+      await tellTabs(origin, 'accountsChanged', []);
     }
   }
 };
@@ -279,37 +329,41 @@ const switchChain: Handler = async ([arg], { site }) => {
   if ((await connected(site.origin)) && !(await reachable(chain))) {
     await ask(site, { kind: 'connect', chain });
   }
+  // audit F-9: the local node is behind no opt-in, so a site asks once per session
+  const localKey = `evmLocal:${site.origin}`;
+  if (chain.local && !(await session<boolean>(localKey))) {
+    await ask(site, { kind: 'chain', chain });
+    await chrome.storage.session.set({ [localKey]: true });
+  }
   const was = (await currentChain(site.origin)).id;
   await chrome.storage.session.set({ [chainKey(site.origin)]: chain.id });
   if (was !== chain.id) {
-    await tellTabs(site.origin, hexChainId(chain.id));
+    await tellTabs(site.origin, 'chainChanged', hexChainId(chain.id));
   }
   return null;
 };
 
 const sendTransaction: Handler = async ([arg], { site, whose }) => {
-  await requireConnected(site.origin);
-  const { sign } = await selectedSigner();
+  const vault = await requireConnected(site.origin);
   const from = (await addressOf(site.origin, true))!;
   const chain = await currentChain(site.origin);
   const rpc = rpcAt(chain.rpc);
   const tx = await fillTx(rpc, chain.id, from, (arg ?? {}) as TxParams);
-  const view = readCall(tx.data, isKnownBridge(chain, tx.to));
+  const view = readCall(tx.data, knownBridge(chain, tx.to));
   const [token, owner] = await Promise.all([tokenOf(rpc, view, tx.to), ownerOf(view, whose)]);
   await ask(site, { kind: 'send', chain, from, tx: storeTx(tx), token, owner });
-  return signAs(site.origin, from, sign, a => signAndSend(rpc, a, tx));
+  return signAs(site.origin, vault, from, a => signAndSend(rpc, a, tx));
 };
 
 const personalSign: Handler = async ([raw, address], { site }) => {
-  await requireConnected(site.origin);
-  const { sign } = await selectedSigner();
+  const vault = await requireConnected(site.origin);
   const from = (await addressOf(site.origin, true))!;
   if (address !== undefined && !sameAddress(address, from)) {
     throw new EvmError(UNAUTHORIZED, 'this message names an address zafu did not give this site');
   }
   const message = typeof raw === 'string' && isHex(raw) ? raw : toHex(String(raw));
   await ask(site, { kind: 'sign', chain: await currentChain(site.origin), from, message });
-  return signAs(site.origin, from, sign, a => a.signMessage({ message: { raw: message } }));
+  return signAs(site.origin, vault, from, a => a.signMessage({ message: { raw: message } }));
 };
 
 /** reads go to the site's chain as they are, once the site is connected */

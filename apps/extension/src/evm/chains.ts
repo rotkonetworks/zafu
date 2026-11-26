@@ -4,13 +4,22 @@
  * so zafu never talks to an rpc a page chose.
  *
  * `ibc` lists the ics20 / bridge contracts whose calls zafu spells out as a
- * move over ibc. A call of the same shape to any other contract is shown as
- * an unreadable call: a look-alike must never read as "into penumbra".
+ * move over ibc, each pinned to the one route (source client, destination
+ * port) that reaches penumbra. A call of the same shape to any other contract
+ * is an unreadable call, and one on another route is said to be off it: a
+ * look-alike or a detour must never read as "into penumbra".
  *
  * `destination` is the egress opt-in that owns the chain's rpc. The local dev
  * chain has none: a node on this computer is not a third party (net/destination
  * isLocalDeviceHost), and it is offered only while beta features are on.
  */
+
+export interface KnownBridge {
+  address: string;
+  /** the eureka source client and destination port; none for a flat bridge with one fixed channel */
+  client?: string;
+  port?: string;
+}
 
 export interface EvmChain {
   id: number;
@@ -19,11 +28,21 @@ export interface EvmChain {
   rpc: string;
   destination?: string;
   beta?: true;
-  ibc: readonly string[];
+  /** a node on this computer: no egress opt-in covers it, so each site asks first */
+  local?: true;
+  ibc: readonly KnownBridge[];
 }
 
-/** the chapel eureka ICS20Transfer (brinance deployments/chapel.json `ics20`) */
-const CHAPEL_ICS20: readonly string[] = ['0xAAffe45F7c9352188783f0d4D945c672788545A3'];
+/**
+ * The chapel eureka ICS20Transfer and its one route into penumbra
+ * (brinance deployments/chapel.json): client-0, whose counterparty is
+ * penumbra's xx-bnbchain-0, on port transfer.
+ */
+const CHAPEL_ICS20: KnownBridge = {
+  address: '0xAAffe45F7c9352188783f0d4D945c672788545A3',
+  client: 'client-0',
+  port: 'transfer',
+};
 
 export const EVM_CHAINS: readonly EvmChain[] = [
   {
@@ -40,7 +59,7 @@ export const EVM_CHAINS: readonly EvmChain[] = [
     symbol: 'tBNB',
     rpc: 'https://bsc-testnet.publicnode.com',
     destination: 'bsc-testnet',
-    ibc: CHAPEL_ICS20,
+    ibc: [CHAPEL_ICS20],
   },
   {
     id: 31337,
@@ -48,8 +67,10 @@ export const EVM_CHAINS: readonly EvmChain[] = [
     symbol: 'ETH',
     rpc: 'http://127.0.0.1:8545',
     beta: true,
-    // BrinanceTransfer, as anvil deploys it (brinance deployments/local.json)
-    ibc: ['0x9A676e781A523b5d0C0e43731313A708CB607508'],
+    local: true,
+    // BrinanceTransfer, as anvil deploys it (brinance deployments/local.json):
+    // flat calls on one fixed channel, so no client or port to pin
+    ibc: [{ address: '0x9A676e781A523b5d0C0e43731313A708CB607508' }],
   },
 ];
 
@@ -70,9 +91,12 @@ export const DAPP_EVM_PATH = "m/44'/60'/1'/0/0";
 export const evmChain = (id: number, beta: boolean): EvmChain | undefined =>
   EVM_CHAINS.find(c => c.id === id && (!c.beta || beta));
 
-/** `to` is one of this chain's known ics20 / bridge contracts */
-export const isKnownBridge = (chain: Pick<EvmChain, 'ibc'>, to: string | undefined): boolean =>
-  !!to && chain.ibc.some(a => a.toLowerCase() === to.toLowerCase());
+/** the known ics20 / bridge contract at `to` on this chain, if it is one */
+export const knownBridge = (
+  chain: Pick<EvmChain, 'ibc'>,
+  to: string | undefined,
+): KnownBridge | undefined =>
+  to ? chain.ibc.find(b => b.address.toLowerCase() === to.toLowerCase()) : undefined;
 
 /** an EIP-1193 chain id ("0x38") as a number; NaN for anything else */
 export const parseChainId = (raw: unknown): number =>

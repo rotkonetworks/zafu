@@ -25,9 +25,16 @@ const eureka = parseAbi([
 const brinance = parseAbi([
   'function sendTransfer(address token,uint256 amount,string receiver,string memo,uint64 timeoutTimestamp) payable returns (uint64)',
 ]);
+/** a known eureka bridge, pinned to its route (evm/chains), and the flat brinance one */
+const EUREKA = { address: SPENDER, client: '08-wasm-0', port: 'transfer' };
+const BRINANCE = { address: SPENDER };
+
 /** as a known bridge's call: ibc moves are read only from these */
-const lines = (data: `0x${string}`, owner?: Parameters<typeof callLines>[2]) =>
-  Object.fromEntries(callLines(readCall(data, true), token, owner).map(([k, v]) => [k, v]));
+const lines = (
+  data: `0x${string}`,
+  owner?: Parameters<typeof callLines>[2],
+  bridge: Parameters<typeof readCall>[1] = EUREKA,
+) => Object.fromEntries(callLines(readCall(data, bridge), token, owner).map(([k, v]) => [k, v]));
 
 describe('reading what a transaction does', () => {
   it('reads an erc-20 approve', () => {
@@ -67,7 +74,7 @@ describe('reading what a transaction does', () => {
 
   it('reads an eureka ics20 sendTransfer into penumbra', () => {
     const data = encodeFunctionData({ abi: eureka, functionName: 'sendTransfer', args: [msg] });
-    expect(readCall(data, true)).toEqual({
+    expect(readCall(data, EUREKA)).toEqual({
       kind: 'ibc',
       token: TOKEN,
       amount: msg.amount,
@@ -75,11 +82,13 @@ describe('reading what a transaction does', () => {
       timeout: 1_795_000_000n,
       memo: '',
       sourceClient: '08-wasm-0',
+      destPort: 'transfer',
     });
     expect(lines(data, 'one-time')).toEqual({
       'what it does': 'moves 250 tUSDT into penumbra',
       token: TOKEN,
       'source client': '08-wasm-0',
+      'destination port': 'transfer',
       to: PENUMBRA,
       whose: 'a one-time address of yours',
       'back to you if not there by': '2026-11-18 11:06 utc',
@@ -96,7 +105,7 @@ describe('reading what a transaction does', () => {
         '0x1234',
       ],
     });
-    expect(readCall(data, true)).toMatchObject({ kind: 'ibc', token: TOKEN, memo: 'hi' });
+    expect(readCall(data, EUREKA)).toMatchObject({ kind: 'ibc', token: TOKEN, memo: 'hi' });
     expect(lines(data).memo).toBe('hi');
   });
 
@@ -106,7 +115,7 @@ describe('reading what a transaction does', () => {
       functionName: 'sendTransfer',
       args: [TOKEN, msg.amount, PENUMBRA, '', 1_795_000_000n * 10n ** 9n],
     });
-    expect(readCall(data, true)).toMatchObject({
+    expect(readCall(data, BRINANCE)).toMatchObject({
       kind: 'ibc',
       token: TOKEN,
       timeout: 1_795_000_000n,
@@ -131,6 +140,7 @@ describe('reading what a transaction does', () => {
       'what it does': 'moves 250 tUSDT over ibc to another chain',
       token: TOKEN,
       'source client': '08-wasm-0',
+      'destination port': 'transfer',
       to: 'cosmos1abc',
     });
   });
@@ -139,6 +149,41 @@ describe('reading what a transaction does', () => {
     const data = encodeFunctionData({ abi: eureka, functionName: 'sendTransfer', args: [msg] });
     expect(readCall(data)).toMatchObject({ kind: 'call', selector: data.slice(0, 10) });
     expect(callLines(readCall(data), token, 'account').join(' ')).not.toContain('penumbra');
+  });
+
+  // audit F-2: the client and port pick the chain, not the receiver string
+  it.each([
+    ['another client', { sourceClient: 'attacker-client-7' }],
+    ['another port', { destPort: 'evil' }],
+  ])(
+    'reads a known bridge on %s as off its route: a warning, no penumbra, no owner',
+    (_, route) => {
+      const data = encodeFunctionData({
+        abi: eureka,
+        functionName: 'sendTransfer',
+        args: [{ ...msg, ...route }],
+      });
+      const view = readCall(data, EUREKA);
+      expect(view).toMatchObject({ kind: 'off-route' });
+      const all = callLines(view, token, 'account');
+      const text = all.map(([, t]) => t).join(' ');
+      expect(text).not.toContain('into penumbra');
+      expect(text).not.toContain('yours');
+      expect(all.map(([k]) => k)).not.toContain('whose');
+      expect(all[0]).toEqual([
+        'what it does',
+        "sends 250 tUSDT over a route this bridge doesn't use for penumbra · it may never arrive, please don't approve unless you expected it",
+        true,
+      ]);
+      const shown = Object.fromEntries(all.map(([k, v]) => [k, v]));
+      expect(shown['source client']).toBe(route.sourceClient ?? '08-wasm-0');
+      expect(shown['destination port']).toBe(route.destPort ?? 'transfer');
+    },
+  );
+
+  it('reads a eureka call to the flat brinance bridge as off its route', () => {
+    const data = encodeFunctionData({ abi: eureka, functionName: 'sendTransfer', args: [msg] });
+    expect(readCall(data, BRINANCE)).toMatchObject({ kind: 'off-route' });
   });
 
   it('calls any approval from 2^96 up "any amount"', () => {
@@ -167,7 +212,7 @@ describe('reading what a transaction does', () => {
     });
     const ibc = encodeFunctionData({ abi: eureka, functionName: 'sendTransfer', args: [msg] });
     expect(tokenAddress(readCall(approve), SPENDER)).toBe(SPENDER);
-    expect(tokenAddress(readCall(ibc, true), SPENDER)).toBe(TOKEN);
+    expect(tokenAddress(readCall(ibc, EUREKA), SPENDER)).toBe(TOKEN);
     expect(tokenAddress(readCall('0x'), SPENDER)).toBeUndefined();
   });
 

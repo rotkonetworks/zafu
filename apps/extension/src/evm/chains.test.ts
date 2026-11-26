@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EVM_CHAINS, evmChain, hexChainId, isKnownBridge, parseChainId } from './chains';
+import { EVM_CHAINS, evmChain, hexChainId, knownBridge, parseChainId } from './chains';
 
 describe('the evm chain allow-list', () => {
   it('offers bnb smart chain and its testnet', () => {
@@ -33,21 +33,27 @@ describe('the evm chain allow-list', () => {
 });
 
 describe('known bridges', () => {
-  it('knows the local BrinanceTransfer, in any case', () => {
+  it('knows the local BrinanceTransfer, in any case, with no route to pin', () => {
     const local = evmChain(31337, true)!;
-    expect(isKnownBridge(local, '0x9a676e781a523b5d0c0e43731313a708cb607508')).toBe(true);
-    expect(isKnownBridge(local, '0x000000000000000000000000000000000000dEaD')).toBe(false);
-    expect(isKnownBridge(local, undefined)).toBe(false);
+    expect(knownBridge(local, '0x9a676e781a523b5d0c0e43731313a708cb607508')).toEqual({
+      address: '0x9A676e781A523b5d0C0e43731313A708CB607508',
+    });
+    expect(knownBridge(local, '0x000000000000000000000000000000000000dEaD')).toBeUndefined();
+    expect(knownBridge(local, undefined)).toBeUndefined();
   });
 
-  it("knows chapel's eureka ics20, and none on mainnet yet", () => {
-    expect(isKnownBridge(evmChain(97, false)!, '0xaaffe45f7c9352188783f0d4d945c672788545a3')).toBe(
-      true,
+  it("pins chapel's eureka ics20 to client-0 on port transfer; none on mainnet yet", () => {
+    expect(knownBridge(evmChain(97, false)!, '0xaaffe45f7c9352188783f0d4d945c672788545a3')).toEqual(
+      {
+        address: '0xAAffe45F7c9352188783f0d4D945c672788545A3',
+        client: 'client-0',
+        port: 'transfer',
+      },
     );
     // the router is not where sendTransfer goes
-    expect(isKnownBridge(evmChain(97, false)!, '0x38A49D19e998ED7DFFA491e20D3E70d549EE4771')).toBe(
-      false,
-    );
+    expect(
+      knownBridge(evmChain(97, false)!, '0x38A49D19e998ED7DFFA491e20D3E70d549EE4771'),
+    ).toBeUndefined();
     expect(evmChain(56, false)!.ibc).toEqual([]);
   });
 });

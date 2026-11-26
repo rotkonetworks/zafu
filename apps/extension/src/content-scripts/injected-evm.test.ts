@@ -95,4 +95,22 @@ describe('injected-evm', () => {
     });
     post.mockRestore();
   });
+
+  test('passes on a wallet switch that took the accounts away', async () => {
+    await load();
+    const provider = announced[0]!.provider as {
+      request: (a: { method: string }) => Promise<unknown>;
+      on: (e: string, l: (v: unknown) => void) => void;
+    };
+    const post = vi.spyOn(window, 'postMessage').mockImplementationOnce(data => {
+      const { id } = data as { id: string };
+      fromBridge({ direction: 'response', id, ok: true, result: ['0xaa'] });
+    });
+    await provider.request({ method: 'eth_accounts' });
+    post.mockRestore();
+    const changed = vi.fn();
+    provider.on('accountsChanged', changed);
+    fromBridge({ direction: 'event', event: 'accountsChanged', value: [] });
+    expect(changed).toHaveBeenCalledWith([]);
+  });
 });
