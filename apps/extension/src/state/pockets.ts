@@ -23,9 +23,6 @@ import { selectActiveZcashWallet, selectZcashIsMainnet } from './wallets';
 import { chainStoreId, isAccountIndex, pocketStoreId } from './pocket-id';
 import { isZignerSigner } from './zigner-pocket';
 
-/** open question: the cap keeps scanning cost bounded (see report) */
-export const MAX_POCKETS = 10;
-
 export interface Pocket {
   account: number;
   name: string;
@@ -69,9 +66,6 @@ export const addPocket = (
   at?: number,
 ): PocketBook => {
   const pockets = pocketsOf(book, owner);
-  if (pockets.length >= MAX_POCKETS) {
-    throw new Error(`at most ${MAX_POCKETS} pockets`);
-  }
   if (at !== undefined && (!isAccountIndex(at) || pockets.some(p => p.account === at))) {
     throw new Error(`account ${at} is already a pocket here`);
   }
@@ -128,7 +122,7 @@ export interface PenumbraAccountRow {
  * The penumbra accounts to list. One viewing key finds notes for every
  * account, so any account holding funds is listed beside the pockets, for
  * any wallet kind. Such an account is not a pocket: it starts no zcash store
- * or scan, is outside MAX_POCKETS, and needs nothing stored, so it comes back
+ * or scan, and needs nothing stored, so it comes back
  * after a restore once sync finds its notes. Main and the active account
  * always show, so the selection is never off the list.
  */
@@ -233,13 +227,12 @@ export const sanitizePocketBook = (raw: unknown): PocketBook => {
     const pockets = (Array.isArray(entry?.pockets) ? entry.pockets : [])
       .filter(isPocket)
       .filter(p => !seen.has(p.account) && seen.add(p.account))
-      .map(neverHideMain)
-      .slice(0, MAX_POCKETS);
+      .map(neverHideMain);
     if (!pockets.some(p => p.account === 0)) {
       pockets.unshift(MAIN);
     }
     const active = pockets.some(p => p.account === entry?.active && !p.hidden) ? entry.active! : 0;
-    out[owner] = { pockets: pockets.slice(0, MAX_POCKETS), active };
+    out[owner] = { pockets, active };
   }
   return out;
 };
@@ -267,9 +260,7 @@ export const mergePocketBooks = (
       const have = byAccount.get(p.account);
       byAccount.set(p.account, have && mode === 'merge' ? have : { ...have, ...p });
     }
-    const pockets = [...byAccount.values()]
-      .sort((a, b) => a.account - b.account)
-      .slice(0, MAX_POCKETS);
+    const pockets = [...byAccount.values()].sort((a, b) => a.account - b.account);
     out[owner] = { pockets, active: mode === 'replace' ? theirs.active : mine.active };
   }
   return sanitizePocketBook(out);

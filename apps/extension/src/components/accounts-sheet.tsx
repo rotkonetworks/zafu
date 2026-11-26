@@ -31,7 +31,6 @@ import { getNetwork } from '../config/networks';
 import { useEnableNetwork } from '../hooks/enable-network';
 import { useHyperliquidAccounts } from '../hooks/hyperliquid';
 import {
-  MAX_POCKETS,
   activeAccountIndex,
   activePockets,
   penumbraAccountRows,
@@ -396,16 +395,7 @@ export const AccountsSheet = ({
               }}
             />
           ) : (
-            <Plus
-              label={
-                pockets.length >= MAX_POCKETS
-                  ? `this wallet has ${MAX_POCKETS} pockets, the most it can hold`
-                  : 'new pocket'
-              }
-              tone='text-zigner-gold'
-              disabled={pockets.length >= MAX_POCKETS}
-              onClick={() => onNewPocket()}
-            />
+            <Plus label='new pocket' tone='text-zigner-gold' onClick={() => onNewPocket()} />
           )}
           {!onHyperliquid && hiddenCount > 0 && (
             <button
@@ -486,23 +476,12 @@ export const AccountsSheet = ({
   );
 };
 
-const Plus = ({
-  label,
-  tone,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  tone: string;
-  disabled?: boolean;
-  onClick: () => void;
-}) => (
+const Plus = ({ label, tone, onClick }: { label: string; tone: string; onClick: () => void }) => (
   <button
     type='button'
     onClick={onClick}
-    disabled={disabled}
     className={cn(
-      'flex h-11 items-center gap-3 px-2 text-left text-[13px] transition-colors hover:bg-surface-elev-2 disabled:pointer-events-none disabled:opacity-50',
+      'flex h-11 items-center gap-3 px-2 text-left text-[13px] transition-colors hover:bg-surface-elev-2',
       tone,
     )}
   >

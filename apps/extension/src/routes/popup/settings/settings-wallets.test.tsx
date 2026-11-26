@@ -57,10 +57,9 @@ describe('settings > wallets: import a recovery phrase', () => {
     expect(openPageInTab).toHaveBeenCalledWith(PagePath.IMPORT_SEED_PHRASE, true);
   });
 
-  it('greys out and says why once a phrase is imported', async () => {
-    await render(['mnemonic']);
-    expect(row()?.textContent).toContain('one recovery-phrase wallet is supported for now');
+  it('opens beside any number of wallets of any kind', async () => {
+    await render(['mnemonic', 'mnemonic', 'zigner-zafu', 'frost-multisig']);
     act(() => row()?.click());
-    expect(openPageInTab).not.toHaveBeenCalled();
+    expect(openPageInTab).toHaveBeenCalledWith(PagePath.IMPORT_SEED_PHRASE, true);
   });
 });

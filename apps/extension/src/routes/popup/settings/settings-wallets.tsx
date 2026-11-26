@@ -60,7 +60,6 @@ export const SettingsWallets = () => {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const zcashOn = enabledNetworks.includes('zcash');
-  const hasSeed = keyInfos.some(v => v.type === 'mnemonic');
   const open = keyInfos.find(v => v.id === openId);
   const held = (v: KeyInfo) => ({
     penumbra: penumbraWallets.some(w => w.vaultId === v.id),
@@ -110,15 +109,11 @@ export const SettingsWallets = () => {
                 />
               )}
               {/* the options page is the apps page once any wallet exists, so the
-                  import opens on its own screen; a second phrase is not offered yet */}
+                  import opens on its own screen */}
               <Row
                 type='screen'
                 icon='i-ph-key'
                 label='import a recovery phrase'
-                description={
-                  hasSeed ? 'one recovery-phrase wallet is supported for now' : undefined
-                }
-                disabled={hasSeed}
                 onPress={() => void openPageInTab(PagePath.IMPORT_SEED_PHRASE, true)}
               />
               {zcashOn && (
