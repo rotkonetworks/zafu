@@ -85,7 +85,8 @@ export const startWalletServices = async (
    */
   onBlockProcessor?: (
     blockProcessor: BlockProcessor,
-    chain: { id: string; confirmed: boolean },
+    /** `watch`: the node is anyone's (a testnet's), so it is asked again while it is read */
+    chain: { id: string; confirmed: boolean; watch: boolean },
   ) => void,
 ): Promise<StartedServices> => {
   // Stub services object that throws on access - returned whenever penumbra
@@ -164,7 +165,8 @@ export const startWalletServices = async (
     numeraires: numeraires.map(n => AssetId.fromJsonString(n)),
     walletCreationBlockHeight: start.creation,
     compactFrontierBlockHeight: start.frontier,
-    onBlockProcessor: bp => onBlockProcessor?.(bp, { id: chainId, confirmed }),
+    onBlockProcessor: bp =>
+      onBlockProcessor?.(bp, { id: chainId, confirmed, watch: entry.askFirst }),
     onPhase: penumbraTiming,
   });
 
@@ -352,8 +354,13 @@ export const refreshChainId = async (
   const fetched = await Promise.race([source.fetch().catch(() => undefined), late]).finally(() =>
     clearTimeout(timer),
   );
-  if (!fetched?.chainId || source.refuse?.(fetched.chainId)) {
+  if (!fetched?.chainId) {
     return undefined;
+  }
+  // a chain this entry refuses is named, not stored: the check sees it differ,
+  // and the rebuild's start refuses it (a refusal, never "no answer")
+  if (source.refuse?.(fetched.chainId)) {
+    return fetched.chainId;
   }
   const stored = await source.stored();
   if (!stored?.equals(fetched)) {

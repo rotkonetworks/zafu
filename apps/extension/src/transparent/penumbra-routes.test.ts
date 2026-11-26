@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { localExtStorage } from '@repo/storage-chrome/local';
 import type { PenumbraRoute } from '@repo/wallet/networks/cosmos/penumbra-routes';
-import { offeredChains, penumbraRouteStatus, routeForChain } from './penumbra-routes';
+import {
+  getPenumbraRoutes,
+  offeredChains,
+  penumbraRouteStatus,
+  routeForChain,
+} from './penumbra-routes';
 
 const route = (
   chainId: string,
@@ -52,5 +58,18 @@ describe('penumbraRouteStatus', () => {
       penumbraSourceChannel: 'channel-18',
       penumbraChannel: 'channel-494',
     });
+  });
+});
+
+describe('getPenumbraRoutes while a testnet is in use', () => {
+  it('asks no node and offers no ibc chain: they all reach mainnet', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    await localExtStorage.set('enabledNetworks', ['penumbra', 'penumbra-testnet']);
+    const routes = await getPenumbraRoutes();
+    expect(routes).toEqual([]);
+    expect(offeredChains(['noble', 'osmosis'], routes)).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

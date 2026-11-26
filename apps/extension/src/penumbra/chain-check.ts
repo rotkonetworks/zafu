@@ -19,6 +19,8 @@ export interface ChainCheckDeps {
   rebuild: (why: string) => void;
   /** wait before asking again after no answer */
   retryMs: number;
+  /** how often a watched chain is asked again while a window is open */
+  watchMs: number;
 }
 
 export const createChainCheck = (deps: ChainCheckDeps) => {
@@ -69,6 +71,34 @@ export const createChainCheck = (deps: ChainCheckDeps) => {
             }
           }, deps.retryMs);
         }
+      };
+      pending = check;
+    },
+    /**
+     * services that started confirmed on a node anyone can run (a testnet's):
+     * asked again whenever a window opens, and every watchMs while one is
+     * open. Serving another chain, mainnet included, rebuilds them, and the
+     * rebuild refuses it; no answer is not a change.
+     */
+    watch: (chainId: string) => {
+      const mine = ++generation;
+      clearTimeout(retry);
+      const check = async (): Promise<void> => {
+        const node = await deps.refresh().catch(() => undefined);
+        if (mine !== generation) {
+          return;
+        }
+        if (node && node !== chainId) {
+          console.warn(`[sync] the node now serves ${node}, not ${chainId}; stopping`);
+          deps.rebuild('chain id changed');
+          return;
+        }
+        pending = check;
+        retry = setTimeout(() => {
+          if (mine === generation && deps.windowOpen()) {
+            run();
+          }
+        }, deps.watchMs);
       };
       pending = check;
     },

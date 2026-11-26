@@ -20,6 +20,7 @@ describe('chain-id check', () => {
       },
       rebuild: why => rebuilt.push(why),
       retryMs: 1_000,
+      watchMs: 3_000,
     });
     return { check, asked, rebuilt, open };
   };
@@ -97,5 +98,47 @@ describe('chain-id check', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(asked).toHaveLength(1);
     expect(rebuilt).toEqual([]);
+  });
+
+  describe('a watched chain (a testnet node, anyone can run one)', () => {
+    const DEVNET = 'penumbra-testnet-brinance-1';
+
+    it('is asked again while a window is open, and a node that moves to mainnet rebuilds', async () => {
+      const { check, asked, rebuilt } = setup([DEVNET, DEVNET, 'penumbra-1']);
+      check.watch(DEVNET);
+      check.run();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(rebuilt).toEqual([]);
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(asked).toHaveLength(2);
+      expect(rebuilt).toEqual([]);
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(asked).toHaveLength(3);
+      expect(rebuilt).toEqual(['chain id changed']);
+      // rebuilt: nothing more is asked for these services
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(asked).toHaveLength(3);
+    });
+
+    it('no answer is not a change: it keeps watching', async () => {
+      const { check, asked, rebuilt } = setup([undefined, undefined, DEVNET]);
+      check.watch(DEVNET);
+      check.run();
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect(asked).toHaveLength(3);
+      expect(rebuilt).toEqual([]);
+    });
+
+    it('with every window closed it waits, and asks the moment one opens', async () => {
+      const open = { value: false };
+      const { check, asked, rebuilt } = setup(['penumbra-1'], open);
+      check.watch(DEVNET);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(asked).toHaveLength(0);
+      open.value = true;
+      check.run();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(rebuilt).toEqual(['chain id changed']);
+    });
   });
 });

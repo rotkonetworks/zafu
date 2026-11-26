@@ -18,7 +18,7 @@
 import { ChainRegistryClient } from '@penumbrafi/registry';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { RpcEndpointRegion } from './zcash-endpoints';
-import { penumbraNetworkOf, type PenumbraNetwork } from '../penumbra/chain';
+import { penumbraNetworkOf, testnetNodeProblem, type PenumbraNetwork } from '../penumbra/chain';
 
 export interface PenumbraEndpointPreset {
   /** stable id; used to key latency/health maps and match user selections. */
@@ -126,8 +126,9 @@ export const resolvePenumbraEndpoint = async (only?: PenumbraNetwork): Promise<s
   // a testnet has no default node, and never falls back to mainnet's
   if ((only ?? penumbraNetworkOf(enabled)) === 'penumbra-testnet') {
     const testnet = networkEndpoints?.['penumbra-testnet']?.trim();
-    if (!testnet) {
-      throw new Error(NO_TESTNET_NODE);
+    const problem = testnet ? testnetNodeProblem(testnet) : NO_TESTNET_NODE;
+    if (!testnet || problem) {
+      throw new Error(problem);
     }
     return testnet;
   }

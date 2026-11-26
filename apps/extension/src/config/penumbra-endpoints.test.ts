@@ -37,4 +37,30 @@ describe('resolvePenumbraEndpoint', () => {
   it('never waits for onboarding: an unset endpoint resolves to the shipped default', async () => {
     await expect(resolvePenumbraEndpoint()).resolves.toBe(defaultPenumbraEndpoint().url);
   });
+
+  describe('while the testnet is on', () => {
+    beforeEach(() => localExtStorage.set('enabledNetworks', ['penumbra', 'penumbra-testnet']));
+
+    it("is the testnet's own node, never mainnet's", async () => {
+      await localExtStorage.set('networkEndpoints', {
+        penumbra: 'https://picked.example',
+        'penumbra-testnet': 'http://127.0.0.1:38080',
+      });
+      await expect(resolvePenumbraEndpoint()).resolves.toBe('http://127.0.0.1:38080');
+      await expect(resolvePenumbraEndpoint('penumbra')).resolves.toBe('https://picked.example');
+    });
+
+    it('with no node set it refuses rather than reach mainnet', async () => {
+      await expect(resolvePenumbraEndpoint()).rejects.toThrow('penumbra testnet has no node yet');
+    });
+
+    it('refuses plain http to a node away from this computer, even one restored from a backup', async () => {
+      await localExtStorage.set('networkEndpoints', {
+        'penumbra-testnet': 'http://testnet.example',
+      });
+      await expect(resolvePenumbraEndpoint()).rejects.toThrow(
+        'a node away from this computer needs https',
+      );
+    });
+  });
 });

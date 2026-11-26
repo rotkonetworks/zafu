@@ -22,9 +22,12 @@ import { getAmount as getAmountFromView } from '@penumbra-zone/getters/value-vie
 import { joinLoHiAmount } from '@penumbrafi/types/amount';
 import { getCosmosChain, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { viewClient } from '../clients';
+import { readPenumbraChain } from '../penumbra/active-chain';
+import { PENUMBRA_MAINNET } from '../penumbra/chain';
 import {
   track,
   defaultTrackerDeps,
+  onItsChain,
   type DestinationProbe,
   type IbcTransfer,
   type NewTransfer,
@@ -144,8 +147,14 @@ export const makeIbcProbe =
     return matchCosmosBalance(balances, t.destDenom);
   };
 
+/** the penumbra chain in use, as a probe filter reads it */
+export const activePenumbraChainId = async () => (await readPenumbraChain()).chainId;
+
 /** the probe the popup uses (page view client + cosmos client) */
-export const uiIbcProbe: DestinationProbe = makeIbcProbe(uiPenumbraBalances);
+export const uiIbcProbe: DestinationProbe = onItsChain(
+  activePenumbraChainId,
+  makeIbcProbe(uiPenumbraBalances),
+);
 
 /** record a shield-in (Noble USDC -> Penumbra) after source broadcast */
 export const trackShieldIn = (args: {
@@ -170,6 +179,8 @@ export const trackShieldIn = (args: {
     expiresAt: now + SHIELD_TIMEOUT_MS + SHIELD_DETECTION_GRACE_MS,
     destAccount: args.penumbraAccount,
     matchSymbol: args.symbol,
+    // the ibc chains reach mainnet only
+    penumbraChainId: PENUMBRA_MAINNET,
   };
   return track(input, uiIbcProbe, defaultTrackerDeps());
 };

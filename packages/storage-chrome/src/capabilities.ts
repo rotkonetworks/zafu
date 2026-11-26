@@ -90,6 +90,12 @@ export interface OriginPermissions {
    * a single origin-wide expiry could not represent that.
    */
   expires?: Partial<Record<Capability, number>>;
+  /**
+   * the penumbra chain `connect` was granted on: a site approved on a testnet
+   * is asked again before it reads mainnet. Absent on grants made before
+   * testnets, which were mainnet's (connectChainOf).
+   */
+  chainId?: string;
   displayName?: string; // user-chosen nickname at this site ("poker-alice")
   identity?: string; // which named identity to use ("default", "poker")
 }
@@ -163,3 +169,6 @@ export function isDenied(perms: OriginPermissions | undefined, cap: Capability):
   }
   return storedList(perms.denied).includes(cap);
 }
+
+/** the penumbra chain a `connect` grant was made on */
+export const connectChainOf = (perms: OriginPermissions): string => perms.chainId ?? 'penumbra-1';

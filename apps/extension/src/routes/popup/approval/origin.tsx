@@ -16,8 +16,7 @@ import {
 import { useApprovalFixture } from './use-approval-fixture';
 import { Clipped } from '@repo/ui/components/ui/clipped';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
-import { usePenumbraChainId } from '../../../penumbra/asset-registry';
-import { testnetLine } from '../../../penumbra/chain';
+import { chainLine } from '../../../penumbra/chain';
 
 const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string }> = {
   low: { border: 'border-border-soft', bg: '', text: 'text-fg-muted' },
@@ -60,16 +59,23 @@ const CapabilityItem = ({ cap }: { cap: Capability }) => {
 
 export const OriginApproval = () => {
   const navigate = usePopupNav();
-  const { requestOrigin, title, lastRequest, requestedCapabilities, setChoice, sendResponse } =
-    useStore(originApprovalSelector);
+  const {
+    requestOrigin,
+    title,
+    lastRequest,
+    requestedCapabilities,
+    chain,
+    setChoice,
+    sendResponse,
+  } = useStore(originApprovalSelector);
   const acceptRequest = useStore(s => s.originApproval.acceptRequest);
-  const chainId = usePenumbraChainId();
 
   useApprovalFixture(!!requestOrigin, () => {
     void acceptRequest({
       origin: 'https://zk.poker',
       title: 'zk.poker',
       capabilities: ['connect', 'sign_identity', 'send_tx', 'frost'],
+      chain: { network: 'penumbra', chainId: 'penumbra-1' },
     } as Parameters<typeof acceptRequest>[0]);
   });
 
@@ -91,7 +97,8 @@ export const OriginApproval = () => {
     exitApprovalSurface(navigate);
   };
 
-  if (!requestOrigin) {
+  // nothing renders before the request names its chain: a testnet never looks like mainnet
+  if (!requestOrigin || !chain) {
     return null;
   }
 
@@ -115,7 +122,8 @@ export const OriginApproval = () => {
     originUrl = undefined;
   }
 
-  const testnet = testnetLine(chainId);
+  // the chain the worker read before opening this, and the one an approval binds to
+  const testnet = chainLine(chain);
 
   return (
     <ApprovalScreen
@@ -142,7 +150,7 @@ export const OriginApproval = () => {
       }
       footer={
         <ApproveDeny
-          approve={approve}
+          approve={chain.chainId ? approve : undefined}
           deny={deny}
           ignore={lastRequest && ignore}
           approveLabel='connect'

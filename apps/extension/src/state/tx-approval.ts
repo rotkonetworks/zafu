@@ -22,12 +22,16 @@ import { AllSlices, SliceCreator } from '.';
 import { viewClient } from '../clients';
 import { PopupRequest, PopupResponse, PopupType } from '../message/popup';
 import { assertValidActionPlans } from './tx-validation/assert-valid-plan';
+import { planChainProblem, type ChainInUse } from '../penumbra/chain';
+import { readPenumbraChain } from '../penumbra/active-chain';
 
 export interface TxApprovalSlice {
   responder?: PromiseWithResolvers<PopupResponse<PopupType.TxApproval>[PopupType.TxApproval]>;
   authorizeRequest?: PlainMessage<AuthorizeRequest>;
   transactionView?: PlainMessage<TransactionView>;
   invalidPlan?: Error;
+  /** the penumbra chain in use when the request came: the banner, and what the plan must name */
+  chain?: ChainInUse;
   choice?: UserChoice;
   isAirgap?: boolean;
   effectHash?: string;
@@ -76,6 +80,16 @@ export const createTxApprovalSlice =
       } catch (e) {
         invalidPlan = ConnectError.from(e, Code.InvalidArgument);
       }
+      // the plan comes from the dapp: it must name the chain in use, so an
+      // approval never calls a mainnet spend valueless, nor the other way round
+      const { network, chainId } = await readPenumbraChain();
+      const wrongChain = planChainProblem(authorizeRequest.plan?.transactionParameters?.chainId, {
+        network,
+        chainId,
+      });
+      invalidPlan ??= wrongChain
+        ? new ConnectError(wrongChain, Code.FailedPrecondition)
+        : undefined;
 
       const responder =
         Promise.withResolvers<PopupResponse<PopupType.TxApproval>[PopupType.TxApproval]>();
@@ -116,6 +130,7 @@ export const createTxApprovalSlice =
         state.txApproval.asPublic = toPlainMessage(asPublic);
         state.txApproval.asReceiver = toPlainMessage(asReceiver);
         state.txApproval.invalidPlan = invalidPlan;
+        state.txApproval.chain = { network, chainId };
         state.txApproval.transactionClassification = transactionClassification.type;
         state.txApproval.isAirgap = req.isAirgap ?? false;
         state.txApproval.effectHash = req.effectHash;
@@ -174,6 +189,7 @@ export const createTxApprovalSlice =
           state.txApproval.transactionView = undefined;
           state.txApproval.choice = undefined;
           state.txApproval.invalidPlan = undefined;
+          state.txApproval.chain = undefined;
           state.txApproval.isAirgap = undefined;
           state.txApproval.effectHash = undefined;
           state.txApproval.authorizationData = undefined;

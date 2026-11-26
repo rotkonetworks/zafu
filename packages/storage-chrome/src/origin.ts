@@ -7,6 +7,7 @@ import {
   OriginPermissions,
   TIME_LIMITED_CAPABILITIES,
   GRANT_TTL_MS,
+  connectChainOf,
 } from './capabilities';
 
 // --- New capability-based API ---
@@ -66,7 +67,12 @@ export const getOriginPermissions = async (
  * parameter, so every call site gets the expiry behavior automatically
  * without having to know which capabilities are time-limited.
  */
-export const grantCapability = async (origin: string, capability: Capability): Promise<void> => {
+export const grantCapability = async (
+  origin: string,
+  capability: Capability,
+  /** the penumbra chain a `connect` is granted on (see OriginPermissions.chainId) */
+  chainId?: string,
+): Promise<void> => {
   const all = await getPermissionsArray();
   const existing = all.find(p => p.origin === origin);
   const expiresAt = TIME_LIMITED_CAPABILITIES.has(capability)
@@ -80,6 +86,9 @@ export const grantCapability = async (origin: string, capability: Capability): P
     if (expiresAt !== undefined) {
       existing.expires = { ...existing.expires, [capability]: expiresAt };
     }
+    if (chainId !== undefined) {
+      existing.chainId = chainId;
+    }
     await savePermissions(all);
   } else {
     await savePermissions([
@@ -90,6 +99,7 @@ export const grantCapability = async (origin: string, capability: Capability): P
         denied: [],
         grantedAt: Date.now(),
         ...(expiresAt !== undefined ? { expires: { [capability]: expiresAt } } : {}),
+        ...(chainId !== undefined ? { chainId } : {}),
       },
     ]);
   }
@@ -150,7 +160,15 @@ export const setIdentity = async (origin: string, identity: string): Promise<voi
 
 // --- Legacy API (kept for backward compat during migration) ---
 
-export const getOriginRecord = async (getOrigin?: string): Promise<OriginRecord | undefined> => {
+/**
+ * The penumbra connection of `getOrigin` on `chainId`, the chain in use. An
+ * approval counts only on the chain it was made on, and on no chain while
+ * none is known: the site is asked again, shown the chain.
+ */
+export const getOriginRecord = async (
+  getOrigin: string | undefined,
+  chainId: string | undefined,
+): Promise<OriginRecord | undefined> => {
   if (!getOrigin) {
     return undefined;
   }
@@ -161,6 +179,9 @@ export const getOriginRecord = async (getOrigin?: string): Promise<OriginRecord 
   // map OriginPermissions → OriginRecord for legacy callers
   let choice: UserChoice;
   if (perms.granted.includes('connect')) {
+    if (connectChainOf(perms) !== chainId) {
+      return undefined;
+    }
     choice = UserChoice.Approved;
   } else if (perms.denied.includes('connect')) {
     choice = UserChoice.Denied;
@@ -170,9 +191,16 @@ export const getOriginRecord = async (getOrigin?: string): Promise<OriginRecord 
   return { origin: perms.origin, choice, date: perms.grantedAt };
 };
 
-export const upsertOriginRecord = async (proposal: OriginRecord): Promise<void> => {
+/** record a choice about a penumbra connection; an approval is bound to `chainId` */
+export const upsertOriginRecord = async (
+  proposal: OriginRecord,
+  chainId: string | undefined,
+): Promise<void> => {
   if (proposal.choice === UserChoice.Approved) {
-    await grantCapability(proposal.origin, 'connect');
+    if (chainId === undefined) {
+      return;
+    }
+    await grantCapability(proposal.origin, 'connect', chainId);
   } else if (proposal.choice === UserChoice.Denied) {
     await denyCapability(proposal.origin, 'connect');
   } else {

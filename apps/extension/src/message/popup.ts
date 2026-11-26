@@ -1,4 +1,5 @@
 import type { AuthorizeRequest } from '@penumbra-zone/protobuf/penumbra/custody/v1/custody_pb';
+import type { ChainInUse } from '../penumbra/chain';
 import type { Jsonified } from '@penumbrafi/types/jsonified';
 import type { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
 import type { JsonValue } from '@bufbuild/protobuf';
@@ -61,6 +62,8 @@ interface PopupRequestMap {
     favIconUrl?: string;
     title?: string;
     lastRequest?: number;
+    /** the penumbra chain the approval is for, read before the popup opens */
+    chain: ChainInUse;
   };
   SignRequest: {
     origin: string;

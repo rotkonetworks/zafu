@@ -10,6 +10,7 @@ import {
   describeEgress,
   NYM_GROUPS,
   nymGroupView,
+  urlOverNym,
   type EgressInputs,
 } from './egress-policy';
 import { decideEgress, type EgressRealm } from './egress-table';
@@ -860,5 +861,32 @@ describe('the injective gas sponsor', () => {
 
   it('stays off when the person blocked it', () => {
     expect(sponsor({ ...INJ, netEgress: { optIns: { sponsor: 'blocked' } } })?.on).toBe(false);
+  });
+});
+
+describe('the penumbra testnet node', () => {
+  const TESTNET: EgressInputs = {
+    enabledNetworks: ['penumbra', 'penumbra-testnet'],
+    networkEndpoints: { 'penumbra-testnet': 'https://testnet.example.org' },
+    netEgress: { optIns: { nym: 'allowed' } },
+  };
+
+  it('is reached only while the testnet is on', () => {
+    expect(outcome(TESTNET, 'https://testnet.example.org/x')).toBe('allow');
+    expect(
+      outcome({ ...TESTNET, enabledNetworks: ['penumbra'] }, 'https://testnet.example.org/x'),
+    ).not.toBe('allow');
+  });
+
+  it('goes over nym when nym can carry it, and says direct when it cannot', () => {
+    expect(urlOverNym(TESTNET, 'penumbra-testnet', 'https://testnet.example.org')).toBe(true);
+    // a node on this computer, or on a port nym's exits don't open, goes direct
+    expect(urlOverNym(TESTNET, 'penumbra-testnet', 'http://127.0.0.1:38080')).toBe(false);
+    expect(urlOverNym(TESTNET, 'penumbra-testnet', 'https://testnet.example.org:38080')).toBe(
+      false,
+    );
+    // nym off: direct
+    const off = { ...TESTNET, netEgress: { optIns: { nym: 'blocked' as const } } };
+    expect(urlOverNym(off, 'penumbra-testnet', 'https://testnet.example.org')).toBe(false);
   });
 });

@@ -164,7 +164,8 @@ describe('params come from storage first', () => {
       'that node serves penumbra mainnet',
     );
     expect(mainnet.saved()).toBeUndefined();
-    expect(await refreshChainId({ ...mainnet.source, refuse })).toBeUndefined();
+    // mid-session the refused chain is named (so the watch stops sync), never stored
+    expect(await refreshChainId({ ...mainnet.source, refuse })).toBe('penumbra-1');
     expect(mainnet.saved()).toBeUndefined();
 
     const devnet = source(undefined, 'penumbra-testnet-brinance-1');

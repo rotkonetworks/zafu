@@ -65,6 +65,8 @@ export interface IbcTransfer {
   destAccount?: number;
   /** shield: asset symbol to match on the penumbra side (voucher denom differs) */
   matchSymbol?: string;
+  /** shield: the penumbra chain the note lands on; absent on records from before testnets (penumbra-1) */
+  penumbraChainId?: string;
   /** unshield: cosmos chain id the burner/recipient lives on */
   destChainId?: string;
   /** unshield: destination address to poll (burner or override recipient) */
@@ -85,6 +87,18 @@ export const whileOpen =
   (open: () => boolean, probe: DestinationProbe): DestinationProbe =>
   t =>
     open() ? probe(t) : Promise.resolve(undefined);
+
+/**
+ * A filter around a probe: a shield-in is asked of the penumbra chain it
+ * targets only. While another chain is in use (a testnet) the pass has no
+ * news, so that chain's balance never marks it arrived.
+ */
+export const onItsChain =
+  (active: () => Promise<string | undefined>, probe: DestinationProbe): DestinationProbe =>
+  async t =>
+    t.direction !== 'shield' || (t.penumbraChainId ?? 'penumbra-1') === (await active())
+      ? probe(t)
+      : undefined;
 
 /** minimal persistence surface - chrome.storage.local in production, a Map in tests */
 export interface TransferStorage {

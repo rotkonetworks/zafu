@@ -56,8 +56,13 @@ import { PopupPath } from './routes/popup/paths';
 import { keplrMessageListener } from './message/listen/keplr';
 import { createPenumbraSendListener } from './message/listen/penumbra-send';
 import { TX_OP_PREFIX, isTxOp, type TxOp } from './tx-ops';
-import { sweepAndResume, defaultTrackerDeps, whileOpen } from './state/ibc-transfer-tracker';
-import { makeIbcProbe } from './state/ibc-transfer-probes';
+import {
+  sweepAndResume,
+  defaultTrackerDeps,
+  onItsChain,
+  whileOpen,
+} from './state/ibc-transfer-tracker';
+import { activePenumbraChainId, makeIbcProbe } from './state/ibc-transfer-probes';
 import { openApprovalPopup } from './utils/popup-window';
 import { trackSidePanelPresence } from './side-panel-presence';
 import { initSidePanelPref } from './side-panel-pref';
@@ -221,8 +226,10 @@ const chainCheck = createChainCheck({
       penumbraTiming('params refresh (node)', t);
     }
   },
-  rebuild: why => void reinitializeServices(why),
+  // forced: a refused chain is never stored, so the target alone would not change
+  rebuild: why => void rebuilds.request(why, true),
   retryMs: 60_000,
+  watchMs: 30_000,
 });
 const runChainCheck = chainCheck.run;
 
@@ -246,7 +253,10 @@ chrome.storage.onChanged.addListener((c, area) => {
 });
 
 /** a fresh block processor, before anything can start it */
-const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: boolean }) => {
+const onBlockProcessor = (
+  bp: BlockProcessor,
+  chain: { id: string; confirmed: boolean; watch: boolean },
+) => {
   bp.onStorageFailure = reopenPenumbraStorage.failed;
   // fresh services start syncing at once; with every window closed they wait
   if (!ui.open && !keepPenumbraSyncing) {
@@ -255,7 +265,12 @@ const onBlockProcessor = (bp: BlockProcessor, chain: { id: string; confirmed: bo
   // a stored tree is only ever wiped (self-heal) once the node confirmed the chain
   bp.chainConfirmed = chain.confirmed;
   if (chain.confirmed) {
-    chainCheck.drop();
+    // a testnet node is anyone's: it is watched for as long as it is read
+    if (chain.watch) {
+      chainCheck.watch(chain.id);
+    } else {
+      chainCheck.drop();
+    }
     return;
   }
   // confirmed, or the node did not answer in time: sync goes on as it would
@@ -586,10 +601,13 @@ listen(createPenumbraSendListener(getInternalViewClient));
 // paths - no new RPC.
 const ibcTransferProbe = whileOpen(
   () => ui.open,
-  makeIbcProbe(async account => {
-    const client = await getInternalViewClient();
-    return Array.fromAsync(client.balances({ accountFilter: { account } }));
-  }),
+  onItsChain(
+    activePenumbraChainId,
+    makeIbcProbe(async account => {
+      const client = await getInternalViewClient();
+      return Array.fromAsync(client.balances({ accountFilter: { account } }));
+    }),
+  ),
 );
 const runIbcTransferSweep = (): Promise<void> =>
   sweepAndResume(ibcTransferProbe, defaultTrackerDeps());
