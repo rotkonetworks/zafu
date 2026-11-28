@@ -44,7 +44,10 @@ describe('cbor wire', () => {
   });
 
   it('an array payload such as the notes list comes back as the same array', () => {
-    const notes = [{ value: '1', height: 2 }, { value: '3', height: 4 }];
+    const notes = [
+      { value: '1', height: 2 },
+      { value: '3', height: 4 },
+    ];
     const revived = reviveCborPayload(notes);
     expect(revived).toBe(notes);
     expect(Array.isArray(revived)).toBe(true);
