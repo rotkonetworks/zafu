@@ -65,7 +65,7 @@ describe('Accounts Slice', () => {
     });
 
     test('accounts can be added', async () => {
-      await useStore.getState().password.setPassword('user_password_123');
+      await useStore.getState().keyRing.setPassword('user_password_123');
       const accountA = {
         label: 'Account #1',
         seedPhrase: seedPhrase1,
@@ -98,7 +98,7 @@ describe('Accounts Slice', () => {
 
   describe('getSeedPhrase()', () => {
     test('seed phrase can be return', async () => {
-      await useStore.getState().password.setPassword('user_password_123');
+      await useStore.getState().keyRing.setPassword('user_password_123');
       const initialSeedPhrase = seedPhrase1;
       const accountA = {
         label: 'Account #1',
@@ -114,7 +114,7 @@ describe('Accounts Slice', () => {
 
     test('seed phrase can be return after relogin', async () => {
       const password = 'user_password_123';
-      await useStore.getState().password.setPassword(password);
+      await useStore.getState().keyRing.setPassword(password);
       const initialSeedPhrase = seedPhrase1;
       const accountA = {
         label: 'Account #1',

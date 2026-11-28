@@ -9,6 +9,7 @@ import {
   writeEncryptedDirect,
 } from '../../../../state/encrypted-storage';
 import { restoreSnapshot } from './hooks';
+import { legacyAirgapProfile } from '../../../../state/keyring/legacy-airgap.test-util';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, unknown> }).mock;
@@ -25,10 +26,11 @@ describe('onboarding rollback', () => {
   test('a first password on an airgap-only profile is undone, other writes kept', async () => {
     const store = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
     const kr = () => store.getState().keyRing;
-    const id = await kr().addZignerUnencrypted(
-      { viewingKey: 'em9yY2hhcmQtZnZr', accountIndex: 0, deviceId: 'dev' },
-      'zigner',
-    );
+    const id = await legacyAirgapProfile(store, {
+      viewingKey: 'em9yY2hhcmQtZnZr',
+      accountIndex: 0,
+      deviceId: 'dev',
+    });
     await writeEncryptedDirect(localExtStorage, sessionExtStorage, 'contacts' as LK, [{ id: 'a' }]);
     const snapshot = await chrome.storage.local.get(null);
     const { passwordKey } = await chrome.storage.session.get('passwordKey');
@@ -48,7 +50,11 @@ describe('onboarding rollback', () => {
     const fresh = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
     sessionMock.clear();
     expect(await fresh.getState().keyRing.unlock('the first real password')).toBe(false);
-    expect(await fresh.getState().keyRing.unlock('')).toBe(true);
+    // back to the old profile: nothing opens it until it is given a password (#160)
+    expect(await fresh.getState().keyRing.unlock('')).toBe(false);
+    await fresh.getState().keyRing.init();
+    expect(fresh.getState().keyRing.needsPassword).toBe(true);
+    await fresh.getState().keyRing.setPassword('a later password');
     expect(((await localExtStorage.get('vaults')) ?? []).map(v => v.id)).toEqual([id]);
     expect(await readEncrypted(localExtStorage, sessionExtStorage, 'contacts' as LK)).toEqual([
       { id: 'a' },

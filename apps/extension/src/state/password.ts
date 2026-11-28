@@ -8,7 +8,6 @@ import type { SessionStorageState } from '@repo/storage-chrome/session';
 // Documentation in docs/src/security/encryption.md
 
 export interface PasswordSlice {
-  setPassword: (password: string) => Promise<void>;
   isPassword: (password: string) => Promise<boolean>;
   clearSessionPassword: () => void;
   setSessionPassword: (password: string) => Promise<void>;
@@ -21,16 +20,9 @@ export const createPasswordSlice =
   ): SliceCreator<PasswordSlice> =>
   (set, _get) => {
     return {
-      setPassword: async password => {
-        const { key, keyPrint } = await Key.create(password);
-        const keyJson = await key.toJson();
-
-        await session.set('passwordKey', keyJson);
-        await local.set('passwordKeyPrint', keyPrint.toJson());
-      },
       setSessionPassword: async password => {
         const keyPrintJson = await local.get('passwordKeyPrint');
-        if (!keyPrintJson) {
+        if (!keyPrintJson || !password) {
           throw new Error('Password KeyPrint not in storage');
         }
 
@@ -66,6 +58,10 @@ export const createPasswordSlice =
         const keyPrintJson = await local.get('passwordKeyPrint');
         if (!keyPrintJson) {
           throw new Error('Password KeyPrint not in storage');
+        }
+        // an empty password never opens a profile (#160)
+        if (!attempt) {
+          return false;
         }
 
         const key = await Key.recreate(attempt, KeyPrint.fromJson(keyPrintJson));
