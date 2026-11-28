@@ -19,6 +19,7 @@ import {
   selectPenumbraAccount,
   keyRingSelector,
   selectEffectiveKeyInfo,
+  selectEffectiveWalletId,
 } from '../../../state/keyring';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
@@ -72,16 +73,17 @@ export function PenumbraIbcSend({ onClose, meta }: { onClose: () => void; meta?:
   const { data: chains = [], isLoading: chainsLoading } = useIbcChains();
   const ibcState = useStore(selectIbcWithdraw);
   const penumbraAccount = useStore(selectPenumbraAccount);
+  const wallet = useStore(selectEffectiveWalletId);
   // opt-in: send to a hand-entered address instead of our own burner deposit
   // address. Off by default - unshielding lands in our transparent burner.
   const [overrideAddress, setOverrideAddress] = useState(false);
 
   // fetch balances for asset selection
-  // Shared RAW ['balances', account] cache; `select` excludes non-fungible
+  // Shared RAW ['balances', wallet, account] cache; `select` excludes non-fungible
   // synthetic tokens (LP NFTs, delegation, etc.) and any balance we can't
   // classify (no metadata = not withdrawable) per observer.
   const { data: allBalances = EMPTY_BALANCES } = useQuery({
-    ...balancesQueryOptions(penumbraAccount),
+    ...balancesQueryOptions(wallet, penumbraAccount),
     staleTime: 30_000,
     select: selectWithdrawableBalances,
   });

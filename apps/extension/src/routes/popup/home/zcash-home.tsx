@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -36,6 +36,7 @@ import {
   EMPTY_POOL_BALANCES,
   useWorkerValue,
   zcashBirthdayQuery,
+  keepPocketFigure,
   zcashWorkerQuery,
 } from '../../../hooks/zcash-pool-balances';
 import { ShieldTransparent } from '../../../components/zcash/shield-transparent';
@@ -151,9 +152,10 @@ export const ZcashContent = ({
   // both "no funds" and "not asked yet"; conflating them read as "your money
   // is gone"); a failed re-read keeps the figure it had. A pocket switch keeps
   // the last pocket's figure on screen, dimmed, until this pocket's lands
-  // (the pocket sheet's intent preload usually has it cached already).
+  // (the pocket sheet's intent preload usually has it cached already); a
+  // wallet switch never shows the last wallet's.
   const balance = useWorkerValue(
-    { ...zcashWorkerQuery.balance(storeId), placeholderData: keepPreviousData },
+    { ...zcashWorkerQuery.balance(storeId), placeholderData: keepPocketFigure(storeId) },
     workerSyncHeight,
   );
   const shieldedZat = balance.data ?? 0n;
@@ -184,7 +186,7 @@ export const ZcashContent = ({
 
   // per-pool split (orchard legacy / ironwood active)
   const poolsQ = useWorkerValue(
-    { ...zcashWorkerQuery.pools(storeId), placeholderData: keepPreviousData },
+    { ...zcashWorkerQuery.pools(storeId), placeholderData: keepPocketFigure(storeId) },
     workerSyncHeight,
   );
   const pools = poolsQ.data ?? EMPTY_POOL_BALANCES;

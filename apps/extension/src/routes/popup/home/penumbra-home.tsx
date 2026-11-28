@@ -13,6 +13,8 @@ import { useSyncProgress } from '../../../hooks/full-sync-height';
 import { CAUGHT_UP_BLOCKS } from '../../../hooks/latest-block-height';
 import { runPercent } from '../../../penumbra/start';
 import { balancesQueryOptions, balancesQueryKey } from '../../../hooks/penumbra-balances';
+import { selectEffectiveWalletId } from '../../../state/keyring';
+import { useStore } from '../../../state';
 import { classifySyncFailure } from '../../../state/sync-failure';
 import { AskHistorySheet, HistoryContent } from './history';
 import { HOME_LOOK } from './look';
@@ -202,12 +204,13 @@ export const AssetRow = ({
 /** penumbra home: the shared home, read from the view service */
 export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: ReactNode }) => {
   const queryClient = useQueryClient();
+  const wallet = useStore(selectEffectiveWalletId);
   const transparent = useTransparent();
   const { tip, height, from, error: syncError, storageStopped } = useSyncProgress();
   // the shared RAW balances cache (preload, send, swap read it too); this
   // screen's view of it is the fungible rows
   const { data, isLoading, error, refetch } = useQuery({
-    ...balancesQueryOptions(account),
+    ...balancesQueryOptions(wallet, account),
     staleTime: 5_000,
     select: selectHome,
   });
@@ -220,9 +223,9 @@ export const PenumbraContent = ({ account, nudge }: { account: number; nudge?: R
   useEffect(() => {
     if (height && height !== prevHeight.current) {
       prevHeight.current = height;
-      void queryClient.invalidateQueries({ queryKey: balancesQueryKey(account) });
+      void queryClient.invalidateQueries({ queryKey: balancesQueryKey(wallet, account) });
     }
-  }, [height, account, queryClient]);
+  }, [height, wallet, account, queryClient]);
 
   const synced = height ?? 0;
   const caughtUp = tip > 0 && height !== undefined && tip - height <= CAUGHT_UP_BLOCKS;

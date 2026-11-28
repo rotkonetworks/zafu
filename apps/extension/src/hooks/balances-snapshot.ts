@@ -47,9 +47,9 @@ export const saveBalancesSnapshot = async (
   }
 };
 
-/** The snapshot for the currently selected wallet, or undefined. */
+/** The snapshot for the currently selected wallet (its vault id), or undefined. */
 export const loadBalancesSnapshot = async (): Promise<
-  { account: number; at: number; items: BalancesResponse[] } | undefined
+  { wallet: string; account: number; at: number; items: BalancesResponse[] } | undefined
 > => {
   try {
     const session = await chrome.storage.session.get([KEY, 'passwordKey']);
@@ -64,6 +64,7 @@ export const loadBalancesSnapshot = async (): Promise<
       return undefined;
     }
     return {
+      wallet: String((await localExtStorage.get('selectedVaultId')) ?? ''),
       account: stored.account,
       at: stored.at,
       items: stored.items.map(json => BalancesResponse.fromJsonString(json)),

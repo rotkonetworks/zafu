@@ -7,7 +7,7 @@ import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { useStore } from '../../../state';
-import { selectPenumbraAccount } from '../../../state/keyring';
+import { selectEffectiveWalletId, selectPenumbraAccount } from '../../../state/keyring';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
 import { selectPenumbraSend } from '../../../state/penumbra-send';
@@ -51,6 +51,7 @@ export function PenumbraSend({
   const navigate = usePopupNav();
   const sendState = useStore(selectPenumbraSend);
   const penumbraAccount = useStore(selectPenumbraAccount);
+  const wallet = useStore(selectEffectiveWalletId);
   const { recordUsage, shouldSuggestSave } = useStore(recentAddressesSelector);
   const { findByAddress } = useStore(contactsSelector);
   // this wallet's own address, offered under "yours" in the picker
@@ -75,10 +76,10 @@ export function PenumbraSend({
     }
   }, [prefillRecipient, prefillMemo, prefillAmount, setRecipient, setMemo, setAmount]);
 
-  // the ['balances', account] cache holds the raw list (home preloads it);
+  // the ['balances', wallet, account] cache holds the raw list (home preloads it);
   // `select` buckets it per observer
   const { data: buckets } = useQuery({
-    ...balancesQueryOptions(penumbraAccount),
+    ...balancesQueryOptions(wallet, penumbraAccount),
     staleTime: 30_000,
     select: selectPickerBuckets,
   });

@@ -129,8 +129,10 @@ describe('shared ["balances", account] cache', () => {
   });
 
   it('uses the exact key the preload and every consumer share', () => {
-    expect(balancesQueryOptions(0).queryKey).toEqual(['balances', 0]);
-    expect(balancesQueryKey(3)).toEqual(['balances', 3]);
+    expect(balancesQueryOptions('w', 0).queryKey).toEqual(['balances', 'w', 0]);
+    expect(balancesQueryKey('w', 3)).toEqual(['balances', 'w', 3]);
+    // one wallet's account 0 is never another's
+    expect(balancesQueryKey('a', 0)).not.toEqual(balancesQueryKey('b', 0));
   });
 
   // mount an observer the way useQuery does (subscribe triggers the
@@ -143,12 +145,12 @@ describe('shared ["balances", account] cache', () => {
 
   it('ROOT CAUSE: a filtering queryFn never runs once the preload seeded the raw list', async () => {
     // what the home preload does (fresh data, dataUpdatedAt = now)
-    qc.setQueryData(['balances', 0], RAW);
+    qc.setQueryData(['balances', 'w', 0], RAW);
 
     // the OLD picker shape: filter inside queryFn, same key, 30s staleTime
     const oldQueryFn = vi.fn(async () => selectPickerBalances(RAW));
     const old = new QueryObserver(qc, {
-      queryKey: ['balances', 0],
+      queryKey: ['balances', 'w', 0],
       queryFn: oldQueryFn,
       staleTime: 30_000,
     });
@@ -158,10 +160,10 @@ describe('shared ["balances", account] cache', () => {
   });
 
   it('FIX: picker select filters the preloaded raw cache (no LP NFTs, no unnamed)', async () => {
-    qc.setQueryData(['balances', 0], RAW);
+    qc.setQueryData(['balances', 'w', 0], RAW);
 
     const picker = new QueryObserver(qc, {
-      ...balancesQueryOptions(0),
+      ...balancesQueryOptions('w', 0),
       staleTime: 30_000,
       select: selectPickerBuckets,
     });
@@ -175,7 +177,7 @@ describe('shared ["balances", account] cache', () => {
     expect(result?.assets).not.toContain(unnamed);
     expect(result?.positions).toEqual([lpOpen, lpClosed, auction]);
     // the cache itself is untouched raw data for the other consumers
-    expect(qc.getQueryData(['balances', 0])).toBe(RAW);
+    expect(qc.getQueryData(['balances', 'w', 0])).toBe(RAW);
   });
 
   it('order-independent: if the picker fetches first, the cache still holds RAW', async () => {
@@ -184,7 +186,7 @@ describe('shared ["balances", account] cache', () => {
     });
 
     const picker = new QueryObserver(qc, {
-      ...balancesQueryOptions(0),
+      ...balancesQueryOptions('w', 0),
       select: selectPickerBalances,
     });
     const unsubscribe = picker.subscribe(() => undefined);
@@ -194,15 +196,15 @@ describe('shared ["balances", account] cache', () => {
     expect(balancesMock).toHaveBeenCalledWith({ accountFilter: { account: 0 } });
     expect(picker.getCurrentResult().data).toEqual([usdc, um]);
     // assets table / positions tab (no select) see the full raw list
-    expect(qc.getQueryData(['balances', 0])).toEqual(RAW);
+    expect(qc.getQueryData(['balances', 'w', 0])).toEqual(RAW);
   });
 
   it('does not cache [] on failure (assets table must see the error)', async () => {
     balancesMock.mockImplementation(() => {
       throw new Error('view service unreachable');
     });
-    await qc.prefetchQuery(balancesQueryOptions(0)); // never throws
-    const state = qc.getQueryState(['balances', 0]);
+    await qc.prefetchQuery(balancesQueryOptions('w', 0)); // never throws
+    const state = qc.getQueryState(['balances', 'w', 0]);
     expect(state?.status).toBe('error');
     expect(state?.data).toBeUndefined();
   });

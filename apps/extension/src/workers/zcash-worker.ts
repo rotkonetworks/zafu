@@ -150,6 +150,7 @@ import { mergeLoadedNotes, mergeLoadedSpent, readAcrossRewinds } from './wallet-
 import { allowMismatchRewind, rewindPurge } from './rewind-purge';
 import { isWrongNetwork, unitOf, walletIsMainnet } from './chain-network';
 import { storeFellBehind } from './store-reset';
+import { STORE_KEY_META, STORE_KEY_MISMATCH, storeKeyFingerprint, storeKeyFits } from './store-key';
 import { createBuildRegistry } from './build-abort';
 import { doorPake, type DoorPakeCall, type DoorPakeWasm } from './door-pake';
 import { multiSendRoute, planIronwoodMultiSend } from './ironwood-multi-send';
@@ -2572,11 +2573,29 @@ const syncLoop = async (
 
   await registerWallet(walletId);
   // use WatchOnlyWallet for UFVK (zigner), WalletKeys for mnemonic
+  let fvkHex: string;
   if (ufvk) {
-    state.keys = wasmModule.WatchOnlyWallet.from_ufvk(ufvk);
+    const watch = wasmModule.WatchOnlyWallet.from_ufvk(ufvk);
+    state.keys = watch;
+    // a key with no orchard part (transparent only) is told apart by itself
+    try {
+      fvkHex = watch.export_fvk_hex();
+    } catch {
+      fvkHex = ufvk;
+    }
     console.log(`[zcash-worker] created WatchOnlyWallet from UFVK for wallet=${walletId}`);
   } else {
     state.keys = walletKeysFor(mnemonic, parsePocketStoreId(walletId).account);
+    fvkHex = (state.keys as WalletKeys).get_fvk_hex();
+  }
+  // a store is filled by one key only: never resume it with another (store-key.ts)
+  const fingerprint = await storeKeyFingerprint(fvkHex);
+  const filledBy = (await idbGet<{ value: string }>('meta', [walletId, STORE_KEY_META]))?.value;
+  if (!storeKeyFits(filledBy, fingerprint)) {
+    throw new Error(STORE_KEY_MISMATCH);
+  }
+  if (filledBy === undefined) {
+    await idbPutMeta(walletId, STORE_KEY_META, fingerprint);
   }
   await loadState(walletId);
 

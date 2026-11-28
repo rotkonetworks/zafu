@@ -14,12 +14,12 @@ import { useStore } from '../../../state';
 import {
   selectZcashWallets,
   selectVisibleMultisigWallets,
-  walletsSelector,
   type ZcashWalletJson,
 } from '../../../state/wallets';
 import {
   selectActiveNetwork,
   selectEffectiveKeyInfo,
+  selectSelectKeyRing,
   keyRingSelector,
 } from '../../../state/keyring';
 import { frostDkgSelector, frostSigningSelector } from '../../../state/frost-session';
@@ -414,7 +414,8 @@ export const MultisigPage = () => {
   const zcashWallets = useStore(selectZcashWallets);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const multisigWallets = useStore(selectVisibleMultisigWallets);
-  const { setActiveZcashWallet } = useStore(walletsSelector);
+  // a multisig is its own wallet: picking it selects its vault, as the accounts sheet does
+  const selectKeyRing = useStore(selectSelectKeyRing);
 
   // per-wallet backup UI state. restore is on the settings backup page.
   const [backupTarget, setBackupTarget] = useState<ZcashWalletJson | null>(null);
@@ -560,7 +561,7 @@ export const MultisigPage = () => {
                   wallet={w}
                   balance={balances[w.id] ?? 0n}
                   isActive={w.vaultId === selectedKeyInfo?.id}
-                  onSelect={() => void setActiveZcashWallet(w.originalIndex)}
+                  onSelect={() => void selectKeyRing(w.vaultId)}
                   onEdit={() => navigate(`${PopupPath.SETTINGS_MULTISIG}?id=${w.id}`)}
                   onBackup={
                     w.multisig?.custody === 'airgapSigner'

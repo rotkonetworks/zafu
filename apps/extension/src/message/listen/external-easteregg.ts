@@ -1435,9 +1435,10 @@ export const externalMessageListener = (
             );
             return;
           }
-          const { zcashWallets, activeZcashIndex } = state.wallets;
-          const w = zcashWallets[activeZcashIndex];
-          if (!w || w.multisig || w.mainnet !== wantMainnet) {
+          // the selected wallet's own record, never another wallet's
+          const { selectActiveZcashWallet } = await import('../../state/wallets');
+          const w = selectActiveZcashWallet(state);
+          if (!w || w.vaultId !== key?.id || w.multisig || w.mainnet !== wantMainnet) {
             sendResponse({ error: 'no zcash wallet on that network', code: 'no-wallet' });
             return;
           }
