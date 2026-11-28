@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  bytesToHex,
-  fountainBytes,
-  framesToShow,
-  hexToBytes,
-  isFountainBytes,
-  reviveCborPayload,
-} from './cbor-wire';
+import { bytesToHex, hexToBytes, isFountainBytes, reviveCborPayload } from './cbor-wire';
 
 const ENV = new Uint8Array([0x53, 0x04, 0x03, 1, 2, 3, 4, 5, 6, 7, 8]);
 const UR_FRAMES = ['ur:zigner-module/guaaaxadao'];
@@ -38,9 +31,8 @@ describe('cbor wire', () => {
     const wire = JSON.parse(JSON.stringify(sent)) as typeof sent;
     const revived = reviveCborPayload(wire.payload);
     expect(revived.cborData).toEqual(ENV);
-    expect(fountainBytes(revived.cborData)).toEqual(ENV);
-    // the prebuilt frames are what the QR shows until a real Uint8Array is re-fountained
-    expect(framesToShow(revived.urFrames, revived.cborData, UR_FRAMES)).toEqual(UR_FRAMES);
+    expect(isFountainBytes(revived.cborData)).toBe(true);
+    expect(revived.urFrames).toEqual(UR_FRAMES);
   });
 
   it('an array payload such as the notes list comes back as the same array', () => {
@@ -82,19 +74,13 @@ describe('cbor wire', () => {
   });
 });
 
-describe('fountainBytes', () => {
-  it('accepts only a non-empty Uint8Array', () => {
-    expect(fountainBytes(ENV)).toBe(ENV);
+describe('isFountainBytes', () => {
+  it('accepts only a non-empty Uint8Array, so the QR keeps the prebuilt frames otherwise', () => {
+    const object = JSON.parse(JSON.stringify({ cborData: ENV })).cborData as object;
     expect(isFountainBytes(ENV)).toBe(true);
     expect(isFountainBytes(new Uint8Array())).toBe(false);
-  });
-
-  it('fails loudly on a JSON-serialized Uint8Array, so the QR keeps the prebuilt frames', () => {
-    const object = JSON.parse(JSON.stringify({ cborData: ENV })).cborData as object;
-    expect(() => fountainBytes(object)).toThrow(/non-empty Uint8Array/);
-    expect(framesToShow(UR_FRAMES, object)).toEqual(UR_FRAMES);
-    expect(framesToShow(UR_FRAMES, new Uint8Array())).toEqual(UR_FRAMES);
-    expect(framesToShow(UR_FRAMES, undefined)).toEqual(UR_FRAMES);
+    expect(isFountainBytes(object)).toBe(false);
+    expect(isFountainBytes(undefined)).toBe(false);
   });
 });
 

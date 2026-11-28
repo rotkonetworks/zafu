@@ -99,28 +99,3 @@ export const reviveCborPayload = <T>(payload: T): T => {
 /** A source the QR may re-fountain: a real, non-empty Uint8Array only. */
 export const isFountainBytes = (value: unknown): value is Uint8Array =>
   value instanceof Uint8Array && value.byteLength > 0;
-
-/** Re-encode only a non-empty Uint8Array; anything else is an encoding slip. */
-export const fountainBytes = (value: unknown): Uint8Array => {
-  if (!isFountainBytes(value)) {
-    throw new Error(
-      'cannot re-encode: need a non-empty Uint8Array (the message bus left a plain object, or the envelope was empty)',
-    );
-  }
-  return value;
-};
-
-/**
- * Frames the QR should show: the re-encoded set when the source is
- * fountainable, otherwise the prebuilt ones (never an empty encoding).
- */
-export const framesToShow = (
-  urFrames: string[] | undefined,
-  source: unknown,
-  reencoded?: string[] | null,
-): string[] => {
-  if (isFountainBytes(source) && reencoded && reencoded.length > 0) {
-    return reencoded;
-  }
-  return urFrames ?? [];
-};
