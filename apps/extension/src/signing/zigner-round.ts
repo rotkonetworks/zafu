@@ -18,6 +18,8 @@ export interface ZignerRequest {
   /** the PCZT zafu keeps (a compact answer is merged into it) */
   readonly pcztHex: string;
   readonly urFrames: string[];
+  /** hex of the envelope on the JSON message bus; revived to `cborData` */
+  readonly cborHex?: string;
   /** the envelope the frames carry, to re-fountain at another density */
   readonly cborData?: Uint8Array;
   readonly cborBytes?: number;

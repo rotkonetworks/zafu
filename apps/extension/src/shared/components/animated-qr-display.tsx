@@ -18,6 +18,7 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { hexToBytes } from '../../components/qr-code';
+import { isFountainBytes } from '../cbor-wire';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const QRCode = require('qrcode');
@@ -246,9 +247,18 @@ export function AnimatedQrDisplay({
     persistDensity(clampPreset(n));
   }, []);
 
-  // Re-fountain UR frames at the chosen density when a raw source is available.
+  // Re-fountain only from a real non-empty Uint8Array. A JSON message bus
+  // turns bytes into a plain object, which wasm would encode as zero bytes
+  // (`ur:zigner-module/aeaeaeae`). Keep the prebuilt frames instead.
   useEffect(() => {
-    if (!urSource || urSource.bytes.byteLength === 0) {
+    if (!urSource) {
+      setUrDensityFrames(null);
+      return;
+    }
+    if (!isFountainBytes(urSource.bytes)) {
+      console.error(
+        '[animated-qr] cannot re-encode: need a non-empty Uint8Array; keeping the prebuilt frames',
+      );
       setUrDensityFrames(null);
       return;
     }
@@ -283,7 +293,7 @@ export function AnimatedQrDisplay({
     };
   }, [density, urSource]);
 
-  const canReDensify = Boolean(urSource) || Boolean(data);
+  const canReDensify = isFountainBytes(urSource?.bytes) || Boolean(data);
 
   // Effective frame list:
   //  UR-source → re-encoded frames (fall back to urFrames until regenerated)
