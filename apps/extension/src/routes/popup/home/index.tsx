@@ -5,6 +5,7 @@ import { useStore } from '../../../state';
 import {
   selectActiveNetwork,
   selectEffectiveKeyInfo,
+  selectEffectiveWalletId,
   selectPenumbraAccount,
   type NetworkType,
 } from '../../../state/keyring';
@@ -48,9 +49,10 @@ const HOME: Partial<Record<NetworkType, ComponentType<{ nudge?: ReactNode }>>> =
 export const PopupIndex = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const penumbraAccount = useStore(selectPenumbraAccount);
+  const wallet = useStore(selectEffectiveWalletId);
 
   // preload balances in background for instant display
-  usePreloadBalances(selectedKeyInfo?.id, penumbraAccount);
+  usePreloadBalances(wallet, penumbraAccount);
 
   const backupNudge = useBackupNudge();
 
