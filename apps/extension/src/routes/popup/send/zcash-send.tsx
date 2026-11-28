@@ -180,8 +180,9 @@ const DEVICE: Partial<Record<WalletKind, string>> = {
 };
 
 export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSendProps) {
+  const beta = useBetaFeatures();
   const SEND_FLAGS = {
-    hardwareWallet: useBetaFeatures(),
+    hardwareWallet: beta,
     ledgerTransparent: LEDGER_TRANSPARENT_ENABLED,
   };
   const UNIT = getNetworkConfig(zcashNetworkOf(mainnet)).symbol;
@@ -604,7 +605,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const toValid = !!to && !toRefusal;
   // another chain's address is paid through a swap: the form becomes "pay", the
   // address kept, the amount asked in the coin it is owed (replace: back is home)
-  const across = step === 'form' ? payAcrossOf(to) : undefined;
+  // beta until a real payment has gone through it: it moves money over a solver
+  const across = step === 'form' && beta ? payAcrossOf(to) : undefined;
   useEffect(() => {
     if (across) {
       const link = { direction: 'from_zec', ...across, address: to, out: '' } as const;

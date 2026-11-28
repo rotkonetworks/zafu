@@ -305,6 +305,7 @@ export const AmountField = ({
   disabled,
   autoFocus,
   dim,
+  readOnly,
 }: {
   id?: string;
   label?: string;
@@ -322,6 +323,8 @@ export const AmountField = ({
   autoFocus?: boolean;
   /** a figure the route answered, shown faded while the next answer is asked */
   dim?: boolean;
+  /** shown, never typed in; the unit button still works */
+  readOnly?: boolean;
 }) => (
   <div className='flex flex-col gap-1.5'>
     <div className='flex items-baseline justify-between'>
@@ -343,6 +346,7 @@ export const AmountField = ({
         onChange={e => onChange(e.target.value)}
         variant={warn ? 'warn' : 'default'}
         disabled={disabled}
+        readOnly={readOnly}
         autoFocus={autoFocus}
         className={cn(
           'h-14 pr-[130px] font-display text-2xl transition-opacity duration-300',

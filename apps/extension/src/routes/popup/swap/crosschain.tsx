@@ -43,6 +43,7 @@ import { useActiveAddress } from '../../../hooks/use-address';
 import { useSwapTAddress, type SwapTAddress } from '../../../hooks/use-transparent-addresses';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { useSwapLast, useSwapRoutes } from '../../../hooks/swap-routes';
+import { useBetaFeatures } from '../../../config/beta';
 import { swapWallet } from '../../../hooks/swap-preload';
 import { keepSwapPreload, keepSwapQuotes, seedSwapQuotes } from '../../../state/swap/preload';
 import {
@@ -571,6 +572,7 @@ export const CrosschainSwap = ({
   const ufvk = zcashViewKey(activeZcashWallet);
   const { requestAuth, PasswordModal } = usePasswordGate();
   const { chosen, choose } = useSwapRoutes();
+  const beta = useBetaFeatures();
   const { last, read, remember } = useSwapLast(wallet);
   // one ask, on the first open, for everything the swap talks to; once allowed, never again
   useEffect(() => {
@@ -587,7 +589,7 @@ export const CrosschainSwap = ({
   const [pickedToken, setToken] = useState<SwapToken>();
   const [typedAmount, setTyped] = useState(link?.link.amount);
   // by what arrives (a payment): the amount the recipient is owed, typed in "you get"
-  const [typedOut, setTypedOut] = useState(link?.link.out);
+  const [typedOut, setTypedOut] = useState(beta ? link?.link.out : undefined);
   // by what arrives, the paid figure last shown: a hint for the routes and the send fee
   const [hintIn, setHintIn] = useState<string>();
   const setAmount = (v: string | undefined) => {
@@ -1383,6 +1385,8 @@ export const CrosschainSwap = ({
             unit={isFromZec ? (tokenQuery.isFetching ? 'reading' : unit) : 'zec'}
             onUnit={isFromZec ? () => setPickerOpen(true) : undefined}
             dim={!byOut && (stale || expiredLive)}
+            // quoting by what arrives is beta until a real payment has gone through it
+            readOnly={!beta}
           />
           {token && (
             <div className='flex flex-col gap-1.5'>
