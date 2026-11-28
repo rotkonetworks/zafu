@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { fullViewingKeyFromBech32m } from '@penumbra-zone/bech32m/penumbrafullviewingkey';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -29,6 +30,11 @@ vi.mock('../../shared/components/qr-scanner', () => ({
 vi.mock('../../shared/components/animated-qr-scanner', () => ({ AnimatedQrScanner: () => null }));
 
 const zid = 'zid-of-one-device';
+/** a real penumbra viewing key, as a ur:penumbra-accounts code carries it */
+const fvkBech32m = vi.hoisted(
+  () =>
+    'penumbrafullviewingkey1vzfytwlvq067g2kz095vn7sgcft47hga40atrg5zu2crskm6tyyjysm28qg5nth2fqmdf5n0q530jreumjlsrcxjwtfv6zdmfpe5kqsa5lg09',
+);
 vi.mock('./parse-connect-code', () => ({
   parseConnectCodeBytes: () => ({ ok: false, message: 'unused' }),
   parseConnectCode: (raw: string) =>
@@ -51,7 +57,7 @@ vi.mock('./parse-connect-code', () => ({
             label: null,
             walletIdBytes: new Uint8Array([1]),
             fvkBytes: new Uint8Array([2]),
-            fvkBech32m: 'penumbrafullviewingkey1example',
+            fvkBech32m,
             zidPublicKey: zid,
           }
         : {
@@ -113,7 +119,9 @@ describe('device scanner', () => {
     await act(async () => button('scan next').click());
     expect(keyRing.addZignerUnencrypted).toHaveBeenCalledTimes(1);
     expect(keyRing.addZignerUnencrypted).toHaveBeenLastCalledWith(
-      expect.objectContaining({ fullViewingKey: 'penumbrafullviewingkey1example' }),
+      expect.objectContaining({
+        fullViewingKey: btoa(String.fromCharCode(...fullViewingKeyFromBech32m(fvkBech32m).inner)),
+      }),
       'zigner penumbra',
     );
     expect(onDone).not.toHaveBeenCalled();
