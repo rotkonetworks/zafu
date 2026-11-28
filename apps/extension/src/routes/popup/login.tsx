@@ -6,13 +6,74 @@ import { usePopupNav } from '../../utils/navigate';
 import { useStore } from '../../state';
 import { getIdentityKey } from '../../state/identity-keys';
 import { passwordSelector } from '../../state/password';
-import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../state/keyring';
+import { keyRingSelector, selectEffectiveKeyInfo, selectGetMnemonic } from '../../state/keyring';
 import { FormEvent, useState } from 'react';
 import { PopupPath } from './paths';
 import { needsOnboard, safeNext } from './popup-needs';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 export const popupLoginLoader = () => needsOnboard();
+
+/**
+ * A profile made before every profile had a password (#160): its cold wallets
+ * were sealed under an empty one, so anyone could open it. Setting one moves
+ * every secret to it; until then nothing opens.
+ */
+const FirstPassword = ({ onDone }: { onDone: () => void }) => {
+  const { setPassword } = useStore(keyRingSelector);
+  const [mismatch, setMismatch] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // read at submit, so a password manager's fill counts even without a change event
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const [pw, again] = [String(form.get('password') ?? ''), String(form.get('again') ?? '')];
+    if (!pw || pw !== again) {
+      setMismatch(true);
+      return;
+    }
+    setSaving(true);
+    setFailed(false);
+    setPassword(pw).then(onDone, () => {
+      setFailed(true);
+      setSaving(false);
+    });
+  };
+
+  return (
+    <form onSubmit={submit} className='flex flex-col gap-[18px]'>
+      <p className='text-body text-fg-muted'>
+        please set a password · zafu opened without one until now
+      </p>
+      {(['password', 'again'] as const).map((name, i) => (
+        <Input
+          key={name}
+          name={name}
+          type='password'
+          aria-label={name}
+          placeholder={name}
+          autoFocus={i === 0}
+          autoComplete='new-password'
+          variant={mismatch ? 'warn' : 'default'}
+          onChange={() => setMismatch(false)}
+          className='h-[52px] px-3.5 text-[15px]'
+        />
+      ))}
+      <span className='h-[18px] text-label text-warning' aria-live='polite'>
+        {mismatch
+          ? "these don't match yet"
+          : failed
+            ? 'something went wrong in zafu · nothing was changed, please try again'
+            : ''}
+      </span>
+      <Button type='submit' loading={saving} className='h-[52px] text-[15px]'>
+        set password
+      </Button>
+    </form>
+  );
+};
 
 export const Login = () => {
   const navigate = usePopupNav();
@@ -22,6 +83,7 @@ export const Login = () => {
   const { isPassword, setSessionPassword } = useStore(passwordSelector);
   const activeKeyInfo = useStore(selectEffectiveKeyInfo);
   const getMnemonic = useStore(selectGetMnemonic);
+  const needsPassword = useStore(s => s.keyRing.needsPassword);
   const [input, setInputValue] = useState('');
   const [enteredIncorrect, setEnteredIncorrect] = useState(false);
   // Set when the password is correct (unlock succeeds) but the active wallet's
@@ -37,12 +99,14 @@ export const Login = () => {
     if (unlocking) {
       return;
     }
+    // read at submit: a password manager's fill may never fire a change event
+    const typed = String(new FormData(e.currentTarget).get('password') ?? input);
     setUnlocking(true);
 
     void (async function () {
       try {
-        if (await isPassword(input)) {
-          await setSessionPassword(input); // saves to session state
+        if (await isPassword(typed)) {
+          await setSessionPassword(typed); // saves to session state
           // Probe the active vault before navigating: the global password is
           // right, but this vault's seed may be sealed under a stale key (e.g.
           // created before a password change) and throw 'failed to decrypt
@@ -91,7 +155,9 @@ export const Login = () => {
       <span className='self-center text-[11px] tracking-[0.1em] text-fg-muted'>
         shielded signing
       </span>
-      {undecryptable ? (
+      {needsPassword ? (
+        <FirstPassword onDone={() => navigate(PopupPath.INDEX)} />
+      ) : undecryptable ? (
         <>
           <p className='text-body text-fg-muted'>
             this wallet&apos;s recovery data no longer opens with this password. your funds are safe

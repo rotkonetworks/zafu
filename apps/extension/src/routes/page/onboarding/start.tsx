@@ -24,7 +24,7 @@ const BRING = [
     icon: 'i-ph-usb text-device-blue',
     label: 'ledger',
     hint: 'plug in over usb',
-    to: PagePath.CONNECT_LEDGER,
+    to: PagePath.LEDGER_PASSWORD,
     shown: LEDGER_TRANSPARENT_ENABLED,
   },
   {

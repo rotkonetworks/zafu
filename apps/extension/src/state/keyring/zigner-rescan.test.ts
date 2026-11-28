@@ -21,6 +21,7 @@ describe('the same zigner scanned again', () => {
   test('selects the wallet it already made, and makes no second one', async () => {
     const kr = () => useStore.getState().keyRing;
     const code = { viewingKey: 'em9yY2hhcmQtZnZr', accountIndex: 0, deviceId: 'dev' };
+    await kr().setPassword('a-real-passw0rd');
     const first = await kr().addZignerUnencrypted(code, 'zigner');
     await kr().newMnemonicKey(
       'advance twist canal impact field normal depend pink sick horn world broccoli',

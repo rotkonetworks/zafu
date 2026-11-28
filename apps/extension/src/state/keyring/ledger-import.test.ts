@@ -59,10 +59,12 @@ const birthdayStore: BirthdayStore = {
 describe('connect ledger (shielded) -> keyring', () => {
   let useStore: TestStore;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     localMock.clear();
     sessionMock.clear();
     useStore = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
+    // every profile has a password before a wallet is stored (#160)
+    await useStore.getState().keyRing.setPassword('a-real-passw0rd');
   });
 
   const connectAndSave = async (accountIndex: number, birthdayHeight: number | null = null) => {

@@ -7,6 +7,7 @@
  * storage effects in wallet-entries.
  */
 
+import type { KeyPrintJson } from '@repo/encryption/key-print';
 import { liveNetworks } from '../../config/networks';
 import { Box } from '@repo/encryption/box';
 import { AllSlices, SliceCreator } from '..';
@@ -91,8 +92,36 @@ export class PasswordMismatchError extends Error {
   }
 }
 
+/**
+ * A wallet was about to be stored on a profile with no password. zafu never
+ * seals anything under an empty one: what it seals (balances, history,
+ * contacts) would open for anyone using this computer.
+ */
+export class NoPasswordError extends Error {
+  constructor() {
+    super('please set a password first');
+    this.name = 'NoPasswordError';
+  }
+}
+
+/**
+ * The key of a profile made before #160, when it still has no password: only
+ * cold-wallet profiles were ever made that way (every vault `airgapOnly`), so
+ * no other profile pays for the derivation.
+ */
+const unprotectedKey = (vaults: EncryptedVault[], keyPrint: KeyPrintJson) =>
+  vaults.length > 0 && vaults.every(v => v.insensitive?.['airgapOnly'] === true)
+    ? recreateMasterKey('', keyPrint)
+    : Promise.resolve(null);
+
 export interface KeyRingSlice {
   status: KeyRingStatus;
+  /**
+   * A profile from before every profile had a password: its cold wallets are
+   * sealed under an empty one. Nothing opens until a password is set, which
+   * moves every secret to it (setPassword).
+   */
+  needsPassword: boolean;
   keyInfos: KeyInfo[];
   selectedKeyInfo: KeyInfo | undefined;
   activeNetwork: NetworkType;
@@ -232,6 +261,7 @@ export const createKeyRingSlice =
       const keyInfos = vaultsToKeyInfos((vaultList ?? []) as EncryptedVault[], selectedId);
       set(state => {
         state.keyRing.status = 'unlocked';
+        state.keyRing.needsPassword = false;
         state.keyRing.keyInfos = keyInfos;
         state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
         if (all) {
@@ -245,6 +275,7 @@ export const createKeyRingSlice =
 
     const slice: KeyRingSlice = {
       status: 'not-loaded',
+      needsPassword: false,
       keyInfos: [],
       selectedKeyInfo: undefined,
       activeNetwork: '' as NetworkType,
@@ -292,10 +323,6 @@ export const createKeyRingSlice =
           }
         }
 
-        // auto-unlock for airgap-only setups
-        const hasOnlyAirgap =
-          vaults.length > 0 && vaults.every(v => v.insensitive?.['airgapOnly'] === true);
-
         // sync penumbra wallet index - only if unlocked (wallets are encrypted)
         const syncedWalletIndex = (await local.get('activeWalletIndex')) ?? 0;
 
@@ -310,18 +337,18 @@ export const createKeyRingSlice =
           return;
         }
 
-        let sessionKey = await session.get('passwordKey');
         const keyInfos = vaultsToKeyInfos(vaults, selectedId);
-
-        if (!sessionKey && hasOnlyAirgap) {
-          const result = await recreateMasterKey('', keyPrint);
-          if (result) {
-            await session.set('passwordKey', result.keyJson);
-            sessionKey = result.keyJson;
-          }
+        // a profile still sealed under the empty password asks for one; it is
+        // never opened with it (#160). A session key left from before this
+        // build is dropped, so nothing reads the profile until then.
+        const needsPassword = !!(await unprotectedKey(vaults, keyPrint));
+        if (needsPassword) {
+          await session.remove('passwordKey');
         }
+        const sessionKey = needsPassword ? undefined : await session.get('passwordKey');
 
         set(state => {
+          state.keyRing.needsPassword = needsPassword;
           state.keyRing.status = sessionKey ? 'unlocked' : 'locked';
           state.keyRing.keyInfos = keyInfos;
           state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
@@ -338,6 +365,9 @@ export const createKeyRingSlice =
       // ── password / unlock / lock ──
 
       setPassword: async (password: string) => {
+        if (!password) {
+          throw new NoPasswordError();
+        }
         const existingKeyPrint = await local.get('passwordKeyPrint');
 
         // Fresh profile - no key material yet. Mint a new master key. This is
@@ -364,13 +394,10 @@ export const createKeyRingSlice =
           });
           return;
         }
-        // An airgap-only profile (every vault airgapOnly, key made from '')
-        // has no password yet, and this is its first: move its secrets to it.
+        // A profile sealed under the empty password (made before #160) has no
+        // password yet, and this is its first: move its secrets to it.
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-        const airgapOnly =
-          vaults.length > 0 && vaults.every(v => v.insensitive?.['airgapOnly'] === true);
-        const unprotected =
-          password && airgapOnly ? await recreateMasterKey('', existingKeyPrint) : null;
+        const unprotected = await unprotectedKey(vaults, existingKeyPrint);
         if (!unprotected) {
           throw new PasswordMismatchError();
         }
@@ -378,6 +405,9 @@ export const createKeyRingSlice =
       },
 
       changePassword: async (current: string, next: string) => {
+        if (!next) {
+          throw new NoPasswordError();
+        }
         const keyPrint = await local.get('passwordKeyPrint');
         const old = keyPrint ? await recreateMasterKey(current, keyPrint) : null;
         if (!old) {
@@ -389,7 +419,7 @@ export const createKeyRingSlice =
 
       unlock: async (password: string) => {
         const keyPrintJson = await local.get('passwordKeyPrint');
-        if (!keyPrintJson) {
+        if (!keyPrintJson || !password) {
           return false;
         }
 
@@ -432,7 +462,7 @@ export const createKeyRingSlice =
 
       checkPassword: async (password: string) => {
         const keyPrintJson = await local.get('passwordKeyPrint');
-        if (!keyPrintJson) {
+        if (!keyPrintJson || !password) {
           return false;
         }
         return (await recreateMasterKey(password, keyPrintJson)) !== null;
@@ -667,20 +697,13 @@ export const createKeyRingSlice =
         const existingKeyPrint = await local.get('passwordKeyPrint');
         const existingSessionKey = await session.get('passwordKey');
 
-        let key: Key;
-        let isNewSetup = false;
-
-        if (existingKeyPrint && existingSessionKey) {
-          key = await Key.fromJson(existingSessionKey);
-        } else if (!existingKeyPrint) {
-          const created = await createMasterKey('');
-          key = created.key;
-          isNewSetup = true;
-          await session.set('passwordKey', created.keyJson);
-          await local.set('passwordKeyPrint', created.keyPrint.toJson());
-        } else {
+        if (!existingKeyPrint) {
+          throw new NoPasswordError();
+        }
+        if (!existingSessionKey) {
           throw new Error('keyring locked - unlock first or use password flow');
         }
+        const key = await Key.fromJson(existingSessionKey);
 
         const encryptedBox = await key.seal(JSON.stringify(data));
         const supportedNetworks = zignerSupportedNetworks(data);
@@ -690,7 +713,6 @@ export const createKeyRingSlice =
           JSON.stringify(encryptedBox.toJson()),
           data,
           supportedNetworks,
-          { airgapOnly: isNewSetup },
         );
 
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
@@ -791,26 +813,17 @@ export const createKeyRingSlice =
         const existingKeyPrint = await local.get('passwordKeyPrint');
         const existingSessionKey = await session.get('passwordKey');
 
-        let key: Key;
-        let isNewSetup = false;
-
-        if (existingKeyPrint && existingSessionKey) {
-          key = await Key.fromJson(existingSessionKey);
-        } else if (!existingKeyPrint) {
-          const created = await createMasterKey('');
-          key = created.key;
-          isNewSetup = true;
-          await session.set('passwordKey', created.keyJson);
-          await local.set('passwordKeyPrint', created.keyPrint.toJson());
-        } else {
+        if (!existingKeyPrint) {
+          throw new NoPasswordError();
+        }
+        if (!existingSessionKey) {
           throw new Error('keyring locked - unlock first or use password flow');
         }
+        const key = await Key.fromJson(existingSessionKey);
 
         const encryptedBox = await key.seal(JSON.stringify(data));
         const supportedNetworks = ['zcash'];
-        const vault = buildLedgerVault(vaultId, name, JSON.stringify(encryptedBox.toJson()), data, {
-          airgapOnly: isNewSetup,
-        });
+        const vault = buildLedgerVault(vaultId, name, JSON.stringify(encryptedBox.toJson()), data);
 
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         const newVaults = [vault, ...vaults];

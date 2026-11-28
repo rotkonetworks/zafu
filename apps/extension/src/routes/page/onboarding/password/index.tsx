@@ -24,12 +24,19 @@ const STRENGTH = [
   ['very strong', 'bg-green'],
 ] as const;
 
+/** the paths that keep the password in memory and seal later: where each goes next */
+const KEEPS: Partial<Record<SEED_PHRASE_ORIGIN, PagePath>> = {
+  [SEED_PHRASE_ORIGIN.NEWLY_GENERATED]: PagePath.GENERATE_SEED_PHRASE,
+  // a ledger is sealed once the device is read (connect-ledger)
+  [SEED_PHRASE_ORIGIN.LEDGER]: PagePath.CONNECT_LEDGER,
+};
+
 export const SetPassword = () => {
   const navigate = usePageNav();
   const origin = originOf(useLocation().pathname) ?? SEED_PHRASE_ORIGIN.IMPORTED;
   const onboarding = useOnboarding();
-  // only the create path keeps a password to come back to
-  const kept = origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED ? onboarding.password : '';
+  // only a path that keeps its password has one to come back to
+  const kept = KEEPS[origin] ? onboarding.password : '';
   const [password, setPassword] = useState(kept);
   const [again, setAgain] = useState(kept);
   const { finalize, error, loading } = useFinalizeOnboarding();
@@ -59,9 +66,10 @@ export const SetPassword = () => {
     if (!match || loading) {
       return;
     }
-    if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
+    const next = KEEPS[origin];
+    if (next) {
       onboarding.setPassword(password);
-      navigate(PagePath.GENERATE_SEED_PHRASE);
+      navigate(next);
       return;
     }
     void finalize(origin, password);

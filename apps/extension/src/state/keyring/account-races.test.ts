@@ -17,6 +17,7 @@ import { finishPendingWipe } from '../../clear-cache-startup';
 import { keyUse } from '../keyring-lock';
 import { Box } from '@repo/encryption/box';
 import { issueWorkerKey, openKeySeal } from '../../shared/vault-seal';
+import { legacyAirgapProfile } from './legacy-airgap.test-util';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, unknown> }).mock;
@@ -285,12 +286,11 @@ describe('password change, second review', () => {
   });
 
   test('an empty-password profile with a hot vault is not handed a new password', async () => {
-    await a
-      .getState()
-      .keyRing.addZignerUnencrypted(
-        { viewingKey: 'em9yY2hhcmQtZnZr', accountIndex: 0, deviceId: 'dev' },
-        'zigner',
-      );
+    await legacyAirgapProfile(a, {
+      viewingKey: 'em9yY2hhcmQtZnZr',
+      accountIndex: 0,
+      deviceId: 'dev',
+    });
     await a.getState().keyRing.newMnemonicKey(SEED, 'hot'); // sealed under the '' key
     const print = localMock.get('passwordKeyPrint');
     await expect(a.getState().keyRing.setPassword('a guess')).rejects.toThrow();

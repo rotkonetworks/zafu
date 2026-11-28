@@ -28,7 +28,7 @@ describe('Password Slice', () => {
   });
 
   test('password can be set and verified', async () => {
-    await useStore.getState().password.setPassword(password);
+    await useStore.getState().keyRing.setPassword(password);
     await useStore.getState().wallets.addWallet({
       label: 'Account #1',
       seedPhrase,
@@ -50,7 +50,7 @@ describe('Password Slice', () => {
   });
 
   test('password key can be set to session storage', async () => {
-    await useStore.getState().password.setPassword(password);
+    await useStore.getState().keyRing.setPassword(password);
     await useStore.getState().wallets.addWallet({
       label: 'Account #1',
       seedPhrase,

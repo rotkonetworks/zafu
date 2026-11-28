@@ -215,7 +215,7 @@ so `persist()` can never wipe encrypted storage with empty arrays while locked.
 
 this function runs:
 
-1. immediately on startup (succeeds if already unlocked or auto-unlocked)
+1. immediately on startup (succeeds if already unlocked)
 2. when keyring status transitions to `unlocked` (via store subscription)
 
 the subscription watches for `status === 'unlocked' && prevStatus !== 'unlocked'`
@@ -320,8 +320,11 @@ function" pattern:
 2. reads `selectedVaultId` and `enabledNetworks`
 3. if no keyprint exists, status is `empty`
 4. if a session key exists, status is `unlocked`
-5. if all vaults are airgap-only (zigner watch-only), auto-unlocks with an empty
-   password (no secrets to protect - only viewing keys)
+5. never opens a profile without its password. A profile made before #160
+   (every vault airgap-only, sealed under an empty password) sets
+   `needsPassword`: the unlock screen asks for a first password, and
+   `setPassword` moves every secret to it. Viewing keys, balances, history and
+   contacts are secrets too.
 6. otherwise, status is `locked`
 
 the init also runs a migration check for orphaned frost multisig zcash wallets

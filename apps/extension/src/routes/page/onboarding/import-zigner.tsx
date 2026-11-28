@@ -35,43 +35,31 @@ const AccessNote = ({ kind }: { kind: 'airgap' | 'watch-only' }) => (
 );
 
 /**
- * password-or-skip footer shown after any successful scan. identical across
- * every detected network, so it lives here once.
+ * The footer after a scan. A profile without a password sets one first (its
+ * wallets are never stored under an empty one, #160); an open profile adds
+ * the wallet under the password it already has.
  */
-const PasswordChoice = ({
-  importing,
-  onSetPassword,
-  onSkip,
+const ScannedFooter = ({
+  working,
+  hasPassword,
+  onContinue,
   onScanAgain,
 }: {
-  importing: boolean;
-  onSetPassword: () => void;
-  onSkip: () => void;
+  working: boolean;
+  hasPassword: boolean;
+  onContinue: () => void;
   onScanAgain: () => void;
 }) => (
   <div className='flex flex-col gap-2'>
     <Button
       variant='primary'
       className='h-14 w-full text-body'
-      onClick={onSetPassword}
-      disabled={importing}
+      onClick={onContinue}
+      disabled={working}
     >
-      set a password
+      {working ? 'adding...' : hasPassword ? 'add this wallet' : 'set a password'}
     </Button>
-
-    <Button
-      variant='secondary'
-      className='mt-2 h-14 w-full text-body'
-      onClick={onSkip}
-      disabled={importing}
-    >
-      {importing ? 'importing...' : 'continue without a password'}
-    </Button>
-    <p className='text-center text-label text-fg-muted lowercase'>
-      anyone using this computer can open zafu and see your balances
-    </p>
-
-    <Button variant='quiet' className='mt-2 w-full' onClick={onScanAgain} disabled={importing}>
+    <Button variant='quiet' className='mt-2 w-full' onClick={onScanAgain} disabled={working}>
       scan again
     </Button>
   </div>
@@ -193,8 +181,8 @@ export const ImportZigner = () => {
   );
   const handleManualInput = (value: string) => value.trim() && processQrData(value);
 
-  // skip password - use default encryption
-  const handleSkip = async () => {
+  // an open profile: sealed under the password it already has
+  const handleAdd = async () => {
     if (!walletImport && !zcashWalletImport && !parsedCosmosExport) {
       setError("please scan your signer's code first");
       return;
@@ -235,6 +223,10 @@ export const ImportZigner = () => {
     }
     navigate(PagePath.ZIGNER_PASSWORD);
   };
+
+  // only an unlocked profile has a password to seal under; any other sets (or gives) one first
+  const hasPassword = useStore(s => s.keyRing.status) === 'unlocked';
+  const proceed = () => (hasPassword ? void handleAdd() : handleSetPassword());
 
   const resetState = () => {
     clearZignerState();
@@ -394,7 +386,7 @@ export const ImportZigner = () => {
               variant='primary'
               className='flex-1'
               disabled={!walletImport && !zcashWalletImport && !parsedCosmosExport}
-              onClick={() => void handleSkip()}
+              onClick={proceed}
             >
               import
             </Button>
@@ -435,10 +427,10 @@ export const ImportZigner = () => {
               {errorMessage}
             </StatusSlot>
           )}
-          <PasswordChoice
-            importing={importing}
-            onSetPassword={handleSetPassword}
-            onSkip={() => void handleSkip()}
+          <ScannedFooter
+            working={importing}
+            hasPassword={hasPassword}
+            onContinue={proceed}
             onScanAgain={resetState}
           />
         </div>

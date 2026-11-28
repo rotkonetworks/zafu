@@ -24,7 +24,7 @@ const pick = (o: Record<string, unknown>, keys: string[]) =>
   Object.fromEntries(keys.filter(k => k in o).map(k => [k, o[k]]));
 
 /** what an import writes; restored together if it fails */
-const ROLLBACK_KEYS = [
+export const ROLLBACK_KEYS = [
   'vaults',
   'penumbraWallets',
   'zcashWallets',

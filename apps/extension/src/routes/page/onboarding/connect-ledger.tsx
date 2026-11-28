@@ -28,7 +28,7 @@ import { Input } from '@repo/ui/components/ui/input';
 import { StatusSlot } from '@repo/ui/components/ui/status-slot';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../state';
-import { keyRingSelector, type LedgerImport } from '../../../state/keyring';
+import { keyRingSelector, NoPasswordError, type LedgerImport } from '../../../state/keyring';
 import { usePageNav } from '../../../utils/navigate';
 import { isPopup } from '../../../utils/popup-detection';
 import { PagePath } from '../paths';
@@ -56,6 +56,38 @@ import {
 } from '../../../ledger/zcash-app/import-account';
 import { loadLedgerZcashProtocol } from '../../../ledger/zcash-app/protocol';
 import { presets } from './import-birthday';
+import { useOnboarding } from '.';
+import { restoreSnapshot, ROLLBACK_KEYS } from './password/hooks';
+
+/**
+ * Add a ledger under the profile's password. A first ledger has none yet: the
+ * step before kept one in memory (LEDGER_PASSWORD), and it is set here, once
+ * the device is read, so a failed read stores nothing. Without it (a reload
+ * lost it) the password step comes back. Nothing is ever sealed under an
+ * empty password (#160).
+ */
+const useAddLedger = () => {
+  const { addLedgerUnencrypted, setPassword } = useStore(keyRingSelector);
+  const { password } = useOnboarding();
+  const navigate = usePageNav();
+  return async (data: LedgerImport, name: string): Promise<string> => {
+    if (await localExtStorage.get('passwordKeyPrint')) {
+      return addLedgerUnencrypted(data, name);
+    }
+    if (!password) {
+      navigate(PagePath.LEDGER_PASSWORD);
+      throw new NoPasswordError();
+    }
+    const snapshot = await chrome.storage.local.get(ROLLBACK_KEYS);
+    try {
+      await setPassword(password);
+      return await addLedgerUnencrypted(data, name);
+    } catch (e) {
+      await restoreSnapshot(snapshot, undefined);
+      throw e;
+    }
+  };
+};
 
 /** Zcash mainnet - onboarding only imports the mainnet account today. */
 const MAINNET = true;
@@ -76,7 +108,7 @@ interface Connected {
 
 const ConnectLedgerTransparent = () => {
   const navigate = usePageNav();
-  const { addLedgerUnencrypted } = useStore(keyRingSelector);
+  const addLedger = useAddLedger();
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -136,7 +168,7 @@ const ConnectLedgerTransparent = () => {
       // The onboarding defaults (rpc, frontend) must only be written on first
       // setup, or adding a ledger would reset the user's configured endpoints.
       const firstWallet = !(await localExtStorage.get('vaults'))?.length;
-      await addLedgerUnencrypted(ledgerImport, walletLabel || 'ledger (transparent)');
+      await addLedger(ledgerImport, walletLabel || 'ledger (transparent)');
       if (firstWallet) {
         await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.LEDGER);
       }
@@ -146,7 +178,7 @@ const ConnectLedgerTransparent = () => {
       setError(`this ledger wasn't added · ${message}`);
       setPhase('connected');
     }
-  }, [account, addLedgerUnencrypted, walletLabel, navigate]);
+  }, [account, addLedger, walletLabel, navigate]);
 
   return (
     <div className='flex flex-col gap-5'>
@@ -292,7 +324,7 @@ const firstAddress = (ufvk: string) => deriveZcashAddressFromUfvk(ufvk, '00'.rep
 
 const ConnectLedgerShielded = ({ onTransparent }: { onTransparent: () => void }) => {
   const navigate = usePageNav();
-  const { addLedgerUnencrypted } = useStore(keyRingSelector);
+  const addLedger = useAddLedger();
   const [phase, setPhase] = useState<'idle' | 'working' | 'review' | 'saving'>('idle');
   const [step, setStep] = useState<LedgerExportStep['step']>('checking_app');
   const [guidance, setGuidance] = useState<LedgerGuidance | null>(null);
@@ -358,7 +390,7 @@ const ConnectLedgerShielded = ({ onTransparent }: { onTransparent: () => void })
       const firstWallet = !(await localExtStorage.get('vaults'))?.length;
       await saveLedgerZcashAccount(
         {
-          addLedger: addLedgerUnencrypted,
+          addLedger,
           deriveAddress: ufvk => (address ? Promise.resolve(address) : firstAddress(ufvk)),
           birthdayStore: chrome.storage.local,
           minBirthdayHeight: ZCASH_ORCHARD_ACTIVATION,

@@ -19,6 +19,8 @@ export enum PagePath {
   /** @deprecated redirects to ZIGNER_PASSWORD */
   IMPORT_ZIGNER_PASSWORD_OLD = '/welcome/import-zigner/password',
   CONNECT_LEDGER = '/welcome/connect-ledger',
+  /** a first ledger's password, kept in memory until the device is read */
+  LEDGER_PASSWORD = '/welcome/connect-ledger/password',
   PERSONALIZE = '/welcome/personalize',
   ONBOARDING_SUCCESS = '/welcome/success',
   /** Grant camera permission page - opened from popup, tells user to return */

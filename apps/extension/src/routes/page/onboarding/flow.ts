@@ -29,6 +29,7 @@ const SCREENS: Partial<Record<string, OnboardingScreen>> = {
   [P.VIEWING_KEY_PASSWORD]: { art: 'bamboo', back: P.VIEWING_KEY_BIRTHDAY, step: [3, 3] },
   [P.IMPORT_SIGNER]: { art: 'enso', back: P.CHOOSE, step: [1, 2] },
   [P.ZIGNER_PASSWORD]: { art: 'enso', back: P.IMPORT_SIGNER, step: [2, 2] },
+  [P.LEDGER_PASSWORD]: { art: 'enso', back: P.CHOOSE, step: [1, 2] },
   [P.CONNECT_LEDGER]: { art: 'enso', back: P.CHOOSE },
   [P.PERSONALIZE]: { art: 'castle' },
   [P.ONBOARDING_SUCCESS]: { art: 'castle' },
@@ -46,6 +47,7 @@ export const PASSWORD_PATH = {
   [SEED_PHRASE_ORIGIN.IMPORTED]: P.IMPORT_PASSWORD,
   [SEED_PHRASE_ORIGIN.ZIGNER]: P.ZIGNER_PASSWORD,
   [SEED_PHRASE_ORIGIN.VIEWING_KEY]: P.VIEWING_KEY_PASSWORD,
+  [SEED_PHRASE_ORIGIN.LEDGER]: P.LEDGER_PASSWORD,
 } as const;
 
 /** The paths that ask when the wallet began: the screen it follows, and the origin it serves. */
