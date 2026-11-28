@@ -117,7 +117,7 @@ module.exports = {
   },
 
   w6: {
-    title: 'send to a bitcoin address becomes pay, owed in btc',
+    title: 'send to a bitcoin address becomes pay, owed in btc (beta; prod stays on send)',
     run: async c => {
       const z = await wallet(c);
       const pg = await z.open('/send', 'popup.html', 2500);
@@ -127,6 +127,16 @@ module.exports = {
       await L.button(pg, 'allow')
         .click({ timeout: 4000 })
         .catch(() => undefined);
+      // prod keeps pay behind beta: the address stays in send
+      if (!/beta/.test(c.dist)) {
+        const stayed = L.flat(await L.text(pg));
+        const onPay = (await pg.locator('#swap-out').count()) > 0;
+        await c.shot(pg, 'prod-send');
+        return {
+          status: !onPay && /\bsend\b/.test(stayed) ? 'pass' : 'fail',
+          note: `prod: send > 1A1zP… stayed on send (pay is beta): "${stayed.slice(0, 90)}" (${c.dir}/prod-send.png)`,
+        };
+      }
       // the token list comes over the swap's egress: wait for btc to be picked
       let landed = '';
       for (let i = 0; i < 30 && !/bitcoin recipient/.test(landed); i++) {
