@@ -6,6 +6,40 @@ This file covers the app release version (`apps/extension/package.json`
 changesets log at `apps/extension/CHANGELOG.md`, which tracks dependency
 bumps for the workspace package.
 
+## 29.8.0
+
+The first store release since 29.7.1: it carries everything in 29.7.2 below,
+except that paying another chain's address is beta-only for now.
+
+### Security
+
+- Every profile has a password. A profile whose only wallets were cold (Zigner,
+  Keystone, Ledger) was locked with an empty password and opened itself on
+  every start, so anyone using the computer could read its balances, history,
+  addresses and contacts. A first cold wallet now sets a password, a first
+  Ledger asks for one before it connects, and a profile made before this asks
+  for a first password on the unlock screen and moves everything to it.
+
+### Wallets
+
+- After switching wallets, one wallet's notes and balance could show under
+  another until a rescan. Each wallet's store is now only ever filled with its
+  own key.
+- Zigner: a swap out of zec shows the signing QR again (it was an empty code),
+  and a quote that moved before signing says so instead of seeming to do
+  nothing.
+- Zigner: a Penumbra code scanned in "connect device" adds its account.
+- Zigner: scanning the other network next keeps the first one, in onboarding
+  and in settings.
+- The backup reminder also shows on receive; dismissing it no longer counts as
+  backed up.
+
+### Beta
+
+- Paying a Bitcoin, Ethereum, Solana or NEAR address from send, and typing
+  swap's "you get", are beta-only until a real payment has gone through them.
+- Hyperliquid is in the beta build only.
+
 ## 29.7.2
 
 ### Security
